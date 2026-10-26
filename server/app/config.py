@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 @dataclass
 class Settings:
     host: str = "0.0.0.0"
-    port: int = 8765
+    port: int = 7013
     data_dir: Path = ROOT / "data"
     secret_key: str = ""
     access_token_hours: int = 12

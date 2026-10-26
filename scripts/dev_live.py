@@ -1,5 +1,5 @@
 """개발용 실행: 서버 + (관리자 계정·토큰 자동 준비) + 내 PC Agent를 한 번에 띄운다. Ctrl+C로 함께 종료.
-  .venv\\Scripts\\python scripts\\dev_live.py [--data <폴더>] [--agent demo|gemini|claude|codex] [--port 8765]
+  .venv\\Scripts\\python scripts\\dev_live.py [--data <폴더>] [--agent demo|gemini|claude|codex] [--port 7013]
 웹앱: http://127.0.0.1:<port>  (프론트엔드는 frontend\\dist 빌드본, 개발 중에는 `cd frontend && npm run dev`로 5173 사용)
 처음 실행 시 관리자 계정 admin / PIN 123456 을 만든다(이미 있으면 그대로 사용).
 """
@@ -19,7 +19,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=str(ROOT / "data" / "dev"))
     ap.add_argument("--agent", default="demo", help="대화 기본 에이전트 (demo는 Gemini 없이 흐름 검증용)")
-    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--port", type=int, default=7013)
     ap.add_argument("--admin", default="admin")
     ap.add_argument("--pin", default="123456")
     a = ap.parse_args()
@@ -52,8 +52,9 @@ def main():
             ws = (data / "workspace").as_posix()
             cfg.write_text(f"server_url = '{base}'\ntoken = '{tok}'\nworkspace_dir = '{ws}'\ndefault_agent = '{a.agent}'\n",
                            encoding="utf-8")
+        # 서버 주소는 이번 실행 포트로 (예전 agent.toml에 다른 포트가 적혀 있어도 따라온다)
         agent = subprocess.Popen([sys.executable, "-m", "agent.dds_agent.main"], cwd=ROOT,
-                                 env={**env, "DDS_AGENT_CONFIG": str(cfg), "DDS_DEFAULT_AGENT": a.agent})
+                                 env={**env, "DDS_AGENT_CONFIG": str(cfg), "DDS_DEFAULT_AGENT": a.agent, "DDS_SERVER_URL": base})
         print(f"\n웹앱: {base}   (관리자 {a.admin} / PIN {a.pin})   기본 에이전트: {a.agent}\n종료: Ctrl+C\n", flush=True)
         server.wait()
     except KeyboardInterrupt:

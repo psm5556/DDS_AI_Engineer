@@ -17,7 +17,7 @@ CONFIG_PATH = Path(os.environ.get("DDS_AGENT_CONFIG", Path.home() / ".dds-agent"
 
 @dataclass
 class AgentSettings:
-    server_url: str = "http://127.0.0.1:8765"
+    server_url: str = "http://127.0.0.1:7013"
     token: str = ""  # 웹앱 > 설정 > PC Agent 토큰에서 발급
     workspace_dir: Path = Path.home() / "DDS_Workspace"
     # 사용할 수 있는 에이전트 CLI(모두 ACP로 구동). 대화를 만들 때 사용자가 고른다.
