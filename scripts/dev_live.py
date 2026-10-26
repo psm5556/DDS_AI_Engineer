@@ -49,7 +49,8 @@ def main():
         cfg = data / "agent.toml"
         if not cfg.exists():
             tok = c.post("/api/tokens", json={"name": "개발 PC"}).json()["token"]
-            ws = (data / "workspace").as_posix()
+            # 작업 폴더는 저장소 밖에 둔다 — 저장소 안이면 AI CLI가 루트의 개발 지침(AGENTS.md·CLAUDE.md)까지 읽는다
+            ws = (Path.home() / "DDS_Workspace_dev").as_posix()
             cfg.write_text(f"server_url = '{base}'\ntoken = '{tok}'\nworkspace_dir = '{ws}'\ndefault_agent = '{a.agent}'\n",
                            encoding="utf-8")
         # 서버 주소는 이번 실행 포트로 (예전 agent.toml에 다른 포트가 적혀 있어도 따라온다)

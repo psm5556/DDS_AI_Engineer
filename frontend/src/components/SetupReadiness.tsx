@@ -51,8 +51,9 @@ export function SetupChecklist() {
           서버에서 자동으로 빌드하지 못했습니다(Windows의 .NET Framework csc 필요). 서버에서 <code>powershell -File scripts\build_setup_exe.ps1</code>을 실행하세요.
         </Row>
         <Row ok={st.runtime} title="포터블 런타임 (Python · Node · 패키지)">
-          저장소(git)에는 들어 있지 않습니다. 인터넷이 되는 PC에서 <code>python scripts\fetch_runtimes.py</code>로 만든 <code>data\agent_runtime</code> 폴더를
-          서버의 <code>{st.runtime_dir ?? "data\\agent_runtime"}</code>에 복사하세요(약 250 MB).
+          저장소(git)에는 들어 있지 않습니다. 서버에서 <code>python scripts\prepare_onsite.py</code>를 실행하면 이 서버의 Python·Node와
+          사내 pip 미러로 <code>{st.runtime_dir ?? "data\\agent_runtime"}</code>에 만듭니다(인터넷 불필요, 수 분).
+          사내 AI에게 맡기려면 "docs/onsite-ai-runbook.md대로 서버를 준비해 줘"라고 요청하세요.
         </Row>
         <Row ok={!!st.release} title={st.release ? `배포된 Agent 버전 ${st.release}` : "배포된 Agent 버전"}>
           <button className="small primary" disabled={publish.isPending} onClick={() => publish.mutate()}>

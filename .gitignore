@@ -11,3 +11,4 @@ frontend/dist/
 .env
 server.toml
 config.toml
+frontend/e2e/shots/

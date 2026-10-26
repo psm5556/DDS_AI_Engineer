@@ -1,5 +1,5 @@
 import { ArrowUp, FileUp, Loader2, Plus, Square, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { uploadFile } from "../api";
 import { useToast } from "../toast";
 import type { Attachment } from "../types";
@@ -40,7 +40,7 @@ export function Composer({
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (autoFocus) ta.current?.focus(); }, [autoFocus]);
-  useEffect(() => {
+  useLayoutEffect(() => { // 화면을 그리기 전에 채운다 — 바로 Enter를 눌러도 빈 입력으로 보내지 않게
     if (!seed) return;
     setText(seed.text);
     requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(seed.text.length, seed.text.length); } });
