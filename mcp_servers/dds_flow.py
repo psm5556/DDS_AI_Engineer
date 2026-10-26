@@ -86,5 +86,20 @@ def publish_image(path: str, title: str, caption: str = "", flow_id: int | None 
     return {"artifact_id": a["id"], "path": rel}
 
 
+@mcp.tool()
+def set_project_info(name: str | None = None, description: str | None = None, project_id: int | None = None) -> dict:
+    """프로젝트 이름(20자 안팎)·설명(한 줄)을 작업 내용에 맞게 정한다. 첫 화면에서 시작한 프로젝트는 요청문 앞부분이 임시 이름이므로,
+    첫 응답 때 알아보기 쉬운 이름(예: "브래킷 경량화 DOE")으로 바꿔 준다."""
+    pid = resolve_pid(project_id)
+    p = api.get(f"/api/projects/{pid}")
+    body = {"version": p["version"]}
+    if name:
+        body["name"] = name[:60]
+    if description is not None:
+        body["description"] = description[:300]
+    p = api.put(f"/api/projects/{pid}", body)
+    return {"project_id": pid, "name": p["name"], "description": p["description"]}
+
+
 if __name__ == "__main__":
     mcp.run()

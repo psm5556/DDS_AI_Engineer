@@ -146,6 +146,8 @@ class DemoAgent:
             ]
             edges = [{"source": a, "target": b} for a, b in
                      [("doe", "solve"), ("solve", "train"), ("train", "opt"), ("opt", "deploy")]]
+            await s.tool("dds-flow", "set_project_info", {"name": "Branin 최적화 데모",
+                                                          "description": "mock 솔버로 DOE → GP → BO → Simulator 검증"})
             goal = text.split("\n\n", 1)[-1][:200]  # 앞의 [DDS 컨텍스트] 줄 제외
             r = await s.tool("dds-flow", "propose_flow", {"title": "Branin 최적화 데모", "goal": goal,
                                                          "nodes": nodes, "edges": edges})

@@ -11,6 +11,7 @@ import "./design/tokens.css";
 import "./styles.css";
 import "./layout.css";
 import "./app.css";
+import "./agentic.css";
 import { applyTheme, initialTheme } from "./theme";
 
 applyTheme(initialTheme()); // 그리기 전에 적용 (밝은 화면이 잠깐 보이는 깜빡임 방지)

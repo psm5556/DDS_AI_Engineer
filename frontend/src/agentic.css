@@ -1,0 +1,129 @@
+/* =====================================================================
+   Agentic 레이아웃: 사이드바 | 대화(가운데, 주인공) | 라이브 캔버스(오른쪽)
+   색·간격은 design/tokens.css 토큰만 쓴다 (DDS ReDO 디자인 시스템).
+   ===================================================================== */
+.app-shell.agentic { grid-template-columns: var(--side-col) minmax(0, 1fr); }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) var(--canvas-w, 560px); height: 100vh; }
+.workspace.canvas-collapsed { grid-template-columns: minmax(0, 1fr) 52px; }
+.ws-main { display: flex; flex-direction: column; min-width: 0; height: 100vh; }
+.ws-head { display: flex; align-items: center; gap: 10px; padding: 12px 20px 12px 24px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.ws-head h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-sub { font-size: 12px; color: var(--ink-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+
+/* ---------- 대화 ---------- */
+.chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat-body { flex: 1; min-height: 0; overflow-y: auto; padding: 28px 24px 8px; }
+.chat-col { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.chat-msg { display: flex; flex-direction: column; max-width: 100%; }
+.chat-msg .bubble { font-size: 14.5px; line-height: 1.7; word-break: break-word; }
+.chat-msg.user { align-self: flex-end; max-width: 80%; }
+.chat-msg.user .bubble { background: #2563eb; color: #fff; padding: 10px 14px; border-radius: 16px; border-bottom-right-radius: 4px; white-space: pre-wrap; }
+.chat-msg.agent .bubble { color: var(--ink); padding: 2px; }
+.chat-msg.agent.err .bubble { background: var(--err-soft); border: 1px solid var(--err-ring); color: var(--err); padding: 10px 14px; border-radius: 12px; }
+.chat-msg .bubble.thinking { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 13px; }
+.chat-empty { margin: 8vh auto 0; max-width: 620px; text-align: center; color: var(--ink-3); display: flex; flex-direction: column; align-items: center; gap: 12px; font-size: var(--fs-s); }
+.chat-empty > svg { color: var(--brand); }
+.chat-empty b { color: var(--ink); font-size: 18px; }
+.chat-suggest { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 6px; }
+.chat-suggest button { justify-content: flex-start; white-space: normal; text-align: left; min-height: 42px; padding: 8px 14px; border-radius: 12px; font-size: 13.5px; }
+.chat-composer { padding: 10px 24px 18px; }
+.composer { border: 1px solid var(--line); border-radius: 18px; background: var(--panel); box-shadow: var(--shadow-card-md); padding: 10px 12px 8px; transition: border-color .15s, box-shadow .15s; }
+.composer:focus-within { border-color: var(--brand-200); box-shadow: 0 0 0 4px var(--brand-soft), var(--shadow-card-md); }
+.composer textarea { border: none; box-shadow: none !important; background: transparent; resize: none; min-height: 46px; max-height: 240px;
+  padding: 4px 6px; font-size: 14.5px; line-height: 1.6; field-sizing: content; }
+.composer textarea:focus { border: none; }
+.composer-bar { display: flex; align-items: center; gap: 8px; padding-top: 4px; }
+.composer-bar .seg button { min-height: 26px; font-size: 12px; padding: 0 10px; }
+.composer-bar .hint { font-size: 11.5px; }
+.composer .send { width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 11px; }
+@media (max-width: 1100px) { .composer-bar .hint { display: none; } }
+
+/* 대화 속 카드: 작업 흐름 제안 · 실행 확인 · 결과 미리보기 */
+.chat-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.chat-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chat-card-head b { font-size: 14.5px; }
+.chat-card-foot { margin-top: 10px; gap: 6px; }
+.flow-card.st-review { border-color: var(--warn-ring); box-shadow: 0 0 0 3px var(--warn-soft); }
+.flow-card .small.muted { margin-top: 4px; }
+.flow-mini { height: 220px; margin-top: 10px; border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; background: var(--panel-2); cursor: pointer; }
+.flow-canvas.mini { height: 100%; border: none; border-radius: 0; background: transparent; }
+.flow-canvas.mini .flow-node { cursor: pointer; }
+.perm-card { border-color: var(--brand-200); box-shadow: 0 0 0 3px var(--brand-soft); }
+.perm-card .chat-card-head svg { color: var(--brand); }
+.perm-card > p { margin-top: 6px; }
+.chat-col .art-card.compact { padding: 14px 16px; }
+.chat-col .art-card.compact .panel-head h3 { font-size: 13.5px; }
+.chat-col .art-card.compact .art-table { max-height: 240px; }
+.chat-col .art-card.compact .art-image img { max-height: 320px; object-fit: contain; }
+.chat-col .cv-tool, .chat-col .cv-toolgroup, .chat-col .cv-thought { max-width: 100%; }
+
+/* ---------- 라이브 캔버스 ---------- */
+.canvas { position: relative; height: 100vh; min-width: 0; display: flex; flex-direction: column; background: var(--paper); border-left: 1px solid var(--line); }
+.canvas.rail { align-items: center; gap: 6px; padding: 12px 0; background: var(--side-bg); }
+.canvas-head { display: flex; align-items: center; gap: 2px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--line); background: var(--panel); min-height: 57px; }
+.canvas-tabs { flex: 1; display: flex; gap: 18px; overflow-x: auto; align-self: stretch; }
+.canvas-tabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 0; padding: 0; margin-bottom: -1px; border: none; border-bottom: 2px solid transparent;
+  border-radius: 0; background: none; color: var(--ink-3); font-size: 13.5px; font-weight: 500; white-space: nowrap; }
+.canvas-tabs button:hover:not(:disabled) { background: none; color: var(--ink); }
+.canvas-tabs button.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+.canvas-tabs small { font-size: 11px; font-weight: 600; color: var(--ink-4); }
+.canvas-tabs small.badge { color: #fff; background: var(--warn); border-radius: 99px; padding: 0 6px; }
+.icon-btn.follow.on { color: var(--ok); }
+.canvas-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.canvas .art-grid { grid-template-columns: 1fr; }
+.canvas .flow-canvas { height: 460px; }
+.canvas .flow-bar .primary.big { min-height: 36px; font-size: var(--fs-s); }
+.canvas .empty-hero { padding: 40px 16px; }
+.canvas .hero { grid-template-columns: 1fr; }
+.canvas .doe-cards { grid-template-columns: 1fr; }
+.art-card.flash { animation: art-flash 1.8s ease-out; }
+@keyframes art-flash { 0% { box-shadow: 0 0 0 4px var(--brand-200); border-color: var(--brand-500); } 100% { box-shadow: none; } }
+
+/* ---------- 사이드바: 프로젝트별 대화 ---------- */
+.side-sessions { list-style: none; margin: 2px 0 6px 30px; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.side-session { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; color: var(--ink-3); font-size: 12.5px; }
+.side-session:hover { background: var(--hover); color: var(--ink); text-decoration: none; }
+.side-session.here, .side-session.active { background: var(--active); color: var(--ink); font-weight: 600; }
+.side-session svg { flex: none; color: var(--ink-4); }
+.side-session .t { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.side-session .m { font-size: 10.5px; color: var(--ink-4); flex: none; font-weight: 400; }
+.side-session.new { color: var(--brand); }
+.side-session.new svg { color: var(--brand); }
+
+/* ---------- 첫 화면: 큰 입력창 ---------- */
+.home { position: relative; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 14vh 24px 60px; }
+.home-hero { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 16px; text-align: center; }
+.home-hero h1 { font-size: 28px; letter-spacing: -0.02em; }
+.home-hero > p { font-size: var(--fs-m); }
+.composer.big { text-align: left; padding: 14px 16px 10px; border-radius: 20px; }
+.composer.big textarea { min-height: 84px; font-size: 15.5px; }
+.starters { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.starter { border-radius: 99px; color: var(--ink-2); }
+.starter svg { color: var(--brand); }
+.home-recent { width: 100%; max-width: 760px; margin-top: 48px; }
+.home-recent .home-sec { margin: 0 2px; }
+.recent-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+.recent { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); min-width: 0; }
+.recent b { font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.recent .small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.recent:hover { border-color: var(--line-strong); box-shadow: var(--shadow-card-md); text-decoration: none; }
+.recent.todo { border-color: var(--brand-200); }
+
+@media (max-width: 900px) {
+  .workspace, .workspace.canvas-collapsed { grid-template-columns: 1fr; height: auto; }
+  .ws-main { height: calc(100vh - 46px); }
+  .canvas { height: auto; border-left: none; border-top: 1px solid var(--line); }
+}
+
+/* 대화 속 결과 칩 */
+.chat-arts { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 6px; }
+.chat-arts-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 4px; font-size: 12px; color: var(--ink-4); font-weight: 500; }
+.chat-arts-head svg { color: var(--brand); }
+.chat-art + .chat-art { border-top: 1px solid var(--line-2); }
+.chat-art-row { display: flex; align-items: center; gap: 6px; padding: 2px 4px; }
+.chat-art-row .kind { color: var(--ink-4); flex: none; }
+.chat-art-toggle { width: 22px; min-height: 26px; padding: 0; border: none; background: none; color: var(--ink-4); }
+.chat-art-title { flex: 1; min-width: 0; justify-content: flex-start; border: none; background: none; min-height: 32px; padding: 0 4px;
+  color: var(--ink); font-size: 13.5px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chat-art-title:hover:not(:disabled) { background: none; color: var(--brand); text-decoration: underline; }
+.chat-art .art-card { margin: 4px 4px 8px; }

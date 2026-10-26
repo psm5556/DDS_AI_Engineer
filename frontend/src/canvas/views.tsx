@@ -1,77 +1,48 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Gauge, Play, Plus, Trash2, Workflow, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, NavLink, Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { del, get, put } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
 import { useAuth } from "../auth";
 import { Confirm } from "../components/Modal";
 import { FlowCanvas } from "../flow/FlowCanvas";
 import { FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, ROLE_LABEL, sendToAgent, when } from "../format";
+import { useCanvas } from "./CanvasContext";
 import { useToast } from "../toast";
 import type { Artifact, Case, Flow, Project, StudyStatus, Study, SurrogateModel, User } from "../types";
 
-const TABS = [
-  ["flow", "작업 흐름"], ["results", "결과"], ["studies", "데이터·모델"], ["simulator", "Simulator"], ["members", "멤버·설정"],
-] as const;
-
-export default function ProjectPage() {
-  const pid = Number(useParams().pid);
-  const { data: p, error } = useQuery({ queryKey: ["project", pid], queryFn: () => get<Project>(`/api/projects/${pid}`) });
-  const { data: flows } = useQuery({ queryKey: ["flows", pid], queryFn: () => get<Flow[]>(`/api/projects/${pid}/flows`) });
-  const { data: arts } = useQuery({ queryKey: ["artifacts", pid], queryFn: () => get<Artifact[]>(`/api/projects/${pid}/artifacts`) });
-  if (error) return <div className="page"><div className="notice err">{(error as Error).message}</div></div>;
-  if (!p) return <div className="page"><div className="busy"><span className="spinner" /> 불러오는 중</div></div>;
-  const review = flows?.filter((f) => f.status === "review").length ?? 0;
-  return (
-    <div className="page wide">
-      <div className="proj-head">
-        <div className="grow">
-          <div className="crumb"><Link to="/">프로젝트</Link> / {p.name}</div>
-          <h1>{p.name}</h1>
-          <div className="proj-sub">{p.description || "설명 없음"} · 멤버 {p.members.length}명 · 내 권한 {ROLE_LABEL[p.user_role ?? "member"]}</div>
-        </div>
-      </div>
-      <nav className="stepper proj-tabs" aria-label="프로젝트 화면">
-        {TABS.map(([k, label]) => (
-          <NavLink key={k} to={`/projects/${pid}/${k}`} className={({ isActive }) => `ptab ${isActive ? "on" : ""}`}>
-            <span className="txt">{label}{k === "flow" && review > 0 && <small>승인 대기 {review}</small>}
-              {k === "results" && !!arts?.length && <small>{arts.length}</small>}</span>
-          </NavLink>
-        ))}
-      </nav>
-      <Routes>
-        <Route index element={<Navigate to="flow" replace />} />
-        <Route path="flow" element={<FlowTab pid={pid} flows={flows} arts={arts ?? []} />} />
-        <Route path="results" element={<ResultsTab pid={pid} arts={arts ?? []} flows={flows ?? []} />} />
-        <Route path="studies" element={<StudiesTab pid={pid} />} />
-        <Route path="simulator" element={<SimulatorTab pid={pid} />} />
-        <Route path="members" element={<MembersTab p={p} />} />
-      </Routes>
-    </div>
-  );
-}
+/** 라이브 캔버스에 들어가는 화면들: 작업 흐름 · 결과 · 데이터·모델 · Simulator 목록 · 멤버.
+ *  대화(가운데)에서 에이전트가 일하면 해당 화면이 실시간으로 갱신된다. */
 
 /* ---------- 작업 흐름 ---------- */
-function FlowTab({ pid, flows, arts }: { pid: number; flows?: Flow[]; arts: Artifact[] }) {
-  const [fid, setFid] = useState<number | null>(null);
-  const [sel, setSel] = useState<string | null>(null);
+/** 플로우 승인/반려. 승인하면 대화 중인 에이전트에게 "진행하세요"를 보낸다. */
+export function useFlowDecision(pid: number) {
   const qc = useQueryClient();
   const toast = useToast();
-  const flow = flows?.find((f) => f.id === fid) ?? flows?.[0];
-  useEffect(() => { setSel(null); }, [flow?.id]);
-
-  const setStatus = useMutation({
-    mutationFn: (status: "approved" | "rejected") => put<Flow>(`/api/flows/${flow!.id}/status`, { status, version: flow!.version }),
+  return useMutation({
+    mutationFn: (v: { flow: Flow; status: "approved" | "rejected" }) =>
+      put<Flow>(`/api/flows/${v.flow.id}/status`, { status: v.status, version: v.flow.version }),
     onSuccess: (f) => {
       qc.invalidateQueries({ queryKey: ["flows", pid] });
       if (f.status === "approved") {
         toast("승인했습니다. 에이전트가 실행을 시작합니다");
         sendToAgent(`플로우 #${f.id} '${f.title}'을(를) 승인했습니다. 계획대로 진행하세요.`);
-      } else toast("반려했습니다");
+      } else {
+        toast("반려했습니다");
+        sendToAgent(`플로우 #${f.id} '${f.title}'을(를) 반려했습니다. 무엇을 바꾸면 좋을지 물어보고 다시 제안해 주세요.`);
+      }
     },
     onError: (e: Error) => toast(e.message ?? "변경하지 못했습니다", true),
   });
+}
+
+export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; arts: Artifact[] }) {
+  const { flowId: fid, setFlowId: setFid } = useCanvas();
+  const [sel, setSel] = useState<string | null>(null);
+  const flow = flows?.find((f) => f.id === fid) ?? flows?.[0];
+  useEffect(() => { setSel(null); }, [flow?.id]);
+  const decide = useFlowDecision(pid);
 
   if (!flows) return <div className="busy"><span className="spinner" /></div>;
   if (!flow) {
@@ -79,9 +50,7 @@ function FlowTab({ pid, flows, arts }: { pid: number; flows?: Flow[]; arts: Arti
       <div className="empty-hero">
         <Workflow size={30} />
         <b>아직 작업 흐름이 없습니다</b>
-        <p>오른쪽 에이전트에게 하고 싶은 일을 말하면, 에이전트가 CAD → 해석 → 결과 추출 → DOE·예측 모델까지 작업 흐름을 먼저 그려 보여 줍니다.</p>
-        <button className="primary" onClick={() => sendToAgent("이 프로젝트에서 할 수 있는 작업을 정리하고, 필요한 정보(모델 파일, 설계변수, 목적)를 물어봐 줘")}>
-          에이전트와 시작하기</button>
+        <p>대화창에 하고 싶은 일을 말하면, 에이전트가 CAD → 해석 → 결과 추출 → DOE·예측 모델까지 작업 흐름을 먼저 그려 여기에 보여 줍니다.</p>
       </div>
     );
   }
@@ -97,7 +66,7 @@ function FlowTab({ pid, flows, arts }: { pid: number; flows?: Flow[]; arts: Arti
     <div className="flow-tab">
       <div className="flow-bar">
         {flows.length > 1 && (
-          <select value={flow.id} onChange={(e) => setFid(Number(e.target.value))} aria-label="작업 흐름 선택" style={{ width: "auto" }}>
+          <select value={flow.id} onChange={(e) => setFid(Number(e.target.value))} aria-label="작업 흐름 선택" style={{ width: "100%" }}>
             {flows.map((f) => <option key={f.id} value={f.id}>#{f.id} {f.title} ({FLOW_STATUS[f.status].label})</option>)}
           </select>
         )}
@@ -107,8 +76,8 @@ function FlowTab({ pid, flows, arts }: { pid: number; flows?: Flow[]; arts: Arti
         </div>
         {flow.status === "review" && (
           <>
-            <button className="ghost" onClick={() => setStatus.mutate("rejected")} disabled={setStatus.isPending}><X size={14} />반려</button>
-            <button className="primary big" onClick={() => setStatus.mutate("approved")} disabled={setStatus.isPending}><Check size={15} />승인하고 실행</button>
+            <button className="ghost" onClick={() => decide.mutate({ flow, status: "rejected" })} disabled={decide.isPending}><X size={14} />반려</button>
+            <button className="primary big" onClick={() => decide.mutate({ flow, status: "approved" })} disabled={decide.isPending}><Check size={15} />승인하고 실행</button>
           </>
         )}
       </div>
@@ -136,8 +105,15 @@ function FlowTab({ pid, flows, arts }: { pid: number; flows?: Flow[]; arts: Arti
 }
 
 /* ---------- 결과 ---------- */
-function ResultsTab({ pid, arts, flows }: { pid: number; arts: Artifact[]; flows: Flow[] }) {
+export function ResultsView({ pid, arts, flows }: { pid: number; arts: Artifact[]; flows: Flow[] }) {
   const [flowId, setFlowId] = useState<number | "all">("all");
+  const { focusArtifactId } = useCanvas();
+  // 대화에서 "캔버스에서 보기"로 고른 결과로 스크롤
+  useEffect(() => {
+    if (!focusArtifactId) return;
+    setFlowId("all");
+    setTimeout(() => document.getElementById(`art-${focusArtifactId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  }, [focusArtifactId]);
   const [rm, setRm] = useState<Artifact | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
@@ -150,15 +126,15 @@ function ResultsTab({ pid, arts, flows }: { pid: number; arts: Artifact[]; flows
   return (
     <>
       <div className="row" style={{ marginBottom: 16 }}>
-        <span className="seg">
-          <button className={flowId === "all" ? "on" : ""} onClick={() => setFlowId("all")}>전체 {arts.length}</button>
-          {flows.slice(0, 5).map((f) => <button key={f.id} className={flowId === f.id ? "on" : ""} onClick={() => setFlowId(f.id)}>#{f.id} {f.title}</button>)}
-        </span>
+        <select value={flowId} onChange={(e) => setFlowId(e.target.value === "all" ? "all" : Number(e.target.value))} style={{ width: "auto", maxWidth: 260 }} aria-label="작업 흐름별 보기">
+          <option value="all">전체 {arts.length}</option>
+          {flows.map((f) => <option key={f.id} value={f.id}>#{f.id} {f.title}</option>)}
+        </select>
         <span className="grow" />
         <button className="small" onClick={() => sendToAgent("지금까지의 결과(표·그래프·이미지)를 정리해서 보고서(markdown 아티팩트)로 작성해 줘")}>보고서 작성 요청</button>
       </div>
       {!shown.length ? <p className="small muted">아직 게시된 결과가 없습니다. 에이전트가 작업하면서 표·그래프·컨투어 이미지를 여기에 올립니다.</p> : (
-        <div className="art-grid">{shown.map((a) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} />)}</div>
+        <div className="art-grid">{shown.map((a) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} highlight={a.id === focusArtifactId} />)}</div>
       )}
       {rm && <Confirm title="결과 삭제" message={`'${rm.title}'을(를) 삭제할까요?`} confirmLabel="삭제" danger
         onConfirm={() => remove.mutate(rm.id)} onClose={() => setRm(null)} />}
@@ -167,7 +143,7 @@ function ResultsTab({ pid, arts, flows }: { pid: number; arts: Artifact[]; flows
 }
 
 /* ---------- 데이터·모델 ---------- */
-function StudiesTab({ pid }: { pid: number }) {
+export function StudiesView({ pid }: { pid: number }) {
   const { data: studies } = useQuery({ queryKey: ["studies", pid], queryFn: () => get<Study[]>(`/api/projects/${pid}/studies`) });
   const [sid, setSid] = useState<number | null>(null);
   const cur = sid ?? studies?.[0]?.id ?? null;
@@ -255,13 +231,13 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
 }
 
 /* ---------- Simulator 목록 ---------- */
-function SimulatorTab({ pid }: { pid: number }) {
+export function SimulatorList({ pid }: { pid: number }) {
   const { data: models } = useQuery({ queryKey: ["models", pid], queryFn: () => get<SurrogateModel[]>(`/api/projects/${pid}/models`) });
   const deployed = (models ?? []).filter((m) => m.deployed);
   if (!deployed.length) {
     return <div className="empty-hero"><Gauge size={30} /><b>배포된 Simulator가 없습니다</b>
       <p>예측 모델을 배포하면 해석 없이 설계변수를 바꿔 가며 결과를 실시간으로 예측할 수 있습니다.</p>
-      <button className="primary" onClick={() => sendToAgent("가장 정확한 예측 모델을 Simulator로 배포해 줘")}>에이전트에게 배포 요청</button></div>;
+      <button onClick={() => sendToAgent("가장 정확한 예측 모델을 Simulator로 배포해 줘")}>에이전트에게 배포 요청</button></div>;
   }
   return (
     <div className="doe-cards" style={{ marginTop: 0 }}>
@@ -278,7 +254,7 @@ function SimulatorTab({ pid }: { pid: number }) {
 }
 
 /* ---------- 멤버·설정 ---------- */
-function MembersTab({ p }: { p: Project }) {
+export function MembersPanel({ p }: { p: Project }) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const toast = useToast();

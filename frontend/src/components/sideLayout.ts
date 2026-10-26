@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
  *  사람마다 편한 너비가 달라 브라우저에 기억해 둔다(실패해도 기본값으로 동작). */
 export interface PanelSpec { key: string; min: number; max: number; width: number; collapsed: boolean; shortcut: string }
 export const LEFT: PanelSpec = { key: "dds.sidebar", min: 200, max: 480, width: 264, collapsed: false, shortcut: "b" };
-export const RIGHT: PanelSpec = { key: "dds.agentpanel.layout", min: 340, max: 760, width: 440, collapsed: false, shortcut: "j" };
+export const RIGHT: PanelSpec = { key: "dds.canvas.layout", min: 360, max: 1100, width: 560, collapsed: false, shortcut: "j" };
 // 예전 이름 (왼쪽 사이드바)
 export const SIDE_MIN = LEFT.min;
 export const SIDE_MAX = LEFT.max;

@@ -13,6 +13,12 @@ export function when(iso: string | null | undefined): string {
   return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`;
 }
 
+/** 서버와 같은 기준(로컬 시각, 시간대 없음)의 ISO 문자열 — 대화 타임라인 정렬용 */
+export function localIso(d = new Date()): string {
+  const z = (n: number, w = 2) => String(n).padStart(w, "0");
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}.${z(d.getMilliseconds(), 3)}`;
+}
+
 export const FLOW_STATUS: Record<FlowStatus, { label: string; chip: string }> = {
   review: { label: "승인 대기", chip: "warn" },
   approved: { label: "승인됨", chip: "info" },

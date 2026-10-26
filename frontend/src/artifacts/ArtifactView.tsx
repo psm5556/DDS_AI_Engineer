@@ -17,7 +17,7 @@ function usePlotTheme() {
   return theme === "dark" ? { grid: "#2a2a30", text: "#a1a1aa" } : { grid: "#ececef", text: "#71717a" };
 }
 
-function Chart({ a }: { a: Artifact }) {
+function Chart({ a, height = 300 }: { a: Artifact; height?: number }) {
   const t = usePlotTheme();
   const p = a.payload as { x?: string; y?: string; series?: Series[]; diagonal?: boolean; categories?: string[]; dimensions?: string[]; rows?: number[][] };
   const axis = (title?: string) => ({ title: { text: title ?? "" }, gridcolor: t.grid, zerolinecolor: t.grid, color: t.text });
@@ -56,13 +56,14 @@ function Chart({ a }: { a: Artifact }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [a, t]);
   return (
-    <Plot data={data} layout={{ ...baseLayout, ...layout, height: 300, autosize: true, font: { ...baseLayout.font, color: t.text } }}
+    <Plot data={data} layout={{ ...baseLayout, ...layout, height, autosize: true, font: { ...baseLayout.font, color: t.text } }}
       config={plotConfig} style={{ width: "100%" }} useResizeHandler />
   );
 }
 
-function Table({ a }: { a: Artifact }) {
+function Table({ a, maxRows }: { a: Artifact; maxRows?: number }) {
   const p = a.payload as { columns?: string[]; rows?: unknown[][] };
+  const rows = maxRows ? (p.rows ?? []).slice(0, maxRows) : (p.rows ?? []);
   const toast = useToast();
   const tsv = () => [p.columns ?? [], ...(p.rows ?? [])].map((r) => r.map((c) => (c ?? "")).join("\t")).join("\n");
   return (
@@ -74,11 +75,12 @@ function Table({ a }: { a: Artifact }) {
       <div className="table-wrap art-table">
         <table>
           <thead><tr>{(p.columns ?? []).map((c) => <th key={c}>{c}</th>)}</tr></thead>
-          <tbody>{(p.rows ?? []).map((r, i) => (
+          <tbody>{rows.map((r, i) => (
             <tr key={i}>{r.map((c, j) => <td key={j} className={typeof c === "number" ? "r" : ""}>{fmt(c)}</td>)}</tr>
           ))}</tbody>
         </table>
       </div>
+      {maxRows && (p.rows?.length ?? 0) > maxRows && <p className="small muted" style={{ marginTop: 6 }}>… {p.rows!.length - maxRows}행 더 (캔버스에서 전체 보기)</p>}
     </>
   );
 }
@@ -100,16 +102,21 @@ function ImageArt({ a }: { a: Artifact }) {
   );
 }
 
-export function ArtifactCard({ a, onDelete }: { a: Artifact; onDelete?: () => void }) {
+/** compact: 대화 안 미리보기(낮은 그래프, 표 6행). actions: 머리글 오른쪽 버튼(예: 캔버스에서 보기) */
+export function ArtifactCard({ a, onDelete, compact, actions, highlight }: {
+  a: Artifact; onDelete?: () => void; compact?: boolean; actions?: React.ReactNode; highlight?: boolean;
+}) {
   return (
-    <section className={`panel art-card kind-${a.kind}`}>
+    <section id={`art-${a.id}`} className={`panel art-card kind-${a.kind} ${compact ? "compact" : ""} ${highlight ? "flash" : ""}`}>
       <div className="panel-head">
         <h3>{a.title}</h3>
         <span className="small muted">{when(a.created_at)}</span>
+        {actions}
         {onDelete && <button className="icon-btn" title="삭제" aria-label={`${a.title} 삭제`} onClick={onDelete}><Trash2 size={14} /></button>}
       </div>
-      {a.kind === "table" ? <Table a={a} /> : a.kind === "markdown" ? <Markdown text={String((a.payload as { text?: string }).text ?? "")} />
-        : a.kind === "image" ? <ImageArt a={a} /> : <Chart a={a} />}
+      {a.kind === "table" ? <Table a={a} maxRows={compact ? 6 : undefined} />
+        : a.kind === "markdown" ? <Markdown text={String((a.payload as { text?: string }).text ?? "")} />
+        : a.kind === "image" ? <ImageArt a={a} /> : <Chart a={a} height={compact ? 200 : 300} />}
     </section>
   );
 }
