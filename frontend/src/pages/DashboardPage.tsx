@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Box, Cpu, FileText, Rocket, Share2, Workflow } from "lucide-react";
+import { AlertTriangle, Box, ChevronRight, Cpu, FileText, Rocket, Share2, Workflow, Wrench } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { get, post, uploadFile } from "../api";
@@ -60,6 +60,7 @@ export default function DashboardPage() {
           onSend={(o) => { start.mutate(o); }}
           leftBar={<AgentPicker value={resolveAgent(agent, preferred)} onChange={setPreferred} disabled={!agent?.connected} />} hint="→ 추천 받기 · ↑↓ 다른 추천 · 파일은 끌어 놓기 · Enter 시작"
           placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘" />
+        <ToolsHint connected={!!agent?.connected} />
         <div className="starters">
           {STARTERS.map(({ icon: Icon, t, p }) => (
             <button key={t} className="starter" onClick={() => setSeed({ text: p, n: Date.now() })} title={p}><Icon size={15} />{t}</button>
@@ -85,5 +86,21 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/** 첫 화면 한 줄: 에이전트가 다룰 수 있는 툴 수와 내 PC에서 바로 쓸 수 있는 수 → 'CAD·CAE 툴' 화면 */
+function ToolsHint({ connected }: { connected: boolean }) {
+  const { data: cat } = useQuery({ queryKey: ["tools", "catalog"], queryFn: () => get<{ tools: { id: string }[] }>("/api/tools/catalog"), staleTime: Infinity });
+  const { data: diag } = useQuery({
+    queryKey: ["agent", "diagnose"], enabled: connected, staleTime: 300_000, retry: false,
+    queryFn: () => get<{ catalog?: { status: string }[] }>("/api/agent/diagnose"),
+  });
+  if (!cat) return null;
+  const ready = diag?.catalog?.filter((t) => t.status === "ready").length;
+  return (
+    <Link to="/tools" className="tools-hint">
+      <Wrench size={13} />지원 CAD·CAE 툴 {cat.tools.length}종{ready != null ? ` · 내 PC에서 바로 사용 ${ready}종` : ""}<ChevronRight size={13} />
+    </Link>
   );
 }

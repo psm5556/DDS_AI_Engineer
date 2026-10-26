@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown, ChevronRight, Home, LogOut, MessageSquare, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Search,
-  Settings, Shield, SquarePen, Star, Sun, Trash2, Users,
+  Settings, Shield, SquarePen, Star, Sun, Trash2, Users, Wrench,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -91,6 +91,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         <button className="icon-btn rail-btn" onClick={layout.toggle} aria-label="사이드바 펼치기" title="사이드바 펼치기 (Ctrl+B)"><PanelLeftOpen size={18} /></button>
         <Link className="icon-btn rail-btn primary" to="/" aria-label="새 작업" title="새 작업"><Plus size={18} /></Link>
         <Link className="icon-btn rail-btn" to="/" aria-label="첫 화면" title="첫 화면"><Home size={18} /></Link>
+        <Link className="icon-btn rail-btn" to="/tools" aria-label="CAD·CAE 툴" title="CAD·CAE 툴"><Wrench size={18} /></Link>
         <span className="grow" />
         <Link className="icon-btn rail-btn" to="/settings" aria-label="설정" title="설정 · PC Agent"><Settings size={18} /></Link>
         <button className="icon-btn rail-btn" onClick={toggleTheme} aria-label={themeLabel} title={themeLabel}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
@@ -160,6 +161,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
       </div>
       <div className="side-body">
         <button className="primary side-new" onClick={() => nav("/")}><Plus size={15} />새 작업</button>
+        <NavLink className="side-nav" to="/tools"><Wrench size={15} />CAD·CAE 툴</NavLink>
         <div className="side-search">
           <Search size={14} />
           <input type="search" placeholder="프로젝트 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="프로젝트 검색" />

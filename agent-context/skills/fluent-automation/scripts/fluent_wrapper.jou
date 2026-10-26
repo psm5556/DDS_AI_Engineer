@@ -1,0 +1,5 @@
+; Fixed wrapper for tool key 'fluent' ({fluent} 3ddp -g -t4 -i fluent_wrapper.jou).
+; The previous step (python fluent_render_run.py --no-run) wrote run.jou in the case folder.
+; run.jou itself ends with /exit yes; the lines below are a fallback.
+/file/read-journal run.jou
+/exit yes

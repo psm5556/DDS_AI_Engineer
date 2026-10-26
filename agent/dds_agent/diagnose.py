@@ -50,11 +50,19 @@ def diagnose(s: AgentSettings) -> dict:
         tools.append({"key": key, "label": label, "configured": exe, "found": bool(found), "path": found,
                       "version": _version(found, vargs) if found else None, "tool_keys": uses,
                       "env": s.tool_env.get(key) or None})
+    from cae_adapters.catalog import tool_status
+
+    catalog = tool_status(paths)
+    for t in catalog:
+        for e in t["executables"]:
+            e["auto"] = e["key"] in s.discovered  # 기본 설치 경로에서 자동으로 찾음
+            label, vargs = LABELS.get(e["key"], (e["key"], None))
+            e["version"] = _version(e["found"], vargs) if e["found"] and vargs else None
     viewers = [{"ext": ext, "command": cmd, "found": bool(_resolve(cmd[0]))} for ext, cmd in s.viewers.items()]
     ws = s.workspace_dir
     usage = shutil.disk_usage(ws if ws.exists() else ws.parent)
     return {
         "workspace": str(ws), "workspace_free_gb": round(usage.free / 1e9, 1),
-        "tools": tools, "viewers": viewers, "agents": s.available_agents(),
+        "tools": tools, "catalog": catalog, "viewers": viewers, "agents": s.available_agents(),
         "hints": [t["label"] + ": agent.toml [tools]에 경로를 지정하세요" for t in tools if not t["found"]],
     }

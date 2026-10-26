@@ -1,0 +1,13 @@
+{
+  "model": "bracket.ansa",
+  "deck": "NASTRAN",
+  "cards": {
+    "thickness": {"type": "PSHELL", "id": 1, "field": "T"},
+    "rib_thickness": {"type": "PSHELL", "id": 2, "field": "T"},
+    "e_mod": {"type": "MAT1", "id": 1, "field": "E"}
+  },
+  "morph": {},
+  "batchmesh": false,
+  "output": "case.bdf",
+  "save_ansa": null
+}

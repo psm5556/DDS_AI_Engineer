@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<!--
+  FloSCRIPT template SKELETON for flotherm_prepare.py  ({{name}} -> params.json value).
+  DO NOT use the element names below as-is. They show the intended order only.
+  Replace the whole body with a FloSCRIPT you RECORDED in the in-house Flotherm GUI
+  (record: load project -> change power / heat sink / fan -> solve -> export result table -> save),
+  then put {{placeholders}} where the recorded numbers are.
+  TODO(사내검증): every element and attribute name in this file.
+-->
+<xml_log_file version="1.0">
+    <!-- 1. load the base project (project copied into the case folder by the study adapter) -->
+    <project_load project_name="{{project_name}}"/>
+
+    <!-- 2. change a source power (recorded: select the source object, modify its power attribute) -->
+    <!-- <select_geometry> ... <geometry name="U1_CPU"/> ... </select_geometry> -->
+    <!-- <modify_attribute property_name="power" new_value="{{cpu_power}}"/> -->
+
+    <!-- 3. heat sink geometry (fin height / count) -->
+    <!-- <modify_geometry property_name="finHeight" new_value="{{fin_height}}"/> -->
+
+    <!-- 4. fan operating point / fan curve scale -->
+    <!-- <modify_attribute property_name="flowRate" new_value="{{fan_flow}}"/> -->
+
+    <!-- 5. re-grid and solve -->
+    <!-- <start start_type="solver"/> -->
+
+    <!-- 6. export results (component max temperature table) to a CSV in the case folder -->
+    <!-- <export_... file_name="component_temps.csv"/> -->
+
+    <!-- 7. save and quit -->
+    <!-- <project_save/> -->
+    <!-- <quit/> -->
+</xml_log_file>

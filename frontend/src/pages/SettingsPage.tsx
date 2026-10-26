@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy, Download, KeyRound, Laptop, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api, del, get, post } from "../api";
 import { useAuth } from "../auth";
 import { PinInput } from "../components/PinInput";
@@ -143,7 +144,6 @@ function PinChange() {
 
 interface Diag {
   workspace: string; workspace_free_gb: number; hints: string[];
-  tools: { key: string; label: string; configured: string; found: boolean; path: string | null; version: string | null; tool_keys: string[] }[];
   viewers: { ext: string; command: string[]; found: boolean }[];
 }
 
@@ -154,7 +154,7 @@ function Diagnose({ connected }: { connected: boolean }) {
   return (
     <section className="block">
       <div className="block-head"><h3>내 PC 진단</h3>
-        <span className="small muted">CAD/CAE 툴·뷰어 경로는 %USERPROFILE%\.dds-agent\agent.toml 의 [tools]·[viewers]에서 설정합니다</span>
+        <span className="small muted">작업 폴더와 CAE 뷰어를 확인합니다. CAD·CAE 툴 설치 상태는 <Link to="/tools">CAD·CAE 툴</Link> 화면에서 봅니다</span>
         <span className="grow" />
         <button className="small" disabled={!connected || run.isPending} onClick={() => run.mutate()}>
           {run.isPending ? <><span className="spinner" style={{ width: 12, height: 12 }} />확인 중</> : "진단 실행"}</button></div>
@@ -166,16 +166,6 @@ function Diagnose({ connected }: { connected: boolean }) {
             <span>CAE 뷰어</span><b>{d.viewers.length ? d.viewers.map((v) => <span key={v.ext} className={`chip ${v.found ? "ok" : "err"}`}>{v.ext} → {v.command[0].split(/[\/]/).pop()}</span>)
               : <span className="small muted">등록 없음 — 결과 파일은 Windows 기본 프로그램으로 열립니다</span>}</b>
           </div>
-          <div className="table-wrap"><table>
-            <thead><tr><th>툴</th><th>상태</th><th>경로 / 버전</th><th>쓰는 tool 키</th></tr></thead>
-            <tbody>{d.tools.map((t) => (
-              <tr key={t.key}>
-                <td>{t.label}</td>
-                <td>{t.found ? <span className="chip ok">찾음</span> : <span className="chip">없음</span>}</td>
-                <td className="small">{t.path ?? <span className="muted">{t.configured || "(미설정)"}</span>}{t.version && <div className="muted">{t.version}</div>}</td>
-                <td className="small muted">{t.tool_keys.join(", ")}</td>
-              </tr>))}</tbody>
-          </table></div>
         </>
       )}
     </section>

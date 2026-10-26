@@ -1,0 +1,7 @@
+read geom Nastran case.op2
+read dis Nastran case.op2 1 Displacements
+read onlyfun Nastran case.op2 1 Stresses,VonMises,MaxofTopBottom
+view default isometric
+options fringebar on
+write png images/vm.png
+exit

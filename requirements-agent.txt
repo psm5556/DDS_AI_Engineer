@@ -8,6 +8,8 @@ scipy==1.17.1
 pyNastran==1.4.1
 lasso-python==2.0.3
 matplotlib==3.11.2
+# CAD·CAE COM 자동화 (CATIA, SolidWorks, Moldflow Synergy) — Windows 전용
+pywin32==312; sys_platform == "win32"
 # 트레이 아이콘
 pystray==0.19.5
 pillow==13.0.0

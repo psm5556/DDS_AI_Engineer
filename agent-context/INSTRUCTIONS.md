@@ -37,9 +37,16 @@ P0012_<프로젝트>/            ← 지금 작업 폴더(cwd)
 - 3D 형상·필드가 필요하면 `adapter_config.post`에 툴별 필드 추출 스크립트를 추가한다. post는 여러 단계를 리스트로 받을 수 있다.
 
 ## 2. 툴 자동화 방법
+- 먼저 `dds-cae.list_tools`로 이 PC에서 쓸 수 있는 툴(status: ready / partial / missing)과 읽을 스킬을 확인합니다.
+  missing인 툴로 계획하지 않습니다. 필요하면 사용자에게 설치나 경로 지정이 필요하다고 알립니다(웹앱 'CAD·CAE 툴' 화면).
 - 툴별 스킬을 먼저 읽고 그 패턴대로 스크립트를 작성합니다.
-  - `nx-cad-automation`, `simcenter3d-automation`, `abaqus-automation`, `lsdyna-automation`
-  - `ansys-automation`, `altair-automation`, `starccm-automation`, `amesim-automation`
+  - CAD: `nx-cad-automation`, `catia-automation`, `solidworks-automation`, `creo-automation`
+  - 전처리·후처리: `ansa-automation`(ANSA·META), `altair-automation`(HyperMesh·OptiStruct·HyperView)
+  - 구조: `simcenter3d-automation`, `abaqus-automation`, `ansys-automation`, `msc-nastran-automation`
+  - 충돌·비선형: `lsdyna-automation`
+  - 유동·열: `starccm-automation`, `fluent-automation`, `openfoam-automation`, `flotherm-automation`
+  - 다중물리: `comsol-automation` / 다물체 동역학: `adams-automation`, `recurdyn-automation`
+  - 사출 성형: `moldflow-automation`, `moldex3d-automation` / 1D 시스템: `amesim-automation` / 피로: `ncode-automation`
   - DOE·학습·최적화는 `doe-surrogate-optimization`, 흐름 설계는 `workflow-planning` 스킬을 봅니다.
 - 입출력 규약은 `dds-cae.case_contract`로 확인합니다. 스크립트는 `params.json`을 읽고 `results.json`(숫자 평탄 딕셔너리)을 씁니다. 이미지는 `images/`에 저장합니다.
 - 모델 구조를 모르면 스킬의 inspect 스크립트를 `dds-cae.run_script`로 먼저 실행해 파악합니다(파라미터 이름, 세트, 스텝 등).

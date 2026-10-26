@@ -247,3 +247,38 @@ td.nowrap { white-space: nowrap; }
 .chat-art-open:hover .chat-art-title { color: var(--brand); }
 .notice-inline { align-self: center; font-size: var(--fs-s); padding: 6px 10px; border-radius: var(--radius-s); white-space: nowrap; }
 .notice-inline.warn { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn-ring); }
+
+/* 사이드바: CAD·CAE 툴 화면 링크 */
+.side-nav { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; margin: 6px 0 2px; border-radius: var(--radius-s);
+  color: var(--ink-2); text-decoration: none; font-size: var(--fs-s); }
+.side-nav:hover { background: var(--hover); color: var(--ink); }
+.side-nav.active { background: var(--active); color: var(--ink); font-weight: 600; }
+
+/* 첫 화면: 지원 툴 한 줄 */
+.tools-hint { display: inline-flex; align-items: center; gap: 6px; margin: 10px auto 0; font-size: var(--fs-s); color: var(--ink-3); text-decoration: none; }
+.tools-hint:hover { color: var(--brand); }
+
+/* CAD·CAE 툴 화면 */
+.tools-summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+.tools-summary .big-num { font-size: 26px; font-weight: 700; color: var(--brand); }
+.tools-cats { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; }
+.chip-btn { min-height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500; background: var(--panel); border: 1px solid var(--line);
+  color: var(--ink-2); box-shadow: none; }
+.chip-btn.on { background: var(--brand-soft); border-color: var(--info-ring); color: var(--brand); font-weight: 600; }
+.tools-sec h2 { font-size: var(--fs-m); font-weight: 600; color: var(--ink-2); margin: 24px 0 10px; }
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+.tool-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.tool-card.ready { border-color: var(--ok-ring); }
+.tool-head { display: flex; align-items: flex-start; gap: 8px; }
+.tool-head b { font-size: var(--fs-m); }
+.tool-head .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.tool-can { display: flex; flex-wrap: wrap; gap: 4px; }
+.tool-can span { font-size: 11px; color: var(--ink-3); background: var(--panel-3); border-radius: 6px; padding: 2px 7px; }
+.tool-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 2px; }
+.tool-detail { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid var(--vline); }
+.tool-exe { display: flex; flex-direction: column; gap: 1px; word-break: break-all; }
+.tool-exe code, .tool-detail code { font-size: 11px; }
+.tool-howto { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.tools-grid { align-items: start; }
+/* 한글 글꼴은 \ 를 ₩ 로 그린다 — 경로·코드는 라틴 고정폭 글꼴로 */
+code, .mono, pre { font-family: "Cascadia Mono", Consolas, "Courier New", ui-monospace, monospace; }

@@ -27,17 +27,26 @@ def case_contract() -> str:
 
 
 @mcp.tool()
-def list_tools() -> list[dict]:
-    """사용 가능한 tool 키, 명령 템플릿, 실행 파일 경로와 존재 여부."""
+def list_tools() -> dict:
+    """이 PC에서 쓸 수 있는 CAD/CAE 툴과 실행 방법.
+    - tools: 지원 툴별 상태(ready=바로 사용, partial=일부만 찾음, missing=설치·경로 필요), 읽을 스킬, 쓸 수 있는 tool 키
+    - commands: tool 키별 명령 템플릿과 실행 파일 존재 여부(run_script·스터디 adapter_config의 tool 값)
+    missing인 툴은 사용자에게 설치나 agent.toml [tools] 경로 지정이 필요하다고 알린다."""
+    from cae_adapters.catalog import TOOLS, tool_status
+
     paths = {**DEFAULT_TOOL_PATHS, **settings.tools}
+    status = {t["id"]: t for t in tool_status(paths)}
+    tools = [{"id": t["id"], "name": t["name"], "category": t["category"], "skill": t["skill"], "tool_keys": t["run"],
+              "can": t["can"], "status": status[t["id"]]["status"],
+              "executables": {e["key"]: e["found"] for e in status[t["id"]]["executables"]}} for t in TOOLS]
     table = {**DEFAULT_TOOL_COMMANDS, **settings.tool_commands}
-    out = []
+    commands = []
     for key, tmpl in sorted(table.items()):
         exe_key = tmpl[0][1:-1] if tmpl[0].startswith("{") else None
         exe = paths.get(exe_key, "") if exe_key and exe_key != "python" else "(플랫폼 python)"
         found = True if exe == "(플랫폼 python)" else bool(exe and (Path(exe).exists() or shutil.which(exe)))
-        out.append({"tool": key, "command": " ".join(tmpl), "executable": exe, "found": found})
-    return out
+        commands.append({"tool": key, "command": " ".join(tmpl), "executable": exe, "found": found})
+    return {"tools": tools, "commands": commands}
 
 
 @mcp.tool()

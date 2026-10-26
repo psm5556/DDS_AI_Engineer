@@ -58,6 +58,22 @@
 | `optistruct` | `{altair_optistruct} {args}` |
 | `starccm` | `{starccm} -batch {script} {args}` |
 | `amesim` | `{amesim_python} {script} {args}` |
+| `adams_view` · `adams_solver` · `adams_python` | `{adams} aview ru-standard b {script}` · `{adams} ru-standard {args}` · `{adams} python {script} {args}` |
+| `recurdyn` · `recurdyn_solver` | `{recurdyn} {args}` · `{recurdyn_solver} {args}` |
+| `moldflow_run` · `moldflow_result` · `moldflow_synergy` | `{moldflow_runstudy} {args}` · `{moldflow_studyrlt} {args}` · `{python} {script}`(Synergy COM) |
+| `moldex3d` | `{moldex3d_python} {script} {args}` |
+| `comsol_batch` · `comsol_python` | `{comsol} batch {args}` · `{python} {script}`(MPh) |
+| `fluent` · `fluent_python` | `{fluent} 3ddp -g -t4 -i {script}` · `{ansys_python} {script}`(PyFluent) |
+| `openfoam` | `{openfoam_shell} bash {script} {args}` (WSL) |
+| `flotherm` | `{flotherm} -b {args}` (FloSCRIPT) |
+| `ansa` · `meta` | `{ansa} -nogui -exec "load_script: '{script}'" -exec "main()"` · `{meta} -b -s {script}` |
+| `msc_nastran` | `{msc_nastran} {args}` (예: `job.bdf scr=yes`) |
+| `ncode` | `{ncode} {args}` |
+| `catia_com` · `catia_batch` | `{python} {script}`(COM) · `{catia} -batch -macro {script}` |
+| `solidworks_com` | `{python} {script}`(COM) |
+| `creo_trail` · `creo_python` | `{creo} -g:no_graphics -i:rpc_input {script}` · `{python} {script}`(Creoson) |
+
+지원 툴 목록과 기본 설치 경로는 `cae_adapters/catalog.py` 한 곳에 있다. PC Agent는 `agent.toml`에 경로가 없으면 기본 설치 경로에서 툴을 자동으로 찾는다.
 | `python` | 플랫폼 venv 파이썬 |
 
 ## 3. 스킬 폴더 구조 (Gemini CLI Agent Skill)

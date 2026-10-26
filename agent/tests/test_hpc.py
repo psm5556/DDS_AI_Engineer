@@ -82,3 +82,19 @@ def test_project_folder_identity(tmp_path):
     c = ws.project_dir(1, "브래킷 설계 v2", "ccc333")  # 같은 번호·이름이어도 uid가 다르면 따로
     assert c not in (a, b)
     assert ws.project_dir(1) == c  # uid 모르는 호출(MCP)은 가장 최근 폴더
+
+
+def test_tool_catalog_consistent():
+    """지원 툴 목록(catalog)의 스킬 폴더·실행 키·경로 키가 실제로 모두 있다."""
+    from pathlib import Path
+
+    from cae_adapters.catalog import CATEGORIES, TOOLS
+    from cae_adapters.tool_commands import DEFAULT_TOOL_COMMANDS, DEFAULT_TOOL_PATHS
+
+    skills = Path(__file__).resolve().parents[2] / "agent-context" / "skills"
+    assert len({t["id"] for t in TOOLS}) == len(TOOLS)
+    for t in TOOLS:
+        assert t["category"] in CATEGORIES, t["id"]
+        assert (skills / t["skill"] / "SKILL.md").is_file(), t["skill"]
+        assert all(k in DEFAULT_TOOL_COMMANDS for k in t["run"]), t["id"]
+        assert all(k in DEFAULT_TOOL_PATHS for k in t["paths"]), t["id"]

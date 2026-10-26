@@ -1,0 +1,44 @@
+; DDS Fluent TUI journal template
+; fluent_render_run.py replaces {{name}} with params.json values (or --set defaults) and writes run.jou.
+; Any {{name}} left without a value is an error. Lines starting with ';' are comments.
+; Record your own case once in the GUI (File > Write > Start Journal) and copy exact TUI prompts:
+; prompt order differs by Fluent version.  TODO(사내검증): verify every command below on the in-house version.
+
+/file/start-transcript fluent.trn
+/file/read-case {{case_file}}
+
+; ---- boundary conditions (TUI 'set' syntax: zone list, then keyword/value pairs, then quit) ----
+; TODO(사내검증): keyword names (vmag, temperature, heat-flux) for the in-house version
+/define/boundary-conditions/set/velocity-inlet inlet () vmag no {{inlet_velocity}} quit
+/define/boundary-conditions/set/velocity-inlet inlet () temperature no {{inlet_temp}} quit
+/define/boundary-conditions/set/wall heater () heat-flux no {{heat_flux}} quit
+
+; ---- alternative: Fluent named input parameters (BC fields set to 'parameter' in the GUI) ----
+; TODO(사내검증): /define/parameters/input-parameters/... syntax
+; /define/parameters/input-parameters/edit "inlet_velocity" "inlet_velocity" {{inlet_velocity}}
+
+; ---- solve ----
+/solve/initialize/hyb-initialization
+/solve/iterate {{iterations}}
+
+; ---- report values to files (report definitions with report files are written during iterate) ----
+; TODO(사내검증): prompt order (surfaces, (), field, write-to-file?, file name)
+/report/surface-integrals/area-weighted-avg outlet () temperature yes outlet_temp.srp
+/report/surface-integrals/mass-flow-rate inlet outlet () yes mass_flow.srp
+
+; ---- surface field export for fields/*.npz (optional) ----
+; TODO(사내검증): prompt order of /file/export/ascii (file, surfaces, (), node-values?, functions, (), delimiter)
+; /file/export/ascii heater_surface.csv heater () yes temperature pressure () no
+
+; ---- pictures (optional; -g batch rendering depends on version/graphics driver) ----
+; TODO(사내검증): off-screen rendering in -g mode, graphics object name 'contour-temp' prepared in the case
+; /display/set/picture/driver png
+; /display/set/picture/use-window-resolution no
+; /display/set/picture/x-resolution 1600
+; /display/set/picture/y-resolution 900
+; /display/objects/display contour-temp
+; /display/save-picture images/contour_temp.png
+
+/file/write-case-data result.cas.h5
+/file/stop-transcript
+/exit yes

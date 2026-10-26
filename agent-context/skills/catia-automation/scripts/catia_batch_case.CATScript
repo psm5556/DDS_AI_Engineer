@@ -1,0 +1,119 @@
+' ===========================================================================
+' CATIA V5 배치 매크로 템플릿 (tool 키 'catia_batch': CNEXT.exe -batch -macro catia_batch_case.CATScript)
+'
+' 흐름: 케이스 폴더(cwd)의 params.json(평탄 숫자 dict)을 정규식으로 읽기 -> *.CATPart 1개 열기
+'       -> 파라미터 변경 -> Part.Update -> 질량/부피/면적 -> export/<이름>.stp -> results.json
+' 실패하면 results.json 을 쓰지 않는다(플랫폼이 failed 처리).
+'
+' TODO(사내검증):
+'  - batch 모드의 현재 폴더가 케이스 폴더인지(GetAbsolutePathName(".")). 아니면 DDS_CASE_DIR 환경변수를 읽는다.
+'  - -batch 실행에 -env/-direnv 인자가 필요한지(사내 CATIA 환경 파일 이름).
+'  - Analyze 단위(Mass kg, Volume m^3, WetArea m^2) - Python 템플릿과 같은 가정.
+'  - 배치 모드에서 오류 시 종료코드가 0 이 아닐지 여부. 판정은 results.json 존재로 한다.
+' ===========================================================================
+Option Explicit
+
+Sub CATMain()
+    Dim fso, caseDir, shell
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set shell = CreateObject("WScript.Shell")
+    caseDir = shell.ExpandEnvironmentStrings("%DDS_CASE_DIR%")
+    If caseDir = "%DDS_CASE_DIR%" Or caseDir = "" Then caseDir = fso.GetAbsolutePathName(".")
+
+    Dim resPath
+    resPath = fso.BuildPath(caseDir, "results.json")
+    If fso.FileExists(resPath) Then fso.DeleteFile resPath
+
+    ' --- params.json 읽기 (평탄 "key": number 만 지원)
+    Dim names(), values(), n
+    n = 0
+    ReDim names(0): ReDim values(0)
+    If fso.FileExists(fso.BuildPath(caseDir, "params.json")) Then
+        Dim txt, re, ms, m
+        txt = fso.OpenTextFile(fso.BuildPath(caseDir, "params.json"), 1).ReadAll
+        Set re = CreateObject("VBScript.RegExp")
+        re.Global = True
+        re.Pattern = """([^""]+)""\s*:\s*(-?[0-9.]+(?:[eE][-+]?[0-9]+)?)"
+        Set ms = re.Execute(txt)
+        For Each m In ms
+            ReDim Preserve names(n): ReDim Preserve values(n)
+            names(n) = m.SubMatches(0)
+            values(n) = CDbl(m.SubMatches(1))   ' TODO(사내검증): 소수점 로캘(쉼표) 환경에서 CDbl 동작
+            n = n + 1
+        Next
+    End If
+
+    ' --- CATPart 찾기
+    Dim f, partPath
+    partPath = ""
+    For Each f In fso.GetFolder(caseDir).Files
+        If LCase(fso.GetExtensionName(f.Name)) = "catpart" And InStr(LCase(f.Name), "_case.") = 0 Then
+            If partPath <> "" Then
+                CATIA.SystemService.Print "[DDS] FAILED: more than one CATPart in case folder"
+                Exit Sub
+            End If
+            partPath = f.Path
+        End If
+    Next
+    If partPath = "" Then
+        CATIA.SystemService.Print "[DDS] FAILED: no CATPart in case folder"
+        Exit Sub
+    End If
+
+    CATIA.DisplayFileAlerts = False
+    Dim doc, part, i, p
+    Set doc = CATIA.Documents.Open(partPath)
+    Set part = doc.Part
+
+    On Error Resume Next
+    For i = 0 To n - 1
+        Set p = part.Parameters.Item(names(i))
+        If Err.Number <> 0 Then
+            CATIA.SystemService.Print "[DDS] FAILED: parameter not found: " & names(i)
+            doc.Close
+            Exit Sub
+        End If
+        p.Value = values(i)      ' Length=mm, Angle=deg
+    Next
+    Err.Clear
+    part.Update
+    If Err.Number <> 0 Then
+        CATIA.SystemService.Print "[DDS] FAILED: Part.Update error: " & Err.Description
+        doc.Close
+        Exit Sub
+    End If
+    On Error GoTo 0
+
+    ' --- 측정
+    Dim an, cog(2)
+    Set an = doc.Product.Analyze
+    an.GetGravityCenter cog
+
+    ' --- STEP 내보내기
+    Dim expDir, base
+    expDir = fso.BuildPath(caseDir, "export")
+    If Not fso.FolderExists(expDir) Then fso.CreateFolder expDir
+    base = fso.GetBaseName(partPath)
+    doc.ExportData fso.BuildPath(expDir, base & ".stp"), "stp"
+
+    ' --- results.json (J() 로 로캘 쉼표를 점으로 바꾼다)
+    Dim out
+    Set out = fso.CreateTextFile(resPath, True)
+    out.WriteLine "{"
+    out.WriteLine "  ""mass"": " & J(an.Mass) & ","
+    out.WriteLine "  ""volume_mm3"": " & J(an.Volume * 1000000000#) & ","
+    out.WriteLine "  ""area_mm2"": " & J(an.WetArea * 1000000#) & ","
+    out.WriteLine "  ""cog_x"": " & J(cog(0)) & ","
+    out.WriteLine "  ""cog_y"": " & J(cog(1)) & ","
+    out.WriteLine "  ""cog_z"": " & J(cog(2)) & ","
+    out.WriteLine "  ""n_params_applied"": " & n
+    out.WriteLine "}"
+    out.Close
+    doc.Close
+    CATIA.SystemService.Print "[DDS] results.json written"
+End Sub
+
+' 숫자 -> JSON 숫자 문자열 (쉼표 소수점 로캘 대응)
+Function J(x)
+    J = Replace(CStr(x), ",", ".")
+End Function

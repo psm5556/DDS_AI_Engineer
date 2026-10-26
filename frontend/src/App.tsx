@@ -9,6 +9,7 @@ import AdminPage from "./pages/AdminPage";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
 import SettingsPage from "./pages/SettingsPage";
+import ToolsPage from "./pages/ToolsPage";
 import SimulatorPage, { SharedSimulatorPage } from "./pages/SimulatorPage";
 import WorkspacePage from "./pages/WorkspacePage";
 
@@ -48,6 +49,7 @@ export default function App() {
       <Route path="/simulator/:mid" element={protect(<SimulatorPage />)} />
       <Route path="/s/:token" element={protect(<SharedSimulatorPage />)} />
       <Route path="/settings" element={protect(<SettingsPage />)} />
+      <Route path="/tools" element={protect(<ToolsPage />)} />
       <Route path="/admin" element={protect(<AdminPage />)} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

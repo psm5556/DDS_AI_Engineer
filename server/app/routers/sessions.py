@@ -237,6 +237,14 @@ def local_tree(path: str = "", project: models.Project = Depends(get_project_for
         raise HTTPException(409, str(e))
 
 
+@router.get("/tools/catalog")
+def tools_catalog(user: models.User = Depends(get_current_user)):
+    """지원하는 CAD/CAE 툴 목록(분야·할 수 있는 일·스킬). 내 PC 설치 상태는 /agent/diagnose의 catalog."""
+    from cae_adapters.catalog import CATEGORIES, public_catalog
+
+    return {"categories": CATEGORIES, "tools": public_catalog()}
+
+
 @router.get("/agent/diagnose")
 def agent_diagnose(user: models.User = Depends(get_current_user)):
     """내 PC 진단: CAD/CAE 툴 경로·버전, 뷰어, 작업 폴더, AI CLI (PC Agent가 확인)."""

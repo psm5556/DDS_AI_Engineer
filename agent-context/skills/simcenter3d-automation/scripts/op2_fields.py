@@ -67,7 +67,7 @@ def nodal_vm(model, subcase: int, elem_nodes: dict[int, list[int]]) -> dict[int,
         if res is None:
             continue
         data = res.data[-1]  # 마지막 시간/하중 단계
-        headers = list(res.headers)
+        headers = list(res.get_headers() if hasattr(res, "get_headers") else getattr(res, "headers", []))
         col = headers.index("von_mises") if "von_mises" in headers else len(headers) - 1
         eids = res.element_node[:, 0] if hasattr(res, "element_node") else res.element
         for row, eid in enumerate(eids):

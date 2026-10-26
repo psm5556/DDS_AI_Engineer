@@ -46,7 +46,13 @@ PIDO 툴처럼 스크립트를 직접 짜고 프로세스를 잇는 대신, 사�
 | `docs/skill-contract.md` | 툴 스크립트 입출력 규약(`params.json` → `results.json`, `images/`) |
 
 ### 스킬 (`agent-context/skills/`)
-- CAD/CAE 툴: `nx-cad-automation`, `simcenter3d-automation`, `abaqus-automation`, `lsdyna-automation`, `ansys-automation`, `altair-automation`, `starccm-automation`, `amesim-automation`
+- CAD/CAE 툴 22종: 웹앱 **CAD·CAE 툴** 화면에서 지원 목록과 내 PC 설치 상태를 본다(목록: `cae_adapters/catalog.py`).
+  - CAD: NX, CATIA V5, SOLIDWORKS, Creo
+  - 전처리·후처리: ANSA·META, HyperMesh·OptiStruct·HyperView
+  - 구조: Simcenter 3D, Abaqus, Ansys, MSC Nastran / 충돌: LS-DYNA
+  - 유동·열: STAR-CCM+, Fluent, OpenFOAM, Flotherm / 다중물리: COMSOL
+  - 다물체: Adams, RecurDyn / 사출: Moldflow, Moldex3D / 1D: Amesim / 피로: nCode DesignLife
+  - PC Agent는 기본 설치 경로에서 툴을 자동으로 찾는다. 다른 위치면 `agent.toml [tools]`에 적는다.
 - 프로세스: `workflow-planning`, `doe-surrogate-optimization`, `live-modeling`
 - 툴 API 중 사내에서 확인이 필요한 부분은 각 스킬에 `TODO(사내검증)`로 표시돼 있다.
 

@@ -27,6 +27,37 @@ DEFAULT_TOOL_COMMANDS: dict[str, list[str]] = {
     "starccm": ["{starccm}", "-batch", "{script}", "{args}"],
     "starccm_run": ["{starccm}", "-batch", "run", "{args}"],
     "amesim": ["{amesim_python}", "{script}", "{args}"],
+    # 다물체 동역학
+    "adams_view": ["{adams}", "aview", "ru-standard", "b", "{script}"],  # .cmd 배치(모델 수정·시뮬레이션)
+    "adams_solver": ["{adams}", "ru-standard", "{args}"],  # .acf 솔버 단독
+    "adams_python": ["{adams}", "python", "{script}", "{args}"],  # Adams View Python(Adams 2017.2+)
+    "adams_car": ["{adams}", "acar", "ru-solver", "{args}"],  # Adams Car files_only 이벤트 솔버 실행 — TODO(사내검증)
+    "recurdyn": ["{recurdyn}", "{args}"],  # RecurDyn GUI/ProcessNet 매크로 실행
+    "recurdyn_solver": ["{recurdyn_solver}", "{args}"],  # 솔버 배치(.rmd)
+    # 사출 성형
+    "moldflow_run": ["{moldflow_runstudy}", "{args}"],  # runstudy.exe study.sdy
+    "moldflow_result": ["{moldflow_studyrlt}", "{args}"],  # studyrlt.exe study.sdy -exportoutput ...
+    "moldflow_synergy": ["{python}", "{script}", "{args}"],  # Synergy COM API(pywin32)
+    "moldex3d": ["{moldex3d_python}", "{script}", "{args}"],  # Moldex3D API(Python)
+    # 다중물리·유동·열
+    "comsol_batch": ["{comsol}", "batch", "{args}"],  # -inputfile m.mph -outputfile out.mph -pname/-plist -methodcall
+    "comsol_python": ["{python}", "{script}", "{args}"],  # MPh 패키지(comsol mphserver 경유)
+    "fluent": ["{fluent}", "3ddp", "-g", "-t4", "-i", "{script}"],  # TUI 저널(.jou)
+    "fluent_run": ["{fluent}", "{args}"],  # 차원·코어·-wait를 args로 지정 (예: 3ddp -g -t8 -i run.jou -wait)
+    "fluent_python":["{ansys_python}", "{script}", "{args}"],  # PyFluent
+    "openfoam": ["{openfoam_shell}", "bash", "{script}", "{args}"],  # WSL/리눅스 bash 스크립트
+    "flotherm": ["{flotherm}", "-b", "{args}"],  # FloSCRIPT 배치
+    # 전처리·후처리·피로
+    "ansa": ["{ansa}", "-nogui", "-exec", "load_script: '{script}'", "-exec", "main()"],
+    "meta": ["{meta}", "-b", "-s", "{script}"],  # META 세션 파일 배치
+    "msc_nastran": ["{msc_nastran}", "{args}"],  # nastran job.bdf scr=yes
+    "ncode": ["{ncode}", "{args}"],  # DesignLife 배치(.flo)
+    # CAD (COM 자동화는 pywin32 파이썬, 배치 매크로는 툴 실행파일)
+    "catia_com": ["{python}", "{script}", "{args}"],
+    "catia_batch": ["{catia}", "-batch", "-macro", "{script}"],
+    "solidworks_com": ["{python}", "{script}", "{args}"],
+    "creo_trail": ["{creo}", "-g:no_graphics", "-i:rpc_input", "{script}"],
+    "creo_python": ["{python}", "{script}", "{args}"],  # Creoson(JSON) 또는 Creo Toolkit 래퍼
     "python": ["{python}", "{script}", "{args}"],
 }
 
@@ -43,6 +74,23 @@ DEFAULT_TOOL_PATHS: dict[str, str] = {
     "altair_optistruct": "optistruct",
     "starccm": "starccm+",
     "amesim_python": "amesim_python",
+    "adams": "mdi",  # 예: C:/Program Files/MSC.Software/Adams/2023_1/common/mdi.bat
+    "recurdyn": "",  # 예: C:/Program Files/FunctionBay, Inc/RecurDyn V9R5/Bin/RecurDyn.exe
+    "recurdyn_solver": "",
+    "moldflow_runstudy": "runstudy",  # 예: C:/Program Files/Autodesk/Moldflow Insight 2025/bin/runstudy.exe
+    "moldflow_studyrlt": "studyrlt",
+    "moldex3d_python": "",
+    "comsol": "comsol",
+    "fluent": "fluent",
+    "openfoam_shell": "wsl",
+    "flotherm": "",
+    "ansa": "ansa64",
+    "meta": "meta_post64",
+    "msc_nastran": "nastran",
+    "ncode": "",
+    "catia": "CNEXT",
+    "creo": "parametric",
+    "solidworks": "",  # COM 자동화라 명령에는 안 쓰고 설치 확인용(SLDWORKS.exe)
 }
 
 

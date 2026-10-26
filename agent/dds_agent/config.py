@@ -49,6 +49,7 @@ class AgentSettings:
     # 결과 파일을 여는 CAE 뷰어: 확장자 → 명령(목록, {file} 치환). 없으면 Windows 기본 연결 프로그램으로 연다.
     # 예) [viewers]  ".odb" = ["C:/DDS/Viewer/ddsview.exe", "--open", "{file}"]   "*" = [...]  (모든 결과 파일)
     viewers: dict[str, list[str]] = field(default_factory=dict)
+    discovered: dict[str, str] = field(default_factory=dict)  # 기본 설치 경로에서 자동으로 찾은 툴 경로(agent.toml에 없을 때)
 
     @property
     def ws_url(self) -> str:
@@ -97,4 +98,18 @@ def load_settings(path: Path | None = None) -> AgentSettings:
         s.workspace_dir = Path(os.environ["DDS_WORKSPACE"])
     s.workspace_dir = s.workspace_dir.expanduser().resolve()  # ACP session/new는 절대경로 cwd만 받는다
     s.workspace_dir.mkdir(parents=True, exist_ok=True)
+    _discover_tools(s)
     return s
+
+
+def _discover_tools(s: AgentSettings):
+    """agent.toml에 경로가 없거나 틀린 툴은 기본 설치 경로(cae_adapters/catalog.py)에서 찾아 쓴다 — 사용자가 설정하지 않아도 되게."""
+    from cae_adapters.catalog import discover, path_keys, resolve
+
+    for key in sorted(path_keys()):
+        if resolve(s.tools.get(key)):
+            continue
+        found = discover(key)
+        if found:
+            s.tools[key] = found
+            s.discovered[key] = found

@@ -203,7 +203,7 @@ def results_from_op2(op2_path):
     for name, tables in _stress_tables(op2):
         sc = SUBCASE if SUBCASE in tables else sorted(tables)[0]
         obj = tables[sc]
-        headers = list(getattr(obj, "headers", []))
+        headers = list(obj.get_headers() if hasattr(obj, "get_headers") else getattr(obj, "headers", []))
         if "von_mises" not in headers:
             print("[DDS] %s has no von_mises column (headers=%s)" % (name, headers))
             continue
