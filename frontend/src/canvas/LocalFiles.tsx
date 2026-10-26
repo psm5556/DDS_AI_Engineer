@@ -7,6 +7,8 @@ import { useToast } from "../toast";
 import type { AgentStatus, LocalTree } from "../types";
 
 const VIEWABLE = /\.(odb|d3plot|op2|f06|rst|rth|h3d|sim|fem|prt|stp|step|igs|iges|stl|vtu|vtk|cae|inp|k|key|dyn|png|jpg|csv|json|txt|log)$/i;
+// 에이전트가 쓰는 내부 파일(설정·지침) — 기본으로 숨긴다
+const INTERNAL = /^([.]|(AGENTS|CLAUDE|GEMINI)[.]md$|project[.]json$)/;
 const size = (n: number | null) => (n == null ? "" : n > 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 
 /** 서버 설정 web_viewer_url 템플릿을 채운다: {path}=그 PC의 절대경로, {rel}, {host}, {project_id} */
@@ -38,6 +40,7 @@ export function relFromRunDir(runDir: string | null): string | null {
 /** 캔버스 '파일' 탭: 내 PC의 프로젝트 작업 폴더 (규칙: inputs·scripts·runs·studies/S…/cases/C…·live·reports) */
 export function LocalFiles({ pid }: { pid: number }) {
   const [path, setPath] = useState("");
+  const [hidden, setHidden] = useState(false);
   const open = useOpenLocal(pid);
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ["local-tree", pid, path], queryFn: () => get<LocalTree>(`/api/projects/${pid}/local/tree?path=${encodeURIComponent(path)}`),
@@ -46,6 +49,8 @@ export function LocalFiles({ pid }: { pid: number }) {
   const { data: cfg } = useQuery({ queryKey: ["config"], queryFn: () => get<{ web_viewer_url: string }>("/api/config/public"), staleTime: 600_000 });
   const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status") });
   const crumbs = path ? path.split("/") : [];
+  const entries = (data?.entries ?? []).filter((e) => hidden || path || !INTERNAL.test(e.name));
+  const nHidden = (data?.entries.length ?? 0) - entries.length;
   if (error) {
     return <div className="empty-hero"><HardDrive size={28} /><b>내 PC 작업 폴더를 볼 수 없습니다</b><p>{(error as Error).message}</p></div>;
   }
@@ -65,7 +70,7 @@ export function LocalFiles({ pid }: { pid: number }) {
       {data && <p className="small muted local-root" title={data.root}>{data.root}{path ? `\\${path.replace(/\//g, "\\")}` : ""}</p>}
       <div className="table-wrap"><table className="local-table">
         <tbody>
-          {data?.entries.map((e) => (
+          {entries.map((e) => (
             <tr key={e.path} className={e.dir ? "clickable" : ""} onClick={() => e.dir && setPath(e.path)}>
               <td>{e.dir ? <Folder size={14} className="dir" /> : <File size={14} />} {e.name}</td>
               <td className="r small muted">{size(e.size)}</td>
@@ -85,9 +90,13 @@ export function LocalFiles({ pid }: { pid: number }) {
               </td>
             </tr>
           ))}
-          {data && !data.entries.length && <tr><td colSpan={4} className="small muted">비어 있습니다</td></tr>}
+          {data && !entries.length && <tr><td colSpan={4} className="small muted">비어 있습니다</td></tr>}
         </tbody>
       </table></div>
+      {(nHidden > 0 || hidden) && !path && (
+        <button className="link-btn small" style={{ marginTop: 8 }} onClick={() => setHidden(!hidden)}>
+          {hidden ? "에이전트 설정 파일 숨기기" : `에이전트 설정 파일 ${nHidden}개 보기`}</button>
+      )}
     </div>
   );
 }

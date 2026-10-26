@@ -62,9 +62,10 @@ export default function SettingsPage() {
           ) : <p className="small muted">아직 이 계정으로 연결된 PC가 없습니다. 아래 순서로 설치하세요.</p>}
         </section>
 
-        <section className="block">
-          <div className="block-head"><h3><Download size={16} />설치 (처음 한 번)</h3>
-            <span className="small muted">Python·Node 등 필요한 것은 모두 자동으로 설치됩니다. 관리자 권한도 필요 없습니다.</span></div>
+        {/* 연결돼 있으면 설치 안내는 접어 둔다 (다른 PC에 설치할 때만 펼침) */}
+        <details className="block install-block" open={!agent?.connected}>
+          <summary className="block-head"><h3><Download size={16} />{agent?.connected ? "다른 PC에 설치하기" : "설치 (처음 한 번)"}</h3>
+            <span className="small muted">Python·Node 등 필요한 것은 모두 자동으로 설치됩니다. 관리자 권한도 필요 없습니다.</span></summary>
           <ol className="install-steps">
             <li><b>설치 파일 받기</b><a className="btn primary" href="/api/agent/setup.exe" download><Download size={14} />DDS-Agent-Setup.exe</a></li>
             <li><b>토큰 발급</b>
@@ -82,7 +83,7 @@ export default function SettingsPage() {
                 <button className="icon-btn" title="명령 복사" aria-label="명령 복사" onClick={() => void copy(oneLiner, "명령")}><Copy size={14} /></button></div>
             </details>
           )}
-        </section>
+        </details>
 
         <section className="block">
           <div className="block-head"><h3>AI 에이전트</h3><span className="small muted">대화를 시작할 때 고를 수 있습니다. 구독·사용 권한이 있는 것만 설치하세요.</span></div>

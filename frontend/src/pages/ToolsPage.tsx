@@ -3,7 +3,6 @@ import { CheckCircle2, ChevronDown, ChevronRight, CircleDashed, Copy, RefreshCw,
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { get } from "../api";
-import { AgentBadge } from "../components/AgentBadge";
 import { copyText } from "../format";
 import { useToast } from "../toast";
 import type { AgentStatus } from "../types";
@@ -44,7 +43,6 @@ export default function ToolsPage() {
 
   return (
     <div className="page">
-      <div className="main-topright"><AgentBadge /></div>
       <div className="proj-head"><div className="grow"><h1>CAD·CAE 툴</h1>
         <div className="proj-sub">에이전트가 다룰 수 있는 툴과 내 PC 설치 상태입니다. 대화에서 툴 이름을 말하면 해당 스킬로 자동화합니다.</div></div></div>
 

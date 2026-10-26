@@ -13,7 +13,7 @@ import { relFromRunDir, useOpenLocal } from "./LocalFiles";
 import { useToast } from "../toast";
 import type { Artifact, Case, Flow, Project, StudyStatus, Study, SurrogateModel, User } from "../types";
 
-/** 라이브 캔버스에 들어가는 화면들: 작업 흐름 · 결과 · 데이터·모델 · Simulator 목록 · 멤버.
+/** 캔버스에 들어가는 화면들: 작업 흐름 · 결과 · 데이터·모델(예측 모델·Simulator) · 멤버.
  *  대화(가운데)에서 에이전트가 일하면 해당 화면이 실시간으로 갱신된다. */
 
 /* ---------- 작업 흐름 ---------- */
@@ -39,7 +39,7 @@ export function useFlowDecision(pid: number) {
 }
 
 export function FlowView({ flows, arts }: { flows?: Flow[]; arts: Artifact[] }) {
-  const { flowId: fid, setFlowId: setFid } = useCanvas();
+  const { flowId: fid, setFlowId: setFid, setTab } = useCanvas();
   const [sel, setSel] = useState<string | null>(null);
   const flow = flows?.find((f) => f.id === fid) ?? flows?.[0];
   useEffect(() => { setSel(null); }, [flow?.id]);
@@ -74,7 +74,7 @@ export function FlowView({ flows, arts }: { flows?: Flow[]; arts: Artifact[] }) 
           <b className="flow-title">{flow.title}</b> <span className={`chip ${st.chip}`}>{st.label}</span>
           <div className="small muted">{flow.goal || "목표 미기재"} · 단계 {done}/{flow.nodes.length} 완료 · {when(flow.updated_at)}</div>
         </div>
-        {flow.status === "review" && <span className="notice-inline warn">왼쪽 대화의 카드에서 승인하거나 반려하세요</span>}
+        {flow.status === "review" && <span className="notice-inline warn">대화의 카드에서 승인하거나 반려하세요</span>}
       </div>
       <div className="bar" aria-label="진행률"><i style={{ width: `${(done / Math.max(1, flow.nodes.length)) * 100}%` }} /></div>
       <FlowCanvas flow={flow} selected={sel} onSelect={setSel} artifactCount={count} />
@@ -90,11 +90,18 @@ export function FlowView({ flows, arts }: { flows?: Flow[]; arts: Artifact[] }) 
           )}
         </div>
       )}
-      <div className="home-sec" style={{ marginTop: 24 }}>{node ? `'${node.label}' 단계 결과` : "이 흐름의 결과"} <span className="count">{shown.length}</span></div>
-      <div className="art-grid" style={{ marginTop: 20 }}>
-        {shown.map((a) => <ArtifactCard key={a.id} a={a} />)}
-        {!shown.length && <p className="small muted">아직 게시된 결과가 없습니다.</p>}
-      </div>
+      {node ? (
+        <>
+          <div className="home-sec" style={{ marginTop: 20 }}>'{node.label}' 단계 결과 <span className="count">{shown.length}</span></div>
+          <div className="art-grid" style={{ marginTop: 20 }}>
+            {shown.map((a) => <ArtifactCard key={a.id} a={a} />)}
+            {!shown.length && <p className="small muted">이 단계에서 게시된 결과가 없습니다.</p>}
+          </div>
+        </>
+      ) : (
+        <p className="small muted flow-hint">단계를 누르면 그 단계의 설명과 결과를 봅니다
+          {shown.length > 0 && <> · <button className="link-btn" onClick={() => setTab("results")}>결과 {shown.length}개 모두 보기</button></>}</p>
+      )}
     </div>
   );
 }
@@ -155,9 +162,11 @@ export function StudiesView({ pid }: { pid: number }) {
   }
   return (
     <>
-      <div className="row" style={{ marginBottom: 16 }}>
-        <span className="seg">{studies.map((s) => <button key={s.id} className={cur === s.id ? "on" : ""} onClick={() => setSid(s.id)}>{s.name}</button>)}</span>
-      </div>
+      {studies.length > 1 && (
+        <div className="row" style={{ marginBottom: 16 }}>
+          <span className="seg">{studies.map((s) => <button key={s.id} className={cur === s.id ? "on" : ""} onClick={() => setSid(s.id)}>{s.name}</button>)}</span>
+        </div>
+      )}
       {cur && <StudyDetail pid={pid} id={cur} />}
     </>
   );
@@ -183,37 +192,42 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
   return (
     <div className="stack">
       <section className="block">
-        <div className="hero">
-          <div>
-            <div className="lbl">{obj ? `현재 최적 (${obj.name} ${obj.goal === "min" ? "최소" : "최대"}${cons ? ` · ${cons}` : ""})` : "스터디"}</div>
-            {st.best ? (
-              <div className="cond-big">
-                {vars.map((v) => <div key={v}><span>{v}</span><b>{fmt(st.best!.params[v], 4)}</b></div>)}
-                {obj && <div><span>{obj.name}</span><b style={{ color: "var(--brand)" }}>{fmt(st.best.results[obj.name], 4)}</b></div>}
-              </div>
-            ) : <p className="small muted" style={{ marginTop: 10 }}>{st.counts.complete && cons ? "제약을 만족하는 케이스가 아직 없습니다." : "완료된 케이스가 아직 없습니다."}</p>}
-            <div className="row" style={{ marginTop: 16 }}>
-              {Object.entries(st.counts).map(([k, n]) => <span key={k} className={`chip ${CASE_STATUS[k]?.[1] ?? ""}`}>{CASE_STATUS[k]?.[0] ?? k} {n}</span>)}
-              {st.running && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />실행 중</span>}
-            </div>
+        <div className="lbl">{obj ? `현재 최적 · ${obj.name} ${obj.goal === "min" ? "최소" : "최대"}${cons ? ` · ${cons}` : ""}` : s.name}</div>
+        {st.best ? (
+          <div className="cond-big">
+            {vars.map((v) => <div key={v}><span>{v}</span><b>{fmt(st.best!.params[v], 4)}</b></div>)}
+            {obj && <div><span>{obj.name}</span><b style={{ color: "var(--brand)" }}>{fmt(st.best.results[obj.name], 4)}</b></div>}
           </div>
-          <div className="gauge"><div className="ring" style={{ "--p": total ? Math.round(((st.counts.complete ?? 0) / total) * 100) : 0 } as React.CSSProperties}>
-            <div><b>{st.counts.complete ?? 0}</b><span>/ {total} 완료</span></div></div>
-            <p>어댑터: {s.adapter}{s.adapter_config?.tool ? ` · ${String(s.adapter_config.tool)}` : ""}</p></div>
+        ) : <p className="small muted" style={{ marginTop: 10 }}>{st.counts.complete && cons ? "제약을 만족하는 케이스가 아직 없습니다." : "완료된 케이스가 아직 없습니다."}</p>}
+        <div className="study-progress">
+          <div className="pbar" aria-label="케이스 진행률"><i style={{ width: `${total ? ((st.counts.complete ?? 0) / total) * 100 : 0}%` }} /></div>
+          <span className="small muted">
+            케이스 {st.counts.complete ?? 0}/{total} 완료
+            {Object.entries(st.counts).filter(([k, n]) => k !== "complete" && n).map(([k, n]) => ` · ${CASE_STATUS[k]?.[0] ?? k} ${n}`).join("")}
+            {` · ${s.adapter}${s.adapter_config?.tool ? `/${String(s.adapter_config.tool)}` : ""}`}
+          </span>
+          {st.running && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />실행 중</span>}
         </div>
       </section>
 
       <section className="block">
-        <div className="block-head"><h3>예측 모델</h3><span className="cnt">{models?.filter((m) => m.study_id === id).length ?? 0}개</span></div>
-        <div className="table-wrap"><table>
-          <thead><tr><th>모델</th><th className="r">학습 수</th><th>정확도 (R²)</th><th>상태</th></tr></thead>
-          <tbody>{(models ?? []).filter((m) => m.study_id === id).slice(0, 8).map((m) => (
-            <tr key={m.id}>
-              <td>{m.name}</td><td className="r">{m.n_train}</td>
-              <td>{Object.entries(m.metrics).map(([k, v]) => <span key={k} className={`chip ${v.r2 >= 0.9 ? "ok" : v.r2 >= 0.7 ? "warn" : "err"}`} style={{ marginRight: 4 }}>{k} {v.r2.toFixed(3)}</span>)}</td>
-              <td>{m.deployed ? <span className="chip ok" title="Simulator 탭에서 엽니다">배포됨</span> : <span className="chip">-</span>}</td>
-            </tr>))}</tbody>
-        </table></div>
+        <div className="block-head"><h3>예측 모델 · Simulator</h3><span className="cnt">{models?.filter((m) => m.study_id === id).length ?? 0}개</span></div>
+        {!(models ?? []).some((m) => m.study_id === id) ? (
+          <div className="row"><span className="small muted grow">아직 예측 모델이 없습니다. 케이스가 쌓이면 학습할 수 있습니다.</span>
+            <button className="small" onClick={() => sendToAgent(`스터디 '${s.name}'(#${s.id})의 완료된 케이스로 예측 모델을 학습해 줘`)}>학습 요청</button></div>
+        ) : (
+          <div className="model-list">{(models ?? []).filter((m) => m.study_id === id).slice(0, 8).map((m) => (
+            <div key={m.id} className="model-row">
+              <div className="grow">
+                <b>{m.name}</b>
+                <div className="model-r2">{Object.entries(m.metrics).map(([k, v]) => <span key={k} className={`chip ${v.r2 >= 0.9 ? "ok" : v.r2 >= 0.7 ? "warn" : "err"}`}>{k} R² {v.r2.toFixed(3)}</span>)}
+                  <span className="small muted">학습 {m.n_train}건</span></div>
+              </div>
+              {m.deployed ? <Link className="btn small primary" to={`/simulator/${m.id}`}><Play size={13} />Simulator 열기</Link>
+                : <button className="small" onClick={() => sendToAgent(`예측 모델 '${m.name}'(#${m.id})을 Simulator로 배포해 줘`)}>배포 요청</button>}
+            </div>))}
+          </div>
+        )}
       </section>
 
       <section className="block">
@@ -238,29 +252,6 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
             </tr>))}</tbody>
         </table></div>
       </section>
-    </div>
-  );
-}
-
-/* ---------- Simulator 목록 ---------- */
-export function SimulatorList({ pid }: { pid: number }) {
-  const { data: models } = useQuery({ queryKey: ["models", pid], queryFn: () => get<SurrogateModel[]>(`/api/projects/${pid}/models`) });
-  const deployed = (models ?? []).filter((m) => m.deployed);
-  if (!deployed.length) {
-    return <div className="empty-hero"><Gauge size={30} /><b>배포된 Simulator가 없습니다</b>
-      <p>예측 모델을 배포하면 해석 없이 설계변수를 바꿔 가며 결과를 실시간으로 예측할 수 있습니다.</p>
-      <button onClick={() => sendToAgent("가장 정확한 예측 모델을 Simulator로 배포해 줘")}>에이전트에게 배포 요청</button></div>;
-  }
-  return (
-    <div className="doe-cards" style={{ marginTop: 0 }}>
-      {deployed.map((m) => (
-        <Link key={m.id} to={`/simulator/${m.id}`} className="doe-card">
-          <div className="t"><b>{m.name}</b><span className="chip ok">배포됨</span></div>
-          <div className="who">출력: {m.outputs.join(", ")} · 학습 {m.n_train}건</div>
-          <div className="row" style={{ marginTop: "auto" }}>{Object.entries(m.metrics).map(([k, v]) => <span key={k} className="chip">{k} R² {v.r2.toFixed(3)}</span>)}</div>
-          <div className="next mine"><Play size={13} />Simulator 열기</div>
-        </Link>
-      ))}
     </div>
   );
 }

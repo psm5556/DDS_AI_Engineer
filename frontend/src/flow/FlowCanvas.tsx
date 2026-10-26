@@ -38,7 +38,7 @@ const COL_W = 250, ROW_H = 118, ROW_GAP = 46;
 
 /** 엣지로 단계 깊이(위상 정렬)를 정하고, 컨테이너 폭에 맞춰 perRow개씩 줄을 바꿔 뱀처럼(→ ← →) 배치한다.
  *  같은 깊이의 병렬 단계는 세로로 쌓는다. 좁은 캔버스에서도 노드가 작아지지 않게 하기 위함. */
-function layout(flow: Flow, perRow: number): { pos: Record<string, { x: number; y: number }>; rtl: Record<string, boolean> } {
+function layout(flow: Flow, perRow: number): { pos: Record<string, { x: number; y: number }>; rtl: Record<string, boolean>; height: number } {
   const depth: Record<string, number> = {};
   const incoming: Record<string, string[]> = {};
   flow.nodes.forEach((n) => { incoming[n.id] = []; });
@@ -66,7 +66,7 @@ function layout(flow: Flow, perRow: number): { pos: Record<string, { x: number; 
     });
     y += Math.max(...row.map((ids) => (ids ?? []).length)) * ROW_H + ROW_GAP;
   }
-  return { pos, rtl };
+  return { pos, rtl, height: y - ROW_GAP };
 }
 
 export function FlowCanvas({ flow, selected, onSelect, artifactCount, mini }: {
@@ -82,8 +82,8 @@ export function FlowCanvas({ flow, selected, onSelect, artifactCount, mini }: {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const { nodes, edges } = useMemo(() => {
-    const { pos, rtl } = layout(flow, perRow);
+  const { nodes, edges, height } = useMemo(() => {
+    const { pos, rtl, height } = layout(flow, perRow);
     const nodes: Node<StepData>[] = flow.nodes.map((n) => ({
       id: n.id, type: "step", position: pos[n.id],
       data: { ...n, selected: n.id === selected, artifacts: artifactCount[n.id] ?? 0, rtl: rtl[n.id] },
@@ -95,15 +95,16 @@ export function FlowCanvas({ flow, selected, onSelect, artifactCount, mini }: {
       animated: active.has(e.target), className: done.has(e.source) ? "done" : "",
       markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
     }));
-    return { nodes, edges };
+    return { nodes, edges, height };
   }, [flow, selected, artifactCount, perRow]);
 
   return (
-    <div ref={box} className={`flow-canvas ${mini ? "mini" : ""}`}>
+    // 캔버스: 그래프 높이만큼 늘려 실제 크기(축소 없이)로 보이게 한다 — 길면 캔버스가 스크롤된다
+    <div ref={box} className={`flow-canvas ${mini ? "mini" : ""}`} style={mini ? undefined : { height: Math.max(240, height + 70) }}>
       {/* mini: 대화 카드 안 미리보기 — 확대·이동 없이 전체를 맞춰 보여 준다 */}
-      <ReactFlow key={perRow} nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: mini ? 0.08 : 0.2, maxZoom: 1.1 }} minZoom={0.2}
+      <ReactFlow key={perRow} nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: mini ? 0.08 : 0.06, maxZoom: 1 }} minZoom={0.2}
         nodesDraggable={false} nodesConnectable={false} elementsSelectable={!mini} proOptions={{ hideAttribution: true }}
-        panOnDrag={!mini} zoomOnScroll={!mini} zoomOnPinch={!mini} zoomOnDoubleClick={!mini} preventScrolling={!mini}
+        panOnDrag={!mini} zoomOnScroll={false} zoomOnPinch={!mini} zoomOnDoubleClick={!mini} preventScrolling={false}
         onNodeClick={(_, n) => onSelect(n.id === selected ? null : n.id)} onPaneClick={() => { if (!mini) onSelect(null); }}>
         {!mini && <Background gap={20} size={1} />}
         {!mini && <Controls showInteractive={false} />}

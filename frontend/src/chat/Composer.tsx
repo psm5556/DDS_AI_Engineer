@@ -1,4 +1,4 @@
-import { ArrowUp, FileUp, Loader2, Paperclip, Square, X } from "lucide-react";
+import { ArrowUp, FileUp, Loader2, Plus, Square, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { uploadFile } from "../api";
 import { useToast } from "../toast";
@@ -133,12 +133,13 @@ export function Composer({
           }} />
       </div>
       <div className="composer-bar">
-        <button type="button" className="icon-btn" onClick={() => fileRef.current?.click()} disabled={disabled}
-          title="파일 첨부 (CAD 모델·입력 파일·자료) — 끌어 놓거나 붙여넣어도 됩니다" aria-label="파일 첨부"><Paperclip size={16} /></button>
+        <button type="button" className="icon-btn composer-attach" onClick={() => fileRef.current?.click()} disabled={disabled}
+          title="파일 첨부 (CAD 모델·입력 파일·자료) — 끌어 놓거나 붙여넣어도 됩니다" aria-label="파일 첨부"><Plus size={18} /></button>
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ""; }} />
-        {leftBar}
+        {/* 회색 추천이 보일 때만 짧게 안내 (Claude·Codex처럼 입력창은 비워 둔다) */}
+        {ghost && ghost !== text && <span className="small muted hint">{hint ?? "→ 추천 입력 · ↑↓ 다른 추천"}</span>}
         <span className="grow" />
-        <span className="small muted hint">{hint ?? (ghost && ghost !== text ? "→ 추천 받기 · ↑↓ 다른 추천 · Enter 보내기" : "Enter 보내기 · Shift+Enter 줄바꿈")}</span>
+        {leftBar}
         {busy && onStop ? (
           <button type="button" className="send" onClick={onStop} aria-label="중지" title="중지"><Square size={14} /></button>
         ) : (

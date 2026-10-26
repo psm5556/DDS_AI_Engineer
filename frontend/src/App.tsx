@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { RequireAuth } from "./auth";
-import { AgentBadge } from "./components/AgentBadge";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import { useSideLayout } from "./components/sideLayout";
@@ -20,31 +19,30 @@ function RouteBoundary({ children }: { children: React.ReactNode }) {
 }
 
 /** 왼쪽 사이드바 + 작업 영역. 프로젝트 화면은 '대화(가운데) + 라이브 캔버스(오른쪽)'로 나뉜다 (WorkspacePage).
- *  상단바는 두지 않는다 (DDS 디자인). badge: 일반 페이지 오른쪽 위에 PC Agent 상태 */
-function Shell({ children, badge = true }: { children: React.ReactNode; badge?: boolean }) {
+ *  상단바는 두지 않는다. PC Agent 상태는 사이드바 아래에 한 번만 보인다 */
+function Shell({ children }: { children: React.ReactNode }) {
   const side = useSideLayout();
   useLiveInvalidation();
   return (
     <div className={`app-shell agentic ${side.collapsed ? "side-collapsed" : ""}`} style={{ "--side-w": `${side.width}px` } as React.CSSProperties}>
       <Sidebar layout={side} />
       <div className="app-main">
-        {badge && <div className="main-topright"><AgentBadge /></div>}
         <RouteBoundary>{children}</RouteBoundary>
       </div>
     </div>
   );
 }
 
-const protect = (el: React.ReactNode, badge = true) => <RequireAuth><Shell badge={badge}>{el}</Shell></RequireAuth>;
+const protect = (el: React.ReactNode) => <RequireAuth><Shell>{el}</Shell></RequireAuth>;
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={protect(<DashboardPage />, false)} />
-      <Route path="/projects/:pid" element={protect(<WorkspacePage />, false)} />
-      <Route path="/projects/:pid/new" element={protect(<WorkspacePage />, false)} />
-      <Route path="/projects/:pid/c/:sid" element={protect(<WorkspacePage />, false)} />
+      <Route path="/" element={protect(<DashboardPage />)} />
+      <Route path="/projects/:pid" element={protect(<WorkspacePage />)} />
+      <Route path="/projects/:pid/new" element={protect(<WorkspacePage />)} />
+      <Route path="/projects/:pid/c/:sid" element={protect(<WorkspacePage />)} />
       <Route path="/projects/:pid/*" element={<Navigate to=".." replace />} />
       <Route path="/simulator/:mid" element={protect(<SimulatorPage />)} />
       <Route path="/s/:token" element={protect(<SharedSimulatorPage />)} />

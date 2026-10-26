@@ -234,7 +234,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
           <Composer projectId={pid} suggestions={suggestions} busy={busy && !readOnly} onStop={cancel} disabled={disabled}
             onSend={(o) => send(o.text, o.attachmentIds)}
             placeholder={readOnly ? "다른 멤버의 대화입니다. 보내면 내 새 대화로 시작합니다" : disabled ? "PC Agent 연결 후 사용할 수 있습니다"
-              : "무엇이든 요청하세요 — 파일은 끌어 놓거나 📎로 첨부"}
+              : "무엇이든 요청하세요"}
             leftBar={readOnly ? <span className="chip">{session ? agentLabel(session.agent) : ""} · 읽기 전용</span>
               : <AgentPicker value={session?.agent ?? chosen} onChange={(n) => void switchAgent(n)} disabled={disabled || busy} />} />
         </div>
@@ -248,10 +248,12 @@ const KIND_ICON = { table: Table2, scatter: ScatterChart, line: LineChart, bar: 
 /** 대화 속 결과: 한 줄 목록(대화가 무거워지지 않게) — 누르면 오른쪽 캔버스에서 크게 연다 */
 function ArtifactChips({ items }: { items: Artifact[] }) {
   const canvas = useCanvas();
+  const [all, setAll] = useState(false);
+  const shown = all ? items : items.slice(0, 4);
   return (
     <div className="chat-arts">
-      <div className="chat-arts-head"><BarChart3 size={13} />결과 {items.length}개 · 누르면 오른쪽 캔버스에서 봅니다</div>
-      {items.map((a) => {
+      <div className="chat-arts-head"><BarChart3 size={13} />결과 {items.length}개</div>
+      {shown.map((a) => {
         const Icon = KIND_ICON[a.kind] ?? FileText;
         return (
           <button key={a.id} className="chat-art-row chat-art-open" onClick={() => canvas.showArtifact(a.id)} title="캔버스에서 보기">
@@ -259,6 +261,7 @@ function ArtifactChips({ items }: { items: Artifact[] }) {
           </button>
         );
       })}
+      {items.length > 4 && <button className="link-btn chat-arts-more" onClick={() => setAll(!all)}>{all ? "접기" : `${items.length - 4}개 더 보기`}</button>}
     </div>
   );
 }
