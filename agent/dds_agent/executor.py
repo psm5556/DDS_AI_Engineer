@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -15,6 +17,10 @@ from .server_api import ServerApi
 
 log = logging.getLogger(__name__)
 MAX_IMAGES = 6
+
+
+def _now() -> str:
+    return datetime.now().isoformat(timespec="seconds")
 
 
 class CaseExecutor:
@@ -38,8 +44,15 @@ class CaseExecutor:
             self.running -= 1
 
     def _run_case(self, job: dict):
-        project_dir = self.s.project_dir(job["project_id"])
-        run_dir = project_dir / "studies" / f"study_{job['study_id']}" / f"case_{job['case_id']:04d}"
+        ws = self.s.workspace
+        project_dir = ws.project_dir(job["project_id"], job.get("project_name"))
+        sdir = ws.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"))
+        ws.write_study(sdir, {k: job.get(k) for k in ("study_id", "study_name", "project_id", "variables", "objectives",
+                                                       "adapter", "adapter_config")})
+        run_dir = ws.case_dir(sdir, job["case_id"], job.get("source", "doe"))
+        meta = {"case_id": job["case_id"], "study_id": job["study_id"], "source": job.get("source"), "params": job["params"],
+                "adapter": job["adapter"], "host": os.environ.get("COMPUTERNAME", "")}
+        ws.record_case(sdir, run_dir, {**meta, "status": "running", "started": _now()})
         self.report({"type": "case.status", "case_id": job["case_id"], "status": "running", "run_dir": str(run_dir)})
         try:
             out = get_adapter(job["adapter"]).run_case(
@@ -50,9 +63,24 @@ class CaseExecutor:
         except Exception as e:
             log.exception("케이스 실행 오류")
             out = CaseOutcome("failed", error=str(e))
+        ws.record_case(sdir, run_dir, {**meta, "status": out.status, "results": out.results, "error": out.error, "finished": _now()})
         images = self._upload_images(job["project_id"], run_dir / "images")
+        fields = self._upload_fields(job["case_id"], run_dir / "fields")
         self.report({"type": "case.status", "case_id": job["case_id"], "status": out.status,
-                     "results": out.results, "error": out.error, "images": images})
+                     "results": out.results, "error": out.error, "images": images, "fields": fields})
+
+    def _upload_fields(self, case_id: int, folder: Path) -> list[str]:
+        """필드·형상 데이터(fields/*.npz: points, values, triangles)를 서버로 올려 형상·필드 학습에 쓴다."""
+        if not folder.is_dir():
+            return []
+        names = []
+        for f in sorted(folder.glob("*.npz"))[:20]:
+            try:
+                self.api.upload(f"/api/cases/{case_id}/fields", f)
+                names.append(f.stem)
+            except Exception as e:
+                log.warning("필드 업로드 실패 %s: %s", f, e)
+        return names
 
     def _upload_images(self, project_id: int, folder: Path) -> list[str]:
         if not folder.is_dir():

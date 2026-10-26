@@ -19,6 +19,7 @@ class Settings:
     access_token_hours: int = 12
     # 케이스 실행을 맡을 Agent가 없을 때 서버에서 직접 mock 어댑터를 돌릴지(개발/데모용)
     allow_server_mock: bool = True
+    max_upload_mb: int = 1024  # 대화 첨부 파일 최대 크기(CAD·해석 입력 파일)
 
     @property
     def db_url(self) -> str:

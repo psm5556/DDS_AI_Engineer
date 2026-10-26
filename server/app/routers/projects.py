@@ -13,7 +13,8 @@ def _to_response(p: models.Project, user: models.User, db: Session) -> dict:
     members = [{"user_id": m.user_id, "display_name": m.user.display_name, "username": m.user.username,
                 "role": m.role} for m in p.members]
     last = db.query(models.Flow).filter_by(project_id=p.id).order_by(models.Flow.id.desc()).first()
-    return {**schemas.ProjectBase.model_validate(p).model_dump(), "members": members,
+    fav = db.query(models.ProjectFavorite).filter_by(user_id=user.id, project_id=p.id).first() is not None
+    return {**schemas.ProjectBase.model_validate(p).model_dump(), "members": members, "is_favorite": fav,
             "user_role": member_role(p.id, user, db) or ("master" if user.is_admin else None),
             "flow_status": last.status if last else None, "flow_title": last.title if last else None}
 
@@ -66,6 +67,23 @@ async def delete_project(project_id: int, user: models.User = Depends(get_curren
     require_master(project_id, user, db)
     await manager.broadcast({"type": "project_updated", "project_id": p.id, "data": {"id": p.id, "deleted": True}})
     db.delete(p)
+    db.commit()
+    return {"ok": True}
+
+
+# ---------- 즐겨찾기 ----------
+@router.put("/{project_id}/favorite")
+def add_favorite(project: models.Project = Depends(get_project_for_member), user: models.User = Depends(get_current_user),
+                 db: Session = Depends(get_db)):
+    if not db.query(models.ProjectFavorite).filter_by(user_id=user.id, project_id=project.id).first():
+        db.add(models.ProjectFavorite(user_id=user.id, project_id=project.id))
+        db.commit()
+    return {"ok": True}
+
+
+@router.delete("/{project_id}/favorite")
+def remove_favorite(project_id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    db.query(models.ProjectFavorite).filter_by(user_id=user.id, project_id=project_id).delete()
     db.commit()
     return {"ok": True}
 

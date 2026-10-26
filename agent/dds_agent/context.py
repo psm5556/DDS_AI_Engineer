@@ -32,7 +32,8 @@ def sync_project_context(project_dir: Path) -> None:
         dst.mkdir(parents=True, exist_ok=True)
         for skill in skills_src.iterdir():
             if skill.is_dir():
-                shutil.copytree(skill, dst / skill.name, dirs_exist_ok=True)
+                shutil.copytree(skill, dst / skill.name, dirs_exist_ok=True,
+                                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     rules = (CONTEXT_DIR / "INSTRUCTIONS.md").read_text(encoding="utf-8")
     rules += _skill_index(project_dir / ".claude" / "skills")
     for name in RULE_FILES:

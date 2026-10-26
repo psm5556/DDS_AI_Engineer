@@ -3,7 +3,10 @@ import secrets
 from datetime import datetime, timedelta
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException
+import base64
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from cae_adapters import REGISTRY
@@ -236,3 +239,114 @@ def share_predict_batch(token: str, body: schemas.PredictBatchRequest, user=Depe
         raise HTTPException(400, f"입력값이 없습니다: {e}")
     mean, std = sur.predict(X)
     return {"mean": {k: v.tolist() for k, v in mean.items()}, "std": {k: v.tolist() for k, v in std.items()}}
+
+
+# ---------- 형상·필드 데이터와 모델 ----------
+@router.post("/cases/{case_id}/fields")
+async def upload_field(case_id: int, file: UploadFile = File(...), user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """PC Agent가 케이스의 fields/<이름>.npz(points, values, triangles)를 올린다."""
+    c = get_or_404(db, models.Case, case_id, "케이스")
+    study = db.get(models.Study, c.study_id)
+    require_member(study.project_id, user, db)
+    name = Path(file.filename or "field.npz").stem
+    if not name.replace("_", "").replace("-", "").isalnum():
+        raise HTTPException(400, "필드 이름은 영문·숫자·_- 만 쓸 수 있습니다")
+    dest = service.field_path(study.project_id, study.id, c.id, name)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    data = await file.read()
+    if len(data) > 200 * 1024 * 1024:
+        raise HTTPException(413, "필드 파일은 200MB 이하만 올릴 수 있습니다")
+    dest.write_bytes(data)
+    c.fields = sorted(set((c.fields or []) + [name]))
+    db.commit()
+    return {"ok": True, "field": name}
+
+
+@router.post("/studies/{study_id}/train_field", response_model=schemas.FieldModelResponse)
+def train_field(study_id: int, body: schemas.TrainFieldRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    s = _study(study_id, user, db)
+    try:
+        return service.train_field(db, s, body.field, body.flow_id, body.node_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/studies/{study_id}/field-models", response_model=list[schemas.FieldModelResponse])
+def list_field_models(study_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    _study(study_id, user, db)
+    return db.query(models.FieldModel).filter_by(study_id=study_id).order_by(models.FieldModel.id.desc()).all()
+
+
+def _b64(a) -> str:
+    return base64.b64encode(np.ascontiguousarray(a).tobytes()).decode("ascii")
+
+
+_rom_cache: dict[int, object] = {}
+
+
+def _rom(fm: models.FieldModel):
+    if fm.id not in _rom_cache:
+        from ..study.fieldmodel import FieldROM
+        _rom_cache[fm.id] = FieldROM.load(fm.path)
+    return _rom_cache[fm.id]
+
+
+def _field_mesh(fm: models.FieldModel) -> dict:
+    rom = _rom(fm)
+    tris = rom.triangles if rom.triangles is not None else np.zeros((0, 3), np.int32)
+    return {"field": fm.field, "n_nodes": rom.n_nodes, "shape_varies": rom.shape_varies, "variables": rom.variables,
+            "triangles_b64": _b64(tris.astype(np.uint32)), "n_triangles": int(len(tris))}
+
+
+def _field_predict(fm: models.FieldModel, params: dict[str, float]) -> dict:
+    rom = _rom(fm)
+    missing = [v for v in rom.variables if v not in params]
+    if missing:
+        raise HTTPException(400, f"입력값이 없습니다: {', '.join(missing)}")
+    pts, vals, unc = rom.predict(params)
+    mag = vals if vals.ndim == 1 else np.linalg.norm(vals, axis=1)
+    return {"points_b64": _b64(pts.astype(np.float32)), "values_b64": _b64(mag.astype(np.float32)),
+            "uncertainty_b64": _b64(unc.astype(np.float32)), "min": float(mag.min()), "max": float(mag.max()),
+            "max_uncertainty": float(unc.max())}
+
+
+def _fm_member(field_model_id: int, user, db) -> models.FieldModel:
+    fm = get_or_404(db, models.FieldModel, field_model_id, "필드 모델")
+    require_member(db.get(models.Study, fm.study_id).project_id, user, db)
+    return fm
+
+
+@router.get("/field-models/{field_model_id}/mesh")
+def field_mesh(field_model_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return _field_mesh(_fm_member(field_model_id, user, db))
+
+
+@router.post("/field-models/{field_model_id}/predict")
+def field_predict(field_model_id: int, body: schemas.PredictRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return _field_predict(_fm_member(field_model_id, user, db), body.params)
+
+
+def _fm_shared(token: str, field_model_id: int, db) -> models.FieldModel:
+    sh = _share(token, db)
+    m = db.get(models.SurrogateModel, sh.model_id)
+    fm = get_or_404(db, models.FieldModel, field_model_id, "필드 모델")
+    if fm.study_id != m.study_id:
+        raise HTTPException(404, "공유되지 않은 모델입니다")
+    return fm
+
+
+@router.get("/shares/{token}/field-models", response_model=list[schemas.FieldModelResponse])
+def shared_field_models(token: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    m = db.get(models.SurrogateModel, _share(token, db).model_id)
+    return db.query(models.FieldModel).filter_by(study_id=m.study_id).order_by(models.FieldModel.id.desc()).all()
+
+
+@router.get("/shares/{token}/field-models/{field_model_id}/mesh")
+def shared_field_mesh(token: str, field_model_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return _field_mesh(_fm_shared(token, field_model_id, db))
+
+
+@router.post("/shares/{token}/field-models/{field_model_id}/predict")
+def shared_field_predict(token: str, field_model_id: int, body: schemas.PredictRequest, user=Depends(get_current_user),
+                         db: Session = Depends(get_db)):
+    return _field_predict(_fm_shared(token, field_model_id, db), body.params)

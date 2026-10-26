@@ -1,13 +1,14 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUp, Box, Cpu, FileText, Share2, Workflow } from "lucide-react";
+import { AlertTriangle, Box, Cpu, FileText, Share2, Workflow } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { get, post } from "../api";
+import { get, post, uploadFile } from "../api";
 import { useAuth } from "../auth";
+import { Composer, type Outgoing } from "../chat/Composer";
 import { AgentBadge } from "../components/AgentBadge";
 import { FLOW_STATUS, when } from "../format";
 import { useToast } from "../toast";
-import type { AgentStatus, Project } from "../types";
+import type { AgentStatus, Attachment, Project } from "../types";
 
 const STARTERS = [
   { icon: Box, t: "CAD로 만들기", p: "NX에서 브래킷 형상을 만들고, 두께·리브 높이를 파라미터로 바꿀 수 있게 정리해 줘" },
@@ -22,21 +23,24 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const nav = useNavigate();
   const toast = useToast();
-  const [text, setText] = useState("");
+  const [seed, setSeed] = useState<{ text: string; n: number } | undefined>();
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
   const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status") });
   const review = (projects ?? []).filter((p) => p.flow_status === "review");
 
+  // 프로젝트를 만들고(이름은 요청 앞부분 → 에이전트가 곧 알맞게 바꾼다), 첨부를 올린 뒤 대화로 넘어간다
   const start = useMutation({
-    mutationFn: (prompt: string) => {
-      const first = prompt.split(/[\n.!?]/)[0].trim();
+    mutationFn: async (o: Outgoing) => {
+      const first = (o.text || o.pendingFiles[0]?.name || "").split(/[\n.!?]/)[0].trim();
       const name = first.length > 28 ? `${first.slice(0, 28)}…` : first || "새 작업";
-      return post<Project>("/api/projects", { name, description: "" });
+      const p = await post<Project>("/api/projects", { name, description: "" });
+      const ids: number[] = [];
+      for (const f of o.pendingFiles) ids.push((await uploadFile<Attachment>(`/api/projects/${p.id}/attachments`, f)).id);
+      return { p, ids, text: o.text };
     },
-    onSuccess: (p, prompt) => nav(`/projects/${p.id}/new`, { state: { prompt } }),
+    onSuccess: ({ p, ids, text }) => nav(`/projects/${p.id}/new`, { state: { prompt: text, attachmentIds: ids } }),
     onError: (e: Error) => toast(e.message ?? "시작하지 못했습니다", true),
   });
-  const go = (t: string) => { if (t.trim() && !start.isPending) start.mutate(t.trim()); };
 
   return (
     <div className="home">
@@ -49,19 +53,12 @@ export default function DashboardPage() {
             <span className="grow">에이전트와 CAD/CAE 툴은 내 PC에서 실행됩니다. 먼저 <b>PC Agent</b>를 설치해 주세요.</span>
             <Link to="/settings" className="btn small primary">설치하기</Link></div>
         )}
-        <form className="composer big" onSubmit={(e) => { e.preventDefault(); go(text); }}>
-          <textarea autoFocus value={text} rows={3} onChange={(e) => setText(e.target.value)} aria-label="에이전트에게 요청"
-            placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘"
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); go(text); } }} />
-          <div className="composer-bar">
-            <span className="small muted">새 프로젝트로 시작합니다 · Enter 보내기</span>
-            <span className="grow" />
-            <button type="submit" className="primary send" disabled={!text.trim() || start.isPending} aria-label="시작"><ArrowUp size={16} /></button>
-          </div>
-        </form>
+        <Composer big autoFocus suggestions={STARTERS.map((x) => x.p)} seed={seed} busy={start.isPending}
+          onSend={(o) => { start.mutate(o); }} hint="→ 추천 받기 · ↑↓ 다른 추천 · 파일은 끌어 놓기 · Enter 시작"
+          placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘" />
         <div className="starters">
           {STARTERS.map(({ icon: Icon, t, p }) => (
-            <button key={t} className="starter" onClick={() => setText(p)} title={p}><Icon size={15} />{t}</button>
+            <button key={t} className="starter" onClick={() => setSeed({ text: p, n: Date.now() })} title={p}><Icon size={15} />{t}</button>
           ))}
         </div>
       </div>

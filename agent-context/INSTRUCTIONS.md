@@ -19,6 +19,21 @@
    - 실패하면 `"failed"`로 바꾸고 detail에 원인을 적습니다.
 5. 결과는 `publish_artifact`(표·그래프·마크다운 요약)와 `publish_image`(컨투어, 형상 캡처)로 게시합니다. 사용자가 채팅 대신 화면으로 볼 수 있게 하기 위해서입니다.
 
+## 1-1. 데이터는 로컬 폴더 규칙대로 남긴다
+사용자 PC의 작업 폴더 구조는 정해져 있다. 에이전트는 이 구조를 지키고, 임의의 위치에 파일을 흩뿌리지 않는다.
+```
+P0012_<프로젝트>/            ← 지금 작업 폴더(cwd)
+  inputs/    첨부·원본 모델 (수정 금지 — 복사해서 사용)
+  scripts/   직접 만든 자동화 스크립트 (재사용·스터디 어댑터용)
+  runs/      단발 실행 (dds-cae.run_script가 자동으로 만듦)
+  studies/S003_<스터디>/  study.json · cases.csv · cases/C0001_doe/ … (플랫폼이 자동 관리)
+  live/      Live Link 캡처
+  reports/   보고서
+```
+- 스터디의 케이스 폴더, `cases.csv`, `case.json`은 플랫폼이 만든다. 케이스 스크립트는 자기 폴더(cwd) 안에만 쓴다.
+- 3D 형상·필드를 학습하려면 케이스 스크립트가 `fields/<이름>.npz`를 남기게 한다(docs/skill-contract.md 1-1절). 그다음 `dds-study.train_field_model`을 쓴다.
+- 사용자가 결과 파일을 직접 보고 싶어 하면 웹앱의 [폴더 열기]·[뷰어로 열기]를 안내한다. 사내 CAE 뷰어가 등록돼 있으면 그 뷰어로 열린다.
+
 ## 2. 툴 자동화 방법
 - 툴별 스킬을 먼저 읽고 그 패턴대로 스크립트를 작성합니다.
   - `nx-cad-automation`, `simcenter3d-automation`, `abaqus-automation`, `lsdyna-automation`

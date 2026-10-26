@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, FileDown, Gauge, Play, Plus, Sparkles, Trash2, Workflow, X } from "lucide-react";
+import { Check, FileDown, FolderOpen, Gauge, Play, Plus, Sparkles, Trash2, Workflow, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { del, download, get, put } from "../api";
@@ -9,6 +9,7 @@ import { Confirm } from "../components/Modal";
 import { FlowCanvas } from "../flow/FlowCanvas";
 import { FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, ROLE_LABEL, sendToAgent, when } from "../format";
 import { useCanvas } from "./CanvasContext";
+import { relFromRunDir, useOpenLocal } from "./LocalFiles";
 import { useToast } from "../toast";
 import type { Artifact, Case, Flow, Project, StudyStatus, Study, SurrogateModel, User } from "../types";
 
@@ -173,6 +174,8 @@ const CASE_STATUS: Record<string, [string, string]> = {
 };
 
 function StudyDetail({ pid, id }: { pid: number; id: number }) {
+  const { user } = useAuth();
+  const open = useOpenLocal(pid);
   const { data: st } = useQuery({ queryKey: ["study", id], queryFn: () => get<StudyStatus>(`/api/studies/${id}`) });
   const { data: cases } = useQuery({ queryKey: ["study", id, "cases"], queryFn: () => get<Case[]>(`/api/studies/${id}/cases`) });
   const { data: models } = useQuery({ queryKey: ["models", pid], queryFn: () => get<SurrogateModel[]>(`/api/projects/${pid}/models`) });
@@ -222,13 +225,22 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
       <section className="block">
         <div className="block-head"><h3>케이스</h3><span className="cnt">{cases?.length ?? 0}건</span></div>
         <div className="table-wrap case-table"><table>
-          <thead><tr><th>ID</th><th>출처</th><th>상태</th>{vars.map((v) => <th key={v} className="r">{v}</th>)}{outs.map((o) => <th key={o} className="r">{o}</th>)}</tr></thead>
+          <thead><tr><th>ID</th><th>출처</th><th>상태</th>{vars.map((v) => <th key={v} className="r">{v}</th>)}{outs.map((o) => <th key={o} className="r">{o}</th>)}<th /></tr></thead>
           <tbody>{(cases ?? []).map((c) => (
             <tr key={c.id} className={st.best?.id === c.id ? "best-row" : ""} title={c.error ?? undefined}>
               <td>{c.id}</td><td>{({ doe: "DOE", bo: "최적화", al: "능동학습", manual: "직접" } as Record<string, string>)[c.source] ?? c.source}</td>
               <td className="status-cell"><span className={`st ${c.status === "complete" ? "done" : c.status === "failed" ? "fail" : ""}`}><i />{CASE_STATUS[c.status]?.[0] ?? c.status}</span></td>
               {vars.map((v) => <td key={v} className="r">{fmt(c.params[v])}</td>)}
               {outs.map((o) => <td key={o} className="r">{fmt(c.results[o])}</td>)}
+              <td className="r nowrap">{(() => {
+                const rel = relFromRunDir(c.run_dir);
+                const mine = c.run_by === user?.id;
+                return rel ? (
+                  <button className="icon-btn" disabled={!mine} aria-label={`케이스 ${c.id} 폴더 열기`}
+                    title={mine ? `내 PC에서 케이스 폴더 열기 — ${rel}` : "다른 멤버의 PC에서 실행된 케이스입니다"}
+                    onClick={() => open.mutate({ path: rel })}><FolderOpen size={13} /></button>
+                ) : null;
+              })()}</td>
             </tr>))}</tbody>
         </table></div>
       </section>

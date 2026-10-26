@@ -1,15 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Database, Gauge, PanelRightClose, PanelRightOpen, Radio, Workflow } from "lucide-react";
+import { BarChart3, Database, FolderTree, Gauge, PanelRightClose, PanelRightOpen, Radio, Workflow } from "lucide-react";
 import { useEffect } from "react";
 import { get } from "../api";
 import { startPanelResize, type PanelLayout } from "../components/sideLayout";
 import { useLive } from "../live";
 import type { Artifact, Flow } from "../types";
 import { useCanvas, type CanvasTab } from "./CanvasContext";
+import { LocalFiles } from "./LocalFiles";
 import { FlowView, ResultsView, SimulatorList, StudiesView } from "./views";
 
 const TABS: [CanvasTab, string, typeof Workflow][] = [
-  ["flow", "작업 흐름", Workflow], ["results", "결과", BarChart3], ["data", "데이터·모델", Database], ["simulator", "Simulator", Gauge],
+  ["flow", "작업 흐름", Workflow], ["results", "결과", BarChart3], ["data", "데이터·모델", Database], ["simulator", "Simulator", Gauge], ["files", "내 PC 파일", FolderTree],
 ];
 
 /** 오른쪽 라이브 캔버스: 에이전트가 만드는 작업 흐름·결과·데이터·Simulator가 실시간으로 쌓인다 */
@@ -70,7 +71,7 @@ export function CanvasPanel({ pid, layout }: { pid: number; layout: PanelLayout 
       <div className="canvas-body">
         {c.tab === "flow" ? <FlowView pid={pid} flows={flows} arts={arts ?? []} />
           : c.tab === "results" ? <ResultsView pid={pid} arts={arts ?? []} flows={flows ?? []} />
-          : c.tab === "data" ? <StudiesView pid={pid} /> : <SimulatorList pid={pid} />}
+          : c.tab === "data" ? <StudiesView pid={pid} /> : c.tab === "files" ? <LocalFiles pid={pid} /> : <SimulatorList pid={pid} />}
       </div>
     </aside>
   );

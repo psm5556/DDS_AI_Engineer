@@ -51,13 +51,16 @@ class AgentHub:
         sid = chat.agent_session_id
         if sid and sid in self.turns:
             return sid
-        if not (sid and runner.load_session(sid, chat.project_id, chat.agent)):
-            sid = runner.new_session(chat.project_id, chat.agent)
+        pname = chat.project.name if chat.project else None
+        if not (sid and runner.load_session(sid, chat.project_id, chat.agent, pname)):
+            sid = runner.new_session(chat.project_id, chat.agent, pname)
         self.turns[sid] = TurnState(chat_id=chat.id, project_id=chat.project_id, user_id=chat.user_id)
         return sid
 
-    def send_prompt(self, chat_id: int, text: str):
-        """프롬프트를 백그라운드 스레드에서 실행. 이미 진행 중이면 AgentError."""
+    def send_prompt(self, chat_id: int, text: str, attachments: list[dict] | None = None):
+        """프롬프트를 백그라운드 스레드에서 실행. 이미 진행 중이면 AgentError.
+        attachments: [{id, filename, size, sha256}] — PC Agent가 프로젝트 폴더 inputs/로 내려받은 뒤 에이전트에 전달한다."""
+        attachments = attachments or []
         with SessionLocal() as db:
             chat = db.get(models.ChatSession, chat_id)
             first_turn = not chat.agent_session_id
@@ -70,19 +73,20 @@ class AgentHub:
             st.busy = True
             if chat.title == "새 대화":
                 chat.title = text[:40]
-            db.add(models.ChatMessage(session_id=chat.id, role="user", content=text))
+            db.add(models.ChatMessage(session_id=chat.id, role="user", content=text,
+                                      meta={"attachments": attachments} if attachments else {}))
             db.commit()
         self.active_project[st.user_id] = st.project_id
         st.agent_msg_id = st.thought_msg_id = None
         self._broadcast(st, {"kind": "turn_started"})
 
         context = (f"[DDS 컨텍스트] project_id={st.project_id}. "
-                   "dds-* MCP 툴과 스킬을 사용하고 GEMINI.md 규칙(작업 전 Flow 제안 → 승인 후 실행)을 따르세요.\n\n") if first_turn else ""
+                   "dds-* MCP 툴과 스킬을 사용하고 작업 규칙(작업 전 Flow 제안 → 승인 후 실행, 데이터는 로컬 폴더 규칙대로)을 따르세요.\n\n") if first_turn else ""
 
         def _run():
             stop = "error"
             try:
-                stop = self.runner_for(st.user_id).prompt(sid, context + text)
+                stop = self.runner_for(st.user_id).prompt(sid, context + text, attachments)
             except Exception as e:
                 log.exception("프롬프트 실패")
                 self._add_message(st, "system", f"에이전트 오류: {e}")

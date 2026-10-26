@@ -12,7 +12,7 @@ from . import models
 from .agent.hub import hub
 from .agent.link import AgentConnection, registry
 from .config import ROOT
-from .database import Base, SessionLocal, engine
+from .database import Base, SessionLocal, engine, ensure_columns
 from .deps import user_from_token
 from .routers import agents, auth, flows, projects, sessions, studies
 from .study import service
@@ -25,6 +25,7 @@ log = logging.getLogger("dds")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
+    ensure_columns()
     loop = asyncio.get_running_loop()
     manager.bind_loop(loop)
 

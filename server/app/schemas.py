@@ -81,6 +81,7 @@ class ProjectMemberResponse(BaseModel):
 class ProjectResponse(ProjectBase):
     members: list[ProjectMemberResponse]
     user_role: str | None
+    is_favorite: bool = False
     flow_status: str | None = None
     flow_title: str | None = None
 
@@ -115,6 +116,20 @@ class ChatMessageResponse(ORM):
 
 class PromptRequest(BaseModel):
     text: str
+    attachment_ids: list[int] = []
+
+
+class SessionUpdate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+
+
+class AttachmentResponse(ORM):
+    id: int
+    project_id: int
+    filename: str
+    size: int
+    sha256: str
+    created_at: datetime
 
 
 class AgentInstall(BaseModel):
@@ -240,6 +255,7 @@ class CaseResponse(ORM):
     run_dir: str | None
     run_by: int | None
     images: list[str] | None
+    fields: list[str] | None = None
     error: str | None
 
 
@@ -349,3 +365,25 @@ class ShareResponse(ORM):
     uses: int
     expires_at: datetime | None
     created_at: datetime
+
+
+class LocalOpen(BaseModel):
+    path: str = ""  # 프로젝트 작업 폴더 기준 상대 경로 (비우면 프로젝트 폴더)
+    with_viewer: bool = False  # True면 결과 파일을 등록된 CAE 뷰어로 연다
+
+
+class FieldModelResponse(ORM):
+    id: int
+    study_id: int
+    field: str
+    n_nodes: int
+    n_train: int
+    shape_varies: bool
+    info: dict[str, Any]
+    created_at: datetime
+
+
+class TrainFieldRequest(BaseModel):
+    field: str
+    flow_id: int | None = None
+    node_id: str | None = None

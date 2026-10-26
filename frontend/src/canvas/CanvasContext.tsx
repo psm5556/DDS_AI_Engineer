@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 /** 대화(가운데)와 라이브 캔버스(오른쪽)가 함께 쓰는 상태.
  *  - 대화의 카드에서 "캔버스에서 보기"를 누르면 해당 탭·항목으로 이동
  *  - '실시간 따라가기'가 켜져 있으면 에이전트가 만든 결과로 캔버스가 자동 전환된다 */
-export type CanvasTab = "flow" | "results" | "data" | "simulator";
+export type CanvasTab = "flow" | "results" | "data" | "simulator" | "files";
 
 interface Ctx {
   tab: CanvasTab;

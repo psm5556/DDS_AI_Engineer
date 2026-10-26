@@ -76,6 +76,27 @@ export async function download(path: string, fallbackName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/** 진행률을 알려 주며 파일 업로드 (대화 첨부 등 큰 파일) */
+export function uploadFile<T>(path: string, file: File, onProgress?: (ratio: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", path);
+    const t = getToken();
+    if (t) xhr.setRequestHeader("Authorization", `Bearer ${t}`);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total); };
+    xhr.onload = () => {
+      let body: { detail?: unknown } | null = null;
+      try { body = JSON.parse(xhr.responseText); } catch { /* 본문 없음 */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body as T);
+      else reject(new ApiError(xhr.status, messageFrom(body?.detail, xhr.status)));
+    };
+    xhr.onerror = () => reject(new ApiError(0, "업로드 중 연결이 끊어졌습니다"));
+    const fd = new FormData();
+    fd.append("file", file);
+    xhr.send(fd);
+  });
+}
+
 export const get = <T,>(p: string) => api<T>(p);
 export const post = <T,>(p: string, body?: unknown) => api<T>(p, { method: "POST", body: body ?? {} });
 export const put = <T,>(p: string, body?: unknown) => api<T>(p, { method: "PUT", body: body ?? {} });

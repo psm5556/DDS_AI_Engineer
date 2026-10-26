@@ -45,15 +45,22 @@ class AgentSettings:
     tools: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_TOOL_PATHS))
     tool_commands: dict[str, list[str]] = field(default_factory=dict)
     tool_env: dict[str, dict[str, str]] = field(default_factory=dict)  # 툴별 추가 환경변수 (예: amesim의 AME)
+    # 결과 파일을 여는 CAE 뷰어: 확장자 → 명령(목록, {file} 치환). 없으면 Windows 기본 연결 프로그램으로 연다.
+    # 예) [viewers]  ".odb" = ["C:/DDS/Viewer/ddsview.exe", "--open", "{file}"]   "*" = [...]  (모든 결과 파일)
+    viewers: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def ws_url(self) -> str:
         return self.server_url.replace("http://", "ws://").replace("https://", "wss://").rstrip("/") + "/ws/agent"
 
-    def project_dir(self, project_id: int) -> Path:
-        d = self.workspace_dir / f"project_{project_id}"
-        d.mkdir(parents=True, exist_ok=True)
-        return d
+    @property
+    def workspace(self):
+        from .workspace import Workspace
+        return Workspace(self.workspace_dir, self.server_url)
+
+    def project_dir(self, project_id: int, name: str | None = None) -> Path:
+        """로컬 데이터 규칙(P0012_<이름>)에 따른 프로젝트 작업 폴더 — workspace.py 참고"""
+        return self.workspace.project_dir(project_id, name)
 
     def agent_command(self, name: str) -> list[str]:
         if name not in self.agents:
@@ -78,7 +85,7 @@ def load_settings(path: Path | None = None) -> AgentSettings:
     path = path or CONFIG_PATH
     if path.exists():
         for key, value in tomllib.loads(path.read_text(encoding="utf-8")).items():
-            if key in ("tools", "tool_commands", "tool_env", "agents"):
+            if key in ("tools", "tool_commands", "tool_env", "agents", "viewers"):
                 getattr(s, key).update(value)
             elif hasattr(s, key):
                 setattr(s, key, Path(value) if isinstance(getattr(s, key), Path) else value)

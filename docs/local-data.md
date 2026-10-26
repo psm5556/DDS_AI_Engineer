@@ -1,0 +1,47 @@
+# 사용자 PC 로컬 데이터 규칙
+
+해석 원본·산출물(odb, d3plot, op2, sim 등 무거운 파일)은 **사용자 PC**에 남는다.
+서버에는 숫자 결과, 메타데이터, 이미지·필드 요약, 그리고 "어느 PC의 어느 폴더인가"가 기록된다.
+폴더 이름 앞의 번호(P/S/C + 서버 ID)가 서버와 로컬을 잇는 열쇠다. 이름 부분은 사람이 알아보기 위한 것이라 바뀌어도 번호로 찾는다.
+
+```
+%USERPROFILE%\DDS_Workspace\                (agent.toml의 workspace_dir)
+  index.json                                내 PC 전체 프로젝트 색인 { "projects": { "12": {name, folder, server} } }
+  P0012_브래킷-경량화\
+    project.json                            프로젝트 ID·이름·서버 주소
+    GEMINI.md / CLAUDE.md / AGENTS.md       에이전트 작업 규칙(자동 동기화)
+    .gemini/.claude/.agents\skills\         스킬(자동 동기화)
+    inputs\                                 대화 첨부·원본 모델 (수정 금지, 복사해서 사용)
+    scripts\                                에이전트가 만든 자동화 스크립트
+    runs\20261027_101500_<이름>\            단발 실행(dds-cae.run_script)
+    studies\
+      S003_두께-리브-DOE\
+        study.json                          설계변수·목적·어댑터·툴 설정
+        cases.csv                           전 케이스 한 표(ID·출처·상태·in:변수·out:결과·폴더) — 엑셀에서 바로 열림
+        cases\
+          C0001_doe\                        DOE 케이스
+          C0021_bo\                         베이지안 최적화가 제안한 케이스
+          C0031_al\                         능동학습이 제안한 케이스
+            case.json                       케이스 메타(파라미터·결과·상태·시작/끝 시각·PC 이름)
+            params.json  results.json  run.log  commands.json
+            images\                         캡처 이미지 → 서버 결과로 업로드
+            fields\<이름>.npz               3D 형상·필드(points, values, triangles) → 서버 업로드, 형상·필드 학습
+            (툴 산출물: *.odb, d3plot, *.op2, *.sim …)
+    live\                                   Live Link 화면 캡처
+    reports\                                보고서
+```
+
+## 연결과 조회
+| 하고 싶은 일 | 방법 |
+|---|---|
+| 웹에서 내 PC 폴더 보기 | 캔버스 **내 PC 파일** 탭 (PC Agent가 목록을 보내 줌) |
+| 탐색기로 열기 | 파일 탭·케이스 표의 📂 버튼, 프로젝트 메뉴의 "내 PC 작업 폴더 열기" |
+| CAE 뷰어로 열기 | 파일 탭의 👁 버튼 → `agent.toml [viewers]`의 확장자별 명령 (없으면 Windows 기본 프로그램) |
+| 다른 멤버의 케이스 | 그 멤버의 PC에 있다(케이스 표에 실행한 사람 표시). 숫자 결과·이미지·필드는 서버에서 모두 볼 수 있다 |
+| 엑셀로 정리 | `cases.csv`(UTF-8 BOM) 또는 캔버스 표의 복사 버튼 |
+
+## 원칙
+- 원본(inputs)은 읽기 전용이다. 케이스는 원본을 복사해서 실행한다.
+- 케이스 폴더는 지우지 않는다. 실패한 케이스도 `run.log`와 함께 남겨 원인을 추적한다.
+- 프로젝트를 웹에서 삭제해도 로컬 폴더는 지우지 않는다. 정리는 사용자가 직접 한다.
+- 경로 길이(260자) 때문에 폴더 이름은 짧게(최대 24자) 만든다. `workspace_dir`도 짧은 경로를 권장한다(예: `D:\DDS`).

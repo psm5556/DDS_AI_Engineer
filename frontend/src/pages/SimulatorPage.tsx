@@ -3,6 +3,7 @@ import { Copy, Link2, RotateCcw, Share2, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { del, get, post } from "../api";
+import { Field3DPanel } from "../components/Field3DPanel";
 import { Modal } from "../components/Modal";
 import { baseLayout, Plot, plotConfig } from "../components/Plot";
 import { copyText, fmt, when } from "../format";
@@ -19,17 +20,21 @@ const SWEEP_N = 41;
 /** 배포된 예측 모델 화면 (프로젝트 멤버용) */
 export default function SimulatorPage() {
   const mid = Number(useParams().mid);
-  return <SimulatorView base={`/api/models/${mid}`} specPath={`/api/models/${mid}/spec`} modelId={mid} />;
+  return <SimulatorView base={`/api/models/${mid}`} specPath={`/api/models/${mid}/spec`} modelId={mid}
+    fieldList={(s) => `/api/studies/${s.model.study_id}/field-models`} fieldBase={(id) => `/api/field-models/${id}`} />;
 }
 
 /** 공유 링크로 연 Simulator (프로젝트 멤버가 아니어도 로그인한 사내 사용자면 사용) */
 export function SharedSimulatorPage() {
   const token = useParams().token!;
-  return <SimulatorView base={`/api/shares/${token}`} specPath={`/api/shares/${token}`} />;
+  return <SimulatorView base={`/api/shares/${token}`} specPath={`/api/shares/${token}`}
+    fieldList={() => `/api/shares/${token}/field-models`} fieldBase={(id) => `/api/shares/${token}/field-models/${id}`} />;
 }
 
 /** 해석 없이 설계변수를 바꿔 결과를 실시간 예측 (± 불확실도) + 민감도 곡선 */
-function SimulatorView({ base, specPath, modelId }: { base: string; specPath: string; modelId?: number }) {
+function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
+  base: string; specPath: string; modelId?: number; fieldList: (s: Spec) => string; fieldBase: (id: number) => string;
+}) {
   const { theme } = useTheme();
   const [sharing, setSharing] = useState(false);
   const { data: spec, error } = useQuery({ queryKey: ["sim-spec", specPath], queryFn: () => get<Spec>(specPath) });
@@ -72,6 +77,7 @@ function SimulatorView({ base, specPath, modelId }: { base: string; specPath: st
       </div>
 
       <div className="sim" style={{ marginTop: 22 }}>
+        <div className="sim-left">
         <section className="block sim-inputs">
           <div className="block-head"><h3>설계변수</h3><span className="grow" />
             <button className="small ghost" onClick={() => setX(mid0)}><RotateCcw size={13} />가운데로</button></div>
@@ -85,6 +91,8 @@ function SimulatorView({ base, specPath, modelId }: { base: string; specPath: st
             </div>
           ))}
         </section>
+          <Field3DPanel listUrl={fieldList(spec)} baseUrl={fieldBase} params={x} />
+        </div>
 
         <section className="block">
           <div className="lbl"><Sparkles size={13} />예측 결과</div>

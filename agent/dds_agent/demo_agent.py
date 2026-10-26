@@ -32,6 +32,7 @@ class DemoSession:
         self.stack = AsyncExitStack()
         self.clients: dict[str, ClientSession] = {}
         self.flow_id: int | None = None
+        self.mode = "branin"
         self.cancelled = False
 
     async def start_mcp(self):
@@ -135,22 +136,37 @@ class DemoAgent:
         return outcome.get("outcome") == "selected" and outcome.get("optionId") == "allow"
 
     async def scenario(self, s: DemoSession, text: str):
+        """시나리오 2가지: 기본(Branin 최적화) · '3D'/'형상' 요청(Beam3D 형상·필드 학습 → 3D Simulator)."""
+        body = text.split("\n\n", 1)[-1]  # 앞의 [DDS 컨텍스트] 줄 제외
         if s.flow_id is None:
+            s.mode = "beam3d" if ("3D" in body or "형상" in body) else "branin"
             await s.say("요청을 분석하고 있습니다. 전체 작업 흐름을 먼저 제안할게요.", thought=True)
-            nodes = [
-                {"id": "doe", "label": "DOE 20점 (LHS)", "type": "doe", "tool": "mock", "detail": "x1∈[-5,10], x2∈[0,15]"},
-                {"id": "solve", "label": "Mock 솔버 실행", "type": "solve", "tool": "mock"},
-                {"id": "train", "label": "GP Surrogate 학습", "type": "train"},
-                {"id": "opt", "label": "베이지안 최적화 6회", "type": "optimize"},
-                {"id": "deploy", "label": "Simulator 배포", "type": "deploy"},
-            ]
-            edges = [{"source": a, "target": b} for a, b in
-                     [("doe", "solve"), ("solve", "train"), ("train", "opt"), ("opt", "deploy")]]
-            await s.tool("dds-flow", "set_project_info", {"name": "Branin 최적화 데모",
-                                                          "description": "mock 솔버로 DOE → GP → BO → Simulator 검증"})
-            goal = text.split("\n\n", 1)[-1][:200]  # 앞의 [DDS 컨텍스트] 줄 제외
-            r = await s.tool("dds-flow", "propose_flow", {"title": "Branin 최적화 데모", "goal": goal,
-                                                         "nodes": nodes, "edges": edges})
+            if "[첨부 파일" in body:
+                files = [ln.strip("- ").split(" (")[0] for ln in body.splitlines() if ln.startswith("- inputs/")]
+                await s.say(f"첨부하신 파일을 작업 폴더에서 확인했습니다: {', '.join(files)}\n\n")
+            if s.mode == "beam3d":
+                title, desc = "외팔보 3D 응력 예측", "mock 3D 외팔보로 DOE → 형상·필드 학습 → 3D Simulator 검증"
+                nodes = [
+                    {"id": "doe", "label": "DOE 16점 (LHS)", "type": "doe", "tool": "mock", "detail": "폭 10~40, 높이 20~80 mm"},
+                    {"id": "solve", "label": "3D 외팔보 해석", "type": "solve", "tool": "mock", "detail": "케이스마다 응력 필드 저장"},
+                    {"id": "train", "label": "스칼라 예측 모델", "type": "train"},
+                    {"id": "field", "label": "형상·응력 필드 학습", "type": "train", "detail": "PCA + GP"},
+                    {"id": "deploy", "label": "3D Simulator 배포", "type": "deploy"},
+                ]
+                pairs = [("doe", "solve"), ("solve", "train"), ("solve", "field"), ("train", "deploy"), ("field", "deploy")]
+            else:
+                title, desc = "Branin 최적화 데모", "mock 솔버로 DOE → GP → BO → Simulator 검증"
+                nodes = [
+                    {"id": "doe", "label": "DOE 20점 (LHS)", "type": "doe", "tool": "mock", "detail": "x1∈[-5,10], x2∈[0,15]"},
+                    {"id": "solve", "label": "Mock 솔버 실행", "type": "solve", "tool": "mock"},
+                    {"id": "train", "label": "GP Surrogate 학습", "type": "train"},
+                    {"id": "opt", "label": "베이지안 최적화 6회", "type": "optimize"},
+                    {"id": "deploy", "label": "Simulator 배포", "type": "deploy"},
+                ]
+                pairs = [("doe", "solve"), ("solve", "train"), ("train", "opt"), ("opt", "deploy")]
+            await s.tool("dds-flow", "set_project_info", {"name": title, "description": desc})
+            r = await s.tool("dds-flow", "propose_flow", {"title": title, "goal": body[:200], "nodes": nodes,
+                                                         "edges": [{"source": x, "target": y} for x, y in pairs]})
             s.flow_id = r["flow_id"]
             await s.say("작업 흐름을 캔버스에 올렸습니다. 확인 후 **승인**을 눌러 주시면 실행을 시작하겠습니다.")
             return
@@ -159,12 +175,18 @@ class DemoAgent:
         if flow["status"] not in ("approved", "in_progress"):
             await s.say(f"현재 플로우 상태가 '{flow['status']}'입니다. 승인 후 다시 요청해 주세요.")
             return
-        if not await self.ask_permission(s, "Mock 솔버로 케이스 실행", {"study": "Branin", "cases": 20}):
+        n_cases = 16 if s.mode == "beam3d" else 20
+        if not await self.ask_permission(s, "Mock 솔버로 케이스 실행", {"study": s.mode, "cases": n_cases}):
             await s.say("실행 권한이 거부되어 중단했습니다.")
             return
-
         fid = s.flow_id
         node = lambda nid, st, d=None: s.tool("dds-flow", "update_node", {"flow_id": fid, "node_id": nid, "status": st, "detail": d})
+        if s.mode == "beam3d":
+            await self._beam3d(s, fid, node)
+        else:
+            await self._branin(s, fid, node)
+
+    async def _branin(self, s, fid, node):
         await node("doe", "in_progress")
         study = await s.tool("dds-study", "create_study", {
             "name": "Branin", "adapter": "mock", "adapter_config": {"function": "branin", "delay_sec": 0.05},
@@ -192,6 +214,30 @@ class DemoAgent:
                                 f"- 목적함수 f = **{best['results']['f']:.4f}** (이론 최소 0.398)\n"
                                 f"- Simulator: 모델 #{d['model_id']}"}})
         await s.say(f"완료했습니다. 최적 f = {best['results']['f']:.4f} 이고, Simulator(모델 #{d['model_id']})를 배포했습니다.")
+
+    async def _beam3d(self, s, fid, node):
+        await node("doe", "in_progress")
+        study = await s.tool("dds-study", "create_study", {
+            "name": "Beam3D", "adapter": "mock", "adapter_config": {"function": "beam3d", "delay_sec": 0.05},
+            "variables": [{"name": "width", "lower": 10, "upper": 40}, {"name": "height", "lower": 20, "upper": 80}],
+            "objectives": [{"name": "max_stress", "goal": "min"}]})
+        sid = study["study_id"]
+        await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 16, "seed": 5, "flow_id": fid, "node_id": "doe"})
+        await node("doe", "complete")
+        await node("solve", "in_progress")
+        r = await s.tool("dds-study", "run_cases", {"study_id": sid})
+        await node("solve", "complete", f"완료 {r['counts'].get('complete', 0)}건 · 응력 필드 저장")
+        await node("train", "in_progress")
+        m = await s.tool("dds-study", "train_surrogate", {"study_id": sid, "outputs": ["max_stress", "mass", "deflection"],
+                                                          "flow_id": fid, "node_id": "train"})
+        await node("train", "complete", f"R²={m['metrics']['max_stress']['r2']:.3f}")
+        await node("field", "in_progress")
+        fm = await s.tool("dds-study", "train_field_model", {"study_id": sid, "field": "stress", "flow_id": fid, "node_id": "field"})
+        await node("field", "complete", f"모드 {fm['info']['modes']}개 · 노드 {fm['nodes']:,}")
+        await node("deploy", "in_progress")
+        d = await s.tool("dds-study", "deploy_model", {"model_id": m["model_id"]})
+        await node("deploy", "complete")
+        await s.say(f"완료했습니다. 응력 필드와 처짐 형상을 학습했고, 3D Simulator(모델 #{d['model_id']})에서 폭·높이를 바꾸며 바로 볼 수 있습니다.")
 
 
 def main():

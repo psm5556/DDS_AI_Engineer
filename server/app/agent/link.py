@@ -4,6 +4,8 @@
   session.new     {project_id, agent}                  → {"session_id", "agent"}
   session.load    {project_id, session_id, agent}      → {"ok": bool}
   agent.install   {agent}                              → {"installed", "login"}  (npm 전역 설치)
+  local.open      {project_id, path?, with_viewer?}    → {"ok"}  (내 PC 탐색기/CAE 뷰어로 열기)
+  local.tree      {project_id, path?}                  → {"entries": [...]} (로컬 작업 폴더 탐색)
   session.prompt  {session_id, text}                   → {"stop_reason"}   (턴이 끝날 때 응답)
 서버 → Agent 알림
   session.cancel  {session_id}
@@ -79,18 +81,24 @@ class RemoteRunner:
     def __init__(self, conn: AgentConnection):
         self.conn = conn
 
-    def new_session(self, project_id: int, agent: str) -> str:
-        return self.conn.request("session.new", {"project_id": project_id, "agent": agent}, timeout=180)["session_id"]
+    def new_session(self, project_id: int, agent: str, project_name: str | None = None) -> str:
+        return self.conn.request("session.new", {"project_id": project_id, "agent": agent, "project_name": project_name},
+                                 timeout=180)["session_id"]
 
-    def load_session(self, session_id: str, project_id: int, agent: str) -> bool:
+    def load_session(self, session_id: str, project_id: int, agent: str, project_name: str | None = None) -> bool:
         try:
             return bool(self.conn.request("session.load", {"project_id": project_id, "session_id": session_id,
-                                                           "agent": agent}, timeout=180).get("ok"))
+                                                           "agent": agent, "project_name": project_name}, timeout=180).get("ok"))
         except AgentError:
             return False
 
-    def prompt(self, session_id: str, text: str) -> str:
-        return self.conn.request("session.prompt", {"session_id": session_id, "text": text}, timeout=None)["stop_reason"]
+    def prompt(self, session_id: str, text: str, attachments: list[dict] | None = None) -> str:
+        return self.conn.request("session.prompt", {"session_id": session_id, "text": text, "attachments": attachments or []},
+                                 timeout=None)["stop_reason"]
+
+    def call(self, type_: str, payload: dict, timeout: float = 30) -> dict:
+        """PC Agent에 로컬 작업 요청(폴더 열기·뷰어 실행·로컬 데이터 조회 등)."""
+        return self.conn.request(type_, payload, timeout=timeout)
 
     def cancel(self, session_id: str):
         self.conn.send({"type": "session.cancel", "session_id": session_id})

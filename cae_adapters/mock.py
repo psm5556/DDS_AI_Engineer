@@ -29,10 +29,51 @@ def _beam(p):
     }
 
 
+def beam_mesh(b: float, h: float, L: float = 1000.0, nx: int = 40, ny: int = 6, nz: int = 8):
+    """외팔보 표면 삼각형 메쉬(직육면체 6면, 모든 케이스 같은 토폴로지). x=0 고정, x=L 끝단 하중."""
+    pts, tris, index = [], [], {}
+
+    def node(i, j, k):
+        key = (i, j, k)
+        if key not in index:
+            index[key] = len(pts)
+            pts.append((L * i / nx, b * (j / ny - 0.5), h * (k / nz - 0.5)))
+        return index[key]
+
+    def face(fixed, a_n, b_n, mk):
+        for a in range(a_n):
+            for c in range(b_n):
+                p00, p10, p01, p11 = mk(a, c), mk(a + 1, c), mk(a, c + 1), mk(a + 1, c + 1)
+                tris.extend([(p00, p10, p11), (p00, p11, p01)])
+
+    face("z0", nx, ny, lambda a, c: node(a, c, 0))
+    face("z1", nx, ny, lambda a, c: node(a, c, nz))
+    face("y0", nx, nz, lambda a, c: node(a, 0, c))
+    face("y1", nx, nz, lambda a, c: node(a, ny, c))
+    face("x0", ny, nz, lambda a, c: node(0, a, c))
+    face("x1", ny, nz, lambda a, c: node(nx, a, c))
+    return np.array(pts, dtype=np.float64), np.array(tris, dtype=np.int32)
+
+
+def _beam3d(p):
+    """3D 외팔보: 스칼라 결과 + 표면 응력 필드(fields/stress.npz) — 형상·필드 학습 연습용."""
+    b, h, L, P, E = p["width"], p["height"], 1000.0, 1000.0, 210e3
+    pts, tris = beam_mesh(b, h, L)
+    inertia = b * h ** 3 / 12
+    x, z = pts[:, 0], pts[:, 2]
+    stress = np.abs(P * (L - x) * z / inertia)  # 굽힘 응력 |M z / I|
+    defl = P * x ** 2 * (3 * L - x) / (6 * E * inertia)  # 처짐 w(x)
+    shown = pts.copy()
+    shown[:, 2] -= defl  # 변형 형상(처짐)을 좌표에 반영
+    res = _beam(p)
+    return res, {"stress": {"points": shown, "values": stress, "triangles": tris}}
+
+
 FUNCTIONS = {
     "branin": (_branin, "2변수 x1∈[-5,10], x2∈[0,15], 출력 f (최소 0.398)"),
     "rosenbrock": (_rosenbrock, "n변수, 출력 f (최소 0 @ 모두 1)"),
     "beam": (_beam, "변수 width, height [mm], 출력 mass, deflection, max_stress"),
+    "beam3d": (_beam3d, "beam과 같고 + 3D 표면 메쉬 응력 필드(fields/stress.npz, 처짐 형상 포함) — 형상·필드 학습 연습"),
 }
 
 
@@ -55,6 +96,11 @@ class MockAdapter(CaeAdapter):
             results = FUNCTIONS[fn_name][0](params)
         except KeyError as e:
             return CaseOutcome("failed", error=f"설계변수 {e} 가 필요합니다")
+        if isinstance(results, tuple):  # (스칼라 결과, 필드) — 필드는 fields/<이름>.npz 규약으로 저장
+            results, fields = results
+            (run_dir / "fields").mkdir(exist_ok=True)
+            for name, f in fields.items():
+                np.savez_compressed(run_dir / "fields" / f"{name}.npz", **f)
         noise = float(config.get("noise", 0))
         if noise:
             rng = np.random.default_rng()

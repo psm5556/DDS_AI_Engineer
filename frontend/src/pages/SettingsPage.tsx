@@ -101,6 +101,8 @@ export default function SettingsPage() {
           )}
         </section>
 
+        <Diagnose connected={!!agent?.connected} />
+
         <PinChange />
 
         <section className="block">
@@ -135,6 +137,47 @@ function PinChange() {
         <div className="field"><span className="lbl">새 PIN</span><PinInput value={next} onChange={setNext} label="새 PIN" /></div>
         <button disabled={cur.length !== 6 || next.length !== 6 || change.isPending} onClick={() => change.mutate()}>PIN 바꾸기</button>
       </div>
+    </section>
+  );
+}
+
+interface Diag {
+  workspace: string; workspace_free_gb: number; hints: string[];
+  tools: { key: string; label: string; configured: string; found: boolean; path: string | null; version: string | null; tool_keys: string[] }[];
+  viewers: { ext: string; command: string[]; found: boolean }[];
+}
+
+/** 내 PC 진단: CAD/CAE 툴 경로·버전, CAE 뷰어, 작업 폴더 */
+function Diagnose({ connected }: { connected: boolean }) {
+  const run = useMutation({ mutationFn: () => get<Diag>("/api/agent/diagnose") });
+  const d = run.data;
+  return (
+    <section className="block">
+      <div className="block-head"><h3>내 PC 진단</h3>
+        <span className="small muted">CAD/CAE 툴·뷰어 경로는 %USERPROFILE%\.dds-agent\agent.toml 의 [tools]·[viewers]에서 설정합니다</span>
+        <span className="grow" />
+        <button className="small" disabled={!connected || run.isPending} onClick={() => run.mutate()}>
+          {run.isPending ? <><span className="spinner" style={{ width: 12, height: 12 }} />확인 중</> : "진단 실행"}</button></div>
+      {run.error && <div className="notice err">{(run.error as Error).message}</div>}
+      {d && (
+        <>
+          <div className="kv" style={{ marginBottom: 12 }}>
+            <span>작업 폴더</span><b>{d.workspace} <span className="chip">{d.workspace_free_gb} GB 남음</span></b>
+            <span>CAE 뷰어</span><b>{d.viewers.length ? d.viewers.map((v) => <span key={v.ext} className={`chip ${v.found ? "ok" : "err"}`}>{v.ext} → {v.command[0].split(/[\/]/).pop()}</span>)
+              : <span className="small muted">등록 없음 — 결과 파일은 Windows 기본 프로그램으로 열립니다</span>}</b>
+          </div>
+          <div className="table-wrap"><table>
+            <thead><tr><th>툴</th><th>상태</th><th>경로 / 버전</th><th>쓰는 tool 키</th></tr></thead>
+            <tbody>{d.tools.map((t) => (
+              <tr key={t.key}>
+                <td>{t.label}</td>
+                <td>{t.found ? <span className="chip ok">찾음</span> : <span className="chip">없음</span>}</td>
+                <td className="small">{t.path ?? <span className="muted">{t.configured || "(미설정)"}</span>}{t.version && <div className="muted">{t.version}</div>}</td>
+                <td className="small muted">{t.tool_keys.join(", ")}</td>
+              </tr>))}</tbody>
+          </table></div>
+        </>
+      )}
     </section>
   );
 }

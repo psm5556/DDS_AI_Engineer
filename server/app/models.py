@@ -136,6 +136,7 @@ class Case(TimestampMixin, Base):
     run_dir = Column(String(500))  # 실행한 PC 기준 경로
     run_by = Column(Integer, ForeignKey("users.id"))
     images = Column(JSON, default=list)  # 서버 files 경로 목록
+    fields = Column(JSON, default=list)  # 업로드된 필드 이름 목록 (fields/<이름>.npz)
     error = Column(Text)
 
 
@@ -194,4 +195,39 @@ class ShareLink(Base):
     enabled = Column(Boolean, default=True, nullable=False)
     uses = Column(Integer, default=0, nullable=False)
     expires_at = Column(DateTime)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class ProjectFavorite(Base):
+    __tablename__ = "project_favorites"
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class Attachment(Base):
+    """대화에 첨부한 파일(CAD 모델·입력 파일·참고 자료). 서버에 보관하고, 프롬프트를 보낼 때
+    PC Agent가 프로젝트 로컬 폴더(inputs/)로 내려받아 CAD/CAE 툴이 바로 쓸 수 있게 한다."""
+    __tablename__ = "attachments"
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    filename = Column(String(300), nullable=False)
+    size = Column(Integer, nullable=False)
+    sha256 = Column(String(64), nullable=False)
+    stored = Column(String(500), nullable=False)  # files_dir 기준 상대 경로
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class FieldModel(Base):
+    """형상·필드 예측 모델(PCA + GP). 설계변수 → 3D 형상과 노드 필드(응력·변위 등)."""
+    __tablename__ = "field_models"
+    id = Column(Integer, primary_key=True)
+    study_id = Column(Integer, ForeignKey("studies.id", ondelete="CASCADE"), nullable=False)
+    field = Column(String(100), nullable=False)
+    n_nodes = Column(Integer, nullable=False)
+    n_train = Column(Integer, nullable=False)
+    shape_varies = Column(Boolean, default=False, nullable=False)
+    info = Column(JSON, default=dict)  # modes, energy, truncation_error, mode_r2
+    path = Column(String(500), nullable=False)
     created_at = Column(DateTime, default=_now, nullable=False)

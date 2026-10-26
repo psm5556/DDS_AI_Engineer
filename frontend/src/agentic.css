@@ -127,3 +127,58 @@
   color: var(--ink); font-size: 13.5px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .chat-art-title:hover:not(:disabled) { background: none; color: var(--brand); text-decoration: underline; }
 .chat-art .art-card { margin: 4px 4px 8px; }
+
+/* 대화 목록: 이름 바꾸기·삭제 (마우스를 올렸을 때) */
+.side-session-row { position: relative; }
+.side-session-acts { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); display: none; gap: 0; background: var(--hover); border-radius: 6px; }
+.side-session-row:hover .side-session-acts, .side-session-acts:focus-within { display: flex; }
+.side-session-row:hover .side-session .m { visibility: hidden; }
+.side-session-acts .icon-btn { width: 24px; height: 24px; min-height: 24px; }
+@media (hover: none) { .side-session-acts { display: flex; position: static; transform: none; background: none; } }
+.side-more-sessions { font-size: 11.5px; margin: 2px 0 0 8px; }
+
+/* 입력창: 회색 추천 글자 · 첨부 */
+.composer { position: relative; }
+.composer-input { position: relative; }
+.composer-ghost { position: absolute; inset: 0; padding: 4px 6px; font-size: 14.5px; line-height: 1.6; color: var(--ink-4); white-space: pre-wrap;
+  word-break: break-word; pointer-events: none; overflow: hidden; }
+.composer.big .composer-ghost { font-size: 15.5px; }
+.composer-ghost .typed { color: transparent; }
+.composer-input textarea { position: relative; z-index: 1; }
+.composer-files, .msg-files { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 8px; }
+.msg-files { justify-content: flex-end; padding: 6px 0 0; }
+.file-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; padding: 4px 6px 4px 10px; border-radius: 10px;
+  background: var(--panel-3); font-size: 12px; color: var(--ink-2); }
+.file-chip svg { color: var(--brand); flex: none; }
+.file-chip .n { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
+.file-chip .s { color: var(--ink-4); flex: none; }
+.file-chip .x { width: 18px; min-height: 18px; height: 18px; padding: 0; border: none; background: none; color: var(--ink-4); }
+.file-chip.err { background: var(--err-soft); color: var(--err); }
+.composer.drag { border-color: var(--brand-500); box-shadow: 0 0 0 4px var(--brand-soft); }
+.composer-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px;
+  border-radius: inherit; background: var(--glass); color: var(--brand); font-weight: 600; font-size: 13px; z-index: 3; pointer-events: none; }
+
+/* 캔버스 '내 PC 파일' */
+.local-head { gap: 6px; margin-bottom: 4px; }
+.local-crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-size: 13px; }
+.local-crumb span { display: inline-flex; align-items: center; gap: 2px; color: var(--ink-4); }
+.local-root { margin-bottom: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; }
+.local-table td { padding: 6px 10px; }
+.local-table svg { vertical-align: -2px; color: var(--ink-4); }
+.local-table svg.dir { color: #d97706; }
+td.nowrap { white-space: nowrap; }
+
+/* Simulator 3D */
+.field3d .block-head h3 { gap: 6px; }
+.field3d .icon-btn.on { color: var(--brand); background: var(--brand-soft); }
+.field3d-body { position: relative; height: 460px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+.viewer3d { position: absolute; inset: 0; }
+.viewer3d canvas { display: block; }
+.colorbar { position: absolute; right: 12px; top: 12px; bottom: 12px; width: 70px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--ink-2); pointer-events: none; }
+.colorbar i { flex: 1; width: 14px; border-radius: 4px; border: 1px solid var(--line); }
+.colorbar .t { font-weight: 600; text-align: center; }
+.colorbar .v { font-variant-numeric: tabular-nums; }
+
+.sim-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.sim-left .field3d-body { height: 420px; }

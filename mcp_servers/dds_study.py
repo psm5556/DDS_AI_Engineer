@@ -119,6 +119,15 @@ def optimize(study_id: int, iterations: int = 10, mode: Literal["bo", "al"] = "b
 
 
 @mcp.tool()
+def train_field_model(study_id: int, field: str, flow_id: int | None = None, node_id: str | None = None) -> dict:
+    """형상·필드 모델 학습: 케이스마다 남긴 fields/<field>.npz(points, values, triangles)로
+    '설계변수 → 3D 형상 + 노드 필드(응력·변위 등)'를 예측하는 모델(PCA + GP)을 만든다. Simulator에서 3D로 보인다.
+    케이스 스크립트가 fields/ 규약(docs/skill-contract.md 1-1절)대로 필드를 저장해야 한다. 노드 수·순서가 케이스마다 같아야 한다."""
+    fm = api.post(f"/api/studies/{study_id}/train_field", {"field": field, "flow_id": flow_id, "node_id": node_id})
+    return {"field_model_id": fm["id"], "nodes": fm["n_nodes"], "shape_varies": fm["shape_varies"], "info": fm["info"]}
+
+
+@mcp.tool()
 def deploy_model(model_id: int) -> dict:
     """Surrogate 모델을 예측 Simulator로 배포한다. 웹앱 Simulator 화면에서 슬라이더로 바로 예측할 수 있다."""
     m = api.post(f"/api/models/{model_id}/deploy")

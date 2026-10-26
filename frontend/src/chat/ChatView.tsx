@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle, ArrowUp, BarChart3, Brain, Check, ChevronDown, ChevronRight, CircleSlash, FileText, Image as ImageIcon, LineChart,
-  Loader2, PanelRight, ScatterChart, ShieldQuestion, Sparkles, Square, Table2, Wrench, X,
+  AlertTriangle, BarChart3, Brain, Check, ChevronDown, ChevronRight, CircleSlash, FileText, Image as ImageIcon, LineChart,
+  FileUp, Loader2, PanelRight, ScatterChart, ShieldQuestion, Sparkles, Table2, Wrench, X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -11,6 +11,7 @@ import { useAuth } from "../auth";
 import { useCanvas } from "../canvas/CanvasContext";
 import { useFlowDecision } from "../canvas/views";
 import { Markdown } from "../components/Markdown";
+import { Composer } from "./Composer";
 import { FlowCanvas } from "../flow/FlowCanvas";
 import { AGENT_SEND, FLOW_STATUS, localIso } from "../format";
 import { useLive } from "../live";
@@ -33,17 +34,16 @@ export const CHAT_SUGGEST = [
 ];
 
 export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: {
-  pid: number; sid: number | null; onSession: (id: number) => void; initialPrompt?: string | null; onInitialSent?: () => void;
+  pid: number; sid: number | null; onSession: (id: number) => void;
+  initialPrompt?: { text: string; attachmentIds: number[] } | null; onInitialSent?: () => void;
 }) {
   const { user } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
-  const [input, setInput] = useState("");
   const [agentChoice, setAgentChoice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [perms, setPerms] = useState<PermissionRequest[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const sentInitial = useRef(false);
 
   const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status"), refetchInterval: 30000 });
@@ -89,7 +89,6 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   }, [sid, msgs, flows, arts, session]);
 
   useEffect(() => { bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" }); }, [timeline.length, msgs, busy, perms]);
-  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 50); }, [sid]);
 
   useLive((e) => {
     if (e.type !== "agent_event" || e.session_id !== sid || !sid) {
@@ -127,9 +126,9 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     }
   });
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, attachmentIds: number[] = []) => {
     const t = text.trim();
-    if (!t) return;
+    if (!t && !attachmentIds.length) return;
     try {
       let id = sid;
       if (!id || readOnly) {
@@ -138,25 +137,35 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
         id = s.id;
         onSession(s.id);
       }
-      setInput("");
       setBusy(true);
       qc.setQueryData<ChatMessage[]>(["messages", id], (xs) => [...(xs ?? []),
-        { id: -Date.now(), session_id: id!, role: "user", content: t, meta: null, created_at: localIso() }]);
-      await post(`/api/sessions/${id}/prompt`, { text: t });
+        { id: -Date.now(), session_id: id!, role: "user", content: t || "첨부한 파일을 확인해 주세요.", meta: null, created_at: localIso() }]);
+      await post(`/api/sessions/${id}/prompt`, { text: t, attachment_ids: attachmentIds });
     } catch (e) {
       setBusy(false);
       toast((e as Error).message, true);
     }
   }, [pid, sid, readOnly, chosen, onSession, qc, toast]);
 
-  // 첫 화면에서 입력한 요청을 이어서 보낸다
+  // 첫 화면에서 입력한 요청(과 첨부)을 이어서 보낸다
   useEffect(() => {
     if (initialPrompt && agent?.connected && !sentInitial.current) {
       sentInitial.current = true;
       onInitialSent?.(); // 새 대화가 만들어지며 화면이 다시 그려져도 두 번 보내지 않게 먼저 비운다
-      void send(initialPrompt);
+      void send(initialPrompt.text, initialPrompt.attachmentIds);
     }
   }, [initialPrompt, agent?.connected, send, onInitialSent]);
+
+  // 상황에 맞는 추천 프롬프트 (→ 키로 입력)
+  const suggestions = useMemo(() => {
+    const review = (flows ?? []).find((f) => f.status === "review");
+    const done = (flows ?? []).some((f) => f.status === "complete");
+    if (review) return [`플로우 '${review.title}'에서 바꿀 점: `, "이 작업 흐름의 각 단계를 자세히 설명해 줘", "승인 전에 필요한 입력 파일과 툴 경로를 점검해 줘"];
+    if (done) return ["결과를 해석해서 결론·권고가 담긴 보고서 요약을 작성해 줘", "능동학습으로 예측 모델 정확도를 더 높여 줘",
+      "최적 설계점에서 실제 해석으로 확인(검증 해석)해 줘", "응력 분포를 3D로 보고 싶어 — 형상·필드 모델을 학습해 줘", "Simulator를 설계팀과 공유할 수 있게 배포해 줘"];
+    if (timeline.length) return ["지금 진행 상황을 요약해 줘", "실패한 케이스 원인을 찾아서 고쳐 줘", "다음 단계로 진행해 줘"];
+    return CHAT_SUGGEST;
+  }, [flows, timeline.length]);
 
   // 캔버스 등 다른 곳에서 보낸 메시지(플로우 승인 등)
   useEffect(() => {
@@ -200,27 +209,16 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
 
       <div className="chat-composer">
         <div className="chat-col">
-          <form className="composer" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
-            <textarea ref={inputRef} value={input} rows={1} disabled={disabled}
-              placeholder={readOnly ? "다른 멤버의 대화입니다. 보내면 내 새 대화로 시작합니다" : disabled ? "PC Agent 연결 후 사용할 수 있습니다" : "무엇이든 요청하세요 — 예: 이 모델의 두께를 2~6mm로 바꿔가며 응력·질량 DOE 해줘"}
-              aria-label="에이전트에게 요청" onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(input); } }} />
-            <div className="composer-bar">
-              {session ? <span className="chip">{agentLabel(session.agent)}{readOnly ? " · 읽기 전용" : ""}</span>
-                : clis.length > 1 ? (
-                  <span className="seg" role="radiogroup" aria-label="사용할 AI 에이전트">{clis.map((a) => (
-                    <button type="button" key={a.name} role="radio" aria-checked={chosen === a.name} className={chosen === a.name ? "on" : ""} onClick={() => setAgentChoice(a.name)}>{a.label}</button>
-                  ))}</span>
-                ) : <span className="chip">{agentLabel(chosen)}</span>}
-              <span className="grow" />
-              <span className="small muted hint">Enter 보내기 · Shift+Enter 줄바꿈</span>
-              {busy && !readOnly ? (
-                <button type="button" className="send" onClick={cancel} aria-label="중지" title="중지"><Square size={14} /></button>
-              ) : (
-                <button type="submit" className="primary send" disabled={disabled || !input.trim()} aria-label="보내기"><ArrowUp size={16} /></button>
-              )}
-            </div>
-          </form>
+          <Composer projectId={pid} suggestions={suggestions} busy={busy && !readOnly} onStop={cancel} disabled={disabled}
+            onSend={(o) => send(o.text, o.attachmentIds)}
+            placeholder={readOnly ? "다른 멤버의 대화입니다. 보내면 내 새 대화로 시작합니다" : disabled ? "PC Agent 연결 후 사용할 수 있습니다"
+              : "무엇이든 요청하세요 — 파일은 끌어 놓거나 📎로 첨부"}
+            leftBar={session ? <span className="chip">{agentLabel(session.agent)}{readOnly ? " · 읽기 전용" : ""}</span>
+              : clis.length > 1 ? (
+                <span className="seg" role="radiogroup" aria-label="사용할 AI 에이전트">{clis.map((a) => (
+                  <button type="button" key={a.name} role="radio" aria-checked={chosen === a.name} className={chosen === a.name ? "on" : ""} onClick={() => setAgentChoice(a.name)}>{a.label}</button>
+                ))}</span>
+              ) : <span className="chip">{agentLabel(chosen)}</span>} />
         </div>
       </div>
     </section>
@@ -304,7 +302,17 @@ function ToolGroup({ items }: { items: ChatMessage[] }) {
 
 function Message({ m }: { m: ChatMessage }) {
   const [openTool, setOpenTool] = useState(false);
-  if (m.role === "user") return <div className="chat-msg user"><div className="bubble">{m.content}</div></div>;
+  if (m.role === "user") return (
+    <div className="chat-msg user">
+      <div className="bubble">{m.content}</div>
+      {!!m.meta?.attachments?.length && (
+        <div className="msg-files">{m.meta.attachments.map((a) => (
+          <span key={a.id} className="file-chip" title={`내 PC 프로젝트 폴더 inputs/${a.filename}`}><FileUp size={12} /><span className="n">{a.filename}</span>
+            <span className="s">{a.size > 1e6 ? `${(a.size / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(a.size / 1e3))} KB`}</span></span>
+        ))}</div>
+      )}
+    </div>
+  );
   if (m.role === "system") return <div className="chat-msg agent err"><div className="bubble">{m.content}</div></div>;
   if (m.role === "thought") {
     return (

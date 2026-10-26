@@ -1,0 +1,79 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { ChevronRight, Eye, File, Folder, FolderOpen, HardDrive, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { api, get } from "../api";
+import { when } from "../format";
+import { useToast } from "../toast";
+import type { LocalTree } from "../types";
+
+const VIEWABLE = /\.(odb|d3plot|op2|f06|rst|rth|h3d|sim|fem|prt|stp|step|igs|iges|stl|vtu|vtk|cae|inp|k|key|dyn|png|jpg|csv|json|txt|log)$/i;
+const size = (n: number | null) => (n == null ? "" : n > 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
+
+/** 내 PC 작업 폴더 열기(탐색기) / CAE 뷰어로 열기 — PC Agent 경유 */
+export function useOpenLocal(pid: number) {
+  const toast = useToast();
+  return useMutation({
+    mutationFn: (v: { path: string; viewer?: boolean }) =>
+      api<{ opened: string; with?: string }>(`/api/projects/${pid}/local/open`, { method: "POST", body: { path: v.path, with_viewer: !!v.viewer } }),
+    onSuccess: (r) => toast(r.with ? `뷰어로 열었습니다: ${r.opened}` : `내 PC에서 열었습니다: ${r.opened}`),
+    onError: (e: Error) => toast(e.message ?? "열지 못했습니다", true),
+  });
+}
+
+/** 케이스의 run_dir(그 PC의 절대 경로)에서 프로젝트 폴더 기준 상대 경로를 뽑는다 */
+export function relFromRunDir(runDir: string | null): string | null {
+  if (!runDir) return null;
+  const parts = runDir.replace(/\\/g, "/").split("/");
+  const i = parts.lastIndexOf("studies");
+  return i >= 0 ? parts.slice(i).join("/") : null;
+}
+
+/** 캔버스 '파일' 탭: 내 PC의 프로젝트 작업 폴더 (규칙: inputs·scripts·runs·studies/S…/cases/C…·live·reports) */
+export function LocalFiles({ pid }: { pid: number }) {
+  const [path, setPath] = useState("");
+  const open = useOpenLocal(pid);
+  const { data, error, refetch, isFetching } = useQuery({
+    queryKey: ["local-tree", pid, path], queryFn: () => get<LocalTree>(`/api/projects/${pid}/local/tree?path=${encodeURIComponent(path)}`),
+    retry: false,
+  });
+  const crumbs = path ? path.split("/") : [];
+  if (error) {
+    return <div className="empty-hero"><HardDrive size={28} /><b>내 PC 작업 폴더를 볼 수 없습니다</b><p>{(error as Error).message}</p></div>;
+  }
+  return (
+    <div className="local-files">
+      <div className="row local-head">
+        <nav className="local-crumb" aria-label="폴더 경로">
+          <button className="link-btn" onClick={() => setPath("")}>작업 폴더</button>
+          {crumbs.map((c, i) => (
+            <span key={i}><ChevronRight size={12} /><button className="link-btn" onClick={() => setPath(crumbs.slice(0, i + 1).join("/"))}>{c}</button></span>
+          ))}
+        </nav>
+        <span className="grow" />
+        <button className="icon-btn" title="새로 고침" aria-label="새로 고침" onClick={() => refetch()}><RefreshCw size={14} className={isFetching ? "spin" : ""} /></button>
+        <button className="small" onClick={() => open.mutate({ path })}><FolderOpen size={13} />탐색기로 열기</button>
+      </div>
+      {data && <p className="small muted local-root" title={data.root}>{data.root}{path ? `\\${path.replace(/\//g, "\\")}` : ""}</p>}
+      <div className="table-wrap"><table className="local-table">
+        <tbody>
+          {data?.entries.map((e) => (
+            <tr key={e.path} className={e.dir ? "clickable" : ""} onClick={() => e.dir && setPath(e.path)}>
+              <td>{e.dir ? <Folder size={14} className="dir" /> : <File size={14} />} {e.name}</td>
+              <td className="r small muted">{size(e.size)}</td>
+              <td className="small muted">{when(e.modified)}</td>
+              <td className="r" onClick={(ev) => ev.stopPropagation()}>
+                {!e.dir && VIEWABLE.test(e.name) && (
+                  <button className="icon-btn" title="CAE 뷰어로 열기 (설정의 [viewers], 없으면 기본 프로그램)" aria-label={`${e.name} 뷰어로 열기`}
+                    onClick={() => open.mutate({ path: e.path, viewer: true })}><Eye size={14} /></button>
+                )}
+                <button className="icon-btn" title="탐색기에서 보기" aria-label={`${e.name} 탐색기에서 보기`} onClick={() => open.mutate({ path: e.path })}>
+                  <FolderOpen size={14} /></button>
+              </td>
+            </tr>
+          ))}
+          {data && !data.entries.length && <tr><td colSpan={4} className="small muted">비어 있습니다</td></tr>}
+        </tbody>
+      </table></div>
+    </div>
+  );
+}

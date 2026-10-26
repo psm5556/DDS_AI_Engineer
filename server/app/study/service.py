@@ -118,8 +118,11 @@ def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, us
         for c in cases:
             c.status, c.run_by, c.error = "queued", user_id, None
         db.commit()
-        jobs = [{"case_id": c.id, "study_id": study_id, "project_id": study.project_id, "params": c.params,
-                 "adapter": study.adapter, "adapter_config": study.adapter_config or {}, "dry_run": dry_run}
+        project = db.get(models.Project, study.project_id)
+        jobs = [{"case_id": c.id, "study_id": study_id, "project_id": study.project_id, "project_name": project.name,
+                 "study_name": study.name, "source": c.source, "params": c.params, "variables": study.variables,
+                 "objectives": study.objectives, "adapter": study.adapter, "adapter_config": study.adapter_config or {},
+                 "dry_run": dry_run}
                 for c in cases]
         project_id = study.project_id
     manager.publish({"type": "study_updated", "project_id": project_id, "data": {"id": study_id}})
@@ -138,7 +141,7 @@ def on_case_status(msg: dict):
         if not case:
             return
         case.status = msg["status"]
-        for key in ("results", "error", "run_dir", "images"):
+        for key in ("results", "error", "run_dir", "images", "fields"):
             if key in msg:
                 setattr(case, key, msg[key])
         db.commit()
@@ -169,7 +172,45 @@ def _run_on_server(job: dict):
     except Exception as e:
         log.exception("서버 mock 실행 실패")
         out = CaseOutcome("failed", error=str(e))
-    on_case_status({"case_id": job["case_id"], "status": out.status, "results": out.results, "error": out.error})
+    fields = []
+    for f in sorted((run_dir / "fields").glob("*.npz")) if (run_dir / "fields").is_dir() else []:
+        dest = field_path(job["project_id"], job["study_id"], job["case_id"], f.stem)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(f.read_bytes())
+        fields.append(f.stem)
+    on_case_status({"case_id": job["case_id"], "status": out.status, "results": out.results, "error": out.error,
+                    "fields": fields})
+
+
+def field_path(project_id: int, study_id: int, case_id: int, name: str) -> Path:
+    return settings.files_dir / f"project_{project_id}" / "fields" / f"study_{study_id}" / f"case_{case_id}" / f"{name}.npz"
+
+
+def train_field(db: Session, study: models.Study, field: str, flow_id=None, node_id=None) -> models.FieldModel:
+    from .fieldmodel import load_snapshot, train_field_rom
+    names = _var_names(study)
+    done = [c for c in study.cases if c.status == "complete" and field in (c.fields or [])]
+    if len(done) < 4:
+        raise ValueError(f"'{field}' 필드가 있는 완료 케이스가 4개 이상 필요합니다 (현재 {len(done)}개)")
+    snaps = [load_snapshot(field_path(study.project_id, study.id, c.id, field)) for c in done]
+    X = np.array([[c.params[v] for v in names] for c in done])
+    rom = train_field_rom(names, field, X, snaps)
+    fm = models.FieldModel(study_id=study.id, field=field, n_nodes=rom.n_nodes, n_train=len(done),
+                           shape_varies=rom.shape_varies, info=rom.info, path="")
+    db.add(fm)
+    db.flush()
+    path = settings.data_dir / "models" / f"field_{fm.id}.joblib"
+    rom.save(path)
+    fm.path = str(path)
+    db.commit()
+    i = rom.info
+    publish_artifact(db, study.project_id, "markdown", f"[{study.name}] {field} 형상·필드 모델",
+                     {"text": f"- 학습 케이스 **{i['n_train']}개**, 노드 {rom.n_nodes:,}개, 형상 변화 {'있음(형상도 예측)' if rom.shape_varies else '없음'}\n"
+                              f"- PCA 모드 **{i['modes']}개** (에너지 {i['energy'] * 100:.2f}%, 절단 오차 {i['truncation_error'] * 100:.2f}%)\n"
+                              f"- 모드별 GP R²: " + ", ".join(f"{k} {v}" for k, v in i["mode_r2"].items())
+                              + "\n- Simulator에서 3D로 볼 수 있습니다."}, flow_id, node_id)
+    manager.publish({"type": "model_updated", "project_id": study.project_id, "data": {"field_model": fm.id}})
+    return fm
 
 
 def publish_convergence(db, study):

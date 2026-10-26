@@ -44,6 +44,10 @@ class ServerApi:
                                  data={"subdir": subdir})
         return self._check(r)["path"]
 
+    def upload(self, path: str, file: Path) -> dict:
+        with open(file, "rb") as f:
+            return self._check(self.client.post(path, files={"file": (file.name, f)}, timeout=600))
+
     def download(self, path: str, dest: Path) -> str:
         """파일을 받아 저장하고 sha256을 돌려준다."""
         h = hashlib.sha256()

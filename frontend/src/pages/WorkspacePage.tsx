@@ -22,7 +22,11 @@ export default function WorkspacePage() {
   const nav = useNavigate();
   const canvasLayout = useConversaLayout();
   const [members, setMembers] = useState(false);
-  const [initial, setInitial] = useState<string | null>((loc.state as { prompt?: string } | null)?.prompt ?? null);
+  // 첫 화면에서 넘어온 요청(과 첨부)
+  const [initial, setInitial] = useState<{ text: string; attachmentIds: number[] } | null>(() => {
+    const st = loc.state as { prompt?: string; attachmentIds?: number[] } | null;
+    return st?.prompt || st?.attachmentIds?.length ? { text: st.prompt ?? "", attachmentIds: st.attachmentIds ?? [] } : null;
+  });
   const isNew = loc.pathname.endsWith("/new");
   const { data: p, error } = useQuery({ queryKey: ["project", pid], queryFn: () => get<Project>(`/api/projects/${pid}`) });
   const { data: sessions } = useQuery({ queryKey: ["sessions", pid], queryFn: () => get<ChatSession[]>(`/api/projects/${pid}/sessions`) });
