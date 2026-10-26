@@ -25,7 +25,14 @@ log = logging.getLogger("dds")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
-    manager.bind_loop(asyncio.get_running_loop())
+    loop = asyncio.get_running_loop()
+    manager.bind_loop(loop)
+
+    def quiet_resets(lp, ctx):  # 브라우저 탭을 닫을 때 Windows가 내는 연결 끊김 오류는 무시
+        if isinstance(ctx.get("exception"), ConnectionResetError):
+            return
+        lp.default_exception_handler(ctx)
+    loop.set_exception_handler(quiet_resets)
     registry.on("case.status", lambda conn, m: service.on_case_status(m))
     registry.on("hello", agents.record_instance)
     registry.on("heartbeat", agents.record_instance)

@@ -181,3 +181,17 @@ class AgentInstance(Base):
     connected = Column(Boolean, default=False, nullable=False)
     last_seen = Column(DateTime, default=_now, nullable=False)
     connected_at = Column(DateTime)
+
+
+class ShareLink(Base):
+    """배포된 Simulator 공유 링크: 프로젝트 멤버가 아니어도(로그인한 사내 사용자) 예측을 쓸 수 있다."""
+    __tablename__ = "share_links"
+    id = Column(Integer, primary_key=True)
+    token = Column(String(64), unique=True, nullable=False)
+    model_id = Column(Integer, ForeignKey("surrogate_models.id", ondelete="CASCADE"), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    note = Column(String(200), default="")
+    enabled = Column(Boolean, default=True, nullable=False)
+    uses = Column(Integer, default=0, nullable=False)
+    expires_at = Column(DateTime)
+    created_at = Column(DateTime, default=_now, nullable=False)

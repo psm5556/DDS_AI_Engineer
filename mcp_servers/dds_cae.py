@@ -35,7 +35,7 @@ def list_tools() -> list[dict]:
     for key, tmpl in sorted(table.items()):
         exe_key = tmpl[0][1:-1] if tmpl[0].startswith("{") else None
         exe = paths.get(exe_key, "") if exe_key and exe_key != "python" else "(플랫폼 python)"
-        found = True if exe == "(플랫폼 python)" else bool(Path(exe).exists() or shutil.which(exe))
+        found = True if exe == "(플랫폼 python)" else bool(exe and (Path(exe).exists() or shutil.which(exe)))
         out.append({"tool": key, "command": " ".join(tmpl), "executable": exe, "found": found})
     return out
 

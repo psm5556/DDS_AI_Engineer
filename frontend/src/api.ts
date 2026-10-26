@@ -64,6 +64,18 @@ export async function blobUrl(path: string): Promise<string> {
   return URL.createObjectURL(await res.blob());
 }
 
+/** 인증이 필요한 파일을 내려받는다(보고서 등) */
+export async function download(path: string, fallbackName: string) {
+  const res = await request(path);
+  const cd = res.headers.get("content-disposition") ?? "";
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/);
+  const name = m ? decodeURIComponent(m[1]) : fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 export const get = <T,>(p: string) => api<T>(p);
 export const post = <T,>(p: string, body?: unknown) => api<T>(p, { method: "POST", body: body ?? {} });
 export const put = <T,>(p: string, body?: unknown) => api<T>(p, { method: "PUT", body: body ?? {} });

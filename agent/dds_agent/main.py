@@ -31,7 +31,7 @@ from .tray import Tray
 log = logging.getLogger("dds-agent")
 HEARTBEAT_SEC = 30
 UPDATE_CHECK_SEC = 3600
-MCP_SERVERS = ("dds_flow", "dds_cae", "dds_study")
+MCP_SERVERS = ("dds_flow", "dds_cae", "dds_study", "dds_live")
 
 
 class Agent:

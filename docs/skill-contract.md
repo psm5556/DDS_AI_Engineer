@@ -25,7 +25,7 @@
   ```
   - 처리 순서: 케이스마다 `inputs` 파일 복사 → `params.json` 작성 → 툴 명령 실행 → `results.json` 읽기.
 
-`tool` 키와 명령 템플릿은 `config.toml`의 `[tool_commands]`에 정의한다. `{exe}`는 `[tools]`의 실행파일 경로, `{script}`는 스크립트 파일, `{args}`는 추가 인자다.
+`tool` 키와 명령 템플릿은 `agent.toml`(`%USERPROFILE%\.dds-agent\agent.toml`)의 `[tool_commands]`에 정의한다. `{exe}`는 `[tools]`의 실행파일 경로(툴별 추가 환경변수는 `[tool_env.<tool>]`), `{script}`는 스크립트 파일, `{args}`는 추가 인자다.
 
 | tool 키 | 기본 명령 템플릿 |
 |---|---|
@@ -48,7 +48,7 @@
 
 ## 3. 스킬 폴더 구조 (Gemini CLI Agent Skill)
 ```
-gemini-extension/skills/<skill-name>/
+agent-context/skills/<skill-name>/
   SKILL.md            # frontmatter(name, description) + 본문
   references/*.md     # 상세 API 레퍼런스(필요 시 SKILL.md에서 링크)
   scripts/*           # 바로 고쳐 쓸 수 있는 템플릿 스크립트 (위 1번 규약 준수)

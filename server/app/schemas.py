@@ -333,3 +333,19 @@ class AgentInstanceResponse(ORM):
     connected_at: datetime | None
     user_display_name: str | None = None
     outdated: bool = False
+
+
+class ShareCreate(BaseModel):
+    note: str = ""
+    expires_days: int | None = Field(None, ge=1, le=3650)
+
+
+class ShareResponse(ORM):
+    id: int
+    token: str
+    model_id: int
+    note: str
+    enabled: bool
+    uses: int
+    expires_at: datetime | None
+    created_at: datetime

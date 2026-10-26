@@ -35,7 +35,7 @@ DEFAULT_TOOL_PATHS: dict[str, str] = {
     "abaqus": "abaqus",
     "lsdyna": "lsdyna",
     "lsprepost": "lsprepost",
-    "ansys_python": "python",
+    "ansys_python": "",  # Ansys 패키지(PyMAPDL 등)가 설치된 파이썬 — agent.toml [tools]에 지정
     "ansys_runwb2": "runwb2",
     "ansys_mapdl": "mapdl",
     "altair_hmbatch": "hmbatch",
@@ -61,7 +61,10 @@ def build_command(tool: str, script: str | None, args: list[str], paths: dict[st
                 raise ValueError(f"tool '{tool}' 은 스크립트가 필요합니다")
             cmd.append(script)
         elif i == 0 and part.startswith("{") and part.endswith("}"):
-            cmd.extend(resolve_cmd(values.get(part[1:-1], part[1:-1])))
+            exe = values.get(part[1:-1], part[1:-1])
+            if not exe:
+                raise ValueError(f"'{part[1:-1]}' 실행 파일 경로가 설정되지 않았습니다. agent.toml의 [tools]에 지정하세요")
+            cmd.extend(resolve_cmd(exe))
         else:
             cmd.append(part.format(script=script or "", **values) if "{" in part else part)
     return cmd

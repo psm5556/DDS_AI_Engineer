@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Gauge, Play, Plus, Trash2, Workflow, X } from "lucide-react";
+import { Check, FileDown, Gauge, Play, Plus, Sparkles, Trash2, Workflow, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { del, get, put } from "../api";
+import { del, download, get, put } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
 import { useAuth } from "../auth";
 import { Confirm } from "../components/Modal";
@@ -131,7 +131,13 @@ export function ResultsView({ pid, arts, flows }: { pid: number; arts: Artifact[
           {flows.map((f) => <option key={f.id} value={f.id}>#{f.id} {f.title}</option>)}
         </select>
         <span className="grow" />
-        <button className="small" onClick={() => sendToAgent("지금까지의 결과(표·그래프·이미지)를 정리해서 보고서(markdown 아티팩트)로 작성해 줘")}>보고서 작성 요청</button>
+        <button className="small" title="에이전트가 결과를 해석해 요약을 쓰고 보고서에 넣습니다"
+          onClick={() => sendToAgent("지금까지의 결과(표·그래프·이미지)를 해석해서 결론·권고가 담긴 보고서 요약(markdown 아티팩트)을 작성해 줘")}>
+          <Sparkles size={13} />요약 작성 요청</button>
+        <button className="small" title="결과를 모은 보고서(HTML)" onClick={() => download(`/api/projects/${pid}/report?format=html${flowId !== "all" ? `&flow_id=${flowId}` : ""}`, "보고서.html").catch((e: Error) => toast(e.message, true))}>
+          <FileDown size={13} />HTML</button>
+        <button className="small" title="결과를 모은 보고서(Word)" onClick={() => download(`/api/projects/${pid}/report?format=docx${flowId !== "all" ? `&flow_id=${flowId}` : ""}`, "보고서.docx").catch((e: Error) => toast(e.message, true))}>
+          <FileDown size={13} />Word</button>
       </div>
       {!shown.length ? <p className="small muted">아직 게시된 결과가 없습니다. 에이전트가 작업하면서 표·그래프·컨투어 이미지를 여기에 올립니다.</p> : (
         <div className="art-grid">{shown.map((a) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} highlight={a.id === focusArtifactId} />)}</div>

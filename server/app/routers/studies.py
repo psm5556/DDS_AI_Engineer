@@ -1,4 +1,7 @@
 """스터디(DOE·실행·학습·BO/능동학습)와 Surrogate 모델(배포·예측)."""
+import secrets
+from datetime import datetime, timedelta
+
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -152,6 +155,81 @@ def predict_batch(model_id: int, body: schemas.PredictBatchRequest, user=Depends
     """Simulator 민감도 곡선용 여러 점 예측."""
     m = _model(model_id, user, db)
     sur = service.load_surrogate(m)
+    try:
+        X = np.array([[p[v] for v in sur.variables] for p in body.points])
+    except KeyError as e:
+        raise HTTPException(400, f"입력값이 없습니다: {e}")
+    mean, std = sur.predict(X)
+    return {"mean": {k: v.tolist() for k, v in mean.items()}, "std": {k: v.tolist() for k, v in std.items()}}
+
+
+# ---------- Simulator 공유 링크 ----------
+def _share(token: str, db: Session) -> models.ShareLink:
+    sh = db.query(models.ShareLink).filter_by(token=token).first()
+    if not sh or not sh.enabled:
+        raise HTTPException(404, "공유가 중지되었거나 없는 링크입니다")
+    if sh.expires_at and sh.expires_at < datetime.now():
+        raise HTTPException(410, "공유 기간이 끝난 링크입니다")
+    return sh
+
+
+@router.post("/models/{model_id}/shares", response_model=schemas.ShareResponse)
+def create_share(model_id: int, body: schemas.ShareCreate, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    m = _model(model_id, user, db)
+    if not m.deployed:
+        raise HTTPException(400, "배포된 Simulator만 공유할 수 있습니다")
+    sh = models.ShareLink(token=secrets.token_urlsafe(16), model_id=m.id, created_by=user.id, note=body.note,
+                          expires_at=datetime.now() + timedelta(days=body.expires_days) if body.expires_days else None)
+    db.add(sh)
+    db.commit()
+    return sh
+
+
+@router.get("/models/{model_id}/shares", response_model=list[schemas.ShareResponse])
+def list_shares(model_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    _model(model_id, user, db)
+    return db.query(models.ShareLink).filter_by(model_id=model_id).order_by(models.ShareLink.id.desc()).all()
+
+
+@router.delete("/shares/{token}")
+def stop_share(token: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    sh = db.query(models.ShareLink).filter_by(token=token).first()
+    if not sh:
+        raise HTTPException(404, "없는 링크입니다")
+    _model(sh.model_id, user, db)  # 프로젝트 멤버만 중지
+    sh.enabled = False
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/shares/{token}")
+def share_spec(token: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """공유받은 사람(로그인한 사내 사용자)이 보는 Simulator 정보."""
+    sh = _share(token, db)
+    m = db.get(models.SurrogateModel, sh.model_id)
+    study = db.get(models.Study, m.study_id)
+    owner = db.get(models.User, sh.created_by)
+    return {"model": schemas.ModelResponse.model_validate(m), "variables": study.variables, "objectives": study.objectives,
+            "study_name": study.name, "shared_by": owner.display_name if owner else "", "note": sh.note}
+
+
+@router.post("/shares/{token}/predict", response_model=schemas.PredictResponse)
+def share_predict(token: str, body: schemas.PredictRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    sh = _share(token, db)
+    sh.uses += 1
+    db.commit()
+    sur = service.load_surrogate(db.get(models.SurrogateModel, sh.model_id))
+    missing = [v for v in sur.variables if v not in body.params]
+    if missing:
+        raise HTTPException(400, f"입력값이 없습니다: {', '.join(missing)}")
+    mean, std = sur.predict(np.array([[body.params[v] for v in sur.variables]]))
+    return {"mean": {k: float(v[0]) for k, v in mean.items()}, "std": {k: float(v[0]) for k, v in std.items()}}
+
+
+@router.post("/shares/{token}/predict_batch", response_model=schemas.PredictBatchResponse)
+def share_predict_batch(token: str, body: schemas.PredictBatchRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    sh = _share(token, db)
+    sur = service.load_surrogate(db.get(models.SurrogateModel, sh.model_id))
     try:
         X = np.array([[p[v] for v in sur.variables] for p in body.points])
     except KeyError as e:

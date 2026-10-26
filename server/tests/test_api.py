@@ -123,3 +123,36 @@ def test_pin_rules_and_lockout(client):
     # 관리자 PIN 초기화 → 잠금 해제
     client.put(f"/api/users/{uid}", json={"pin": "111222"}, headers=admin)
     assert client.post("/api/auth/login", json={"username": "lee", "pin": "111222"}).status_code == 200
+
+
+def test_report_and_share(client):
+    admin, _ = _auth(client, "admin")
+    pid = client.post("/api/projects", json={"name": "보고서·공유"}, headers=admin).json()["id"]
+    sid = client.post(f"/api/projects/{pid}/studies", headers=admin, json={
+        "name": "Beam", "adapter": "mock", "adapter_config": {"function": "beam"},
+        "variables": [{"name": "width", "lower": 10, "upper": 40}, {"name": "height", "lower": 20, "upper": 80}],
+        "objectives": [{"name": "mass", "goal": "min"}]}).json()["id"]
+    client.post(f"/api/studies/{sid}/doe", json={"n": 12, "seed": 3}, headers=admin)
+    client.post(f"/api/studies/{sid}/run", json={}, headers=admin)
+    _wait_idle(client, sid, admin)
+    m = client.post(f"/api/studies/{sid}/train", json={}, headers=admin).json()
+    client.post(f"/api/projects/{pid}/artifacts", headers=admin,
+                json={"kind": "markdown", "title": "요약", "payload": {"text": "## 결론\n- 질량 **최소** 설계"}})
+
+    r = client.get(f"/api/projects/{pid}/report?format=html", headers=admin)
+    assert r.status_code == 200 and "요약" in r.text and "data:image/png;base64" in r.text and "<table>" in r.text
+    r = client.get(f"/api/projects/{pid}/report?format=docx", headers=admin)
+    assert r.status_code == 200 and r.content[:2] == b"PK"
+
+    # 배포 전에는 공유 불가 → 배포 후 공유, 멤버가 아닌 사용자도 링크로 예측
+    assert client.post(f"/api/models/{m['id']}/shares", json={}, headers=admin).status_code == 400
+    client.post(f"/api/models/{m['id']}/deploy", headers=admin)
+    tok = client.post(f"/api/models/{m['id']}/shares", json={"note": "설계팀 공유"}, headers=admin).json()["token"]
+    other, _ = _auth(client, "park", admin)
+    assert client.get(f"/api/models/{m['id']}/spec", headers=other).status_code == 403  # 프로젝트는 못 봄
+    spec = client.get(f"/api/shares/{tok}", headers=other).json()
+    assert spec["study_name"] == "Beam" and spec["shared_by"] == "admin"
+    pred = client.post(f"/api/shares/{tok}/predict", json={"params": {"width": 20, "height": 50}}, headers=other).json()
+    assert abs(pred["mean"]["mass"] - 7.85) < 2.0  # 7.85e-6*20*50*1000 = 7.85 kg
+    client.delete(f"/api/shares/{tok}", headers=admin)
+    assert client.get(f"/api/shares/{tok}", headers=other).status_code == 404
