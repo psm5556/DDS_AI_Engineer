@@ -11,7 +11,7 @@ import { ChatView } from "../chat/ChatView";
 import { Confirm, Modal } from "../components/Modal";
 import { ProjectMenu, RenameModal } from "../components/ProjectMenu";
 import { useConversaLayout } from "../components/sideLayout";
-import { ROLE_LABEL, when } from "../format";
+import { when } from "../format";
 import { useToast } from "../toast";
 import type { ChatSession, Project } from "../types";
 
@@ -63,8 +63,8 @@ export default function WorkspacePage() {
             <span className="ws-sep" aria-hidden="true">/</span>
             <ConversationSwitcher p={p} sessions={sessions ?? []} current={sid} />
             <span className="grow" />
-            <button className="icon-btn ws-icon" onClick={() => setMembers(true)} title={`멤버 ${p.members.length}명 · 공유`} aria-label="멤버·공유">
-              <Users size={17} />{p.members.length > 1 && <small>{p.members.length}</small>}</button>
+            <button className="ws-share" onClick={() => setMembers(true)} title={`멤버 ${p.members.length}명 — 함께 볼 사람 추가`} aria-label="멤버·공유">
+              <Users size={15} />공유{p.members.length > 1 && <small>{p.members.length}</small>}</button>
             <button className={`icon-btn ws-icon ${canvasOn ? "on" : ""}`} onClick={canvasLayout.toggle} aria-pressed={canvasOn}
               title={canvasOn ? "캔버스 닫기 (Ctrl+J)" : "캔버스 열기 — 작업 흐름·결과·데이터 (Ctrl+J)"} aria-label="캔버스 열기/닫기"><PanelRight size={17} /></button>
           </header>
@@ -75,8 +75,7 @@ export default function WorkspacePage() {
       </div>
       {menuAt && <ProjectMenu p={p} at={menuAt} onClose={() => setMenuAt(null)} />}
       {members && (
-        <Modal title={`멤버·공유 — ${p.name}`} wide onClose={() => setMembers(false)}>
-          <p className="small muted" style={{ marginBottom: 12 }}>내 권한: {ROLE_LABEL[p.user_role ?? "member"]}</p>
+        <Modal title={`멤버·공유 — ${p.name}`} onClose={() => setMembers(false)}>
           <MembersPanel p={p} />
         </Modal>
       )}

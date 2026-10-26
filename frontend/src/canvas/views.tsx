@@ -43,6 +43,10 @@ export function FlowView({ flows, arts }: { flows?: Flow[]; arts: Artifact[] }) 
   const [sel, setSel] = useState<string | null>(null);
   const flow = flows?.find((f) => f.id === fid) ?? flows?.[0];
   useEffect(() => { setSel(null); }, [flow?.id]);
+  // 그래프가 길어 단계 설명이 화면 밖에 생기므로, 단계를 고르면 설명으로 스크롤한다
+  useEffect(() => {
+    if (sel) setTimeout(() => document.getElementById("node-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
+  }, [sel]);
 
   if (!flows) return <div className="busy"><span className="spinner" /></div>;
   if (!flow) {
@@ -79,7 +83,7 @@ export function FlowView({ flows, arts }: { flows?: Flow[]; arts: Artifact[] }) 
       <div className="bar" aria-label="진행률"><i style={{ width: `${(done / Math.max(1, flow.nodes.length)) * 100}%` }} /></div>
       <FlowCanvas flow={flow} selected={sel} onSelect={setSel} artifactCount={count} />
       {node && (
-        <div className="panel node-detail">
+        <div className="panel node-detail" id="node-detail">
           <div className="panel-head"><h3>{node.label}</h3>
             <span className="chip">{NODE_TYPE[node.type] ?? node.type}{node.tool ? ` · ${node.tool}` : ""}</span>
             <span className={`chip ${node.status === "complete" ? "ok" : node.status === "failed" ? "err" : node.status === "in_progress" ? "info" : ""}`}>{NODE_STATUS[node.status]}</span></div>
@@ -127,19 +131,26 @@ export function ResultsView({ pid, arts, flows }: { pid: number; arts: Artifact[
   });
   return (
     <>
-      <div className="row" style={{ marginBottom: 16 }}>
-        <select value={flowId} onChange={(e) => setFlowId(e.target.value === "all" ? "all" : Number(e.target.value))} style={{ width: "auto", maxWidth: 260 }} aria-label="작업 흐름별 보기">
-          <option value="all">전체 {arts.length}</option>
-          {flows.map((f) => <option key={f.id} value={f.id}>#{f.id} {f.title}</option>)}
-        </select>
+      {/* 결과의 끝은 보고서 — 받기를 가장 눈에 띄게, 요약 요청은 보조로 */}
+      <div className="results-bar">
+        {flows.length > 1 ? (
+          <select value={flowId} onChange={(e) => setFlowId(e.target.value === "all" ? "all" : Number(e.target.value))} aria-label="작업 흐름별 보기">
+            <option value="all">모든 작업 흐름 · {arts.length}</option>
+            {flows.map((f) => <option key={f.id} value={f.id}>#{f.id} {f.title}</option>)}
+          </select>
+        ) : <span className="small muted">결과 {arts.length}개</span>}
         <span className="grow" />
-        <button className="small" title="에이전트가 결과를 해석해 요약을 쓰고 보고서에 넣습니다"
+        <button className="small ghost" title="에이전트가 결과를 해석해 결론·권고를 쓰고 보고서 맨 앞에 넣습니다"
           onClick={() => sendToAgent("지금까지의 결과(표·그래프·이미지)를 해석해서 결론·권고가 담긴 보고서 요약(markdown 아티팩트)을 작성해 줘")}>
           <Sparkles size={13} />요약 작성 요청</button>
-        <button className="small" title="결과를 모은 보고서(HTML)" onClick={() => download(`/api/projects/${pid}/report?format=html${flowId !== "all" ? `&flow_id=${flowId}` : ""}`, "보고서.html").catch((e: Error) => toast(e.message, true))}>
-          <FileDown size={13} />HTML</button>
-        <button className="small" title="결과를 모은 보고서(Word)" onClick={() => download(`/api/projects/${pid}/report?format=docx${flowId !== "all" ? `&flow_id=${flowId}` : ""}`, "보고서.docx").catch((e: Error) => toast(e.message, true))}>
-          <FileDown size={13} />Word</button>
+        <span className="split-btn">
+          <button className="small primary" title="결과를 모은 보고서 (Word)" disabled={!arts.length}
+            onClick={() => download(`/api/projects/${pid}/report?format=docx${flowId !== "all" ? `&flow_id=${flowId}` : ""}`, "보고서.docx").catch((e: Error) => toast(e.message, true))}>
+            <FileDown size={13} />보고서 받기</button>
+          <button className="small" title="같은 보고서를 HTML로" disabled={!arts.length}
+            onClick={() => download(`/api/projects/${pid}/report?format=html${flowId !== "all" ? `&flow_id=${flowId}` : ""}`, "보고서.html").catch((e: Error) => toast(e.message, true))}>
+            HTML</button>
+        </span>
       </div>
       {!shown.length ? <p className="small muted">아직 게시된 결과가 없습니다. 에이전트가 작업하면서 표·그래프·컨투어 이미지를 여기에 올립니다.</p> : (
         <div className="art-grid">{shown.map((a) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} highlight={a.id === focusArtifactId} />)}</div>
@@ -256,59 +267,47 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
   );
 }
 
-/* ---------- 멤버·설정 ---------- */
+/* ---------- 멤버·공유 ---------- */
+/** 프로젝트 멤버(=공유 대상) 관리. 이름·설명은 프로젝트 메뉴의 '이름·설명 바꾸기'에서 바꾼다 */
 export function MembersPanel({ p }: { p: Project }) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const toast = useToast();
   const isMaster = p.user_role === "master";
   const [add, setAdd] = useState<number | "">("");
-  const [name, setName] = useState(p.name);
-  const [desc, setDesc] = useState(p.description);
   const { data: users } = useQuery({ queryKey: ["users"], queryFn: () => get<User[]>("/api/users"), enabled: isMaster });
   const candidates = useMemo(() => (users ?? []).filter((u) => u.is_active && !p.members.some((m) => m.user_id === u.id)), [users, p.members]);
   const done = () => { qc.invalidateQueries({ queryKey: ["project", p.id] }); qc.invalidateQueries({ queryKey: ["projects"] }); };
   const err = (e: Error) => toast(e.message ?? "처리하지 못했습니다", true);
   const upsert = useMutation({ mutationFn: (v: { uid: number; role: string }) => put(`/api/projects/${p.id}/members/${v.uid}`, { role: v.role }), onSuccess: () => { done(); toast("저장했습니다"); setAdd(""); }, onError: err });
   const remove = useMutation({ mutationFn: (uid: number) => del(`/api/projects/${p.id}/members/${uid}`), onSuccess: () => { done(); toast("제거했습니다"); }, onError: err });
-  const save = useMutation({ mutationFn: () => put(`/api/projects/${p.id}`, { name, description: desc, version: p.version }), onSuccess: () => { done(); toast("저장했습니다"); }, onError: err });
 
   return (
-    <div className="stack">
-      <section className="panel">
-        <div className="panel-head"><h3>멤버</h3><span className="small muted">멤버는 작업 흐름·결과·대화를 함께 보고, 자기 PC Agent로 작업을 요청할 수 있습니다</span></div>
-        <div className="table-wrap"><table>
-          <thead><tr><th>이름</th><th>아이디</th><th>권한</th><th /></tr></thead>
-          <tbody>{p.members.map((m) => (
-            <tr key={m.user_id}>
-              <td>{m.display_name}{m.user_id === user?.id ? " (나)" : ""}</td><td>{m.username}</td>
-              <td>{isMaster ? (
-                <select value={m.role} style={{ width: "auto", minHeight: 30 }} onChange={(e) => upsert.mutate({ uid: m.user_id, role: e.target.value })}>
-                  <option value="master">관리자</option><option value="member">멤버</option></select>
-              ) : ROLE_LABEL[m.role]}</td>
-              <td className="r">{isMaster && <button className="icon-btn danger" title="제거" aria-label={`${m.display_name} 제거`} onClick={() => remove.mutate(m.user_id)}><Trash2 size={13} /></button>}</td>
-            </tr>))}</tbody>
-        </table></div>
-        {isMaster && (
-          <div className="row" style={{ marginTop: 12 }}>
-            <select value={add} onChange={(e) => setAdd(e.target.value ? Number(e.target.value) : "")} style={{ width: 260 }} aria-label="추가할 사용자">
-              <option value="">추가할 사용자 선택</option>
-              {candidates.map((u) => <option key={u.id} value={u.id}>{u.display_name} ({u.username})</option>)}
-            </select>
-            <button disabled={add === ""} onClick={() => add !== "" && upsert.mutate({ uid: add, role: "member" })}><Plus size={14} />멤버 추가</button>
-          </div>
-        )}
-      </section>
+    <div className="members">
+      <p className="small muted">멤버는 작업 흐름·결과·대화를 함께 보고, 자기 PC Agent로 작업을 요청할 수 있습니다 · 내 권한: {ROLE_LABEL[p.user_role ?? "member"]}</p>
       {isMaster && (
-        <section className="panel">
-          <div className="panel-head"><h3>프로젝트 정보</h3></div>
-          <div className="stack">
-            <label className="field"><span className="lbl">이름</span><input type="text" value={name} onChange={(e) => setName(e.target.value)} /></label>
-            <label className="field"><span className="lbl">설명</span><textarea value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
-            <div className="row end"><button className="primary" disabled={save.isPending} onClick={() => save.mutate()}>저장</button></div>
-          </div>
-        </section>
+        <div className="row members-add">
+          <select value={add} onChange={(e) => setAdd(e.target.value ? Number(e.target.value) : "")} aria-label="추가할 사용자">
+            <option value="">{candidates.length ? "추가할 사용자 선택" : "추가할 수 있는 사용자가 없습니다"}</option>
+            {candidates.map((u) => <option key={u.id} value={u.id}>{u.display_name} ({u.username})</option>)}
+          </select>
+          <button className="primary" disabled={add === ""} onClick={() => add !== "" && upsert.mutate({ uid: add, role: "member" })}><Plus size={14} />추가</button>
+        </div>
       )}
+      <ul className="member-list">
+        {p.members.map((m) => (
+          <li key={m.user_id}>
+            <span className="avatar" aria-hidden="true">{m.display_name.slice(0, 1)}</span>
+            <span className="grow who"><b>{m.display_name}{m.user_id === user?.id ? " (나)" : ""}</b><small>{m.username}</small></span>
+            {isMaster ? (
+              <select value={m.role} onChange={(e) => upsert.mutate({ uid: m.user_id, role: e.target.value })} aria-label={`${m.display_name} 권한`}>
+                <option value="master">관리자</option><option value="member">멤버</option></select>
+            ) : <span className="small muted">{ROLE_LABEL[m.role]}</span>}
+            {isMaster && m.user_id !== user?.id
+              ? <button className="icon-btn danger" title="제거" aria-label={`${m.display_name} 제거`} onClick={() => remove.mutate(m.user_id)}><Trash2 size={14} /></button>
+              : <span className="icon-gap" />}
+          </li>))}
+      </ul>
     </div>
   );
 }

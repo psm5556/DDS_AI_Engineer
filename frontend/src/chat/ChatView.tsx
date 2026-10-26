@@ -196,6 +196,10 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     return "생각하는 중…";
   }, [flows, msgs]);
 
+  // 방금 보낸 요청에 아직 답이 없으면(새 대화가 막 만들어진 직후 등) 바로 '생각하는 중'을 보여 준다
+  const last = msgs?.[msgs.length - 1];
+  const waiting = !!agent?.connected && !readOnly && last?.role === "user" && Date.now() - new Date(last.created_at).getTime() < 120_000;
+
   const cancel = () => { if (sid) post(`/api/sessions/${sid}/cancel`).catch((e: Error) => toast(e.message, true)); };
   const answer = async (p: PermissionRequest, optionId: string | null) => {
     try {
@@ -225,7 +229,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
             return <Message key={it.m.id} m={it.m} />;
           })}
           {perms.map((p) => <PermissionCard key={p.request_id} p={p} readOnly={readOnly} onAnswer={(o) => void answer(p, o)} />)}
-          {busy && !perms.length && <div className="chat-msg agent"><div className="bubble thinking"><Loader2 size={14} className="spin" />{activity}</div></div>}
+          {(busy || waiting) && !perms.length && <div className="chat-msg agent"><div className="bubble thinking"><Loader2 size={14} className="spin" />{activity}</div></div>}
         </div>
       </div>
 

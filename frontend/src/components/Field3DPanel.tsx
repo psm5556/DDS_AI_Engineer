@@ -52,14 +52,17 @@ export function Field3DPanel({ listUrl, baseUrl, params }: { listUrl: string; ba
           <span className="seg">{list.map((f) => <button key={f.id} className={fm?.id === f.id ? "on" : ""} onClick={() => setFid(f.id)}>{f.field}</button>)}</span>
         )}
         <span className="small muted">{fm?.shape_varies ? "형상·필드 함께 예측" : "필드 예측"} · 노드 {fm?.n_nodes.toLocaleString()} · 학습 {fm?.n_train}건</span>
-        <span className="grow" />
-        <button className={`icon-btn ${showUnc ? "on" : ""}`} title={showUnc ? "예측값 보기" : "불확실도 보기 (데이터가 부족한 곳)"} aria-pressed={showUnc}
-          aria-label="불확실도 보기" onClick={() => setShowUnc(!showUnc)}><Waves size={15} /></button>
-        <button className={`icon-btn ${lockRange ? "on" : ""}`} title={lockRange ? "색 범위 자동" : "지금 색 범위 고정 (설계 비교용)"} aria-label="색 범위 고정"
+      </div>
+      {/* 보기 옵션: 아이콘만으로는 뜻이 모호해 글자를 붙인다 */}
+      <div className="view-tools" role="toolbar" aria-label="3D 보기 옵션">
+        <button className={`tog ${showUnc ? "on" : ""}`} title="데이터가 부족해 예측을 덜 믿을 수 있는 곳" aria-pressed={showUnc}
+          onClick={() => setShowUnc(!showUnc)}><Waves size={14} />불확실도</button>
+        <button className={`tog ${lockRange ? "on" : ""}`} title="지금 색 범위를 고정해 설계끼리 비교" aria-pressed={!!lockRange}
           onClick={() => setLockRange(lockRange ? null : [pred?.min ?? 0, pred?.max ?? 1])} disabled={showUnc}>
-          {lockRange ? <Lock size={14} /> : <LockOpen size={14} />}</button>
-        <button className={`icon-btn ${wire ? "on" : ""}`} title="메쉬 선 보기" aria-pressed={wire} aria-label="메쉬 선 보기" onClick={() => setWire(!wire)}><Grid3x3 size={15} /></button>
-        <button className="icon-btn" title="시점 초기화" aria-label="시점 초기화" onClick={() => setReset((n) => n + 1)}><RotateCcw size={14} /></button>
+          {lockRange ? <Lock size={13} /> : <LockOpen size={13} />}색 범위 고정</button>
+        <button className={`tog ${wire ? "on" : ""}`} aria-pressed={wire} onClick={() => setWire(!wire)}><Grid3x3 size={14} />메쉬 선</button>
+        <span className="grow" />
+        <button className="tog" onClick={() => setReset((n) => n + 1)}><RotateCcw size={13} />시점 초기화</button>
       </div>
       <div className="field3d-body">
         {arrays && vals ? (

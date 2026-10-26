@@ -120,7 +120,9 @@ function Releases() {
             <td><b>{r.version}</b> {r.is_latest && <span className="chip ok">최신</span>}</td>
             <td className="small">{r.notes || "-"}</td><td className="r">{Math.round(r.size / 1024)} KB</td><td>{when(r.created_at)}</td>
             <td className="r">{!r.is_latest && <button className="small" onClick={() => latest.mutate(r.version)}>최신으로 지정</button>}</td>
-          </tr>))}</tbody>
+          </tr>))}
+          {data && !data.length && <tr><td colSpan={5} className="small muted empty-row">아직 배포한 버전이 없습니다. 위 명령으로 첫 버전을 올리면 연결된 PC가 자동으로 업데이트합니다.</td></tr>}
+        </tbody>
       </table></div>
     </>
   );

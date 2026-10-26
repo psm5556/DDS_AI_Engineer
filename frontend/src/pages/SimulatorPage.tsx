@@ -11,7 +11,10 @@ import { useTheme } from "../theme";
 import { useToast } from "../toast";
 import type { Objective, SurrogateModel, Variable } from "../types";
 
-interface Spec { model: SurrogateModel; variables: Variable[]; objectives: Objective[]; study_name: string; shared_by?: string; note?: string }
+interface Spec {
+  model: SurrogateModel; variables: Variable[]; objectives: Objective[]; study_name: string;
+  project_id?: number; project_name?: string; shared_by?: string; note?: string;
+}
 interface Pred { mean: Record<string, number>; std: Record<string, number> }
 interface Batch { mean: Record<string, number[]>; std: Record<string, number[]> }
 interface Share { id: number; token: string; note: string; enabled: boolean; uses: number; expires_at: string | null; created_at: string }
@@ -67,65 +70,76 @@ function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
   const txt = theme === "dark" ? "#a1a1aa" : "#71717a";
 
   return (
-    <div className="page">
-      <div className="crumb"><Link to="/">홈</Link> / Simulator{spec.shared_by ? " · 공유받음" : ""}</div>
-      <div className="proj-head">
+    <div className="page sim-page">
+      <div className="crumb">
+        {spec.project_id ? <Link to={`/projects/${spec.project_id}`}>{spec.project_name || "프로젝트"}</Link> : <span>공유받은 Simulator</span>}
+        <span> / Simulator</span>
+      </div>
+      <div className="sim-head">
         <div className="grow"><h1>{spec.study_name} Simulator</h1>
-          <div className="proj-sub">{spec.shared_by ? `${spec.shared_by}님이 공유${spec.note ? ` · ${spec.note}` : ""} · ` : ""}
-            {spec.model.name} · 학습 {spec.model.n_train}건 · 해석 없이 즉시 예측합니다 (± 는 예측 불확실도)</div></div>
+          <p className="page-sub">{spec.shared_by ? `${spec.shared_by}님이 공유${spec.note ? ` · ${spec.note}` : ""} · ` : ""}
+            해석 없이 설계변수를 바꿔 바로 예측합니다 · {spec.model.name} · 학습 {spec.model.n_train}건</p></div>
         {modelId && <button onClick={() => setSharing(true)}><Share2 size={14} />공유</button>}
       </div>
 
-      <div className="sim" style={{ marginTop: 22 }}>
-        <div className="sim-left">
-        <section className="block sim-inputs">
-          <div className="block-head"><h3>설계변수</h3><span className="grow" />
-            <button className="small ghost" onClick={() => setX(mid0)}><RotateCcw size={13} />가운데로</button></div>
-          {spec.variables.map((q) => (
-            <div key={q.name} className="slider-row">
-              <span title={`${q.lower} ~ ${q.upper}`}>{q.name}</span>
-              <input type="range" min={q.lower} max={q.upper} step={(q.upper - q.lower) / 200} value={x[q.name] ?? q.lower}
-                onChange={(e) => setX({ ...x, [q.name]: Number(e.target.value) })} aria-label={q.name} />
-              <input type="number" inputMode="decimal" value={x[q.name] !== undefined ? Number(x[q.name].toPrecision(5)) : ""}
-                min={q.lower} max={q.upper} onChange={(e) => setX({ ...x, [q.name]: Number(e.target.value) })} aria-label={`${q.name} 값`} />
-            </div>
-          ))}
-        </section>
-          <Field3DPanel listUrl={fieldList(spec)} baseUrl={fieldBase} params={x} />
+      {/* 왼쪽: 입력(설계변수)과 출력(예측값)을 붙여 둔다 · 오른쪽: 3D 형상·필드와 민감도 */}
+      <div className="sim2">
+        <div className="sim-side">
+          <section className="block sim-inputs">
+            <div className="block-head"><h3>설계변수</h3><span className="grow" />
+              <button className="small ghost" onClick={() => setX(mid0)} title="모든 변수를 범위 가운데로"><RotateCcw size={13} />가운데로</button></div>
+            {spec.variables.map((q) => (
+              <div key={q.name} className="sim-var">
+                <div className="sim-var-top"><span title={q.name}>{q.name}</span>
+                  <input type="number" inputMode="decimal" value={x[q.name] !== undefined ? Number(x[q.name].toPrecision(5)) : ""}
+                    min={q.lower} max={q.upper} onChange={(e) => setX({ ...x, [q.name]: Number(e.target.value) })} aria-label={`${q.name} 값`} /></div>
+                <input type="range" min={q.lower} max={q.upper} step={(q.upper - q.lower) / 200} value={x[q.name] ?? q.lower}
+                  onChange={(e) => setX({ ...x, [q.name]: Number(e.target.value) })} aria-label={q.name} />
+                <div className="sim-var-range small muted"><span>{fmt(q.lower, 4)}</span><span>{fmt(q.upper, 4)}</span></div>
+              </div>
+            ))}
+          </section>
+          <section className="block">
+            <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted">± 예측 불확실도</span></div>
+            <ul className="sim-out">
+              {outs.map((o) => {
+                const obj = spec.objectives.find((q) => q.name === o);
+                return (
+                  <li key={o}>
+                    <span className="n">{o}{obj && <small>{obj.goal === "min" ? "최소화 목표" : "최대화 목표"}</small>}</span>
+                    <b>{pred ? fmt(pred.mean[o], 4) : "…"}</b>
+                    <small className="u">{pred ? `± ${fmt(2 * pred.std[o], 2)}` : ""}</small>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         </div>
 
-        <section className="block">
-          <div className="lbl"><Sparkles size={13} />예측 결과</div>
-          <div className="cond-big">
-            {outs.map((o) => {
-              const obj = spec.objectives.find((q) => q.name === o);
-              return (
-                <div key={o}><span>{o}{obj ? ` (${obj.goal === "min" ? "최소화" : "최대화"} 목표)` : ""}</span>
-                  <b>{pred ? fmt(pred.mean[o], 4) : "…"}</b>
-                  {pred && <small>± {fmt(2 * pred.std[o], 2)}</small>}</div>
-              );
-            })}
-          </div>
-          <div className="row" style={{ marginTop: 20 }}>
-            <span className="small muted">민감도</span>
-            <span className="seg">{spec.variables.map((q) => <button key={q.name} className={sweepVar === q.name ? "on" : ""} onClick={() => setSweepVar(q.name)}>{q.name}</button>)}</span>
-          </div>
-          {sweep && v && outs.map((o) => {
-            const xs = Array.from({ length: SWEEP_N }, (_, i) => v.lower + ((v.upper - v.lower) * i) / (SWEEP_N - 1));
-            const m = sweep.mean[o], s = sweep.std[o];
-            return (
-              <Plot key={o} config={plotConfig} style={{ width: "100%" }} useResizeHandler
-                data={[
-                  { x: [...xs, ...xs.slice().reverse()], y: [...m.map((a, i) => a + 2 * s[i]), ...m.map((a, i) => a - 2 * s[i]).reverse()],
-                    fill: "toself", fillcolor: "rgba(100,116,139,0.15)", line: { width: 0 }, hoverinfo: "skip", showlegend: false, type: "scatter" },
-                  { x: xs, y: m, type: "scatter", mode: "lines", line: { color: "#2563eb", width: 2 }, name: o },
-                  { x: [x[v.name]], y: [pred?.mean[o]], type: "scatter", mode: "markers", marker: { color: "#dc2626", size: 9 }, name: "현재" },
-                ]}
-                layout={{ ...baseLayout, height: 220, autosize: true, showlegend: false, font: { ...baseLayout.font, color: txt },
-                  xaxis: { title: { text: v.name }, gridcolor: grid, color: txt }, yaxis: { title: { text: o }, gridcolor: grid, color: txt } }} />
-            );
-          })}
-        </section>
+        <div className="sim-main">
+          <Field3DPanel listUrl={fieldList(spec)} baseUrl={fieldBase} params={x} />
+          <section className="block">
+            <div className="block-head"><h3>민감도</h3><span className="small muted">한 변수만 바꿀 때의 변화 · 빨간 점이 지금 설계</span><span className="grow" />
+              {spec.variables.length > 1 && <span className="seg">{spec.variables.map((q) => <button key={q.name} className={sweepVar === q.name ? "on" : ""} onClick={() => setSweepVar(q.name)}>{q.name}</button>)}</span>}</div>
+            <div className="sim-plots">
+              {sweep && v && outs.map((o) => {
+                const xs = Array.from({ length: SWEEP_N }, (_, i) => v.lower + ((v.upper - v.lower) * i) / (SWEEP_N - 1));
+                const m = sweep.mean[o], s = sweep.std[o];
+                return (
+                  <Plot key={o} config={plotConfig} style={{ width: "100%" }} useResizeHandler
+                    data={[
+                      { x: [...xs, ...xs.slice().reverse()], y: [...m.map((a, i) => a + 2 * s[i]), ...m.map((a, i) => a - 2 * s[i]).reverse()],
+                        fill: "toself", fillcolor: "rgba(100,116,139,0.15)", line: { width: 0 }, hoverinfo: "skip", showlegend: false, type: "scatter" },
+                      { x: xs, y: m, type: "scatter", mode: "lines", line: { color: "#2563eb", width: 2 }, name: o },
+                      { x: [x[v.name]], y: [pred?.mean[o]], type: "scatter", mode: "markers", marker: { color: "#dc2626", size: 9 }, name: "현재" },
+                    ]}
+                    layout={{ ...baseLayout, height: 220, autosize: true, showlegend: false, font: { ...baseLayout.font, color: txt },
+                      xaxis: { title: { text: v.name }, gridcolor: grid, color: txt }, yaxis: { title: { text: o }, gridcolor: grid, color: txt } }} />
+                );
+              })}
+            </div>
+          </section>
+        </div>
       </div>
       {sharing && modelId && <ShareModal modelId={modelId} onClose={() => setSharing(false)} />}
     </div>

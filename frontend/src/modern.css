@@ -242,3 +242,120 @@ details.install-block > summary { cursor: pointer; list-style: none; margin-bott
 details.install-block > summary::-webkit-details-marker { display: none; }
 details.install-block[open] > summary { margin-bottom: 12px; }
 details.install-block + .block { margin-top: 16px; }
+
+/* ---------- 일반 화면 머리글 ---------- */
+.page > h1, .sim-head h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
+.page-sub { margin-top: 6px; color: var(--ink-3); font-size: var(--fs-s); }
+
+/* ---------- 작업 공간: 공유 버튼 ---------- */
+.ws-share { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; margin-right: 2px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--panel); box-shadow: none; color: var(--ink-2); font-size: 13px; font-weight: 500; }
+.ws-share:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.ws-share small { font-size: 11px; color: var(--ink-4); font-weight: 600; }
+
+/* ---------- 멤버·공유 ---------- */
+.members { display: flex; flex-direction: column; gap: 14px; }
+.members-add select { flex: 1; min-width: 0; }
+.member-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.member-list li { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-top: 1px solid var(--line-2); }
+.member-list li:first-child { border-top: none; }
+.member-list .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--brand-100); color: var(--brand); display: inline-flex; align-items: center;
+  justify-content: center; font-weight: 700; font-size: 12.5px; flex: none; }
+.member-list .who { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.member-list .who b { font-size: var(--fs-m); font-weight: 600; }
+.member-list .who small { font-size: 12px; color: var(--ink-4); }
+.member-list select { width: auto; min-height: 32px; }
+.member-list .icon-gap { width: 32px; flex: none; }
+
+/* ---------- 결과 탭 막대 ---------- */
+.results-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.results-bar select { width: auto; max-width: 260px; min-height: 32px; }
+.split-btn { display: inline-flex; }
+.split-btn > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.split-btn > button:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
+
+/* ---------- CAD·CAE 툴 ---------- */
+.tools-page { max-width: 960px; }
+.tools-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; margin-top: 20px; font-size: var(--fs-m); }
+.tools-count { display: inline-flex; align-items: baseline; gap: 5px; color: var(--ink-2); }
+.tools-count b { font-size: 20px; font-weight: 650; color: var(--ok); }
+.tools-count.warn b { color: var(--warn); }
+.tools-count.off b { color: var(--ink-3); }
+.tools-recheck { display: inline-flex; align-items: center; gap: 4px; }
+.tools-tip { margin-top: 6px; }
+.tools-filter { display: flex; align-items: center; gap: 12px; margin: 20px 0 6px; }
+.tools-search { flex: 1; display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 10px;
+  background: var(--panel); color: var(--ink-4); cursor: text; }
+.tools-search:focus-within { border-color: var(--brand-500); box-shadow: 0 0 0 3px rgb(59 130 246 / 0.12); }
+.tools-search input { flex: 1; min-width: 0; border: none; padding: 0; min-height: 0; background: transparent; box-shadow: none !important; font-size: var(--fs-m); color: var(--ink); }
+.tools-mine { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-s); color: var(--ink-2); white-space: nowrap; cursor: pointer; }
+.tools-mine.off { color: var(--ink-4); cursor: not-allowed; }
+.tools-sec h2 { margin: 26px 4px 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-4); letter-spacing: 0.02em; }
+.tool-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.tool-row { display: grid; grid-template-columns: minmax(180px, 1.1fr) minmax(0, 1.6fr) 128px 16px; align-items: center; gap: 16px; width: 100%; min-height: 56px;
+  padding: 8px 14px 8px 16px; border: none; border-radius: 0; background: none; box-shadow: none; text-align: left; font-weight: 400; color: var(--ink); }
+.tool-row + .tool-row { border-top: 1px solid var(--line-2); }
+.tool-row:hover:not(:disabled), .tool-row.on { background: var(--hover); }
+.tool-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.tool-name b { font-size: var(--fs-m); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tool-name small { font-size: 12px; color: var(--ink-4); }
+.tool-can { font-size: 12.5px; color: var(--ink-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tool-st { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.tool-st.ok { color: var(--ok); }
+.tool-st.warn { color: var(--warn); }
+.tool-st.off { color: var(--ink-4); font-weight: 400; }
+.tool-st.big { justify-content: flex-start; font-size: var(--fs-m); font-weight: 600; }
+.tool-go { color: var(--ink-5); }
+
+/* 오른쪽 자세히 패널 */
+.drawer-scrim { position: fixed; inset: 0; z-index: 55; background: rgb(0 0 0 / 0.18); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 56; width: min(460px, 100vw); display: flex; flex-direction: column;
+  background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--shadow-modal); animation: drawer-in .16s ease-out; }
+@keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.drawer-head { display: flex; align-items: flex-start; gap: 10px; padding: 20px 16px 14px 22px; border-bottom: 1px solid var(--line-2); }
+.drawer-head h3 { font-size: 18px; font-weight: 650; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 18px 22px 28px; display: flex; flex-direction: column; gap: 10px; }
+.drawer-body h4 { margin-top: 12px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.drawer-body .code-block { margin: 0; }
+.drawer-body > button { align-self: flex-start; }
+.tool-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tool-tags span { font-size: 12px; color: var(--ink-2); background: var(--panel-3); border-radius: 6px; padding: 3px 8px; }
+.tool-exes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.tool-exes li { display: flex; align-items: flex-start; gap: 8px; }
+.tool-exes .ok { color: var(--ok); margin-top: 2px; flex: none; }
+.tool-exes .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink-4); margin: 5px 3px 0; flex: none; }
+.tool-exes .path { word-break: break-all; margin-top: 2px; }
+.drawer-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.drawer-foot code { margin-right: 4px; }
+
+/* ---------- Simulator ---------- */
+.sim-page { max-width: 1280px; }
+.app-main .page.sim-page { max-width: 1280px; }
+.sim-head { display: flex; align-items: flex-end; gap: 12px; margin-top: 4px; }
+.sim2 { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 18px; align-items: start; margin-top: 22px; }
+.sim-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 14px; }
+.sim-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.sim2 .block { padding: 18px 20px; }
+.sim2 .block + .block { margin-top: 0; }
+.sim-var + .sim-var { margin-top: 14px; }
+.sim-var-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: var(--fs-s); font-weight: 500; }
+.sim-var-top span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sim-var-top input { width: 96px; min-height: 30px; padding: 2px 8px; text-align: right; }
+.sim-var-range { display: flex; justify-content: space-between; margin-top: 1px; font-size: 11px; }
+.sim-out { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.sim-out li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 10px; padding: 10px 0; border-top: 1px solid var(--line-2); }
+.sim-out li:first-child { border-top: none; padding-top: 2px; }
+.sim-out .n { grid-row: 1 / 3; align-self: center; font-size: var(--fs-s); color: var(--ink-2); display: flex; flex-direction: column; }
+.sim-out .n small { font-size: 11px; color: var(--brand); }
+.sim-out b { text-align: right; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.sim-out .u { text-align: right; font-size: 11.5px; color: var(--ink-4); }
+.sim-main .field3d-body { height: 480px; }
+.sim-plots { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 4px 12px; }
+.view-tools { display: flex; align-items: center; gap: 4px; margin: -4px 0 8px; }
+.view-tools .tog { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 0 9px; border: 1px solid transparent; border-radius: 7px;
+  background: none; box-shadow: none; color: var(--ink-3); font-size: 12.5px; font-weight: 500; }
+.view-tools .tog:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.view-tools .tog.on { background: var(--brand-soft); color: var(--brand); border-color: var(--info-ring); }
+
+/* 관리: 빈 표 */
+td.empty-row { padding: 22px 14px !important; text-align: center; }

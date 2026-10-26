@@ -128,8 +128,10 @@ def model_spec(model_id: int, user=Depends(get_current_user), db: Session = Depe
     """Simulator 화면용: 입력 변수 범위와 출력 목록."""
     m = _model(model_id, user, db)
     study = db.get(models.Study, m.study_id)
+    project = db.get(models.Project, study.project_id)
     return {"model": schemas.ModelResponse.model_validate(m), "variables": study.variables,
-            "objectives": study.objectives, "study_name": study.name}
+            "objectives": study.objectives, "study_name": study.name,
+            "project_id": study.project_id, "project_name": project.name if project else ""}
 
 
 @router.post("/models/{model_id}/deploy", response_model=schemas.ModelResponse)

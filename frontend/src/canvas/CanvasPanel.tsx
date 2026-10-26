@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Database, FolderTree, Radio, Workflow, X } from "lucide-react";
+import { BarChart3, Database, FolderTree, Workflow, X } from "lucide-react";
 import { useEffect } from "react";
 import { get } from "../api";
 import { startPanelResize, type PanelLayout } from "../components/sideLayout";
@@ -14,6 +14,7 @@ const TABS: [CanvasTab, string, typeof Workflow][] = [
 ];
 
 /** 오른쪽 캔버스: 에이전트가 만드는 작업 흐름·결과·데이터(예측 모델·Simulator)·내 PC 파일이 실시간으로 쌓인다.
+ *  에이전트가 새로 만든 것으로 탭이 자동으로 바뀐다(방금 직접 탭을 골랐으면 잠시 양보).
  *  닫으면 완전히 사라지고, 머리글의 캔버스 버튼(Ctrl+J)으로 다시 연다. */
 export function CanvasPanel({ pid, layout }: { pid: number; layout: PanelLayout }) {
   const c = useCanvas();
@@ -56,8 +57,6 @@ export function CanvasPanel({ pid, layout }: { pid: number; layout: PanelLayout 
             </button>
           ))}
         </nav>
-        <button className={`icon-btn follow ${c.follow ? "on" : ""}`} onClick={() => c.setFollow(!c.follow)} aria-pressed={c.follow}
-          title={c.follow ? "자동 전환 켜짐 — 에이전트가 새로 만든 것을 바로 보여 줍니다" : "자동 전환 꺼짐"} aria-label="자동 전환"><Radio size={15} /></button>
         <button className="icon-btn canvas-close" onClick={() => setCollapsed(true)} title="캔버스 닫기 (Ctrl+J)" aria-label="캔버스 닫기"><X size={17} /></button>
       </header>
       <div className="canvas-body">
