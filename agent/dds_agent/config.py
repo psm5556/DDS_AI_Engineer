@@ -95,5 +95,6 @@ def load_settings(path: Path | None = None) -> AgentSettings:
             setattr(s, key, os.environ[env])
     if os.environ.get("DDS_WORKSPACE"):
         s.workspace_dir = Path(os.environ["DDS_WORKSPACE"])
+    s.workspace_dir = s.workspace_dir.expanduser().resolve()  # ACP session/new는 절대경로 cwd만 받는다
     s.workspace_dir.mkdir(parents=True, exist_ok=True)
     return s

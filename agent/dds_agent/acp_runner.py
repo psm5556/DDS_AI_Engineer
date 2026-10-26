@@ -6,6 +6,7 @@ from __future__ import annotations
 import itertools
 import json
 import logging
+import os
 import subprocess
 import threading
 from concurrent.futures import Future
@@ -127,7 +128,7 @@ class AcpRunner(AgentRunner):
     def new_session(self, cwd: str, mcp_servers: list[dict] | None = None) -> str:
         self._ensure_started()
         try:
-            res = self._request("session/new", {"cwd": cwd, "mcpServers": mcp_servers or []}, timeout=120)
+            res = self._request("session/new", {"cwd": os.path.abspath(cwd), "mcpServers": mcp_servers or []}, timeout=120)
         except AgentError as e:
             if "auth" in str(e).lower():
                 methods = [m.get("id") for m in self.agent_info.get("authMethods", [])]
@@ -140,7 +141,7 @@ class AcpRunner(AgentRunner):
         if not (self.agent_info.get("agentCapabilities") or {}).get("loadSession"):
             return False
         try:
-            self._request("session/load", {"sessionId": session_id, "cwd": cwd, "mcpServers": mcp_servers or []},
+            self._request("session/load", {"sessionId": session_id, "cwd": os.path.abspath(cwd), "mcpServers": mcp_servers or []},
                           timeout=120)
             return True
         except AgentError:
