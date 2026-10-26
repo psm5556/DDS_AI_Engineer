@@ -67,7 +67,8 @@ export function useLiveInvalidation() {
       case "model_updated": qc.invalidateQueries({ queryKey: ["models", pid] }); break;
       case "agent_status":
       case "agent_release":
-        qc.invalidateQueries({ queryKey: ["agent"] });
+        // 내 PC 진단(툴 찾기·WSL 확인)은 무거워 상태 변화마다 다시 돌리지 않는다 — 툴 화면의 '다시 확인'으로만
+        qc.invalidateQueries({ queryKey: ["agent"], predicate: (q) => q.queryKey[1] !== "diagnose" });
         break;
     }
   });
