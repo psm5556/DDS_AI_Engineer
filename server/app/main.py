@@ -22,10 +22,21 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("dds")
 
 
+def _backfill_project_uids():
+    """uid 컬럼이 생기기 전에 만든 프로젝트에 uid를 채운다."""
+    import uuid
+
+    with SessionLocal() as db:
+        for p in db.query(models.Project).filter(models.Project.uid.is_(None)):
+            p.uid = uuid.uuid4().hex
+        db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     ensure_columns()
+    _backfill_project_uids()
     loop = asyncio.get_running_loop()
     manager.bind_loop(loop)
 

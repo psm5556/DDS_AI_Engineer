@@ -220,7 +220,7 @@ def open_local(body: schemas.LocalOpen, project: models.Project = Depends(get_pr
                user: models.User = Depends(get_current_user)):
     """내 PC에서 프로젝트 작업 폴더(또는 케이스 폴더·결과 파일)를 탐색기나 CAE 뷰어로 연다."""
     try:
-        return registry.runner(user.id).call("local.open", {"project_id": project.id, "project_name": project.name,
+        return registry.runner(user.id).call("local.open", {"project_id": project.id, "project_name": project.name, "project_uid": project.uid,
                                                             "path": body.path, "with_viewer": body.with_viewer})
     except AgentError as e:
         raise HTTPException(409, str(e))
@@ -231,7 +231,7 @@ def local_tree(path: str = "", project: models.Project = Depends(get_project_for
                user: models.User = Depends(get_current_user)):
     """내 PC 작업 폴더 탐색 (폴더·파일 목록, 크기, 수정 시각)."""
     try:
-        return registry.runner(user.id).call("local.tree", {"project_id": project.id, "project_name": project.name,
+        return registry.runner(user.id).call("local.tree", {"project_id": project.id, "project_name": project.name, "project_uid": project.uid,
                                                             "path": path})
     except AgentError as e:
         raise HTTPException(409, str(e))

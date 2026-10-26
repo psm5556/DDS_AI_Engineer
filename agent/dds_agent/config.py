@@ -59,9 +59,9 @@ class AgentSettings:
         from .workspace import Workspace
         return Workspace(self.workspace_dir, self.server_url)
 
-    def project_dir(self, project_id: int, name: str | None = None) -> Path:
+    def project_dir(self, project_id: int, name: str | None = None, uid: str | None = None) -> Path:
         """로컬 데이터 규칙(P0012_<이름>)에 따른 프로젝트 작업 폴더 — workspace.py 참고"""
-        return self.workspace.project_dir(project_id, name)
+        return self.workspace.project_dir(project_id, name, uid)
 
     def agent_command(self, name: str) -> list[str]:
         if name not in self.agents:

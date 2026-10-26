@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, Home, LogOut, MessageSquare, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Search,
   Settings, Shield, SquarePen, Star, Sun, Trash2, Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { del, get, put } from "../api";
 import { useAuth } from "../auth";
@@ -68,6 +68,16 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [meOpen, setMeOpen] = useState(false);
+  const meRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!meOpen) return;
+    const h = (e: MouseEvent) => { if (!meRef.current?.contains(e.target as Node)) setMeOpen(false); };
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") setMeOpen(false); };
+    document.addEventListener("mousedown", h);
+    document.addEventListener("keydown", k);
+    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k); };
+  }, [meOpen]);
   const [menu, setMenu] = useState<{ p: Project; x: number; y: number } | null>(null);
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
   const themeLabel = theme === "dark" ? "밝은 화면으로" : "어두운 화면으로";
@@ -117,7 +127,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
                 onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ p, x: r.left, y: r.bottom + 4 }); }}>
                 <MoreHorizontal size={15} /></button>
             </div>
-            {st && <div className={`side-next ${todo ? "mine" : ""}`}>{st.label} · {p.flow_title}</div>}
+            {st && <div className={`side-next ${todo ? "mine" : ""}`}>{st.label}{p.flow_title && p.flow_title !== p.name ? ` · ${p.flow_title}` : ""}</div>}
             {isOpen && <Sessions p={p} current={p.id === pid ? sid : null} />}
           </div>
         );
@@ -163,13 +173,21 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         )}
       </div>
       {user && (
-        <div className="side-me">
-          <span className="avatar" aria-hidden="true">{user.display_name.slice(0, 1)}</span>
-          <span className="who"><b>{user.display_name}</b><small>{user.username}{user.is_admin ? " · 관리자" : ""}</small></span>
-          {user.is_admin && <Link className="icon-btn" to="/admin" aria-label="관리" title="관리 (사용자 · Agent 현황 · 배포)"><Shield size={15} /></Link>}
-          <Link className="icon-btn" to="/settings" aria-label="설정" title="설정 · PC Agent"><Settings size={15} /></Link>
-          <button className="icon-btn" onClick={toggleTheme} aria-label={themeLabel} title={themeLabel}>{theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}</button>
-          <button className="icon-btn" title="로그아웃" aria-label="로그아웃" onClick={() => { logout(); nav("/login"); }}><LogOut size={15} /></button>
+        <div className="side-me" ref={meRef}>
+          <button className="side-me-btn" onClick={() => setMeOpen((o) => !o)} aria-haspopup="menu" aria-expanded={meOpen} title="계정 · 설정">
+            <span className="avatar" aria-hidden="true">{user.display_name.slice(0, 1)}</span>
+            <span className="who"><b>{user.display_name}</b><small>{user.username}{user.is_admin ? " · 관리자" : ""}</small></span>
+            <ChevronDown size={14} className="muted" />
+          </button>
+          {meOpen && (
+            <div className="side-me-menu" role="menu" onClick={() => setMeOpen(false)}>
+              <Link role="menuitem" to="/settings"><Settings size={14} />설정 · 내 PC Agent</Link>
+              {user.is_admin && <Link role="menuitem" to="/admin"><Shield size={14} />관리 (사용자 · Agent 현황 · 배포)</Link>}
+              <button role="menuitem" onClick={toggleTheme}>{theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}{themeLabel}</button>
+              <hr />
+              <button role="menuitem" onClick={() => { logout(); nav("/login"); }}><LogOut size={14} />로그아웃</button>
+            </div>
+          )}
         </div>
       )}
       {menu && <ProjectMenu p={menu.p} at={menu} onClose={() => setMenu(null)} />}

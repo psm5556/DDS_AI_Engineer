@@ -98,7 +98,7 @@ button.primary:hover:not(:disabled), .btn.primary:hover { background: #1d4ed8; b
 .cv-tool { align-self: flex-start; max-width: 92%; min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 12.5px; }
 .cv-tool-head { width: 100%; justify-content: flex-start; gap: 7px; min-height: 30px; padding: 0 10px; border: none; background: none; color: var(--ink-3); font-weight: 500; font-size: 12.5px; }
 .cv-tool-head:hover:not(:disabled) { background: var(--panel-3); }
-.cv-tool-head .t { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.cv-tool-head .t { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
 .cv-tool-head .st { display: inline-flex; }
 .cv-tool.completed .cv-tool-head .st { color: var(--ok); }
 .cv-tool.failed { border-color: var(--err-ring); }

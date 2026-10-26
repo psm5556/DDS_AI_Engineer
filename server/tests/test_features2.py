@@ -94,3 +94,27 @@ def test_field_model_3d(client):  # noqa: F811
     assert fms[0]["field"] == "stress"
     r = client.post(f"/api/shares/{tok}/field-models/{fms[0]['id']}/predict", json={"params": {"width": 30, "height": 60}}, headers=other)
     assert r.status_code == 200 and r.json()["max"] > 0
+
+
+def test_constraints_best_and_bo(client):  # noqa: F811
+    """제약(max_stress ≤ 250)이 있으면 '현재 최적'과 BO가 제약을 만족하는 설계를 고른다."""
+    admin, _ = _auth(client, "admin")
+    pid = client.post("/api/projects", json={"name": "제약"}, headers=admin).json()["id"]
+    sid = client.post(f"/api/projects/{pid}/studies", headers=admin, json={
+        "name": "브래킷", "adapter": "mock", "adapter_config": {"function": "bracket"},
+        "variables": [{"name": "thickness", "lower": 6, "upper": 14}, {"name": "rib_height", "lower": 10, "upper": 40}],
+        "objectives": [{"name": "mass", "goal": "min"}], "constraints": [{"name": "max_stress", "upper": 250}]}).json()["id"]
+    client.post(f"/api/studies/{sid}/doe", json={"method": "lhs", "n": 16, "seed": 3}, headers=admin)
+    client.post(f"/api/studies/{sid}/run", json={}, headers=admin)
+    st = _wait_idle(client, sid, admin)
+    assert st["study"]["constraints"] == [{"name": "max_stress", "upper": 250.0}]
+    done = [c for c in client.get(f"/api/studies/{sid}/cases", headers=admin).json() if c["status"] == "complete"]
+    assert min(c["results"]["mass"] for c in done) < st["best"]["results"]["mass"]  # 제약 없는 최소는 응력 초과
+    assert st["best"]["results"]["max_stress"] <= 250
+    client.post(f"/api/studies/{sid}/train", json={"outputs": ["mass", "max_stress"]}, headers=admin)
+    for _ in range(3):
+        client.post(f"/api/studies/{sid}/suggest", json={"mode": "bo", "n": 1}, headers=admin)
+        client.post(f"/api/studies/{sid}/run", json={}, headers=admin)
+        _wait_idle(client, sid, admin)
+    best = client.get(f"/api/studies/{sid}", headers=admin).json()["best"]["results"]
+    assert best["max_stress"] <= 250 and best["mass"] <= st["best"]["results"]["mass"]

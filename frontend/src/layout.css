@@ -253,7 +253,7 @@ details.more-all section h4 { margin-bottom: 8px; display: flex; align-items: ba
 .grid-table th[data-sel] { background: var(--sel-head) !important; color: var(--brand); }
 
 /* 실험 표 상태 칸 */
-.status-cell .st { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-3); }
+.status-cell .st { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
 .status-cell .st i { width: 6px; height: 6px; border-radius: 50%; background: var(--dot); }
 .status-cell .st.done { color: var(--ok); }
 .status-cell .st.done i { background: var(--ok); }

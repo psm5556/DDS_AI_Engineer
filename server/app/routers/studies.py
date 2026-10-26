@@ -53,7 +53,8 @@ def create_study(body: schemas.StudyCreate, project: models.Project = Depends(ge
         if v.lower >= v.upper:
             raise HTTPException(400, f"변수 '{v.name}'의 하한이 상한보다 작아야 합니다")
     s = models.Study(project_id=project.id, name=body.name, variables=[v.model_dump() for v in body.variables],
-                     objectives=[o.model_dump() for o in body.objectives], adapter=body.adapter,
+                     objectives=[o.model_dump() for o in body.objectives],
+                     constraints=[c.model_dump(exclude_none=True) for c in body.constraints], adapter=body.adapter,
                      adapter_config=body.adapter_config)
     db.add(s)
     db.commit()

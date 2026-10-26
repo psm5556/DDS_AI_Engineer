@@ -196,3 +196,54 @@ td.nowrap { white-space: nowrap; }
 .agent-pick-menu button:disabled { color: var(--ink-3); }
 .agent-pick-menu .check { width: 14px; color: var(--brand); display: inline-flex; }
 .agent-pick-foot { display: block; padding: 6px 8px 4px; border-top: 1px solid var(--line); margin-top: 4px; color: var(--brand); }
+
+/* 대화 속 작업 흐름: 실행 순서대로 단계 목록 */
+.flow-card .brand { color: var(--brand); }
+.flow-steps { list-style: none; margin: 10px 0 6px; padding: 0; display: flex; flex-direction: column; }
+.flow-steps li { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-top: 1px solid var(--vline); }
+.flow-steps li:first-child { border-top: none; }
+.flow-steps .fs-ico { flex: none; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; background: var(--panel-3); color: var(--ink-3); margin-top: 1px; }
+.flow-steps .fs-complete .fs-ico { background: var(--ok-soft); color: var(--ok); }
+.flow-steps .fs-in_progress .fs-ico { background: var(--info-soft); color: var(--info); }
+.flow-steps .fs-failed .fs-ico { background: var(--err-soft); color: var(--err); }
+.flow-steps .fs-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.flow-steps .fs-label { font-size: var(--fs-m); font-weight: 500; color: var(--ink); }
+.flow-steps .fs-pending .fs-label { color: var(--ink-2); }
+.flow-steps .fs-in_progress .fs-label { color: var(--info); font-weight: 600; }
+.flow-steps .fs-detail { font-size: var(--fs-xs); color: var(--ink-3); }
+.flow-steps .fs-tag { flex: none; font-size: 11px; color: var(--ink-3); background: var(--panel-3); border-radius: 6px; padding: 2px 7px; margin-top: 1px; }
+.flow-progress { height: 4px; border-radius: 4px; background: var(--panel-3); overflow: hidden; margin: 6px 0 2px; }
+.flow-progress > div { height: 100%; background: var(--brand); transition: width .4s ease; }
+.flow-card.st-complete .flow-progress > div { background: var(--ok); }
+
+/* 실행 확인 카드 */
+.perm-card .perm-title { font-weight: 600; margin: 6px 0; }
+.perm-args { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 4px 0 8px; padding: 10px 12px;
+  background: var(--panel-3); border-radius: var(--radius-s); font-size: var(--fs-s); }
+.perm-args > div { display: contents; }
+.perm-args dt { color: var(--ink-3); }
+.perm-args dd { margin: 0; color: var(--ink); word-break: break-all; }
+.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 11px; }
+
+/* 사이드바 아래 사용자 메뉴 */
+.side-me { position: relative; gap: 4px; padding: 10px 10px; }
+.side-me-btn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: none; box-shadow: none;
+  background: transparent; border-radius: var(--radius-s); text-align: left; color: var(--ink); min-height: 44px; }
+.side-me-btn:hover:not(:disabled) { background: var(--hover); }
+.side-me-menu { position: absolute; left: 10px; right: 10px; bottom: calc(100% + 4px); z-index: 60; padding: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-card-md); }
+.side-me-menu a, .side-me-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 0 10px;
+  font-size: var(--fs-s); color: var(--ink); text-decoration: none; border: none; box-shadow: none; background: transparent; border-radius: 6px; font-weight: 400; }
+.side-me-menu a:hover, .side-me-menu button:hover:not(:disabled) { background: var(--hover); }
+.side-me-menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 0; }
+
+/* 대화 속 결과 한 줄 = 버튼 하나(캔버스에서 열기) */
+.chat-art-open { width: 100%; min-height: 34px; border: none; box-shadow: none; background: none; border-radius: 6px; text-align: left;
+  color: var(--ink); font-weight: 400; cursor: pointer; }
+.chat-art-open + .chat-art-open { border-top: 1px solid var(--line-2); border-radius: 0; }
+.chat-art-open .chat-art-title { flex: 1; min-width: 0; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-art-open:hover:not(:disabled) { background: var(--panel-3); }
+.chat-art-open:hover .chat-art-title { color: var(--brand); }
+.notice-inline { align-self: center; font-size: var(--fs-s); padding: 6px 10px; border-radius: var(--radius-s); white-space: nowrap; }
+.notice-inline.warn { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn-ring); }

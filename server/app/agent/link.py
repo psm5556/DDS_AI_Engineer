@@ -81,14 +81,17 @@ class RemoteRunner:
     def __init__(self, conn: AgentConnection):
         self.conn = conn
 
-    def new_session(self, project_id: int, agent: str, project_name: str | None = None) -> str:
-        return self.conn.request("session.new", {"project_id": project_id, "agent": agent, "project_name": project_name},
+    def new_session(self, project_id: int, agent: str, project_name: str | None = None, project_uid: str | None = None) -> str:
+        return self.conn.request("session.new", {"project_id": project_id, "agent": agent, "project_name": project_name,
+                                                 "project_uid": project_uid},
                                  timeout=180)["session_id"]
 
-    def load_session(self, session_id: str, project_id: int, agent: str, project_name: str | None = None) -> bool:
+    def load_session(self, session_id: str, project_id: int, agent: str, project_name: str | None = None,
+                     project_uid: str | None = None) -> bool:
         try:
             return bool(self.conn.request("session.load", {"project_id": project_id, "session_id": session_id,
-                                                           "agent": agent, "project_name": project_name}, timeout=180).get("ok"))
+                                                           "agent": agent, "project_name": project_name,
+                                                           "project_uid": project_uid}, timeout=180).get("ok"))
         except AgentError:
             return False
 

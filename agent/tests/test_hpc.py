@@ -67,3 +67,18 @@ def test_bracket_demo_mock_and_intent():
     assert rib["mass"] < thick["mass"] and rib["max_stress"] < thick["max_stress"]
     assert wants_e2e("브래킷 CAD를 만들고 … 보고서까지 작성해 줘")
     assert not wants_e2e("3D 외팔보 응력 분포 Simulator")
+
+
+def test_project_folder_identity(tmp_path):
+    """서버 DB가 새로 만들어져 번호가 겹쳐도 다른 프로젝트의 폴더를 쓰지 않는다(uid로 확인)."""
+    from agent.dds_agent.workspace import Workspace
+
+    ws = Workspace(tmp_path, "http://srv")
+    a = ws.project_dir(1, "브래킷 설계", "aaa111")
+    (a / "inputs" / "a.stp").write_text("A")
+    assert ws.project_dir(1, "브래킷 설계 v2", "aaa111") == a  # 이름을 바꿔도 같은 폴더
+    b = ws.project_dir(1, "다른 프로젝트", "bbb222")  # 같은 번호, 다른 프로젝트
+    assert b != a and not (b / "inputs" / "a.stp").exists()
+    c = ws.project_dir(1, "브래킷 설계 v2", "ccc333")  # 같은 번호·이름이어도 uid가 다르면 따로
+    assert c not in (a, b)
+    assert ws.project_dir(1) == c  # uid 모르는 호출(MCP)은 가장 최근 폴더

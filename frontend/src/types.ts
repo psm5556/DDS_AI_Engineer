@@ -42,6 +42,7 @@ export interface Variable { name: string; lower: number; upper: number }
 export interface Objective { name: string; goal: "min" | "max" }
 export interface Study {
   id: number; project_id: number; name: string; variables: Variable[]; objectives: Objective[];
+  constraints?: { name: string; upper?: number; lower?: number }[] | null;
   adapter: string; adapter_config: Record<string, unknown>; version: number; created_at: string;
 }
 export interface Case {

@@ -69,7 +69,7 @@ export function CanvasPanel({ pid, layout }: { pid: number; layout: PanelLayout 
         <button className="icon-btn" onClick={() => setCollapsed(true)} title="캔버스 접기 (Ctrl+J)" aria-label="캔버스 접기"><PanelRightClose size={16} /></button>
       </header>
       <div className="canvas-body">
-        {c.tab === "flow" ? <FlowView pid={pid} flows={flows} arts={arts ?? []} />
+        {c.tab === "flow" ? <FlowView flows={flows} arts={arts ?? []} />
           : c.tab === "results" ? <ResultsView pid={pid} arts={arts ?? []} flows={flows ?? []} />
           : c.tab === "data" ? <StudiesView pid={pid} /> : c.tab === "files" ? <LocalFiles pid={pid} /> : <SimulatorList pid={pid} />}
       </div>

@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
@@ -42,6 +43,8 @@ class Project(TimestampMixin, Base):
     __tablename__ = "projects"
     __table_args__ = {"sqlite_autoincrement": True}  # 지운 id를 다시 쓰지 않게(새 DB부터)
     id = Column(Integer, primary_key=True)
+    # 사용자 PC 작업 폴더가 '이 프로젝트'의 것인지 확인하는 고유값 — DB를 새로 만들어 id가 겹쳐도 데이터가 섞이지 않게
+    uid = Column(String(32), default=lambda: uuid.uuid4().hex, index=True)
     name = Column(String(200), nullable=False)
     description = Column(Text, default="")
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -112,13 +115,15 @@ class Artifact(Base):
 
 
 class Study(TimestampMixin, Base):
-    """설계 탐색 단위. variables: [{name, lower, upper}], objectives: [{name, goal: min|max}]"""
+    """설계 탐색 단위. variables: [{name, lower, upper}], objectives: [{name, goal: min|max}],
+    constraints: [{name, upper?, lower?}] — 결과값 제약(예: max_stress ≤ 250)"""
     __tablename__ = "studies"
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(200), nullable=False)
     variables = Column(JSON, default=list)
     objectives = Column(JSON, default=list)
+    constraints = Column(JSON, default=list)
     adapter = Column(String(50), nullable=False, default="mock")
     adapter_config = Column(JSON, default=dict)
     version = Column(Integer, default=1, nullable=False)

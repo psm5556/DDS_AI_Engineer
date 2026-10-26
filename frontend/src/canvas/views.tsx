@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, FileDown, FolderOpen, Gauge, Play, Plus, Sparkles, Trash2, Workflow, X } from "lucide-react";
+import { FileDown, FolderOpen, Gauge, Play, Plus, Sparkles, Trash2, Workflow } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { del, download, get, put } from "../api";
@@ -28,22 +28,21 @@ export function useFlowDecision(pid: number) {
       qc.invalidateQueries({ queryKey: ["flows", pid] });
       if (f.status === "approved") {
         toast("승인했습니다. 에이전트가 실행을 시작합니다");
-        sendToAgent(`플로우 #${f.id} '${f.title}'을(를) 승인했습니다. 계획대로 진행하세요.`);
+        sendToAgent(`작업 흐름 '${f.title}'(#${f.id})을 승인했습니다. 계획대로 진행해 주세요.`);
       } else {
         toast("반려했습니다");
-        sendToAgent(`플로우 #${f.id} '${f.title}'을(를) 반려했습니다. 무엇을 바꾸면 좋을지 물어보고 다시 제안해 주세요.`);
+        sendToAgent(`작업 흐름 '${f.title}'(#${f.id})을 반려했습니다. 무엇을 바꾸면 좋을지 물어보고 다시 제안해 주세요.`);
       }
     },
     onError: (e: Error) => toast(e.message ?? "변경하지 못했습니다", true),
   });
 }
 
-export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; arts: Artifact[] }) {
+export function FlowView({ flows, arts }: { flows?: Flow[]; arts: Artifact[] }) {
   const { flowId: fid, setFlowId: setFid } = useCanvas();
   const [sel, setSel] = useState<string | null>(null);
   const flow = flows?.find((f) => f.id === fid) ?? flows?.[0];
   useEffect(() => { setSel(null); }, [flow?.id]);
-  const decide = useFlowDecision(pid);
 
   if (!flows) return <div className="busy"><span className="spinner" /></div>;
   if (!flow) {
@@ -75,12 +74,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
           <b className="flow-title">{flow.title}</b> <span className={`chip ${st.chip}`}>{st.label}</span>
           <div className="small muted">{flow.goal || "목표 미기재"} · 단계 {done}/{flow.nodes.length} 완료 · {when(flow.updated_at)}</div>
         </div>
-        {flow.status === "review" && (
-          <>
-            <button className="ghost" onClick={() => decide.mutate({ flow, status: "rejected" })} disabled={decide.isPending}><X size={14} />반려</button>
-            <button className="primary big" onClick={() => decide.mutate({ flow, status: "approved" })} disabled={decide.isPending}><Check size={15} />승인하고 실행</button>
-          </>
-        )}
+        {flow.status === "review" && <span className="notice-inline warn">왼쪽 대화의 카드에서 승인하거나 반려하세요</span>}
       </div>
       <div className="bar" aria-label="진행률"><i style={{ width: `${(done / Math.max(1, flow.nodes.length)) * 100}%` }} /></div>
       <FlowCanvas flow={flow} selected={sel} onSelect={setSel} artifactCount={count} />
@@ -91,7 +85,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
             <span className={`chip ${node.status === "complete" ? "ok" : node.status === "failed" ? "err" : node.status === "in_progress" ? "info" : ""}`}>{NODE_STATUS[node.status]}</span></div>
           {node.detail && <p className="small">{node.detail}</p>}
           {flow.status !== "review" && (
-            <button className="small" onClick={() => sendToAgent(`플로우 #${flow.id}의 '${node.label}' 단계에 대해 설명하고, 결과나 문제를 알려줘`)}>
+            <button className="small" onClick={() => sendToAgent(`작업 흐름 #${flow.id}의 '${node.label}' 단계에 대해 설명하고, 결과나 문제를 알려줘`)}>
               이 단계에 대해 에이전트에게 묻기</button>
           )}
         </div>
@@ -184,19 +178,20 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const vars = s.variables.map((v) => v.name);
   const outs = Array.from(new Set((cases ?? []).flatMap((c) => Object.keys(c.results))));
   const obj = s.objectives[0];
+  const cons = (s.constraints ?? []).map((c) => [c.lower != null ? `${c.lower} ≤ ` : "", c.name, c.upper != null ? ` ≤ ${c.upper}` : ""].join("")).join(", ");
   const total = Object.values(st.counts).reduce((a, b) => a + b, 0);
   return (
     <div className="stack">
       <section className="block">
         <div className="hero">
           <div>
-            <div className="lbl">{obj ? `현재 최적 (${obj.name} ${obj.goal === "min" ? "최소" : "최대"})` : "스터디"}</div>
+            <div className="lbl">{obj ? `현재 최적 (${obj.name} ${obj.goal === "min" ? "최소" : "최대"}${cons ? ` · ${cons}` : ""})` : "스터디"}</div>
             {st.best ? (
               <div className="cond-big">
                 {vars.map((v) => <div key={v}><span>{v}</span><b>{fmt(st.best!.params[v], 4)}</b></div>)}
                 {obj && <div><span>{obj.name}</span><b style={{ color: "var(--brand)" }}>{fmt(st.best.results[obj.name], 4)}</b></div>}
               </div>
-            ) : <p className="small muted" style={{ marginTop: 10 }}>완료된 케이스가 아직 없습니다.</p>}
+            ) : <p className="small muted" style={{ marginTop: 10 }}>{st.counts.complete && cons ? "제약을 만족하는 케이스가 아직 없습니다." : "완료된 케이스가 아직 없습니다."}</p>}
             <div className="row" style={{ marginTop: 16 }}>
               {Object.entries(st.counts).map(([k, n]) => <span key={k} className={`chip ${CASE_STATUS[k]?.[1] ?? ""}`}>{CASE_STATUS[k]?.[0] ?? k} {n}</span>)}
               {st.running && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />실행 중</span>}
@@ -211,13 +206,12 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
       <section className="block">
         <div className="block-head"><h3>예측 모델</h3><span className="cnt">{models?.filter((m) => m.study_id === id).length ?? 0}개</span></div>
         <div className="table-wrap"><table>
-          <thead><tr><th>모델</th><th className="r">학습 수</th><th>정확도 (R²)</th><th>상태</th><th /></tr></thead>
+          <thead><tr><th>모델</th><th className="r">학습 수</th><th>정확도 (R²)</th><th>상태</th></tr></thead>
           <tbody>{(models ?? []).filter((m) => m.study_id === id).slice(0, 8).map((m) => (
             <tr key={m.id}>
               <td>{m.name}</td><td className="r">{m.n_train}</td>
               <td>{Object.entries(m.metrics).map(([k, v]) => <span key={k} className={`chip ${v.r2 >= 0.9 ? "ok" : v.r2 >= 0.7 ? "warn" : "err"}`} style={{ marginRight: 4 }}>{k} {v.r2.toFixed(3)}</span>)}</td>
-              <td>{m.deployed ? <span className="chip ok">배포됨</span> : <span className="chip">-</span>}</td>
-              <td className="r">{m.deployed && <Link className="btn small" to={`/simulator/${m.id}`}><Play size={12} />Simulator</Link>}</td>
+              <td>{m.deployed ? <span className="chip ok" title="Simulator 탭에서 엽니다">배포됨</span> : <span className="chip">-</span>}</td>
             </tr>))}</tbody>
         </table></div>
       </section>

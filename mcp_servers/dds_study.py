@@ -32,15 +32,18 @@ def list_adapters() -> list[dict]:
 @mcp.tool()
 def create_study(name: str, variables: list[dict[str, Any]], objectives: list[dict[str, str]] | None = None,
                  adapter: str = "script", adapter_config: dict[str, Any] | None = None,
-                 project_id: int | None = None) -> dict:
+                 constraints: list[dict[str, Any]] | None = None, project_id: int | None = None) -> dict:
     """스터디를 만든다.
     variables: [{"name": "thickness", "lower": 1.0, "upper": 5.0}]
     objectives: [{"name": "mass", "goal": "min"}]  (첫 번째가 최적화 대상, 이름은 results.json 키)
+    constraints: [{"name": "max_stress", "upper": 250}]  (결과 제약 — 최적 케이스·BO가 이를 만족하는 쪽을 고른다.
+                 BO에 반영하려면 train_surrogate의 outputs에 제약 항목도 넣는다)
     adapter='script' 이면 adapter_config: {"tool": "abaqus_cae", "script": "scripts/plate.py", "inputs": ["models/plate.cae"], "post": {...}}
     adapter='mock' 이면 adapter_config: {"function": "branin" | "rosenbrock" | "beam"}
     """
     pid = resolve_pid(project_id)
     s = api.post(f"/api/projects/{pid}/studies", {"name": name, "variables": variables, "objectives": objectives or [],
+                                                  "constraints": constraints or [],
                                                   "adapter": adapter, "adapter_config": adapter_config or {}})
     return {"study_id": s["id"]}
 

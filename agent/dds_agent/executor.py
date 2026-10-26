@@ -45,8 +45,9 @@ class CaseExecutor:
 
     def _run_case(self, job: dict):
         ws = self.s.workspace
-        project_dir = ws.project_dir(job["project_id"], job.get("project_name"))
-        sdir = ws.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"))
+        project_dir = ws.project_dir(job["project_id"], job.get("project_name"), job.get("project_uid"))
+        sdir = ws.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
+                            job.get("project_uid"))
         ws.write_study(sdir, {k: job.get(k) for k in ("study_id", "study_name", "project_id", "variables", "objectives",
                                                        "adapter", "adapter_config")})
         run_dir = ws.case_dir(sdir, job["case_id"], job.get("source", "doe"))

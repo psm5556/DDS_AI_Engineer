@@ -70,8 +70,9 @@ class AgentHub:
             self.chat_sid[chat.id] = sid
             return sid
         pname = chat.project.name if chat.project else None
-        if not (sid and runner.load_session(sid, chat.project_id, chat.agent, pname)):
-            sid = runner.new_session(chat.project_id, chat.agent, pname)
+        puid = chat.project.uid if chat.project else None
+        if not (sid and runner.load_session(sid, chat.project_id, chat.agent, pname, puid)):
+            sid = runner.new_session(chat.project_id, chat.agent, pname, puid)
         self.turns[sid] = TurnState(chat_id=chat.id, project_id=chat.project_id, user_id=chat.user_id)
         self.chat_sid[chat.id] = sid
         return sid

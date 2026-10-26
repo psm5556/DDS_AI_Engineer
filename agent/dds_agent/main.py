@@ -53,7 +53,7 @@ class Agent:
                     "DDS_TOKEN": self.s.token}
         self.runners: dict[str, AgentRunner] = {}  # 에이전트 이름 → 러너(상주 프로세스)
         self.session_runner: dict[str, str] = {}  # 세션 id → 에이전트 이름
-        self.session_project: dict[str, tuple[int, str | None]] = {}  # 세션 id → (프로젝트 id, 이름)
+        self.session_project: dict[str, tuple[int, str | None, str | None]] = {}  # 세션 id → (프로젝트 id, 이름, uid)
         self._lock = threading.Lock()
         self.executor = CaseExecutor(self.s, self.send_threadsafe)
         self.api = ServerApi(self.s)
@@ -119,36 +119,38 @@ class Agent:
             msg = {"type": "response", "rid": rid, "error": str(e)}
         await self.ws.send(json.dumps(msg, ensure_ascii=False, default=str))
 
-    def _prepare(self, project_id: int, project_name: str | None = None) -> str:
-        d = self.s.project_dir(project_id, project_name)
+    def _prepare(self, project_id: int, project_name: str | None = None, project_uid: str | None = None) -> str:
+        d = self.s.project_dir(project_id, project_name, project_uid)
         sync_project_context(d)
         return str(d)
 
-    def _new_session(self, project_id: int, agent: str | None, project_name: str | None = None) -> dict:
+    def _new_session(self, project_id: int, agent: str | None, project_name: str | None = None,
+                     project_uid: str | None = None) -> dict:
         name = agent or self.s.default_agent
-        cwd = self._prepare(project_id, project_name)
+        cwd = self._prepare(project_id, project_name, project_uid)
         sid = self.runner(name).new_session(cwd, self.mcp_servers(project_id))
         self.session_runner[sid] = name
-        self.session_project[sid] = (project_id, project_name)
+        self.session_project[sid] = (project_id, project_name, project_uid)
         return {"session_id": sid, "agent": name}
 
-    def _load_session(self, project_id: int, session_id: str, agent: str | None, project_name: str | None = None) -> dict:
+    def _load_session(self, project_id: int, session_id: str, agent: str | None, project_name: str | None = None,
+                      project_uid: str | None = None) -> dict:
         name = agent or self.s.default_agent
-        cwd = self._prepare(project_id, project_name)
+        cwd = self._prepare(project_id, project_name, project_uid)
         ok = self.runner(name).load_session(session_id, cwd, self.mcp_servers(project_id))
         if ok:
             self.session_runner[session_id] = name
-            self.session_project[session_id] = (project_id, project_name)
+            self.session_project[session_id] = (project_id, project_name, project_uid)
         return {"ok": ok}
 
     def _fetch_attachments(self, session_id: str, attachments: list[dict]) -> str:
         """대화 첨부 파일을 프로젝트 inputs/로 내려받고, 에이전트에게 알려 줄 안내문을 만든다."""
         if not attachments:
             return ""
-        pid, pname = self.session_project.get(session_id, (None, None))
+        pid, pname, puid = self.session_project.get(session_id, (None, None, None))
         if pid is None:
             return ""
-        inputs = self.s.project_dir(pid, pname) / "inputs"
+        inputs = self.s.project_dir(pid, pname, puid) / "inputs"
         lines = []
         for a in attachments:
             dest = inputs / a["filename"]
@@ -168,8 +170,9 @@ class Agent:
             self.active_prompts -= 1
 
     # ---------- 내 PC 작업 폴더 ----------
-    def _local_open(self, project_id: int, project_name: str | None, path: str, with_viewer: bool) -> dict:
-        target = self.s.workspace.resolve(project_id, path, project_name)
+    def _local_open(self, project_id: int, project_name: str | None, path: str, with_viewer: bool,
+                    project_uid: str | None = None) -> dict:
+        target = self.s.workspace.resolve(project_id, path, project_name, project_uid)
         if not target.exists():
             raise FileNotFoundError(f"없는 경로입니다: {path}")
         if with_viewer and target.is_file():
@@ -184,8 +187,8 @@ class Agent:
                 os.startfile(str(target))  # noqa: S606 — 폴더 열기 또는 기본 연결 프로그램
         return {"ok": True, "opened": str(target)}
 
-    def _local_tree(self, project_id: int, project_name: str | None, path: str) -> dict:
-        return self.s.workspace.tree(project_id, path, project_name)
+    def _local_tree(self, project_id: int, project_name: str | None, path: str, project_uid: str | None = None) -> dict:
+        return self.s.workspace.tree(project_id, path, project_name, project_uid=project_uid)
 
     # ---------- 상태 보고 / 자동 업데이트 ----------
     def status(self) -> dict:
@@ -284,20 +287,22 @@ class Agent:
     async def handle(self, msg: dict):
         t, rid = msg.get("type"), msg.get("rid")
         if t == "session.new":
-            asyncio.create_task(self._respond(rid, self._new_session, msg["project_id"], msg.get("agent"), msg.get("project_name")))
+            asyncio.create_task(self._respond(rid, self._new_session, msg["project_id"], msg.get("agent"), msg.get("project_name"),
+                                              msg.get("project_uid")))
         elif t == "session.load":
             asyncio.create_task(self._respond(rid, self._load_session, msg["project_id"], msg["session_id"],
-                                              msg.get("agent"), msg.get("project_name")))
+                                              msg.get("agent"), msg.get("project_name"), msg.get("project_uid")))
         elif t == "session.prompt":
             asyncio.create_task(self._respond(rid, self._prompt, msg["session_id"], msg["text"], msg.get("attachments")))
         elif t == "local.open":
             asyncio.create_task(self._respond(rid, self._local_open, msg["project_id"], msg.get("project_name"),
-                                              msg.get("path", ""), bool(msg.get("with_viewer"))))
+                                              msg.get("path", ""), bool(msg.get("with_viewer")), msg.get("project_uid")))
         elif t == "local.diagnose":
             from .diagnose import diagnose
             asyncio.create_task(self._respond(rid, diagnose, self.s))
         elif t == "local.tree":
-            asyncio.create_task(self._respond(rid, self._local_tree, msg["project_id"], msg.get("project_name"), msg.get("path", "")))
+            asyncio.create_task(self._respond(rid, self._local_tree, msg["project_id"], msg.get("project_name"), msg.get("path", ""),
+                                              msg.get("project_uid")))
         elif t == "agent.install":
             asyncio.create_task(self._respond(rid, self._install, msg["agent"]))
         elif t == "session.cancel":

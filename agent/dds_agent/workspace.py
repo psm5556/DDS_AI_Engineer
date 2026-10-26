@@ -55,37 +55,56 @@ class Workspace:
         self.root.mkdir(parents=True, exist_ok=True)
 
     # ---------- 프로젝트 ----------
-    def project_dir(self, project_id: int, name: str | None = None) -> Path:
-        """P{id:04d}_<이름> 폴더(번호로 찾고, 없으면 만든다). 예전 규칙(project_{id})도 그대로 쓴다."""
+    def project_dir(self, project_id: int, name: str | None = None, uid: str | None = None) -> Path:
+        """P{id:04d}_<이름> 폴더를 찾고, 없으면 만든다. 예전 규칙(project_{id})도 그대로 쓴다.
+        uid(서버 프로젝트 고유값)를 주면 project.json의 uid로 '이 프로젝트의 폴더'인지 확인한다.
+        서버 DB를 새로 만들어 번호가 겹쳐도 다른 프로젝트의 폴더를 쓰지 않는다.
+        uid를 모르면(MCP 툴) 이 번호로 가장 최근에 쓴 폴더(index.json)를 쓴다."""
         with _lock:
-            found = sorted(self.root.glob(f"P{project_id:04d}_*")) + sorted(self.root.glob(f"P{project_id:04d}"))
+            cands = sorted(self.root.glob(f"P{project_id:04d}_*")) + sorted(self.root.glob(f"P{project_id:04d}"))
             legacy = self.root / f"project_{project_id}"
-            if found:
-                d = found[0]
-            elif legacy.exists():
-                d = legacy
+            if legacy.exists():
+                cands.append(legacy)
+            fresh = f"P{project_id:04d}_{slug(name)}" if name else f"P{project_id:04d}"
+            d = None
+            if uid:
+                d = next((c for c in cands if _read_json(c / "project.json").get("uid") == uid), None)
+                if d is None:  # uid 없는 예전 폴더는 이름이 같을 때만 이 프로젝트의 것으로 본다
+                    d = next((c for c in cands if not _read_json(c / "project.json").get("uid")
+                              and (not name or _read_json(c / "project.json").get("name") == name)), None)
+                if d is None:
+                    d = self.root / fresh
+                    if d.exists():  # 같은 번호·이름의 다른 프로젝트 폴더가 있으면 uid를 붙여 따로 만든다
+                        d = self.root / f"{fresh}_{uid[:6]}"
             else:
-                d = self.root / (f"P{project_id:04d}_{slug(name)}" if name else f"P{project_id:04d}")
+                cur = _read_json(self.root / "index.json").get("projects", {}).get(str(project_id), {}).get("folder")
+                d = self.root / cur if cur and (self.root / cur).is_dir() else cands[0] if cands else self.root / fresh
             for sub in SUBDIRS:
                 (d / sub).mkdir(parents=True, exist_ok=True)
             info = _read_json(d / "project.json")
-            if not info or (name and info.get("name") != name):
-                info.update({"project_id": project_id, "name": name or info.get("name", ""), "server": self.server_url,
-                             "folder": d.name, "created": info.get("created", _now()), "updated": _now()})
+            if not info or (name and info.get("name") != name) or (uid and info.get("uid") != uid):
+                info.update({"project_id": project_id, "uid": uid or info.get("uid"), "name": name or info.get("name", ""),
+                             "server": self.server_url, "folder": d.name, "created": info.get("created", _now()),
+                             "updated": _now()})
                 _write_json(d / "project.json", info)
+            if uid:
                 self._index(project_id, info, d)
             return d
 
     def _index(self, project_id: int, info: dict, d: Path):
         idx = _read_json(self.root / "index.json")
+        cur = idx.get("projects", {}).get(str(project_id), {})
+        if cur.get("folder") == d.name and cur.get("name") == info.get("name"):
+            return
         idx.setdefault("projects", {})[str(project_id)] = {"name": info.get("name"), "folder": d.name,
                                                              "server": self.server_url, "updated": _now()}
         idx["root"] = str(self.root)
         _write_json(self.root / "index.json", idx)
 
     # ---------- 스터디·케이스 ----------
-    def study_dir(self, project_id: int, study_id: int, study_name: str | None = None, project_name: str | None = None) -> Path:
-        base = self.project_dir(project_id, project_name) / "studies"
+    def study_dir(self, project_id: int, study_id: int, study_name: str | None = None, project_name: str | None = None,
+                  project_uid: str | None = None) -> Path:
+        base = self.project_dir(project_id, project_name, project_uid) / "studies"
         found = sorted(base.glob(f"S{study_id:03d}_*")) + sorted(base.glob(f"S{study_id:03d}"))
         legacy = base / f"study_{study_id}"
         d = found[0] if found else legacy if legacy.exists() else base / (f"S{study_id:03d}_{slug(study_name)}" if study_name else f"S{study_id:03d}")
@@ -136,18 +155,19 @@ class Workspace:
             tmp.replace(path)
 
     # ---------- 탐색 ----------
-    def resolve(self, project_id: int, rel: str, project_name: str | None = None) -> Path:
-        base = self.project_dir(project_id, project_name).resolve()
+    def resolve(self, project_id: int, rel: str, project_name: str | None = None, project_uid: str | None = None) -> Path:
+        base = self.project_dir(project_id, project_name, project_uid).resolve()
         target = (base / (rel or "")).resolve()
         if base != target and base not in target.parents:
             raise ValueError("프로젝트 폴더 밖의 경로입니다")
         return target
 
-    def tree(self, project_id: int, rel: str = "", project_name: str | None = None, limit: int = 500) -> dict:
-        d = self.resolve(project_id, rel, project_name)
+    def tree(self, project_id: int, rel: str = "", project_name: str | None = None, limit: int = 500,
+             project_uid: str | None = None) -> dict:
+        d = self.resolve(project_id, rel, project_name, project_uid)
         if not d.exists():
             raise FileNotFoundError(f"없는 경로입니다: {rel}")
-        base = self.project_dir(project_id, project_name).resolve()
+        base = self.project_dir(project_id, project_name, project_uid).resolve()
         entries = []
         for p in sorted(d.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))[:limit]:
             st = p.stat()

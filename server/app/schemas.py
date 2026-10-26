@@ -226,10 +226,17 @@ class Objective(BaseModel):
     goal: Literal["min", "max"] = "min"
 
 
+class Constraint(BaseModel):
+    name: str  # results.json 키
+    upper: float | None = None
+    lower: float | None = None
+
+
 class StudyCreate(BaseModel):
     name: str
     variables: list[Variable]
     objectives: list[Objective] = []
+    constraints: list[Constraint] = []
     adapter: str = "mock"
     adapter_config: dict[str, Any] = {}
 
@@ -240,6 +247,7 @@ class StudyResponse(ORM):
     name: str
     variables: list[dict[str, Any]]
     objectives: list[dict[str, Any]]
+    constraints: list[dict[str, Any]] | None = None
     adapter: str
     adapter_config: dict[str, Any]
     version: int

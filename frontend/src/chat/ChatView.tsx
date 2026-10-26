@@ -1,23 +1,22 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle, BarChart3, Brain, Check, ChevronDown, ChevronRight, CircleSlash, FileText, Image as ImageIcon, LineChart,
-  FileUp, Loader2, PanelRight, ScatterChart, ShieldQuestion, Sparkles, Table2, Wrench, X,
+  AlertTriangle, BarChart3, Brain, Check, ChevronRight, CircleSlash, FileText, Image as ImageIcon, LineChart,
+  FileUp, Loader2, PanelRight, ScatterChart, ShieldQuestion, Sparkles, Table2, Workflow, Wrench, X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, get, post } from "../api";
-import { ArtifactCard } from "../artifacts/ArtifactView";
 import { useAuth } from "../auth";
 import { useCanvas } from "../canvas/CanvasContext";
 import { useFlowDecision } from "../canvas/views";
 import { Markdown } from "../components/Markdown";
 import { Composer } from "./Composer";
-import { FlowCanvas } from "../flow/FlowCanvas";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
-import { AGENT_SEND, FLOW_STATUS, localIso } from "../format";
+import { isQuietTool, readableArgs, toolLabel } from "./labels";
+import { AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, localIso } from "../format";
 import { useLive } from "../live";
 import { useToast } from "../toast";
-import type { AgentStatus, Artifact, ChatMessage, ChatSession, Flow, PermissionRequest } from "../types";
+import type { AgentStatus, Artifact, ChatMessage, ChatSession, Flow, FlowNode, PermissionRequest } from "../types";
 
 /** 가운데 대화: 사용자는 말로 지시하고, 에이전트의 작업 흐름 제안·실행 확인·결과가 대화 안의 카드로 이어진다.
  *  같은 내용은 오른쪽 라이브 캔버스에 크게 쌓인다. */
@@ -170,7 +169,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   const suggestions = useMemo(() => {
     const review = (flows ?? []).find((f) => f.status === "review");
     const done = (flows ?? []).some((f) => f.status === "complete");
-    if (review) return [`플로우 '${review.title}'에서 바꿀 점: `, "이 작업 흐름의 각 단계를 자세히 설명해 줘", "승인 전에 필요한 입력 파일과 툴 경로를 점검해 줘"];
+    if (review) return [`작업 흐름 '${review.title}'에서 바꿀 점: `, "이 작업 흐름의 각 단계를 자세히 설명해 줘", "승인 전에 필요한 입력 파일과 툴 경로를 점검해 줘"];
     if (done) return ["결과를 해석해서 결론·권고가 담긴 보고서 요약을 작성해 줘", "능동학습으로 예측 모델 정확도를 더 높여 줘",
       "최적 설계점에서 실제 해석으로 확인(검증 해석)해 줘", "응력 분포를 3D로 보고 싶어 — 형상·필드 모델을 학습해 줘", "Simulator를 설계팀과 공유할 수 있게 배포해 줘"];
     if (timeline.length) return ["지금 진행 상황을 요약해 줘", "실패한 케이스 원인을 찾아서 고쳐 줘", "다음 단계로 진행해 줘"];
@@ -183,6 +182,19 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     window.addEventListener(AGENT_SEND, h);
     return () => window.removeEventListener(AGENT_SEND, h);
   }, [send]);
+
+  // "작업하는 중…" 대신 지금 무엇을 하는지: 진행 중인 단계 → 실행 중인 툴 → 생각 중
+  const activity = useMemo(() => {
+    const f = (flows ?? []).find((x) => x.status === "in_progress" || x.status === "approved");
+    if (f) {
+      const steps = orderNodes(f);
+      const i = steps.findIndex((n) => n.status === "in_progress");
+      if (i >= 0) return `${steps[i].label} 진행 중 · ${i + 1}/${steps.length}단계`;
+    }
+    const t = [...(msgs ?? [])].reverse().find((m) => m.role === "tool");
+    if (t && t.meta?.status !== "completed" && t.meta?.status !== "failed") return `${toolLabel(t.meta?.title || t.content)[0]} 중…`;
+    return "생각하는 중…";
+  }, [flows, msgs]);
 
   const cancel = () => { if (sid) post(`/api/sessions/${sid}/cancel`).catch((e: Error) => toast(e.message, true)); };
   const answer = async (p: PermissionRequest, optionId: string | null) => {
@@ -213,7 +225,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
             return <Message key={it.m.id} m={it.m} />;
           })}
           {perms.map((p) => <PermissionCard key={p.request_id} p={p} readOnly={readOnly} onAnswer={(o) => void answer(p, o)} />)}
-          {busy && !perms.length && <div className="chat-msg agent"><div className="bubble thinking"><Loader2 size={14} className="spin" />작업하는 중…</div></div>}
+          {busy && !perms.length && <div className="chat-msg agent"><div className="bubble thinking"><Loader2 size={14} className="spin" />{activity}</div></div>}
         </div>
       </div>
 
@@ -233,52 +245,81 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
 
 const KIND_ICON = { table: Table2, scatter: ScatterChart, line: LineChart, bar: BarChart3, parallel: LineChart, markdown: FileText, image: ImageIcon };
 
-/** 대화 속 결과: 한 줄 칩으로 보여 주고(대화가 무거워지지 않게), 누르면 캔버스에서 크게 · 필요하면 대화 안 미리보기 */
+/** 대화 속 결과: 한 줄 목록(대화가 무거워지지 않게) — 누르면 오른쪽 캔버스에서 크게 연다 */
 function ArtifactChips({ items }: { items: Artifact[] }) {
   const canvas = useCanvas();
-  const [open, setOpen] = useState<number | null>(null);
   return (
     <div className="chat-arts">
-      <div className="chat-arts-head"><BarChart3 size={13} />결과 {items.length}개 게시 · 오른쪽 캔버스에서 크게 볼 수 있습니다</div>
+      <div className="chat-arts-head"><BarChart3 size={13} />결과 {items.length}개 · 누르면 오른쪽 캔버스에서 봅니다</div>
       {items.map((a) => {
         const Icon = KIND_ICON[a.kind] ?? FileText;
-        const isOpen = open === a.id;
         return (
-          <div key={a.id} className="chat-art">
-            <div className="chat-art-row">
-              <button className="chat-art-toggle" onClick={() => setOpen(isOpen ? null : a.id)} aria-expanded={isOpen}
-                aria-label={`${a.title} 미리보기 ${isOpen ? "접기" : "펼치기"}`}>{isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button>
-              <Icon size={14} className="kind" />
-              <button className="chat-art-title" onClick={() => canvas.showArtifact(a.id)} title="캔버스에서 보기">{a.title}</button>
-              <button className="icon-btn" onClick={() => canvas.showArtifact(a.id)} title="캔버스에서 보기" aria-label={`${a.title} 캔버스에서 보기`}><PanelRight size={14} /></button>
-            </div>
-            {isOpen && <ArtifactCard a={a} compact />}
-          </div>
+          <button key={a.id} className="chat-art-row chat-art-open" onClick={() => canvas.showArtifact(a.id)} title="캔버스에서 보기">
+            <Icon size={14} className="kind" /><span className="chat-art-title">{a.title}</span><ChevronRight size={14} className="muted" />
+          </button>
         );
       })}
     </div>
   );
 }
 
-/** 대화 속 작업 흐름 제안 카드: 미니 그래프 + 승인/반려 */
+/** 단계를 실행 순서대로(엣지 기준 위상 정렬, 같은 순위는 원래 순서) */
+export function orderNodes(f: Flow): FlowNode[] {
+  const indeg = new Map(f.nodes.map((n) => [n.id, 0]));
+  f.edges.forEach((e) => indeg.set(e.target, (indeg.get(e.target) ?? 0) + 1));
+  const out: FlowNode[] = [];
+  const left = [...f.nodes];
+  while (left.length) {
+    const i = Math.max(0, left.findIndex((n) => (indeg.get(n.id) ?? 0) === 0));
+    const [n] = left.splice(i, 1);
+    out.push(n);
+    f.edges.filter((e) => e.source === n.id).forEach((e) => indeg.set(e.target, (indeg.get(e.target) ?? 1) - 1));
+  }
+  return out;
+}
+
+/** 대화 속 작업 흐름 카드: 실행 순서대로 단계 목록 + 진행률 + 승인/반려 (그래프는 캔버스에서) */
 function FlowCard({ pid, f, readOnly }: { pid: number; f: Flow; readOnly: boolean }) {
   const canvas = useCanvas();
   const decide = useFlowDecision(pid);
+  const [more, setMore] = useState(false);
   const st = FLOW_STATUS[f.status];
-  const done = f.nodes.filter((n) => n.status === "complete").length;
+  const steps = orderNodes(f);
+  const done = steps.filter((n) => n.status === "complete").length;
+  const shown = more || steps.length <= 8 ? steps : steps.slice(0, 6);
+  const review = f.status === "review";
   return (
     <div className={`chat-card flow-card st-${f.status}`}>
       <div className="chat-card-head">
-        <b>{f.title}</b><span className={`chip ${st.chip}`}>{st.label}</span>
+        <Workflow size={16} className="brand" /><b>{f.title}</b><span className={`chip ${st.chip}`}>{st.label}</span>
         <span className="grow" />
-        <button className="small ghost" onClick={() => canvas.showFlow(f.id)}><PanelRight size={13} />캔버스에서 보기</button>
+        <button className="small ghost" onClick={() => canvas.showFlow(f.id)} title="오른쪽 캔버스에 흐름도로 보기"><PanelRight size={13} />흐름도</button>
       </div>
-      {f.goal && <p className="small muted">{f.goal}</p>}
-      <div className="flow-mini"><FlowCanvas flow={f} selected={null} onSelect={() => canvas.showFlow(f.id)} artifactCount={{}} mini /></div>
+      {review && <p className="small">에이전트가 아래 순서로 진행하려고 합니다. 확인하고 승인해 주세요.</p>}
+      <ol className="flow-steps">
+        {shown.map((n, i) => (
+          <li key={n.id} className={`fs-${n.status}`}>
+            <span className="fs-ico" aria-label={NODE_STATUS[n.status]}>
+              {n.status === "complete" ? <Check size={12} /> : n.status === "in_progress" ? <Loader2 size={12} className="spin" />
+                : n.status === "failed" ? <X size={12} /> : i + 1}
+            </span>
+            <span className="fs-main">
+              <span className="fs-label">{n.label}</span>
+              {n.detail && <span className="fs-detail">{n.detail}</span>}
+            </span>
+            <span className="fs-tag">{NODE_TYPE[n.type] ?? n.type}{n.tool ? ` · ${n.tool}` : ""}</span>
+          </li>
+        ))}
+      </ol>
+      {steps.length > shown.length && <button className="link-btn small" onClick={() => setMore(true)}>나머지 {steps.length - shown.length}단계 더 보기</button>}
+      {!review && f.status !== "rejected" && (
+        <div className="flow-progress" role="progressbar" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={done}
+          aria-label="진행률"><div style={{ width: `${(100 * done) / Math.max(1, steps.length)}%` }} /></div>
+      )}
       <div className="row chat-card-foot">
-        <span className="small muted">단계 {done}/{f.nodes.length} 완료</span>
+        <span className="small muted">{review ? "고칠 점은 아래 입력창에 적어 보내면 다시 제안합니다" : `${steps.length}단계 중 ${done}단계 완료`}</span>
         <span className="grow" />
-        {f.status === "review" && !readOnly && (
+        {review && !readOnly && (
           <>
             <button className="small" onClick={() => decide.mutate({ flow: f, status: "rejected" })} disabled={decide.isPending}><X size={13} />반려</button>
             <button className="small primary" onClick={() => decide.mutate({ flow: f, status: "approved" })} disabled={decide.isPending}><Check size={13} />승인하고 실행</button>
@@ -293,11 +334,12 @@ function ToolGroup({ items }: { items: ChatMessage[] }) {
   const [open, setOpen] = useState(false);
   const failed = items.filter((m) => m.meta?.status === "failed").length;
   const running = items.some((m) => m.meta?.status !== "completed" && m.meta?.status !== "failed");
-  const last = items[items.length - 1];
+  const visible = items.filter((m) => !isQuietTool(m.meta?.title || m.content));
+  const last = visible[visible.length - 1] ?? items[items.length - 1];
   return (
     <div className="cv-toolgroup">
-      <button className="cv-toolgroup-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <Wrench size={12} />툴 {items.length}개 실행{failed ? ` · 실패 ${failed}` : ""}
+      <button className="cv-toolgroup-head" onClick={() => setOpen(!open)} aria-expanded={open} title="에이전트가 사용한 도구 기록">
+        <Wrench size={12} />에이전트 작업 {items.length}건{failed ? ` · 실패 ${failed}` : ""}
         {running ? <Loader2 size={12} className="spin" /> : failed ? <X size={12} className="err" /> : <Check size={12} className="ok" />}
         <span className="small muted">{open ? "접기" : "펼치기"}</span>
       </button>
@@ -330,14 +372,16 @@ function Message({ m }: { m: ChatMessage }) {
   }
   if (m.role === "tool") {
     const st = m.meta?.status ?? "pending";
+    const [label, raw] = toolLabel(m.meta?.title || m.content);
     const icon = st === "completed" ? <Check size={13} /> : st === "failed" ? <X size={13} /> : <Loader2 size={13} className="spin" />;
     return (
       <div className={`cv-tool ${st}`}>
         <button className="cv-tool-head" onClick={() => setOpenTool(!openTool)} aria-expanded={openTool}>
-          <Wrench size={12} /><span className="t">{m.meta?.title || m.content}</span><span className="st">{icon}</span>
+          <Wrench size={12} /><span className="t">{label}</span><span className="st">{icon}</span>
         </button>
         {openTool && (
           <div className="cv-tool-body">
+            {raw && <div className="small muted mono">{raw}</div>}
             {m.meta?.raw_input != null && <pre>{JSON.stringify(m.meta.raw_input, null, 2)}</pre>}
             {m.meta?.output && <pre>{m.meta.output}</pre>}
           </div>
@@ -351,11 +395,16 @@ function Message({ m }: { m: ChatMessage }) {
 function PermissionCard({ p, readOnly, onAnswer }: { p: PermissionRequest; readOnly: boolean; onAnswer: (optionId: string | null) => void }) {
   const allow = p.options.filter((o) => o.kind.startsWith("allow"));
   const reject = p.options.filter((o) => o.kind.startsWith("reject"));
+  const [label, raw] = toolLabel(p.title);
+  const rows = readableArgs(p.raw_input);
   return (
-    <div className="chat-card perm-card" role="group" aria-label={`실행 확인: ${p.title}`}>
-      <div className="chat-card-head"><ShieldQuestion size={16} /><b>실행해도 될까요?</b></div>
-      <p className="small">{p.title}</p>
-      {p.raw_input != null && <pre className="cv-perm-input">{JSON.stringify(p.raw_input, null, 2).slice(0, 1500)}</pre>}
+    <div className="chat-card perm-card" role="group" aria-label={`실행 확인: ${label}`}>
+      <div className="chat-card-head"><ShieldQuestion size={16} /><b>내 PC에서 실행해도 될까요?</b></div>
+      <p className="perm-title">{label}{raw && <span className="small muted mono"> {raw}</span>}</p>
+      {rows ? (
+        <dl className="perm-args">{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+      ) : p.raw_input != null && <pre className="cv-perm-input">{JSON.stringify(p.raw_input, null, 2).slice(0, 1500)}</pre>}
+      {!readOnly && <p className="small muted">허용하면 에이전트가 이 작업을 내 PC에서 실행합니다. 거부하면 멈추고 다른 방법을 묻습니다.</p>}
       {readOnly ? <p className="small muted">대화를 시작한 사람이 확인합니다.</p> : (
         <div className="row chat-card-foot">
           <span className="grow" />

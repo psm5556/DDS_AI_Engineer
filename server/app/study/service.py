@@ -50,11 +50,24 @@ def _complete_cases(study):
     return [c for c in study.cases if c.status == "complete"]
 
 
-def best_case(study: models.Study) -> models.Case | None:
+def feasible(study: models.Study, results: dict) -> bool:
+    """제약(constraints)을 모두 만족하는가. 결과에 없는 제약 항목은 판단하지 않는다."""
+    for c in study.constraints or []:
+        v = results.get(c["name"])
+        if v is None:
+            continue
+        if (c.get("upper") is not None and v > c["upper"]) or (c.get("lower") is not None and v < c["lower"]):
+            return False
+    return True
+
+
+def best_case(study: models.Study, feasible_only: bool = True) -> models.Case | None:
+    """목적함수 최적 케이스. 제약이 있으면 만족하는 케이스 중에서 고른다(없으면 None)."""
     if not study.objectives:
         return None
     obj = study.objectives[0]
-    done = [c for c in _complete_cases(study) if obj["name"] in c.results]
+    done = [c for c in _complete_cases(study) if obj["name"] in c.results
+            and (not feasible_only or feasible(study, c.results))]
     if not done:
         return None
     key = lambda c: c.results[obj["name"]]
@@ -78,11 +91,16 @@ def create_doe(db: Session, study: models.Study, method: str, n: int, seed: int 
     return cases
 
 
+CASE_STATUS_KO = {"pending": "대기", "queued": "대기", "running": "실행 중", "complete": "완료", "failed": "실패",
+                  "dry_run": "스크립트만 생성", "cancelled": "취소"}
+CASE_SOURCE_KO = {"doe": "DOE", "bo": "최적화", "al": "능동학습", "manual": "직접"}
+
+
 def publish_cases_table(db, study, flow_id=None, node_id=None):
     db.refresh(study)
     names = _var_names(study)
     outs = sorted({k for c in study.cases for k in c.results})
-    rows = [[c.id, c.source, c.status, *[round(c.params.get(v, float("nan")), 4) for v in names],
+    rows = [[c.id, CASE_SOURCE_KO.get(c.source, c.source), CASE_STATUS_KO.get(c.status, c.status), *[round(c.params.get(v, float("nan")), 4) for v in names],
              *[round(c.results[o], 5) if o in c.results else None for o in outs]] for c in study.cases]
     publish_artifact(db, study.project_id, "table", f"[{study.name}] 케이스 결과",
                      {"columns": ["ID", "출처", "상태", *names, *outs], "rows": rows}, flow_id, node_id)
@@ -119,7 +137,7 @@ def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, us
             c.status, c.run_by, c.error = "queued", user_id, None
         db.commit()
         project = db.get(models.Project, study.project_id)
-        jobs = [{"case_id": c.id, "study_id": study_id, "project_id": study.project_id, "project_name": project.name,
+        jobs = [{"case_id": c.id, "study_id": study_id, "project_id": study.project_id, "project_name": project.name, "project_uid": project.uid,
                  "study_name": study.name, "source": c.source, "params": c.params, "variables": study.variables,
                  "objectives": study.objectives, "adapter": study.adapter, "adapter_config": study.adapter_config or {},
                  "dry_run": dry_run}
@@ -221,9 +239,11 @@ def publish_convergence(db, study):
     best, pts_best, pts_raw = None, [], []
     for i, c in enumerate([c for c in study.cases if c.status == "complete" and obj["name"] in c.results], 1):
         v = c.results[obj["name"]]
-        best = v if best is None or sign * v < sign * best else best
+        if feasible(study, c.results):  # 최적값은 제약을 만족하는 케이스로만
+            best = v if best is None or sign * v < sign * best else best
         pts_raw.append({"x": i, "y": v})
-        pts_best.append({"x": i, "y": best})
+        if best is not None:
+            pts_best.append({"x": i, "y": best})
     if pts_raw:
         publish_artifact(db, study.project_id, "line", f"[{study.name}] {obj['name']} 수렴 이력",
                          {"x": "평가 횟수", "series": [{"name": "평가값", "points": pts_raw},
@@ -291,11 +311,12 @@ def suggest(db: Session, study: models.Study, mode: str, n: int, model_id: int |
     if mode == "bo":
         if not obj or obj["name"] not in sur.outputs:
             raise ValueError("BO에는 모델이 학습한 목적함수(objectives[0])가 필요합니다")
-        best = best_case(study)
+        best = best_case(study) or best_case(study, feasible_only=False)
         if best is None:
             raise ValueError("완료된 케이스가 없습니다")
         pts = bayesopt.suggest(sur, lo, hi, "bo", n, obj["name"], obj.get("goal", "min"),
-                               best.results[obj["name"]], seed=len(study.cases))
+                               best.results[obj["name"]], seed=len(study.cases),
+                               constraints=[c for c in study.constraints or [] if c["name"] in sur.outputs])
     else:
         pts = bayesopt.suggest(sur, lo, hi, "al", n, seed=len(study.cases))
 

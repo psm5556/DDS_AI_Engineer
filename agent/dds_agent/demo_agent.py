@@ -306,7 +306,7 @@ class DemoAgent:
         study = await s.tool("dds-study", "create_study", {
             "name": "브래킷 DOE", "adapter": "mock", "adapter_config": {"function": "bracket3d", "delay_sec": 0.05},
             "variables": [{"name": "thickness", "lower": 6, "upper": 14}, {"name": "rib_height", "lower": 10, "upper": 40}],
-            "objectives": [{"name": "mass", "goal": "min"}]})
+            "objectives": [{"name": "mass", "goal": "min"}], "constraints": [{"name": "max_stress", "upper": STRESS_LIMIT}]})
         sid = study["study_id"]
         await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 20, "seed": 11, "flow_id": fid, "node_id": "doe"})
         await node("doe", "complete")
