@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, Pencil, Star, Trash2, Users } from "lucide-react";
+import { FolderCog, FolderOpen, Pencil, Star, Trash2, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -7,11 +7,12 @@ import { api, del, put } from "../api";
 import { MembersPanel } from "../canvas/views";
 import { useToast } from "../toast";
 import type { Project } from "../types";
+import { FolderModal } from "./FolderModal";
 import { Confirm, Modal } from "./Modal";
 
 /** 프로젝트 메뉴 (⋯ 또는 우클릭): 이름 바꾸기 · 즐겨찾기 · 멤버·공유 · 내 PC 폴더 열기 · 삭제 */
 export function ProjectMenu({ p, at, onClose }: { p: Project; at: { x: number; y: number }; onClose: () => void }) {
-  const [dialog, setDialog] = useState<"rename" | "members" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"rename" | "members" | "folder" | "delete" | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
   const toast = useToast();
@@ -47,6 +48,7 @@ export function ProjectMenu({ p, at, onClose }: { p: Project; at: { x: number; y
 
   if (dialog === "rename") return <ProjectInfoModal p={p} onClose={onClose}
     onSave={(name, description) => put(`/api/projects/${p.id}`, { name, description, version: p.version }).then(() => { refresh(); toast("저장했습니다"); onClose(); }).catch(err)} />;
+  if (dialog === "folder") return <FolderModal pid={p.id} onClose={onClose} />;
   if (dialog === "members") return (
     <Modal title={`멤버·공유 — ${p.name}`} onClose={onClose}><MembersPanel p={p} /></Modal>
   );
@@ -63,6 +65,7 @@ export function ProjectMenu({ p, at, onClose }: { p: Project; at: { x: number; y
       <button role="menuitem" onClick={() => fav.mutate()}><Star size={14} fill={p.is_favorite ? "currentColor" : "none"} />{p.is_favorite ? "즐겨찾기 해제" : "즐겨찾기"}</button>
       <button role="menuitem" onClick={() => setDialog("members")}><Users size={14} />멤버·공유</button>
       <button role="menuitem" onClick={() => openLocal.mutate()}><FolderOpen size={14} />내 PC 작업 폴더 열기</button>
+      <button role="menuitem" onClick={() => setDialog("folder")}><FolderCog size={14} />작업 폴더 바꾸기</button>
       <div className="ctx-sep" />
       <button role="menuitem" className="danger" onClick={() => setDialog("delete")} disabled={!isMaster} title={isMaster ? "" : "프로젝트 관리자만 삭제할 수 있습니다"}><Trash2 size={14} />삭제</button>
     </div>,

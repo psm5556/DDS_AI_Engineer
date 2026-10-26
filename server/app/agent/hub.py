@@ -84,7 +84,7 @@ class AgentHub:
         with SessionLocal() as db:
             chat = db.get(models.ChatSession, chat_id)
             first_turn = not chat.agent_session_id
-            recap = _recap(db, chat.id) if first_turn else ""  # 에이전트를 바꾼 대화면 이전 내용을 넘긴다
+            recap = _recap(db, chat.id) if first_turn else ""  # 에이전트·작업 폴더를 바꾼 대화면 이전 내용을 넘긴다
             sid = self.ensure_session(chat)
             if chat.agent_session_id != sid:
                 chat.agent_session_id = sid
@@ -223,7 +223,7 @@ def _content_text(content) -> str:
 
 
 def _recap(db, chat_id: int, limit: int = 12, chars: int = 6000) -> str:
-    """에이전트(CLI)를 바꾼 대화의 첫 요청에 붙일 이전 대화 요약(최근 사용자·에이전트 메시지)."""
+    """CLI 세션을 새로 연 대화(에이전트·작업 폴더를 바꿈)의 첫 요청에 붙일 이전 대화 요약(최근 사용자·에이전트 메시지)."""
     msgs = (db.query(models.ChatMessage).filter(models.ChatMessage.session_id == chat_id,
                                                  models.ChatMessage.role.in_(("user", "agent")))
             .order_by(models.ChatMessage.id.desc()).limit(limit).all())
@@ -231,7 +231,7 @@ def _recap(db, chat_id: int, limit: int = 12, chars: int = 6000) -> str:
         return ""
     lines = [f"{'사용자' if m.role == 'user' else '에이전트'}: {m.content.strip()[:1500]}" for m in reversed(msgs)]
     body = "\n".join(lines)[-chars:]
-    return f"[이전 대화 — 다른 에이전트와 나눈 내용이다. 이어서 진행하라]\n{body}\n[이전 대화 끝]\n\n"
+    return f"[이전 대화 — 이 대화에서 앞서 나눈 내용이다. 이어서 진행하라]\n{body}\n[이전 대화 끝]\n\n"
 
 
 hub = AgentHub()

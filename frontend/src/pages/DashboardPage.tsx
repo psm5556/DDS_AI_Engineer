@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Box, ChevronRight, Cpu, Loader2, Rocket, Target, Workflow, Wrench } from "lucide-react";
+import { AlertTriangle, Box, ChevronRight, Cpu, FolderOpen, Loader2, Rocket, Target, Workflow, Wrench } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { get, post, uploadFile } from "../api";
+import { get, post, put, uploadFile } from "../api";
 import { useAuth } from "../auth";
 import { Composer, type Outgoing } from "../chat/Composer";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
+import { folderName, FolderModal } from "../components/FolderModal";
 import { FLOW_STATUS, when } from "../format";
 import { useToast } from "../toast";
 import type { AgentStatus, Attachment, Project } from "../types";
@@ -24,6 +25,8 @@ export default function DashboardPage() {
   const nav = useNavigate();
   const toast = useToast();
   const [seed, setSeed] = useState<{ text: string; n: number } | undefined>();
+  const [folder, setFolder] = useState<string | null>(null); // 새 작업의 내 PC 작업 폴더 (null = 기본 위치)
+  const [picking, setPicking] = useState(false);
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
   const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status") });
   const [preferred, setPreferred] = usePreferredAgent();
@@ -35,6 +38,11 @@ export default function DashboardPage() {
       const first = (o.text || o.pendingFiles[0]?.name || "").split(/[\n.!?]/)[0].trim();
       const name = first.length > 28 ? `${first.slice(0, 28)}…` : first || "새 작업";
       const p = await post<Project>("/api/projects", { name, description: "" });
+      // 고른 작업 폴더는 에이전트가 첫 세션을 열기 전에 정해 둔다 (실패하면 기본 위치로 시작)
+      if (folder) {
+        await put(`/api/projects/${p.id}/local/folder`, { path: folder })
+          .catch((e: Error) => toast(`작업 폴더를 정하지 못해 기본 위치로 시작합니다: ${e.message}`, true));
+      }
       const ids: number[] = [];
       for (const f of o.pendingFiles) ids.push((await uploadFile<Attachment>(`/api/projects/${p.id}/attachments`, f)).id);
       return { p, ids, text: o.text };
@@ -55,8 +63,14 @@ export default function DashboardPage() {
         )}
         <Composer big autoFocus suggestions={STARTERS.map((x) => x.p)} seed={seed} busy={start.isPending}
           onSend={(o) => { start.mutate(o); }}
-          leftBar={<AgentPicker value={resolveAgent(agent, preferred)} onChange={setPreferred} disabled={!agent?.connected} />}
+          leftBar={<>
+            <button type="button" className={`folder-chip ${folder ? "on" : ""}`} onClick={() => setPicking(true)} disabled={!agent?.connected}
+              title={folder ? `작업 폴더: ${folder}` : "작업 폴더: 기본 위치 (누르면 내 PC 폴더를 고릅니다)"}>
+              <FolderOpen size={14} />{folder ? folderName(folder) : "기본 폴더"}</button>
+            <AgentPicker value={resolveAgent(agent, preferred)} onChange={setPreferred} disabled={!agent?.connected} />
+          </>}
           placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘" />
+        {picking && <FolderModal initial={folder} onPicked={setFolder} onClose={() => setPicking(false)} />}
         <div className="starters">
           {STARTERS.map(({ icon: Icon, t, p }) => (
             <button key={t} className="starter" onClick={() => setSeed({ text: p, n: Date.now() })} title={p}><Icon size={15} />{t}</button>

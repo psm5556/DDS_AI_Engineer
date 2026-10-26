@@ -44,6 +44,38 @@ def test_favorite_rename_delete(client):  # noqa: F811
     assert client.delete(f"/api/projects/{p['id']}", headers=admin).status_code == 200
 
 
+def test_local_folder_change(client, monkeypatch):  # noqa: F811
+    """작업 폴더를 바꾸면 PC Agent에 uid와 경로를 넘기고, 내 대화는 다음 요청부터 새 세션(새 폴더)으로 이어 간다."""
+    from server.app import models
+    from server.app.agent.link import registry
+    from server.app.database import SessionLocal
+
+    calls = []
+
+    class FakeRunner:
+        def call(self, type_, payload, timeout=30):
+            calls.append((type_, payload))
+            return {"path": payload.get("path") or "C:/DDS_Workspace/P0001_x", "custom": bool(payload.get("path")), "root": "C:/DDS_Workspace"}
+
+    monkeypatch.setattr(registry, "runner", lambda uid: FakeRunner())
+    admin, _ = _auth(client, "admin")
+    p = client.post("/api/projects", json={"name": "폴더 테스트"}, headers=admin).json()
+    s = client.post(f"/api/projects/{p['id']}/sessions", json={"agent": "demo"}, headers=admin).json()
+    with SessionLocal() as db:
+        db.query(models.ChatSession).filter_by(id=s["id"]).update({"agent_session_id": "old-sid"})
+        db.commit()
+    r = client.put(f"/api/projects/{p['id']}/local/folder", json={"path": "D:/Work/브래킷"}, headers=admin)
+    assert r.status_code == 200 and r.json()["custom"] is True
+    t, payload = calls[-1]
+    with SessionLocal() as db:
+        uid = db.get(models.Project, p["id"]).uid
+        assert db.get(models.ChatSession, s["id"]).agent_session_id is None
+    assert t == "local.folder.set" and uid and payload["project_uid"] == uid and payload["path"] == "D:/Work/브래킷"
+    assert client.get(f"/api/projects/{p['id']}/local/folder", headers=admin).json()["path"]
+    assert client.post("/api/agent/check-folder", json={"path": ""}, headers=admin).status_code == 422
+    client.delete(f"/api/projects/{p['id']}", headers=admin)
+
+
 def test_attachments(client):  # noqa: F811
     admin, _ = _auth(client, "admin")
     pid = client.post("/api/projects", json={"name": "첨부"}, headers=admin).json()["id"]

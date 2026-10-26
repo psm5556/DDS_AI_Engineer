@@ -359,3 +359,18 @@ details.install-block + .block { margin-top: 16px; }
 
 /* 관리: 빈 표 */
 td.empty-row { padding: 22px 14px !important; text-align: center; }
+
+/* ---------- 내 PC 작업 폴더 ---------- */
+.folder-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; max-width: 220px; padding: 0 10px; border: none; border-radius: 8px;
+  background: transparent; box-shadow: none; color: var(--ink-3); font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.folder-chip:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.folder-chip.on { color: var(--brand); background: var(--brand-soft); }
+.local-rootbar { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; min-width: 0; }
+.local-rootbar .local-root { flex: 1; min-width: 0; margin: 0; }
+.local-kind { flex: none; font-size: 11px; font-weight: 600; color: var(--ink-4); background: var(--panel-3); border-radius: 99px; padding: 1px 8px; }
+.local-kind.custom { color: var(--brand); background: var(--brand-soft); }
+.local-rootbar .link-btn { flex: none; }
+.folder-input input { flex: 1; min-width: 0; font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-size: 13px; }
+.folder-input button { flex: none; }
+.folder-notes { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.folder-modal code { font-size: 12px; word-break: break-all; }

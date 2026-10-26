@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, get } from "../api";
 import { when } from "../format";
 import { useToast } from "../toast";
+import { FolderModal } from "../components/FolderModal";
 import type { AgentStatus, LocalTree } from "../types";
 
 const VIEWABLE = /\.(odb|d3plot|op2|f06|rst|rth|h3d|sim|fem|prt|stp|step|igs|iges|stl|vtu|vtk|cae|inp|k|key|dyn|png|jpg|csv|json|txt|log)$/i;
@@ -41,6 +42,7 @@ export function relFromRunDir(runDir: string | null): string | null {
 export function LocalFiles({ pid }: { pid: number }) {
   const [path, setPath] = useState("");
   const [hidden, setHidden] = useState(false);
+  const [picking, setPicking] = useState(false);
   const open = useOpenLocal(pid);
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ["local-tree", pid, path], queryFn: () => get<LocalTree>(`/api/projects/${pid}/local/tree?path=${encodeURIComponent(path)}`),
@@ -67,7 +69,14 @@ export function LocalFiles({ pid }: { pid: number }) {
         <button className="icon-btn" title="새로 고침" aria-label="새로 고침" onClick={() => refetch()}><RefreshCw size={14} className={isFetching ? "spin" : ""} /></button>
         <button className="small" onClick={() => open.mutate({ path })}><FolderOpen size={13} />탐색기로 열기</button>
       </div>
-      {data && <p className="small muted local-root" title={data.root}>{data.root}{path ? `\\${path.replace(/\//g, "\\")}` : ""}</p>}
+      {data && (
+        <div className="local-rootbar">
+          <span className="small muted local-root" title={data.root}>{data.root}{path ? `\\${path.replace(/\//g, "\\")}` : ""}</span>
+          <span className={`local-kind ${data.custom ? "custom" : ""}`}>{data.custom ? "직접 지정" : "기본 위치"}</span>
+          <button className="link-btn small" onClick={() => setPicking(true)}>폴더 바꾸기</button>
+        </div>
+      )}
+      {picking && <FolderModal pid={pid} onClose={() => { setPicking(false); setPath(""); }} />}
       <div className="table-wrap"><table className="local-table">
         <tbody>
           {entries.map((e) => (

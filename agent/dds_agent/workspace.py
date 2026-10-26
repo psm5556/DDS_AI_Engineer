@@ -10,12 +10,15 @@
       cases\\C0001_doe\\ C0021_bo\\ C0031_al\\   ← 케이스마다 case.json·params.json·results.json·run.log·images\\·fields\\·툴 산출물
 
 - 폴더 이름의 번호(P/S/C + 서버 ID)가 연결의 기준이다. 이름 부분은 사람이 알아보기 위한 것이라 바뀌어도 된다(번호로 찾는다).
+- 사용자가 프로젝트마다 작업 폴더를 직접 정할 수 있다(D:\\Work\\... 등). index.json의 links(uid → 절대 경로)에
+  이 PC 기준으로 기록하고, 그 폴더 안에도 같은 구조(project.json·inputs·studies…)를 만든다.
 - 원본(inputs)은 읽기 전용으로 다루고, 케이스는 복사본으로 실행한다.
 """
 from __future__ import annotations
 
 import csv
 import json
+import os
 import re
 import threading
 from datetime import datetime
@@ -59,6 +62,7 @@ class Workspace:
         """P{id:04d}_<이름> 폴더를 찾고, 없으면 만든다. 예전 규칙(project_{id})도 그대로 쓴다.
         uid(서버 프로젝트 고유값)를 주면 project.json의 uid로 '이 프로젝트의 폴더'인지 확인한다.
         서버 DB를 새로 만들어 번호가 겹쳐도 다른 프로젝트의 폴더를 쓰지 않는다.
+        사용자가 이 PC에서 작업 폴더를 직접 정했으면(index.json links) 그 폴더를 쓴다.
         uid를 모르면(MCP 툴) 이 번호로 가장 최근에 쓴 폴더(index.json)를 쓴다."""
         with _lock:
             cands = sorted(self.root.glob(f"P{project_id:04d}_*")) + sorted(self.root.glob(f"P{project_id:04d}"))
@@ -67,7 +71,10 @@ class Workspace:
                 cands.append(legacy)
             fresh = f"P{project_id:04d}_{slug(name)}" if name else f"P{project_id:04d}"
             d = None
-            if uid:
+            linked = self._links().get(uid) if uid else None
+            if linked:
+                d = Path(linked)
+            elif uid:
                 d = next((c for c in cands if _read_json(c / "project.json").get("uid") == uid), None)
                 if d is None:  # uid 없는 예전 폴더는 이름이 같을 때만 이 프로젝트의 것으로 본다
                     d = next((c for c in cands if not _read_json(c / "project.json").get("uid")
@@ -78,7 +85,8 @@ class Workspace:
                         d = self.root / f"{fresh}_{uid[:6]}"
             else:
                 cur = _read_json(self.root / "index.json").get("projects", {}).get(str(project_id), {}).get("folder")
-                d = self.root / cur if cur and (self.root / cur).is_dir() else cands[0] if cands else self.root / fresh
+                cur_dir = self.root / cur if cur else None  # 직접 정한 폴더는 절대 경로로 들어 있다(root / 절대경로 = 그 경로)
+                d = cur_dir if cur_dir and cur_dir.is_dir() else cands[0] if cands else self.root / fresh
             for sub in SUBDIRS:
                 (d / sub).mkdir(parents=True, exist_ok=True)
             info = _read_json(d / "project.json")
@@ -94,12 +102,62 @@ class Workspace:
     def _index(self, project_id: int, info: dict, d: Path):
         idx = _read_json(self.root / "index.json")
         cur = idx.get("projects", {}).get(str(project_id), {})
-        if cur.get("folder") == d.name and cur.get("name") == info.get("name"):
+        folder = d.name if d.parent == self.root else str(d)  # 기본 위치면 폴더 이름, 직접 정한 폴더면 절대 경로
+        if cur.get("folder") == folder and cur.get("name") == info.get("name"):
             return
-        idx.setdefault("projects", {})[str(project_id)] = {"name": info.get("name"), "folder": d.name,
+        idx.setdefault("projects", {})[str(project_id)] = {"name": info.get("name"), "folder": folder,
                                                              "server": self.server_url, "updated": _now()}
         idx["root"] = str(self.root)
         _write_json(self.root / "index.json", idx)
+
+    # ---------- 직접 정한 작업 폴더 (이 PC에서만 유효) ----------
+    def _links(self) -> dict[str, str]:
+        return _read_json(self.root / "index.json").get("links", {})
+
+    def check_folder(self, path: str, uid: str | None = None) -> Path:
+        """작업 폴더로 쓸 수 있는지 확인하고 정규화한 경로를 돌려준다. 안 되면 ValueError(사용자에게 보일 문장)."""
+        raw = (path or "").strip().strip('"')
+        if not raw:
+            raise ValueError("폴더 경로를 입력하세요")
+        p = Path(os.path.expandvars(os.path.expanduser(raw)))
+        if not p.is_absolute():
+            raise ValueError("전체 경로를 입력하세요 (예: D:\\Work\\브래킷)")
+        p = p.resolve()
+        if p.parent == p:
+            raise ValueError("드라이브 최상위 폴더는 쓸 수 없습니다. 그 안의 폴더를 고르세요")
+        sysroots = [Path(os.environ[k]).resolve() for k in ("SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramData")
+                    if os.environ.get(k)]
+        if any(p == s or s in p.parents for s in sysroots):
+            raise ValueError("Windows·프로그램 설치 폴더는 작업 폴더로 쓸 수 없습니다")
+        if p == self.root:
+            raise ValueError("작업 공간 최상위 폴더 자체는 쓸 수 없습니다. 그 안의 폴더를 고르세요")
+        if p.exists() and not p.is_dir():
+            raise ValueError("파일이 아니라 폴더를 고르세요")
+        owner = _read_json(p / "project.json")
+        if owner.get("uid") and owner.get("uid") != uid:
+            raise ValueError(f"다른 프로젝트('{owner.get('name') or owner.get('project_id')}')가 쓰고 있는 폴더입니다")
+        return p
+
+    def set_folder(self, project_id: int, name: str | None, uid: str, path: str | None) -> dict:
+        """이 프로젝트의 작업 폴더를 직접 정한다(path=None이면 기본 위치로 되돌린다). 기존 파일은 옮기지 않는다."""
+        if not uid:
+            raise ValueError("프로젝트 고유값(uid)이 없습니다")
+        target = self.check_folder(path, uid) if path else None
+        if target:
+            target.mkdir(parents=True, exist_ok=True)
+        with _lock:
+            idx = _read_json(self.root / "index.json")
+            links = idx.setdefault("links", {})
+            if target:
+                links[uid] = str(target)
+            else:
+                links.pop(uid, None)
+            _write_json(self.root / "index.json", idx)
+        return self.folder_info(project_id, name, uid)
+
+    def folder_info(self, project_id: int, name: str | None, uid: str | None) -> dict:
+        d = self.project_dir(project_id, name, uid)
+        return {"path": str(d), "custom": bool(uid and self._links().get(uid)), "root": str(self.root)}
 
     # ---------- 스터디·케이스 ----------
     def study_dir(self, project_id: int, study_id: int, study_name: str | None = None, project_name: str | None = None,
@@ -174,4 +232,5 @@ class Workspace:
             entries.append({"name": p.name, "path": str(p.relative_to(base)).replace("\\", "/"), "dir": p.is_dir(),
                             "size": None if p.is_dir() else st.st_size,
                             "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")})
-        return {"root": str(base), "path": str(d.relative_to(base)).replace("\\", "/") if d != base else "", "entries": entries}
+        return {"root": str(base), "path": str(d.relative_to(base)).replace("\\", "/") if d != base else "", "entries": entries,
+                "custom": bool(project_uid and self._links().get(project_uid))}

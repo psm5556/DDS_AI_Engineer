@@ -150,6 +150,8 @@ class DemoAgent:
     async def scenario(self, s: DemoSession, text: str):
         """시나리오 3가지: CAD~보고서 전체(브래킷 E2E) · '3D'/'형상' 요청(Beam3D 형상·필드 학습) · 기본(Branin 최적화)."""
         body = text.split("\n\n", 1)[-1]  # 앞의 [DDS 컨텍스트] 줄 제외
+        if "[이전 대화 끝]" in body:  # 새 세션에 넘긴 지난 대화 요약도 제외(이번 요청만)
+            body = body.split("[이전 대화 끝]", 1)[1].strip()
         if s.flow_id is None:
             s.mode = "bracket" if wants_e2e(body) else "beam3d" if ("3D" in body or "형상" in body) else "branin"
             await s.say("요청을 분석하고 있습니다. 전체 작업 흐름을 먼저 제안할게요.", thought=True)

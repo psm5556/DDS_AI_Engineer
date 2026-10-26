@@ -237,6 +237,50 @@ def local_tree(path: str = "", project: models.Project = Depends(get_project_for
         raise HTTPException(409, str(e))
 
 
+def _agent_call(user: models.User, type_: str, payload: dict, timeout: float = 30):
+    try:
+        return registry.runner(user.id).call(type_, payload, timeout=timeout)
+    except AgentError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.get("/projects/{project_id}/local/folder")
+def get_local_folder(project: models.Project = Depends(get_project_for_member), user: models.User = Depends(get_current_user)):
+    """이 프로젝트의 내 PC 작업 폴더 (직접 정했는지 여부 포함). 폴더는 사람마다·PC마다 다르다."""
+    return _agent_call(user, "local.folder", {"project_id": project.id, "project_name": project.name, "project_uid": project.uid})
+
+
+@router.put("/projects/{project_id}/local/folder")
+def set_local_folder(body: schemas.LocalFolder, project: models.Project = Depends(get_project_for_member),
+                     user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """내 PC에서 이 프로젝트의 작업 폴더를 바꾼다(path 없으면 기본 위치). 기존 파일은 옮기지 않는다.
+    에이전트 CLI 세션은 시작 폴더가 고정이므로, 내 대화들은 다음 요청부터 새 폴더에서 새 세션으로 이어 간다(지난 대화 요약 전달)."""
+    chats = db.query(models.ChatSession).filter_by(project_id=project.id, user_id=user.id).all()
+    if any(hub.status(c.id).get("busy") for c in chats):
+        raise HTTPException(409, "에이전트가 이 프로젝트에서 작업 중입니다. 끝난 뒤 바꾸세요")
+    info = _agent_call(user, "local.folder.set", {"project_id": project.id, "project_name": project.name,
+                                                   "project_uid": project.uid, "path": body.path})
+    for c in chats:
+        hub.forget_chat(c.id)
+        c.agent_session_id = None
+    db.commit()
+    return info
+
+
+@router.post("/agent/check-folder")
+def check_folder(body: schemas.LocalFolder, user: models.User = Depends(get_current_user)):
+    """새 프로젝트를 만들기 전에 고른 폴더를 작업 폴더로 쓸 수 있는지 확인한다."""
+    if not body.path:
+        raise HTTPException(422, "폴더 경로를 입력하세요")
+    return _agent_call(user, "local.folder.check", {"path": body.path})
+
+
+@router.post("/agent/pick-folder")
+def pick_folder(body: schemas.FolderPick, user: models.User = Depends(get_current_user)):
+    """PC Agent가 있는 내 PC에 Windows 폴더 선택 창을 띄운다. 사용자가 고를 때까지 기다린다(취소하면 빈 경로)."""
+    return _agent_call(user, "local.pick_folder", {"initial": body.initial, "title": body.title}, timeout=900)
+
+
 @router.get("/tools/catalog")
 def tools_catalog(user: models.User = Depends(get_current_user)):
     """지원하는 CAD/CAE 툴 목록(분야·할 수 있는 일·스킬). 내 PC 설치 상태는 /agent/diagnose의 catalog."""

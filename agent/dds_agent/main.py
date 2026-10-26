@@ -190,6 +190,33 @@ class Agent:
     def _local_tree(self, project_id: int, project_name: str | None, path: str, project_uid: str | None = None) -> dict:
         return self.s.workspace.tree(project_id, path, project_name, project_uid=project_uid)
 
+    def _set_folder(self, project_id: int, project_name: str | None, project_uid: str, path: str | None) -> dict:
+        """작업 폴더를 바꾼다. 에이전트 CLI 세션은 시작 폴더(cwd)가 고정이라 이 프로젝트의 세션은 잊는다
+        — 서버가 다음 요청에서 새 폴더로 세션을 새로 열고 지난 대화 내용을 넘긴다."""
+        if self.executor.running or self.executor.queued:
+            raise ValueError("이 PC에서 케이스를 실행하는 중에는 작업 폴더를 바꿀 수 없습니다. 끝난 뒤 다시 시도하세요")
+        info = self.s.workspace.set_folder(project_id, project_name, project_uid, path)
+        for sid in [s for s, (_, _, uid) in self.session_project.items() if uid == project_uid]:
+            self.session_project.pop(sid, None)
+            self.session_runner.pop(sid, None)
+        sync_project_context(Path(info["path"]))
+        return info
+
+    def _pick_folder(self, initial: str | None, title: str | None) -> dict:
+        """이 PC에 Windows 폴더 선택 창을 띄워 고른 경로를 돌려준다(취소하면 빈 값). Tk는 별도 프로세스로 띄운다."""
+        code = ("import sys, tkinter as tk\nfrom tkinter import filedialog\n"
+                "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
+                "p = filedialog.askdirectory(parent=r, initialdir=sys.argv[1] or None, title=sys.argv[2], mustexist=False)\n"
+                "sys.stdout.write(p or '')\n")
+        try:
+            out = subprocess.run([sys.executable, "-c", code, initial or "", title or "작업 폴더 선택"], capture_output=True,
+                                 text=True, encoding="utf-8", timeout=900, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except subprocess.TimeoutExpired:
+            return {"path": ""}
+        if out.returncode != 0:
+            raise RuntimeError("폴더 선택 창을 열지 못했습니다. 경로를 직접 입력하세요")
+        return {"path": str(Path(out.stdout.strip())) if out.stdout.strip() else ""}
+
     # ---------- 상태 보고 / 자동 업데이트 ----------
     def status(self) -> dict:
         return {"running_cases": self.executor.running, "queued_cases": self.executor.queued,
@@ -303,6 +330,16 @@ class Agent:
         elif t == "local.tree":
             asyncio.create_task(self._respond(rid, self._local_tree, msg["project_id"], msg.get("project_name"), msg.get("path", ""),
                                               msg.get("project_uid")))
+        elif t == "local.folder":
+            asyncio.create_task(self._respond(rid, self.s.workspace.folder_info, msg["project_id"], msg.get("project_name"),
+                                              msg.get("project_uid")))
+        elif t == "local.folder.set":
+            asyncio.create_task(self._respond(rid, self._set_folder, msg["project_id"], msg.get("project_name"),
+                                              msg.get("project_uid"), msg.get("path")))
+        elif t == "local.folder.check":
+            asyncio.create_task(self._respond(rid, lambda p: {"path": str(self.s.workspace.check_folder(p))}, msg.get("path", "")))
+        elif t == "local.pick_folder":
+            asyncio.create_task(self._respond(rid, self._pick_folder, msg.get("initial"), msg.get("title")))
         elif t == "agent.install":
             asyncio.create_task(self._respond(rid, self._install, msg["agent"]))
         elif t == "session.cancel":

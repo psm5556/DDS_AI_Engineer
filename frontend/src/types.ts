@@ -67,7 +67,7 @@ export interface ApiToken { id: number; name: string; created_at: string; last_u
 
 export interface Attachment { id: number; project_id: number; filename: string; size: number; sha256: string; created_at: string }
 export interface LocalEntry { name: string; path: string; dir: boolean; size: number | null; modified: string }
-export interface LocalTree { root: string; path: string; entries: LocalEntry[] }
+export interface LocalTree { root: string; path: string; entries: LocalEntry[]; custom?: boolean }
 export interface FieldModel {
   id: number; study_id: number; field: string; n_nodes: number; n_train: number; shape_varies: boolean;
   info: { modes?: number; value_modes?: number; geometry_modes?: number; energy?: number; value_error?: number; geometry_error?: number };

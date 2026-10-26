@@ -381,6 +381,15 @@ class LocalOpen(BaseModel):
     with_viewer: bool = False  # True면 결과 파일을 등록된 CAE 뷰어로 연다
 
 
+class LocalFolder(BaseModel):
+    path: str | None = Field(None, max_length=1000)  # 내 PC의 절대 경로. None이면 기본 위치(작업 공간 아래)
+
+
+class FolderPick(BaseModel):
+    initial: str | None = Field(None, max_length=1000)
+    title: str | None = Field(None, max_length=100)
+
+
 class FieldModelResponse(ORM):
     id: int
     study_id: int

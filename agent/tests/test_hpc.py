@@ -84,6 +84,33 @@ def test_project_folder_identity(tmp_path):
     assert ws.project_dir(1) == c  # uid 모르는 호출(MCP)은 가장 최근 폴더
 
 
+def test_custom_project_folder(tmp_path):
+    """프로젝트마다 내 PC 작업 폴더를 직접 정한다: 정하면 그 폴더를, 되돌리면 원래 기본 폴더를 쓴다."""
+    import pytest
+
+    from agent.dds_agent.workspace import Workspace
+
+    ws = Workspace(tmp_path / "ws", "http://srv")
+    default = ws.project_dir(3, "브래킷", "uid333")
+    mine = tmp_path / "Work" / "브래킷_개선"
+    info = ws.set_folder(3, "브래킷", "uid333", str(mine))
+    assert info["custom"] and Path(info["path"]) == mine.resolve()
+    assert ws.project_dir(3, "브래킷", "uid333") == mine.resolve()
+    assert (mine / "inputs").is_dir() and (mine / "project.json").is_file()
+    assert ws.project_dir(3) == mine.resolve()  # uid 모르는 MCP 툴도 같은 폴더(index.json의 절대 경로)
+    assert ws.tree(3, "", "브래킷", project_uid="uid333")["custom"] is True
+    # 다른 프로젝트가 쓰는 폴더 · 드라이브 최상위 · 상대 경로는 거부
+    other = ws.project_dir(4, "다른", "uid444")
+    for bad in (str(other), Path(mine.anchor).as_posix(), "relative\\dir"):
+        with pytest.raises(ValueError):
+            ws.set_folder(3, "브래킷", "uid333", bad)
+    # 기본 위치로 되돌리면 원래 폴더(파일 그대로)
+    (default / "inputs" / "a.stp").write_text("A")
+    back = ws.set_folder(3, "브래킷", "uid333", None)
+    assert not back["custom"] and Path(back["path"]) == default
+    assert (default / "inputs" / "a.stp").exists()
+
+
 def test_tool_catalog_consistent():
     """지원 툴 목록(catalog)의 스킬 폴더·실행 키·경로 키가 실제로 모두 있다."""
     from pathlib import Path
