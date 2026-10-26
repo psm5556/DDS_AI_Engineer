@@ -47,7 +47,7 @@ def main():
                                  stdout=out, stderr=subprocess.STDOUT)
         lived = time.time() - started
         if rc == RESTART_CODE:
-            log(f"업데이트 완료 → {read('current.txt')}로 재시작")
+            log(f"다시 시작 → {read('current.txt')}")
             just_updated, crashes = True, 0
             continue
         if rc == 0:

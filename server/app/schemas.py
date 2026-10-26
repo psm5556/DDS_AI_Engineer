@@ -21,6 +21,12 @@ class UserAdminUpdate(BaseModel):
     display_name: str | None = None
     is_active: bool | None = None
     is_admin: bool | None = None
+    pin: str | None = None  # 관리자가 PIN 초기화 (6자리 숫자)
+
+
+class PinChange(BaseModel):
+    current_pin: str
+    new_pin: str
 
 
 class LoginResponse(BaseModel):
@@ -286,6 +292,15 @@ class ModelResponse(ORM):
 
 class PredictRequest(BaseModel):
     params: dict[str, float]
+
+
+class PredictBatchRequest(BaseModel):
+    points: list[dict[str, float]] = Field(..., max_length=2000)
+
+
+class PredictBatchResponse(BaseModel):
+    mean: dict[str, list[float]]
+    std: dict[str, list[float]]
 
 
 class PredictResponse(BaseModel):

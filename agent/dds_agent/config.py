@@ -40,6 +40,7 @@ class AgentSettings:
     headless_extra_args: list[str] = field(default_factory=lambda: ["--approval-mode", "auto_edit"])
     runner: str = "local"  # local | hpc
     auto_update: bool = True  # 서버에 새 버전이 배포되면 유휴 시 자동 업데이트
+    tray: bool = True  # Windows 트레이 아이콘으로 연결 상태 표시
     max_parallel_cases: int = 1
     tools: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_TOOL_PATHS))
     tool_commands: dict[str, list[str]] = field(default_factory=dict)

@@ -1,0 +1,125 @@
+/* ============================================================================
+   DDS ReDO 디자인 토큰 — 이 앱의 모든 색·글꼴·둥글기·그림자의 단일 원본.
+   다른 프로젝트에서 같은 디자인을 쓰려면 이 파일 + kit.css 를 복사하세요 (DESIGN.md 참고).
+   - 밝은 테마: :root,  어두운 테마: :root[data-theme="dark"]
+   - 주 버튼 색(#2563eb)은 두 테마에서 같게 유지한다 (kit.css의 button.primary 보정).
+   ============================================================================ */
+/* DDS ReDO — 디자인 토큰 (미니멀: 회색 바탕 + 흰 카드 + 선으로 구분, 포인트 색은 기존 앱의 파랑 하나)
+   UI 색상: --brand (주요 버튼·선택·링크)
+   데이터 의미 색상(앱 전체 공통, CLAUDE.md 7.5):
+   - 평균(μ): 청록  --mean
+   - 산포(σ, 공정 고유 변동): 보라  --sigma
+   - 모델 불확실성(데이터 부족): 회청색 + 점선  --epi
+   색만으로 의미를 전달하지 않도록 항상 기호(μ, σ, ±)와 문구를 함께 쓴다. */
+:root {
+  /* 무채색 (zinc) */
+  --ink: #18181b;
+  --ink-2: #52525b;
+  --ink-3: #71717a;
+  --ink-4: #a1a1aa;
+  --paper: #f7f7f8;
+  --panel: #ffffff;
+  --panel-2: #fafafa;
+  --panel-3: #f4f4f5;
+  --line: #ececef;
+  --line-2: #f3f3f5;
+  /* 포인트 = 기존 앱 버튼 색 (blue) */
+  --brand: #2563eb;
+  --brand-hover: #1d4ed8;
+  --brand-500: #3b82f6;
+  --brand-400: #60a5fa;
+  --brand-soft: #eff6ff;
+  --brand-100: #dbeafe;
+  --brand-200: #bfdbfe;
+  /* 데이터 의미 색상 */
+  --mean: #0d9488;
+  --mean-soft: #f0fdfa;
+  --mean-ring: #99f6e4;
+  --sigma: #7c3aed;
+  --sigma-soft: #f5f3ff;
+  --sigma-ring: #ddd6fe;
+  --epi: #64748b;
+  /* 상태 */
+  --ok: #16a34a;   --ok-soft: #f0fdf4;   --ok-ring: #bbf7d0;
+  --warn: #b45309; --warn-soft: #fffbeb; --warn-ring: #fde68a;
+  --err: #dc2626;  --err-soft: #fef2f2;  --err-ring: #fecaca;
+  --info: #1d4ed8; --info-soft: #eff6ff; --info-ring: #bfdbfe;
+  --focus: #3b82f6;
+  --radius-s: 8px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --shadow-card: none;
+  --shadow-card-md: 0 4px 16px rgb(24 24 27 / 0.06);
+  --shadow-modal: 0 24px 64px -16px rgb(24 24 27 / 0.28);
+  --font: "Pretendard Variable", Pretendard, Inter, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --fs-xs: 12px;
+  --fs-s: 13px;
+  --fs-m: 14px;
+  --fs-l: 16px;
+  --fs-xl: 20px;
+  --fs-xxl: 26px;
+  --side-w: 264px;
+  /* 표면·선 보조 토큰 (다크 모드에서 함께 바뀜) */
+  --ink-5: #c4c4cc;
+  --side-bg: #fbfbfc;
+  --hover: #f1f1f4;
+  --active: #ebebf0;
+  --dot: #d4d4d8;
+  --line-strong: #d4d4d8;
+  --vline: #f3f3f6;
+  --row-hover: #fcfcfd;
+  --err-row: #fffafa;
+  --sel: #dbeafe;
+  --sel-head: #bfdbfe;
+  --track: #ececf3;
+  --glass: rgb(255 255 255 / 0.92);
+  --toast-bg: #18181b;
+  --scroll: #d4d4d8;
+  color-scheme: light;
+}
+
+/* ---------- 다크 모드 (html[data-theme="dark"]). 주 버튼은 밝은 테마와 같은 파랑을 유지 ---------- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #f4f4f5;
+  --ink-2: #d4d4d8;
+  --ink-3: #a1a1aa;
+  --ink-4: #7c7c86;
+  --ink-5: #52525b;
+  --paper: #0e0e10;
+  --panel: #17171a;
+  --panel-2: #1b1b1f;
+  --panel-3: #26262b;
+  --line: #2a2a30;
+  --line-2: #222227;
+  --line-strong: #3f3f46;
+  --side-bg: #121214;
+  --hover: #202024;
+  --active: #26262c;
+  --dot: #3f3f46;
+  --vline: #202025;
+  --row-hover: #1c1c20;
+  --err-row: rgb(239 68 68 / 0.07);
+  --sel: rgb(37 99 235 / 0.28);
+  --sel-head: rgb(37 99 235 / 0.4);
+  --track: #2a2a31;
+  --glass: rgb(23 23 26 / 0.9);
+  --toast-bg: #2a2a30;
+  --scroll: #3f3f46;
+  --brand: #3b82f6;          /* 글자·링크·선택 표시는 어두운 바탕에서 읽히도록 조금 밝게 */
+  --brand-hover: #2563eb;
+  --brand-500: #3b82f6;
+  --brand-400: #60a5fa;
+  --brand-soft: rgb(37 99 235 / 0.14);
+  --brand-100: rgb(37 99 235 / 0.24);
+  --brand-200: rgb(59 130 246 / 0.38);
+  --mean: #2dd4bf;   --mean-soft: rgb(45 212 191 / 0.1);  --mean-ring: rgb(45 212 191 / 0.3);
+  --sigma: #a78bfa;  --sigma-soft: rgb(167 139 250 / 0.12); --sigma-ring: rgb(167 139 250 / 0.3);
+  --epi: #94a3b8;
+  --ok: #4ade80;   --ok-soft: rgb(34 197 94 / 0.13);  --ok-ring: rgb(34 197 94 / 0.3);
+  --warn: #fbbf24; --warn-soft: rgb(245 158 11 / 0.12); --warn-ring: rgb(245 158 11 / 0.3);
+  --err: #f87171;  --err-soft: rgb(239 68 68 / 0.12);  --err-ring: rgb(239 68 68 / 0.32);
+  --info: #93c5fd; --info-soft: rgb(37 99 235 / 0.14); --info-ring: rgb(59 130 246 / 0.32);
+  --shadow-card-md: 0 4px 16px rgb(0 0 0 / 0.35);
+  --shadow-modal: 0 24px 64px -16px rgb(0 0 0 / 0.7);
+}

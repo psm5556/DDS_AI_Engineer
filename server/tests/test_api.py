@@ -17,11 +17,11 @@ def client():
 
 
 def _auth(client, username, admin_headers=None):
-    client.post("/api/auth/register", json={"username": username, "password": "password123", "display_name": username})
+    client.post("/api/auth/register", json={"username": username, "pin": "123456", "display_name": username})
     if admin_headers:
         uid = next(u["id"] for u in client.get("/api/users", headers=admin_headers).json() if u["username"] == username)
         client.put(f"/api/users/{uid}", json={"is_active": True}, headers=admin_headers)
-    r = client.post("/api/auth/login", json={"username": username, "password": "password123"})
+    r = client.post("/api/auth/login", json={"username": username, "pin": "123456"})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}, r.json()["user"]
 
@@ -30,8 +30,8 @@ def test_auth_and_sharing(client):
     admin, admin_user = _auth(client, "admin")
     assert admin_user["is_admin"]
     # 두 번째 사용자는 승인 전 로그인 불가
-    client.post("/api/auth/register", json={"username": "kim", "password": "password123", "display_name": "김"})
-    assert client.post("/api/auth/login", json={"username": "kim", "password": "password123"}).status_code == 403
+    client.post("/api/auth/register", json={"username": "kim", "pin": "123456", "display_name": "김"})
+    assert client.post("/api/auth/login", json={"username": "kim", "pin": "123456"}).status_code == 403
     kim, kim_user = _auth(client, "kim", admin)
 
     p = client.post("/api/projects", json={"name": "브래킷 최적화"}, headers=admin).json()
@@ -107,3 +107,19 @@ def test_doe_train_bo_on_server_mock(client):
     arts = client.get(f"/api/projects/{pid}/artifacts", headers=admin).json()
     kinds = {a["kind"] for a in arts}
     assert {"scatter", "table", "line"} <= kinds
+
+
+def test_pin_rules_and_lockout(client):
+    admin, _ = _auth(client, "admin")
+    r = client.post("/api/auth/register", json={"username": "lee", "pin": "12ab56", "display_name": "이"})
+    assert r.status_code == 400  # 숫자 6자리만
+    client.post("/api/auth/register", json={"username": "lee", "pin": "654321", "display_name": "이"})
+    uid = next(u["id"] for u in client.get("/api/users", headers=admin).json() if u["username"] == "lee")
+    client.put(f"/api/users/{uid}", json={"is_active": True}, headers=admin)
+    for _ in range(5):
+        assert client.post("/api/auth/login", json={"username": "lee", "pin": "000000"}).status_code == 401
+    # 5회 실패 → 맞는 PIN도 잠김
+    assert client.post("/api/auth/login", json={"username": "lee", "pin": "654321"}).status_code == 423
+    # 관리자 PIN 초기화 → 잠금 해제
+    client.put(f"/api/users/{uid}", json={"pin": "111222"}, headers=admin)
+    assert client.post("/api/auth/login", json={"username": "lee", "pin": "111222"}).status_code == 200

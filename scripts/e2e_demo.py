@@ -36,8 +36,8 @@ def main():
     try:
         c = httpx.Client(base_url=BASE, timeout=30)
         wait_for(lambda: _ok(c), what="서버 시작")
-        c.post("/api/auth/register", json={"username": "admin", "password": "password123", "display_name": "관리자"})
-        tok = c.post("/api/auth/login", json={"username": "admin", "password": "password123"}).json()["access_token"]
+        c.post("/api/auth/register", json={"username": "admin", "pin": "123456", "display_name": "관리자"})
+        tok = c.post("/api/auth/login", json={"username": "admin", "pin": "123456"}).json()["access_token"]
         c.headers["Authorization"] = f"Bearer {tok}"
         api_token = c.post("/api/tokens", json={"name": "e2e"}).json()["token"]
 

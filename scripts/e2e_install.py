@@ -45,13 +45,13 @@ def main():
     try:
         c = httpx.Client(base_url=BASE, timeout=60)
         wait_for(lambda: c.get("/api/auth/me").status_code == 401, what="서버 시작")
-        c.post("/api/auth/register", json={"username": "admin", "password": "password123", "display_name": "관리자"})
-        jwt = c.post("/api/auth/login", json={"username": "admin", "password": "password123"}).json()["access_token"]
+        c.post("/api/auth/register", json={"username": "admin", "pin": "123456", "display_name": "관리자"})
+        jwt = c.post("/api/auth/login", json={"username": "admin", "pin": "123456"}).json()["access_token"]
         c.headers["Authorization"] = f"Bearer {jwt}"
         token = c.post("/api/tokens", json={"name": "설치 테스트"}).json()["token"]
 
         pub = [sys.executable, "scripts/build_agent_bundle.py", "--publish", "--server", BASE,
-               "--user", "admin", "--password", "password123"]
+               "--user", "admin", "--pin", "123456"]
         subprocess.check_call(pub + ["--version", "0.9.0", "--notes", "첫 배포"], cwd=ROOT)
 
         print("▶ 원클릭 설치 실행 (irm | iex)")

@@ -20,9 +20,11 @@ class User(TimestampMixin, Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(100), unique=True, nullable=False)
     display_name = Column(String(100), nullable=False)
-    password_hash = Column(String(300), nullable=False)
+    pin_hash = Column(String(300), nullable=False)  # 6자리 PIN의 PBKDF2 해시
     is_admin = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=False, nullable=False)  # 관리자 승인 후 True
+    failed_logins = Column(Integer, default=0, nullable=False)
+    locked_until = Column(DateTime)  # PIN 연속 실패 시 잠금
 
 
 class ApiToken(Base):

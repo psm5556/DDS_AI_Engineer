@@ -1,33 +1,41 @@
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..deps import (create_access_token, get_current_user, hash_password, new_api_token, require_admin,
-                    verify_password)
+from ..deps import (LOCK_MINUTES, MAX_FAILED_LOGINS, PIN_RE, create_access_token, get_current_user, hash_password,
+                    new_api_token, require_admin, verify_password)
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
     username: str
-    password: str
+    pin: str
 
 
 class RegisterRequest(LoginRequest):
     display_name: str
 
 
+def _check_pin(pin: str):
+    if not PIN_RE.match(pin or ""):
+        raise HTTPException(400, "PIN은 숫자 6자리여야 합니다")
+
+
 @router.post("/auth/register", response_model=schemas.UserResponse)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
-    if len(body.password) < 8:
-        raise HTTPException(400, "비밀번호는 8자 이상이어야 합니다")
+    _check_pin(body.pin)
+    if not body.username.strip():
+        raise HTTPException(400, "아이디를 입력하세요")
     if db.query(models.User).filter_by(username=body.username).first():
         raise HTTPException(409, "이미 사용 중인 아이디입니다")
     first = db.query(models.User).count() == 0
-    u = models.User(username=body.username, display_name=body.display_name,
-                    password_hash=hash_password(body.password), is_admin=first, is_active=first)
+    u = models.User(username=body.username.strip(), display_name=body.display_name.strip() or body.username,
+                    pin_hash=hash_password(body.pin), is_admin=first, is_active=first)
     db.add(u)
     db.commit()
     return u
@@ -35,12 +43,34 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/auth/login", response_model=schemas.LoginResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
+    """PIN 6자리 로그인. 연속 5회 틀리면 10분 잠금(무작위 대입 방지)."""
     u = db.query(models.User).filter_by(username=body.username).first()
-    if not u or not verify_password(body.password, u.password_hash):
-        raise HTTPException(401, "아이디 또는 비밀번호가 올바르지 않습니다")
+    now = datetime.now()
+    if u and u.locked_until and u.locked_until > now:
+        left = int((u.locked_until - now).total_seconds() // 60) + 1
+        raise HTTPException(423, f"PIN을 여러 번 틀려 잠겼습니다. {left}분 뒤 다시 시도하거나 관리자에게 초기화를 요청하세요")
+    if not u or not verify_password(body.pin, u.pin_hash):
+        if u:
+            u.failed_logins += 1
+            if u.failed_logins >= MAX_FAILED_LOGINS:
+                u.failed_logins, u.locked_until = 0, now + timedelta(minutes=LOCK_MINUTES)
+            db.commit()
+        raise HTTPException(401, "아이디 또는 PIN이 올바르지 않습니다")
     if not u.is_active:
         raise HTTPException(403, "관리자 승인을 기다리고 있습니다")
+    u.failed_logins, u.locked_until = 0, None
+    db.commit()
     return {"access_token": create_access_token(u), "user": u}
+
+
+@router.put("/auth/pin")
+def change_pin(body: schemas.PinChange, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not verify_password(body.current_pin, user.pin_hash):
+        raise HTTPException(400, "현재 PIN이 올바르지 않습니다")
+    _check_pin(body.new_pin)
+    user.pin_hash = hash_password(body.new_pin)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/auth/me", response_model=schemas.UserResponse)
@@ -94,5 +124,8 @@ def update_user(user_id: int, body: schemas.UserAdminUpdate, admin: models.User 
     for k in ("is_active", "is_admin", "display_name"):
         if getattr(body, k) is not None:
             setattr(u, k, getattr(body, k))
+    if body.pin is not None:
+        _check_pin(body.pin)
+        u.pin_hash, u.failed_logins, u.locked_until = hash_password(body.pin), 0, None
     db.commit()
     return u

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -22,7 +23,12 @@ API_TOKEN_PREFIX = "dds_"
 _bearer = HTTPBearer(auto_error=False)
 
 
-# ---------- 비밀번호 / 토큰 ----------
+# ---------- PIN / 토큰 ----------
+PIN_RE = re.compile(r"^\d{6}$")
+MAX_FAILED_LOGINS = 5
+LOCK_MINUTES = 10
+
+
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 240_000).hex()

@@ -144,3 +144,17 @@ def predict(model_id: int, body: schemas.PredictRequest, user=Depends(get_curren
         raise HTTPException(400, f"입력값이 없습니다: {', '.join(missing)}")
     mean, std = sur.predict(np.array([[body.params[v] for v in sur.variables]]))
     return {"mean": {k: float(v[0]) for k, v in mean.items()}, "std": {k: float(v[0]) for k, v in std.items()}}
+
+
+@router.post("/models/{model_id}/predict_batch", response_model=schemas.PredictBatchResponse)
+def predict_batch(model_id: int, body: schemas.PredictBatchRequest, user=Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+    """Simulator 민감도 곡선용 여러 점 예측."""
+    m = _model(model_id, user, db)
+    sur = service.load_surrogate(m)
+    try:
+        X = np.array([[p[v] for v in sur.variables] for p in body.points])
+    except KeyError as e:
+        raise HTTPException(400, f"입력값이 없습니다: {e}")
+    mean, std = sur.predict(X)
+    return {"mean": {k: v.tolist() for k, v in mean.items()}, "std": {k: v.tolist() for k, v in std.items()}}

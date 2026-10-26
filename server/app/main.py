@@ -71,10 +71,10 @@ async def ws_browser(ws: WebSocket, token: str | None = None):
 @app.websocket("/ws/agent")
 async def ws_agent(ws: WebSocket, token: str | None = None):
     user = _auth_ws(token)
-    if not user:
-        await ws.close(code=4401)
-        return
     await ws.accept()
+    if not user:
+        await ws.close(code=4401, reason="invalid token")  # Agent가 '토큰 오류'로 구분할 수 있게 accept 후 닫는다
+        return
     conn = AgentConnection(ws, user.id, asyncio.get_running_loop())
     registry.add(conn)
     hub.forget_user(user.id)

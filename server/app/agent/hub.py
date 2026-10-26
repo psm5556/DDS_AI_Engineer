@@ -179,7 +179,7 @@ class AgentHub:
         if not st:
             return
         tc = params.get("toolCall") or {}
-        payload = {"request_id": request_id, "title": tc.get("title") or "툴 실행", "kind": tc.get("kind"),
+        payload = {"request_id": request_id, "title": tc.get("title") or "툴 실행", "tool_kind": tc.get("kind"),
                    "raw_input": tc.get("rawInput"), "options": params.get("options", [])}
         st.pending_permissions[request_id] = payload
         self._broadcast(st, {"kind": "permission_request", **payload})

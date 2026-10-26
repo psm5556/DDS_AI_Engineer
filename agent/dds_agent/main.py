@@ -26,6 +26,7 @@ from .executor import CaseExecutor
 from .headless_runner import HeadlessRunner
 from .runner import AgentError, AgentRunner
 from .server_api import ServerApi
+from .tray import Tray
 
 log = logging.getLogger("dds-agent")
 HEARTBEAT_SEC = 30
@@ -49,6 +50,8 @@ class Agent:
         self.update_state = "idle"  # idle | pending:<ver> | installing:<ver> | restarting:<ver> | failed: ...
         self._update_task: asyncio.Task | None = None
         self.restart = False
+        self.quit = False
+        self.tray: Tray | None = None
 
     # ---------- 러너 ----------
     def runner(self, name: str) -> AgentRunner:
@@ -156,6 +159,8 @@ class Agent:
         while self.busy() and not force:  # 작업 중이면 끝날 때까지 기다린다
             await asyncio.sleep(10)
         self.update_state = f"installing:{version}"
+        if self.tray:
+            self.tray.set("updating", version)
         try:
             ok = await asyncio.to_thread(updater.apply_update, self.api, version, sha256)
         except Exception as e:
@@ -164,19 +169,43 @@ class Agent:
             return
         if ok:
             self.update_state = f"restarting:{version}"
+            if self.tray:
+                self.tray.notify(f"새 버전 {version}(으)로 다시 시작합니다")
             await self._send_heartbeat()
             self.restart = True
             if self.ws:
                 await self.ws.close()
 
-    async def _check_latest(self):
-        if not self.s.auto_update:
+    async def _check_latest(self, manual: bool = False):
+        if not (self.s.auto_update or manual):
             return
         try:
             latest = await asyncio.to_thread(self.api.get, "/api/agent/releases/latest")
+            if manual and self.tray and not updater.is_newer(latest["version"]):
+                self.tray.notify(f"최신 버전입니다 ({__version__})")
             self.schedule_update(latest["version"], latest["sha256"])
         except Exception as e:
             log.debug("최신 버전 확인 실패: %s", e)
+            if manual and self.tray:
+                self.tray.notify("배포된 버전 정보를 가져오지 못했습니다")
+
+    # ---------- 트레이 ----------
+    def _start_tray(self):
+        if not self.s.tray:
+            return
+        home = updater.install_home()
+        call = lambda coro: asyncio.run_coroutine_threadsafe(coro, self.loop)  # noqa: E731 — 트레이 스레드 → 이벤트 루프
+        self.tray = Tray(__version__, self.s.server_url, self.s.workspace_dir, home / "logs" if home else None,
+                         on_check_update=lambda: call(self._check_latest(manual=True)),
+                         on_restart=lambda: call(self._stop(restart=True)),
+                         on_quit=lambda: call(self._stop(restart=False)))
+        if not self.tray.start():
+            self.tray = None
+
+    async def _stop(self, restart: bool):
+        self.restart, self.quit = restart, not restart
+        if self.ws:
+            await self.ws.close()
 
     async def _send_heartbeat(self):
         if self.ws:
@@ -237,13 +266,18 @@ class Agent:
             log.error("토큰이 없습니다. 웹앱 > 설정 > PC Agent 토큰을 발급해 agent.toml의 token에 넣으세요.")
             return
         delay = 1
+        self._start_tray()
         asyncio.create_task(self._background())
-        while not self.restart:
+        while not (self.restart or self.quit):
             try:
                 async with websockets.connect(f"{self.s.ws_url}?token={self.s.token}", max_size=16 * 1024 * 1024,
                                               ping_interval=20) as ws:
                     self.ws, delay = ws, 1
                     log.info("서버에 연결됨: %s", self.s.server_url)
+                    if self.tray:
+                        if self.tray.state != "connected":
+                            self.tray.notify("웹앱에 연결되었습니다")
+                        self.tray.set("connected", self.s.server_url)
                     await ws.send(json.dumps(self.hello(), ensure_ascii=False))
                     await self._send_heartbeat()
                     asyncio.create_task(self._check_latest())
@@ -251,20 +285,30 @@ class Agent:
                         await self.handle(json.loads(raw))
             except (OSError, websockets.WebSocketException) as e:
                 code = getattr(getattr(e, "rcvd", None), "code", None)
-                if code == 4401:
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                if code == 4401 or status in (401, 403):
                     log.error("토큰이 유효하지 않습니다. 새 토큰을 발급하세요.")
+                    if self.tray:
+                        self.tray.set("error", "토큰이 유효하지 않음 — 다시 설치하세요")
+                        self.tray.notify("토큰이 유효하지 않습니다. 웹앱 설정에서 새 토큰으로 다시 설치하세요.")
+                    while not self.quit:  # 트레이에서 상태를 볼 수 있게 프로세스는 유지
+                        await asyncio.sleep(5)
                     return
                 log.warning("서버 연결 끊김(%s). %d초 후 재시도", e, delay)
             finally:
                 self.ws = None
-            if self.restart:
+            if self.restart or self.quit:
                 break
+            if self.tray:
+                self.tray.set("connecting", "서버에 다시 연결하는 중")
             await asyncio.sleep(delay)
             delay = min(delay * 2, 30)
 
     def shutdown(self):
         for r in self.runners.values():
             r.shutdown()
+        if self.tray:
+            self.tray.stop()
 
 
 def main():
