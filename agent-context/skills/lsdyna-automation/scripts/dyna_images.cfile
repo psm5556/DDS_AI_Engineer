@@ -1,0 +1,10 @@
+open d3plot "d3plot"
+ac
+anim last
+fringe 9
+pfringe
+print png "images/vonmises_last.png" LANDSCAPE nocompress gamma 1.000 opaque enlisted "OGL1x1"
+fringe 7
+pfringe
+print png "images/eps_last.png" LANDSCAPE nocompress gamma 1.000 opaque enlisted "OGL1x1"
+quit

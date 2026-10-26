@@ -1,0 +1,182 @@
+# encoding: utf-8
+# DDS template - Ansys Workbench journal (IronPython 2.7, py2 syntax, no f-strings)
+# Run   : tool key "ansys_wb"  ->  runwb2 -B -R wb_param_update.wbjn
+# In    : <case>/params.json  {"thickness": 2.5, "rib_height": 12.0}
+# Out   : <case>/results.json {"max_mises": ..., "mass": ...}
+#         <case>/wb_designpoints.csv (record of parameter table)
+# Prereq: Workbench project whose input/output parameters are already defined
+#         (P-boxes checked in DesignModeler/SpaceClaim/Mechanical).
+# Tip   : verify every call below with File > Scripting > Record Journal on your version.
+import os
+import json
+import codecs
+
+# SetScriptVersion(Version="24.2")  # TODO(사내검증): copy the line a recorded journal writes for your version
+
+# ---------------------------------------------------------------- settings
+CASE_DIR = os.environ.get("DDS_CASE_DIR") or os.getcwd()   # TODO(사내검증): confirm runwb2 keeps cwd
+CASE_DIR = CASE_DIR.replace("\\", "/")
+
+PROJECT_ARCHIVE = "bracket.wbpz"    # copied into case dir by the study "inputs"; set None to open .wbpj
+PROJECT_FILE = "bracket.wbpj"       # unarchive target (or existing project when PROJECT_ARCHIVE is None)
+
+# params.json key -> Workbench parameter Name ("P1") or DisplayText. Missing keys are matched by DisplayText.
+INPUT_MAP = {
+    "thickness": "P1",
+    "rib_height": "P2",
+}
+# Units appended to the expression. Leave a key out to send the bare number.
+UNIT_MAP = {
+    "thickness": "mm",
+    "rib_height": "mm",
+}
+# results.json key -> output parameter Name/DisplayText
+OUTPUT_MAP = {
+    "max_mises": "P3",
+    "mass": "P4",
+    "max_disp": "P5",
+}
+DESIGN_POINT = "0"                  # "0" = Current design point
+SAVE_PROJECT = False                # True keeps the solved project in the case dir (disk usage!)
+EXPORT_IMAGES = False               # Mechanical image export via SendCommand - TODO(사내검증)
+MECH_SYSTEM_NAME = "SYS"            # system name in the schematic (Properties of the system cell)
+
+
+# ---------------------------------------------------------------- helpers
+def case_path(name):
+    return CASE_DIR + "/" + name
+
+
+def read_json(path):
+    f = codecs.open(path, "r", "utf-8")
+    try:
+        return json.loads(f.read())
+    finally:
+        f.close()
+
+
+def write_json(path, data):
+    f = codecs.open(path, "w", "utf-8")
+    try:
+        f.write(json.dumps(data, indent=2, sort_keys=True))
+    finally:
+        f.close()
+
+
+def find_param(name):
+    p = None
+    try:
+        p = Parameters.GetParameter(Name=name)
+    except Exception:
+        p = None
+    if p is not None:
+        return p
+    for q in Parameters.GetAllParameters():
+        try:
+            if q.DisplayText == name or q.Name == name:
+                return q
+        except Exception:
+            pass
+    return None
+
+
+def to_float(value):
+    # Output parameter .Value is usually a Quantity (number + unit); handle float/str as well.
+    try:
+        return float(value.Value)
+    except Exception:
+        pass
+    try:
+        return float(value)
+    except Exception:
+        pass
+    text = str(value).split("[")[0].strip()
+    return float(text)
+
+
+def log(msg):
+    print("[DDS] " + msg)
+
+
+# ---------------------------------------------------------------- main
+params = read_json(case_path("params.json"))
+log("case dir: " + CASE_DIR)
+log("params: " + json.dumps(params))
+
+# remove stale result so a failed run cannot look successful
+if os.path.exists(case_path("results.json")):
+    os.remove(case_path("results.json"))
+
+if PROJECT_ARCHIVE:
+    Unarchive(ArchivePath=case_path(PROJECT_ARCHIVE),
+              ProjectPath=case_path(PROJECT_FILE),
+              Overwrite=True)
+else:
+    Open(FilePath=case_path(PROJECT_FILE))
+
+dp = Parameters.GetDesignPoint(Name=DESIGN_POINT)
+
+for key in params:
+    pname = INPUT_MAP.get(key, key)
+    p = find_param(pname)
+    if p is None:
+        log("skip param (not found in project): %s -> %s" % (key, pname))
+        continue
+    expr = "%.10g" % float(params[key])
+    unit = UNIT_MAP.get(key)
+    if unit:
+        expr = "%s [%s]" % (expr, unit)
+    dp.SetParameterExpression(Parameter=p, Expression=expr)
+    log("set %s (%s) = %s" % (key, p.Name, expr))
+
+# Geometry -> Mesh -> Setup -> Solution -> output parameters.
+# Raises on failure; for multiple DPs use UpdateAllDesignPoints() instead.
+Update()
+
+try:
+    Parameters.ExportAllDesignPointsData(FilePath=case_path("wb_designpoints.csv"))
+except Exception as e:
+    log("csv export failed: " + str(e))
+
+results = {}
+for key in OUTPUT_MAP:
+    p = find_param(OUTPUT_MAP[key])
+    if p is None:
+        raise Exception("output parameter not found: " + OUTPUT_MAP[key])
+    results[key] = to_float(p.Value)
+    log("out %s (%s) = %s" % (key, p.Name, results[key]))
+
+if EXPORT_IMAGES:
+    # TODO(사내검증): batch-mode Mechanical editing + SendCommand availability depends on version.
+    # Alternative: run dpf_extract_rst.py (tool ansys_python) on the solved .rst.
+    try:
+        img_dir = case_path("images")
+        if not os.path.isdir(img_dir):
+            os.makedirs(img_dir)
+        mech_cmd = (
+            "import os\n"
+            "img_dir = r'" + img_dir.replace("/", "\\\\") + "'\n"
+            "st = Ansys.Mechanical.Graphics.GraphicsImageExportSettings()\n"
+            "st.Resolution = GraphicsResolutionType.EnhancedResolution\n"
+            "st.Background = GraphicsBackgroundType.White\n"
+            "st.Capture = GraphicsCaptureType.ImageAndLegend\n"
+            "for r in Model.Analyses[0].Solution.Children:\n"
+            "    if hasattr(r, 'Maximum'):\n"
+            "        r.Activate()\n"
+            "        Graphics.Camera.SetFit()\n"
+            "        Graphics.ExportImage(os.path.join(img_dir, r.Name.replace(' ', '_') + '.png'),"
+            " GraphicsImageExportFormat.PNG, st)\n"
+        )
+        system = GetSystem(Name=MECH_SYSTEM_NAME)
+        model = system.GetContainer(ComponentName="Model")
+        model.Edit()
+        model.SendCommand(Language="Python", Command=mech_cmd)
+        model.Exit()
+    except Exception as e:
+        log("image export failed (numbers are still written): " + str(e))
+
+if SAVE_PROJECT:
+    Save(Overwrite=True)
+
+write_json(case_path("results.json"), results)
+log("results.json written")

@@ -1,0 +1,88 @@
+! DDS template - classic MAPDL batch input (cantilever block, SOLID186, MPA units)
+! Run through mapdl_batch_driver.py (writes params.inp from params.json), or for a single run:
+!   ANSYSxxx -b -i plate_template.inp -o solve.out   (params.inp must already exist in cwd)
+! Parameters expected in params.inp (uppercase names from params.json keys):
+!   LENGTH, WIDTH, THICKNESS, LOAD_N, MESH_SIZE, E_MOD, DENSITY
+! Output: dds_results.txt ("key value" per line), file000.png ... (contour images)
+/BATCH
+/NERR,5,10000
+! ---- defaults (overridden by params.inp) ----
+LENGTH=100
+WIDTH=20
+THICKNESS=5
+LOAD_N=1000
+MESH_SIZE=2.5
+E_MOD=210000
+POISSON=0.3
+DENSITY=7.85e-9
+/INPUT,params,inp
+!
+/PREP7
+/UNITS,MPA
+ET,1,SOLID186
+MP,EX,1,E_MOD
+MP,PRXY,1,POISSON
+MP,DENS,1,DENSITY
+BLOCK,0,LENGTH,0,WIDTH,0,THICKNESS
+ESIZE,MESH_SIZE
+VMESH,ALL
+NSEL,S,LOC,X,0
+D,ALL,ALL
+NSEL,S,LOC,X,LENGTH
+*GET,NTIP,NODE,0,COUNT
+F,ALL,FZ,-LOAD_N/NTIP
+ALLSEL,ALL
+FINISH
+!
+/SOLU
+ANTYPE,STATIC
+OUTRES,ALL,ALL
+SOLVE
+FINISH
+!
+/POST1
+SET,LAST
+NSORT,S,EQV
+*GET,SMAX,SORT,0,MAX
+NUSORT
+NSORT,U,SUM
+*GET,UMAX,SORT,0,MAX
+NUSORT
+NSEL,S,LOC,X,0
+ESLN,S,0
+FSUM
+*GET,RFZ,FSUM,0,ITEM,FZ
+ALLSEL,ALL
+ETABLE,EVOL,VOLU
+SSUM
+*GET,VTOT,SSUM,0,ITEM,EVOL
+MTOT=VTOT*DENSITY
+!
+! ---- numeric results (Fortran formats; the driver converts this file to results.json) ----
+*CFOPEN,dds_results,txt
+*VWRITE,SMAX
+('max_mises ',E20.10)
+*VWRITE,UMAX
+('max_disp ',E20.10)
+*VWRITE,RFZ
+('reaction_fz ',E20.10)
+*VWRITE,VTOT
+('volume ',E20.10)
+*VWRITE,MTOT
+('mass ',E20.10)
+*CFCLOSE
+!
+! ---- images: file000.png (von Mises), file001.png (USUM) ----
+/SHOW,PNG
+/GFILE,1200
+/RGB,INDEX,100,100,100,0
+/RGB,INDEX,0,0,0,15
+/VIEW,1,1,1,1
+/ANG,1
+/AUTO,1
+/PLOPTS,DATE,0
+PLNSOL,S,EQV
+PLNSOL,U,SUM
+/SHOW,CLOSE
+FINISH
+/EXIT,NOSAVE
