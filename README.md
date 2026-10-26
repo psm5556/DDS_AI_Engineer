@@ -60,6 +60,9 @@ cd frontend; npm install; npm run build; cd ..
 ```
 - `demo` 에이전트는 Gemini 없이 전체 흐름을 검증하는 시나리오 에이전트다.
   - 흐름: Flow 제안 → 승인 → 권한 → Branin mock DOE → GP → BO → Simulator 배포
+- 전체 과정 데모: 첫 화면에서 에이전트를 "데모(시나리오)"로 고르고 **전체 과정 (CAD→보고서)** 추천을 보낸다.
+  - 흐름: 브래킷 CAD(STL·expression) → 해석 모델(Abaqus .inp, 고정·하중 그림) → DOE 20점 → 질량·응력 예측 모델 + 형상·응력 필드 학습 → 3D Simulator → 결론 게시와 Word·HTML 보고서(`reports/`)
+  - 실제 툴 대신 연습용 스크립트(`agent/dds_agent/demo_scripts/`)와 mock `bracket3d` 솔버를 쓴다.
 - Live Link 연습: 대화에서 "연습용 CAD로 Live Link 해 봐"라고 하거나, `live_launch(tool="practice")`를 쓴다.
 
 ### 테스트

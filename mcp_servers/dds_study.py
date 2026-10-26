@@ -77,9 +77,14 @@ def run_cases(study_id: int, case_ids: list[int] | None = None, dry_run: bool = 
 
 
 @mcp.tool()
-def get_study(study_id: int) -> dict:
-    """스터디 진행 상황(상태별 케이스 수, 실행 중 여부, 현재 최적 케이스)."""
-    return _summary(api.get(f"/api/studies/{study_id}"))
+def get_study(study_id: int, include_cases: bool = False) -> dict:
+    """스터디 진행 상황(상태별 케이스 수, 실행 중 여부, 현재 최적 케이스).
+    include_cases=True면 케이스별 params·results·status도 준다(제약조건을 만족하는 최적 설계를 직접 고를 때)."""
+    out = _summary(api.get(f"/api/studies/{study_id}"))
+    if include_cases:
+        out["cases"] = [{"case_id": c["id"], "status": c["status"], "params": c["params"],
+                         "results": c.get("results")} for c in api.get(f"/api/studies/{study_id}/cases")]
+    return out
 
 
 @mcp.tool()

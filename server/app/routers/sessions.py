@@ -168,6 +168,7 @@ def delete_session(session_id: int, user: models.User = Depends(get_current_user
     chat = _session_for_editor(session_id, user, db)
     if hub.status(session_id)["busy"]:
         raise HTTPException(409, "에이전트가 작업 중인 대화는 지울 수 없습니다. 먼저 중지하세요")
+    hub.forget_chat(chat.id)
     db.delete(chat)
     db.commit()
     return {"ok": True}

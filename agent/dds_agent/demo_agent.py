@@ -12,12 +12,24 @@ import sys
 import threading
 import uuid
 from contextlib import AsyncExitStack
+from pathlib import Path
 from typing import Any
 
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 _write_lock = threading.Lock()
+ROOT = Path(__file__).resolve().parents[2]  # 저장소(또는 설치된 Agent) 루트 — cae_adapters를 찾는다
+SCRIPTS = Path(__file__).resolve().parent / "demo_scripts"
+STRESS_LIMIT = 250.0  # MPa
+
+
+def wants_e2e(body: str) -> bool:
+    """CAD부터 보고서까지 전체 과정을 원하는 요청인지."""
+    b = body.upper()
+    cad = "CAD" in b or "캐드" in body
+    tail = any(k in body for k in ("보고서", "레포트", "리포트")) or "E2E" in b or "전체 과정" in body
+    return cad and tail
 
 
 def send(msg: dict):
@@ -136,15 +148,29 @@ class DemoAgent:
         return outcome.get("outcome") == "selected" and outcome.get("optionId") == "allow"
 
     async def scenario(self, s: DemoSession, text: str):
-        """시나리오 2가지: 기본(Branin 최적화) · '3D'/'형상' 요청(Beam3D 형상·필드 학습 → 3D Simulator)."""
+        """시나리오 3가지: CAD~보고서 전체(브래킷 E2E) · '3D'/'형상' 요청(Beam3D 형상·필드 학습) · 기본(Branin 최적화)."""
         body = text.split("\n\n", 1)[-1]  # 앞의 [DDS 컨텍스트] 줄 제외
         if s.flow_id is None:
-            s.mode = "beam3d" if ("3D" in body or "형상" in body) else "branin"
+            s.mode = "bracket" if wants_e2e(body) else "beam3d" if ("3D" in body or "형상" in body) else "branin"
             await s.say("요청을 분석하고 있습니다. 전체 작업 흐름을 먼저 제안할게요.", thought=True)
             if "[첨부 파일" in body:
                 files = [ln.strip("- ").split(" (")[0] for ln in body.splitlines() if ln.startswith("- inputs/")]
                 await s.say(f"첨부하신 파일을 작업 폴더에서 확인했습니다: {', '.join(files)}\n\n")
-            if s.mode == "beam3d":
+            if s.mode == "bracket":
+                title, desc = "브래킷 E2E 설계", "CAD → 해석 모델 → DOE → 형상·응력 학습 → 3D Simulator → 보고서"
+                nodes = [
+                    {"id": "cad", "label": "브래킷 CAD 생성", "type": "cad", "tool": "nx", "detail": "플레이트+리브, 두께·리브 높이 파라미터"},
+                    {"id": "pre", "label": "해석 모델 구성", "type": "pre", "tool": "abaqus", "detail": "강재 · 벽 고정 · 끝단 2 kN"},
+                    {"id": "doe", "label": "DOE 20점 (LHS)", "type": "doe", "detail": "두께 6~14, 리브 10~40 mm"},
+                    {"id": "solve", "label": "케이스 해석 20건", "type": "solve", "tool": "abaqus", "detail": "응력 필드 저장"},
+                    {"id": "train", "label": "질량·응력 예측 모델", "type": "train", "detail": "GP"},
+                    {"id": "field", "label": "형상·응력 필드 학습", "type": "train", "detail": "PCA + GP"},
+                    {"id": "deploy", "label": "3D Simulator 배포", "type": "deploy"},
+                    {"id": "report", "label": "보고서 작성", "type": "post", "detail": "Word · HTML"},
+                ]
+                pairs = [("cad", "pre"), ("pre", "doe"), ("doe", "solve"), ("solve", "train"), ("solve", "field"),
+                         ("train", "deploy"), ("field", "deploy"), ("deploy", "report")]
+            elif s.mode == "beam3d":
                 title, desc = "외팔보 3D 응력 예측", "mock 3D 외팔보로 DOE → 형상·필드 학습 → 3D Simulator 검증"
                 nodes = [
                     {"id": "doe", "label": "DOE 16점 (LHS)", "type": "doe", "tool": "mock", "detail": "폭 10~40, 높이 20~80 mm"},
@@ -176,12 +202,15 @@ class DemoAgent:
             await s.say(f"현재 플로우 상태가 '{flow['status']}'입니다. 승인 후 다시 요청해 주세요.")
             return
         n_cases = 16 if s.mode == "beam3d" else 20
-        if not await self.ask_permission(s, "Mock 솔버로 케이스 실행", {"study": s.mode, "cases": n_cases}):
+        title = "CAD·해석 모델 생성 후 케이스 해석 실행" if s.mode == "bracket" else "Mock 솔버로 케이스 실행"
+        if not await self.ask_permission(s, title, {"study": s.mode, "cases": n_cases}):
             await s.say("실행 권한이 거부되어 중단했습니다.")
             return
         fid = s.flow_id
         node = lambda nid, st, d=None: s.tool("dds-flow", "update_node", {"flow_id": fid, "node_id": nid, "status": st, "detail": d})
-        if s.mode == "beam3d":
+        if s.mode == "bracket":
+            await self._bracket(s, fid, node)
+        elif s.mode == "beam3d":
             await self._beam3d(s, fid, node)
         else:
             await self._branin(s, fid, node)
@@ -238,6 +267,104 @@ class DemoAgent:
         d = await s.tool("dds-study", "deploy_model", {"model_id": m["model_id"]})
         await node("deploy", "complete")
         await s.say(f"완료했습니다. 응력 필드와 처짐 형상을 학습했고, 3D Simulator(모델 #{d['model_id']})에서 폭·높이를 바꾸며 바로 볼 수 있습니다.")
+
+
+    async def _bracket(self, s, fid, node):
+        """브래킷 E2E: CAD → 해석 모델 → DOE·해석 → 예측 모델 + 형상·필드 학습 → 3D Simulator → 보고서."""
+        base = {"thickness": 10.0, "rib_height": 25.0}
+
+        async def script(node_id, name, title, params):
+            r = await s.tool("dds-cae", "run_script", {
+                "tool": "python", "script": (SCRIPTS / name).read_text(encoding="utf-8"), "filename": name,
+                "args": [str(ROOT)], "params": params, "publish_images": False, "flow_id": fid, "node_id": node_id})
+            if not r.get("ok"):
+                raise RuntimeError(f"{name} 실패: {r.get('stderr_tail') or r.get('error')}")
+            for img in sorted(Path(r["run_dir"], "images").glob("*.png")):
+                await s.tool("dds-flow", "publish_image", {"path": str(img), "title": title, "caption": img.name,
+                                                           "flow_id": fid, "node_id": node_id})
+            return r["results"]
+
+        # 1) CAD
+        await node("cad", "in_progress")
+        await s.say("브래킷 CAD를 파라메트릭으로 만듭니다(두께·리브 높이를 expression으로).\n\n", thought=True)
+        cad = await script("cad", "bracket_cad.py", "브래킷 CAD 형상", base)
+        await s.tool("dds-flow", "publish_artifact", {
+            "kind": "table", "title": "CAD 파라미터 (expression)", "flow_id": fid, "node_id": "cad",
+            "payload": {"columns": ["이름", "값", "설명"], "rows": [
+                ["L", 200, "브래킷 길이 [mm]"], ["W", 60, "플레이트 폭 [mm]"], ["rib_t", 6, "리브 두께 [mm]"],
+                ["thickness", base["thickness"], "플레이트 두께 [mm] — 설계변수"],
+                ["rib_height", base["rib_height"], "리브 높이 [mm] — 설계변수"]]}})
+        await node("cad", "complete", f"체적 {cad['volume_mm3'] / 1000:,.0f} cm³ · cad/bracket.stl")
+
+        # 2) 해석 모델
+        await node("pre", "in_progress")
+        pre = await script("pre", "bracket_model.py", "해석 모델 (메쉬·경계조건·하중)", base)
+        await node("pre", "complete", f"S3 {pre['elements']:,}요소 · 고정 {pre['fixed_nodes']}절점 · model/bracket.inp")
+
+        # 3) DOE + 케이스 해석
+        await node("doe", "in_progress")
+        study = await s.tool("dds-study", "create_study", {
+            "name": "브래킷 DOE", "adapter": "mock", "adapter_config": {"function": "bracket3d", "delay_sec": 0.05},
+            "variables": [{"name": "thickness", "lower": 6, "upper": 14}, {"name": "rib_height", "lower": 10, "upper": 40}],
+            "objectives": [{"name": "mass", "goal": "min"}]})
+        sid = study["study_id"]
+        await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 20, "seed": 11, "flow_id": fid, "node_id": "doe"})
+        await node("doe", "complete")
+        await node("solve", "in_progress")
+        r = await s.tool("dds-study", "run_cases", {"study_id": sid})
+        await node("solve", "complete", f"완료 {r['counts'].get('complete', 0)}건 · 응력 필드 저장")
+
+        # 4) 예측 모델 + 형상·필드 학습
+        await node("train", "in_progress")
+        m = await s.tool("dds-study", "train_surrogate", {"study_id": sid, "outputs": ["mass", "max_stress", "deflection"],
+                                                          "flow_id": fid, "node_id": "train"})
+        r2 = {k: v["r2"] for k, v in m["metrics"].items()}
+        await node("train", "complete", f"R² 질량 {r2['mass']:.3f} · 응력 {r2['max_stress']:.3f}")
+        await node("field", "in_progress")
+        fm = await s.tool("dds-study", "train_field_model", {"study_id": sid, "field": "stress", "flow_id": fid, "node_id": "field"})
+        await node("field", "complete", f"모드 {fm['info']['modes']}개 · 노드 {fm['nodes']:,}")
+
+        # 5) Simulator 배포
+        await node("deploy", "in_progress")
+        d = await s.tool("dds-study", "deploy_model", {"model_id": m["model_id"]})
+        await node("deploy", "complete", f"모델 #{d['model_id']}")
+
+        # 6) 보고서: 응력 제한을 만족하는 최경량 설계를 골라 결론을 쓰고, Word·HTML로 저장
+        await node("report", "in_progress")
+        st = await s.tool("dds-study", "get_study", {"study_id": sid, "include_cases": True})
+        done = [c for c in st["cases"] if c["status"] == "complete"]
+        ok = sorted((c for c in done if c["results"]["max_stress"] <= STRESS_LIMIT), key=lambda c: c["results"]["mass"])
+        best = ok[0] if ok else min(done, key=lambda c: c["results"]["max_stress"])
+        bp, br = best["params"], best["results"]
+        pred = await s.tool("dds-study", "predict", {"model_id": m["model_id"], "params": base})
+        mean = pred.get("mean", pred)
+        await s.tool("dds-flow", "publish_artifact", {
+            "kind": "markdown", "title": "결론 및 권고", "flow_id": fid, "node_id": "report",
+            "payload": {"text": (
+                "## 브래킷 설계 결론\n"
+                f"- 하중 2 kN, 응력 제한 {STRESS_LIMIT:.0f} MPa 조건에서 DOE {len(done)}건 중 "
+                f"**{len(ok)}건**이 제한을 만족했습니다.\n"
+                f"- 최경량 설계: 두께 **{bp['thickness']:.1f} mm**, 리브 높이 **{bp['rib_height']:.1f} mm** → "
+                f"질량 {br['mass']:.0f} g, 최대 응력 {br['max_stress']:.0f} MPa, 처짐 {br['deflection']:.2f} mm\n"
+                f"- 기준 설계(두께 10, 리브 25) 예측: 질량 {mean.get('mass', 0):.0f} g, 응력 {mean.get('max_stress', 0):.0f} MPa\n"
+                f"- 예측 모델 정확도(교차검증 R²): 질량 {r2['mass']:.3f}, 응력 {r2['max_stress']:.3f}, 처짐 {r2['deflection']:.3f}\n"
+                "- 리브 높이가 응력·처짐을 가장 크게 줄이고 질량 증가는 작습니다. 두께보다 리브를 키우는 쪽이 효율적입니다.\n\n"
+                "### 권고\n"
+                "1. 최경량 설계점 부근에서 실제 해석으로 검증 해석을 1~2건 수행합니다.\n"
+                f"2. 3D Simulator(모델 #{d['model_id']})로 설계팀이 두께·리브를 바꿔 응력 분포를 바로 확인하게 공유합니다.")}})
+        rep = await s.tool("dds-flow", "make_report", {"formats": ["docx", "html"], "flow_id": fid})
+        names = [Path(f).name for f in rep["files"]]
+        await node("report", "complete", " · ".join(names))
+        await s.say(
+            "전체 과정을 마쳤습니다.\n\n"
+            "- **CAD**: `cad/bracket.stl`, 파라미터 `cad/expressions.json`\n"
+            "- **해석 모델**: `model/bracket.inp` (강재, 벽 고정, 끝단 2 kN)\n"
+            f"- **DOE**: {len(done)}건 해석, 케이스별 응력 필드 저장\n"
+            f"- **예측 모델**: 질량 R² {r2['mass']:.3f}, 응력 R² {r2['max_stress']:.3f} · 형상·응력 필드 모드 {fm['info']['modes']}개\n"
+            f"- **Simulator**: 모델 #{d['model_id']} — 두께·리브를 바꾸며 3D 응력 분포를 바로 봅니다\n"
+            f"- **보고서**: `reports/{names[0]}` 외 — '결과' 탭에서도 내려받을 수 있습니다\n\n"
+            f"응력 {STRESS_LIMIT:.0f} MPa 이하 최경량 설계는 두께 {bp['thickness']:.1f} mm, 리브 {bp['rib_height']:.1f} mm "
+            f"(질량 {br['mass']:.0f} g)입니다.")
 
 
 def main():

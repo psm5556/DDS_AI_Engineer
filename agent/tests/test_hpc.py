@@ -51,3 +51,19 @@ def test_path_and_exe_mapping():
     assert r.remote_command(["cmd", "/c", "C:\\SIMULIA\\Commands\\abaqus.bat", "job=a", "input=Z:\\x\\a.inp"]) == \
         ["abaqus", "job=a", "input=/shared/x/a.inp"]
     assert r.remote_command(["C:\\LSDYNA\\lsdyna_smp.exe", "i=main.k"]) == ["lsdyna_smp", "i=main.k"]
+
+
+def test_bracket_demo_mock_and_intent():
+    """브래킷 E2E 데모: 같은 토폴로지 메쉬 + 응력/질량 트레이드오프, CAD~보고서 요청 판별."""
+    from agent.dds_agent.demo_agent import wants_e2e
+    from cae_adapters.mock import _bracket, _bracket3d
+
+    a, fa = _bracket3d({"thickness": 6, "rib_height": 10})
+    b, fb = _bracket3d({"thickness": 14, "rib_height": 40})
+    assert fa["stress"]["triangles"].shape == fb["stress"]["triangles"].shape
+    assert a["mass"] < b["mass"] and a["max_stress"] > b["max_stress"]
+    # 리브를 키우는 편이 두께를 키우는 것보다 가볍고 강하다
+    rib, thick = _bracket({"thickness": 6, "rib_height": 40}), _bracket({"thickness": 14, "rib_height": 10})
+    assert rib["mass"] < thick["mass"] and rib["max_stress"] < thick["max_stress"]
+    assert wants_e2e("브래킷 CAD를 만들고 … 보고서까지 작성해 줘")
+    assert not wants_e2e("3D 외팔보 응력 분포 Simulator")

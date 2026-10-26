@@ -69,10 +69,66 @@ def _beam3d(p):
     return res, {"stress": {"points": shown, "values": stress, "triangles": tris}}
 
 
+def box_surface(x: tuple, y: tuple, z: tuple, n: tuple):
+    """직육면체 표면 삼각형 메쉬. n=(nx, ny, nz) 분할 수가 같으면 치수가 달라도 토폴로지가 같다."""
+    (x0, x1), (y0, y1), (z0, z1), (nx, ny, nz) = x, y, z, n
+    pts, b = beam_mesh(1.0, 1.0, 1.0, nx, ny, nz)  # 단위 상자(x∈[0,1], y·z∈[-.5,.5])를 늘린다
+    pts = pts * [x1 - x0, y1 - y0, z1 - z0] + [x0, (y0 + y1) / 2, (z0 + z1) / 2]
+    return pts, b
+
+
+# 브래킷: 폭 W·길이 L 플레이트(두께 thickness) 위 가운데에 리브(두께 RIB_T, 높이 rib_height). x=0 벽 고정, x=L 끝단 하중 P.
+BRACKET = {"L": 200.0, "W": 60.0, "RIB_T": 6.0, "P": 2000.0, "E": 210e3, "rho": 7.85e-6}
+
+
+def bracket_section(t: float, r: float):
+    """T단면 성질: 면적, 도심 높이 zc, 단면 2차 모멘트 I (z는 플레이트 바닥 기준)."""
+    W, tr = BRACKET["W"], BRACKET["RIB_T"]
+    a1, a2 = W * t, tr * r
+    zc = (a1 * t / 2 + a2 * (t + r / 2)) / (a1 + a2)
+    inertia = W * t ** 3 / 12 + a1 * (t / 2 - zc) ** 2 + tr * r ** 3 / 12 + a2 * (t + r / 2 - zc) ** 2
+    return a1 + a2, zc, inertia
+
+
+def bracket_mesh(t: float, r: float):
+    """플레이트 + 리브 표면 메쉬(두 상자). 모든 설계에서 같은 토폴로지."""
+    L, W, tr = BRACKET["L"], BRACKET["W"], BRACKET["RIB_T"]
+    p1, t1 = box_surface((0, L), (-W / 2, W / 2), (0, t), (40, 12, 2))
+    p2, t2 = box_surface((0, L), (-tr / 2, tr / 2), (t, t + r), (40, 2, 6))
+    return np.vstack([p1, p2]), np.vstack([t1, t2 + len(p1)])
+
+
+def _bracket(p):
+    t, r = p["thickness"], p["rib_height"]
+    L, P, E, rho = BRACKET["L"], BRACKET["P"], BRACKET["E"], BRACKET["rho"]
+    area, zc, inertia = bracket_section(t, r)
+    return {
+        "mass": rho * area * L * 1000,  # g
+        "max_stress": P * L * max(zc, t + r - zc) / inertia,  # MPa
+        "deflection": P * L ** 3 / (3 * E * inertia),  # mm
+    }
+
+
+def _bracket3d(p):
+    """브래킷 3D: 스칼라 결과 + 표면 Mises(굽힘) 응력 필드, 처짐 형상(10배 확대) 포함."""
+    t, r = p["thickness"], p["rib_height"]
+    L, P, E = BRACKET["L"], BRACKET["P"], BRACKET["E"]
+    _, zc, inertia = bracket_section(t, r)
+    pts, tris = bracket_mesh(t, r)
+    x, z = pts[:, 0], pts[:, 2]
+    stress = np.abs(P * (L - x) * (z - zc) / inertia)
+    defl = P * x ** 2 * (3 * L - x) / (6 * E * inertia)
+    shown = pts.copy()
+    shown[:, 2] -= 10 * defl
+    return _bracket(p), {"stress": {"points": shown, "values": stress, "triangles": tris}}
+
+
 FUNCTIONS = {
     "branin": (_branin, "2변수 x1∈[-5,10], x2∈[0,15], 출력 f (최소 0.398)"),
     "rosenbrock": (_rosenbrock, "n변수, 출력 f (최소 0 @ 모두 1)"),
     "beam": (_beam, "변수 width, height [mm], 출력 mass, deflection, max_stress"),
+    "bracket": (_bracket, "브래킷(플레이트+리브) 변수 thickness 4~12, rib_height 5~30 [mm], 출력 mass[g], max_stress[MPa], deflection[mm]"),
+    "bracket3d": (_bracket3d, "bracket과 같고 + 3D 표면 응력 필드(fields/stress.npz, 처짐 10배 확대) — 형상·필드 학습"),
     "beam3d": (_beam3d, "beam과 같고 + 3D 표면 메쉬 응력 필드(fields/stress.npz, 처짐 형상 포함) — 형상·필드 학습 연습"),
 }
 

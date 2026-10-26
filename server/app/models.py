@@ -40,6 +40,7 @@ class ApiToken(Base):
 
 class Project(TimestampMixin, Base):
     __tablename__ = "projects"
+    __table_args__ = {"sqlite_autoincrement": True}  # 지운 id를 다시 쓰지 않게(새 DB부터)
     id = Column(Integer, primary_key=True)
     name = Column(String(200), nullable=False)
     description = Column(Text, default="")
@@ -60,6 +61,7 @@ class ProjectMember(Base):
 
 class ChatSession(TimestampMixin, Base):
     __tablename__ = "chat_sessions"
+    __table_args__ = {"sqlite_autoincrement": True}
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 소유자(이 사람의 PC Agent로 실행)

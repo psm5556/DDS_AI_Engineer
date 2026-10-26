@@ -101,5 +101,26 @@ def set_project_info(name: str | None = None, description: str | None = None, pr
     return {"project_id": pid, "name": p["name"], "description": p["description"]}
 
 
+@mcp.tool()
+def make_report(formats: list[Literal["html", "docx"]] | None = None, flow_id: int | None = None,
+                project_id: int | None = None) -> dict:
+    """게시된 결과(요약·표·그래프·이미지)를 모아 보고서를 만들어 이 PC 프로젝트 폴더 reports/에 저장한다.
+    결론·권고는 먼저 publish_artifact(kind="markdown")로 게시해 두면 보고서에 함께 들어간다. flow_id를 주면 그 흐름의 결과만."""
+    import time
+
+    pid = resolve_pid(project_id)
+    out = settings.project_dir(pid) / "reports"
+    out.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    saved = []
+    for fmt in formats or ["docx", "html"]:
+        q = f"?format={fmt}" + (f"&flow_id={flow_id}" if flow_id else "")
+        dest = out / f"report_{stamp}.{fmt}"
+        api.download(f"/api/projects/{pid}/report{q}", dest)
+        saved.append(str(dest))
+    return {"project_id": pid, "files": saved,
+            "hint": "웹앱 '결과' 탭의 보고서 버튼이나 '내 PC 파일' 탭 reports/에서 열 수 있습니다."}
+
+
 if __name__ == "__main__":
     mcp.run()

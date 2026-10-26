@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..agent.hub import hub
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, member_role, require_master
 from ..ws import manager
@@ -66,6 +67,8 @@ async def delete_project(project_id: int, user: models.User = Depends(get_curren
     p = get_or_404(db, models.Project, project_id, "프로젝트")
     require_master(project_id, user, db)
     await manager.broadcast({"type": "project_updated", "project_id": p.id, "data": {"id": p.id, "deleted": True}})
+    for chat_id, in db.query(models.ChatSession.id).filter_by(project_id=p.id):
+        hub.forget_chat(chat_id)
     db.delete(p)
     db.commit()
     return {"ok": True}

@@ -29,6 +29,7 @@ class TurnState:
 class AgentHub:
     def __init__(self):
         self.turns: dict[str, TurnState] = {}  # agent session id → 상태
+        self.chat_sid: dict[int, str] = {}  # 대화 id → 지금 쓰는 agent session id
         self.active_project: dict[int, int] = {}  # user_id → 최근 대화한 project_id
         registry.on("agent.event", lambda conn, m: self._on_event(m.get("session_id"), m.get("update") or {}))
         registry.on("agent.permission", lambda conn, m: self._on_permission(
@@ -48,18 +49,31 @@ class AgentHub:
     def forget_session(self, sid: str | None):
         """대화의 에이전트를 바꿀 때 이전 CLI 세션 상태를 버린다."""
         if sid:
+            st = self.turns.pop(sid, None)
+            if st and self.chat_sid.get(st.chat_id) == sid:
+                self.chat_sid.pop(st.chat_id, None)
+
+    def forget_chat(self, chat_id: int):
+        """대화(또는 프로젝트)를 지우면 그 대화의 세션 상태도 버린다 — SQLite가 지운 id를 다시 쓰므로 꼭 필요하다."""
+        for sid in [k for k, st in self.turns.items() if st.chat_id == chat_id]:
             self.turns.pop(sid, None)
+        self.chat_sid.pop(chat_id, None)
+
+    def _turn(self, chat_id: int) -> TurnState | None:
+        return self.turns.get(self.chat_sid.get(chat_id, ""))
 
     # ---------- 세션 ----------
     def ensure_session(self, chat: models.ChatSession) -> str:
         runner = self.runner_for(chat.user_id)
         sid = chat.agent_session_id
         if sid and sid in self.turns:
+            self.chat_sid[chat.id] = sid
             return sid
         pname = chat.project.name if chat.project else None
         if not (sid and runner.load_session(sid, chat.project_id, chat.agent, pname)):
             sid = runner.new_session(chat.project_id, chat.agent, pname)
         self.turns[sid] = TurnState(chat_id=chat.id, project_id=chat.project_id, user_id=chat.user_id)
+        self.chat_sid[chat.id] = sid
         return sid
 
     def send_prompt(self, chat_id: int, text: str, attachments: list[dict] | None = None):
@@ -104,20 +118,20 @@ class AgentHub:
         threading.Thread(target=_run, daemon=True).start()
 
     def cancel(self, chat_id: int):
-        for sid, st in self.turns.items():
-            if st.chat_id == chat_id and st.busy:
-                self.runner_for(st.user_id).cancel(sid)
-                st.pending_permissions.clear()
+        sid, st = self.chat_sid.get(chat_id), self._turn(chat_id)
+        if st and st.busy:
+            self.runner_for(st.user_id).cancel(sid)
+            st.pending_permissions.clear()
 
     def respond_permission(self, chat_id: int, request_id: str, option_id: str | None):
-        st = next((s for s in self.turns.values() if s.chat_id == chat_id), None)
+        st = self._turn(chat_id)
         if not st or st.pending_permissions.pop(request_id, None) is None:
             raise AgentError("이미 처리되었거나 존재하지 않는 권한 요청입니다")
         self.runner_for(st.user_id).respond_permission(request_id, option_id)
         self._broadcast(st, {"kind": "permission_resolved", "request_id": request_id, "option_id": option_id})
 
     def status(self, chat_id: int) -> dict[str, Any]:
-        st = next((s for s in self.turns.values() if s.chat_id == chat_id), None)
+        st = self._turn(chat_id)
         return {"busy": bool(st and st.busy),
                 "pending_permissions": list(st.pending_permissions.values()) if st else []}
 

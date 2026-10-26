@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Box, Cpu, FileText, Share2, Workflow } from "lucide-react";
+import { AlertTriangle, Box, Cpu, FileText, Rocket, Share2, Workflow } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { get, post, uploadFile } from "../api";
@@ -12,6 +12,7 @@ import { useToast } from "../toast";
 import type { AgentStatus, Attachment, Project } from "../types";
 
 const STARTERS = [
+  { icon: Rocket, t: "전체 과정 (CAD→보고서)", p: "브래킷 CAD를 만들고 해석 모델을 구성한 뒤 DOE로 데이터를 쌓아 형상·응력을 학습하고, 3D Simulator로 배포한 다음 보고서까지 작성해 줘" },
   { icon: Box, t: "CAD로 만들기", p: "NX에서 브래킷 형상을 만들고, 두께·리브 높이를 파라미터로 바꿀 수 있게 정리해 줘" },
   { icon: Workflow, t: "해석 모델링·실행", p: "이 CAD 모델로 Abaqus 정적 해석 모델을 만들고(재료·하중·경계조건·메쉬) 해석해서 최대 응력을 알려 줘" },
   { icon: Cpu, t: "데이터 쌓고 예측 모델", p: "두께 2~6mm, 리브 높이 5~20mm로 DOE를 돌려 데이터를 쌓고, 질량·응력 예측 모델을 만들어 Simulator로 배포해 줘" },
