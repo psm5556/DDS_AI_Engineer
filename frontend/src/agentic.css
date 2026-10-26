@@ -233,7 +233,7 @@ td.nowrap { white-space: nowrap; }
 .side-me-btn:hover:not(:disabled) { background: var(--hover); }
 .side-me-menu { position: absolute; left: 10px; right: 10px; bottom: calc(100% + 4px); z-index: 60; padding: 4px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-card-md); }
-.side-me-menu a, .side-me-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 0 10px;
+.side-me-menu a, .side-me-menu button { display: flex; align-items: center; justify-content: flex-start; text-align: left; gap: 8px; width: 100%; min-height: 34px; padding: 0 10px;
   font-size: var(--fs-s); color: var(--ink); text-decoration: none; border: none; box-shadow: none; background: transparent; border-radius: 6px; font-weight: 400; }
 .side-me-menu a:hover, .side-me-menu button:hover:not(:disabled) { background: var(--hover); }
 .side-me-menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 0; }
