@@ -136,3 +136,11 @@ optistruct.bat case.fem -nt 4          # Linux: optistruct case.fem -nt 4
 - [references/fem-format.md](references/fem-format.md)
 - [references/optistruct.md](references/optistruct.md)
 - [references/hyperview-post.md](references/hyperview-post.md)
+
+## 3D 필드 저장 (형상·필드 학습 → 3D Simulator)
+케이스 폴더에 `fields/<이름>.npz`(points, values, triangles — 외곽 표면 노드)를 남기면, 플랫폼이 서버로 올린다. 그다음 `dds-study.train_field_model(study_id, field="<이름>")`으로 '설계변수 → 3D 형상 + 분포'를 학습하고 Simulator에서 3D로 본다.
+리메쉬로 노드 수가 케이스마다 달라도 서버가 기준 메쉬에 자동으로 보간한다. 단, 형상이 크게 달라지면(위상 변화) 정확도가 떨어진다.
+
+- OptiStruct OP2 출력(`OUTPUT,OP2`)이 있으면 `simcenter3d-automation/scripts/op2_fields.py`를 그대로 쓴다:
+  `{"tool": "python", "script": "scripts/op2_fields.py", "args": ["model.op2", "--bdf", "model.fem", "--field", "vm"]}`
+  (스크립트를 프로젝트 `scripts/`로 복사해서 쓴다)

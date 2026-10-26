@@ -27,7 +27,8 @@
   - Abaqus: odb에서 표면 노드 좌표와 `S` Mises를 노드 평균으로 추출한다.
   - Nastran: pyNastran으로 OP2를 읽는다.
 - 요청 예: "케이스마다 응력 필드를 fields/stress.npz로 남기고, 형상·필드 모델을 학습해서 Simulator에서 3D로 보여 줘"
-- 노드 수가 케이스마다 다르면(리메쉬) 기준 메쉬에 보간해야 한다. 이 경우 에이전트에게 "기준 메쉬에 보간해서 저장해 줘"라고 요청한다.
+- 노드 수가 케이스마다 다르면(리메쉬) 서버가 가장 촘촘한 케이스의 메쉬로 자동 보간한다. 위상이 바뀌는 큰 형상 변화에는 맞지 않는다.
+- 툴별 추출 스크립트: Abaqus `abq_odb_fields.py`, Nastran·OptiStruct `op2_fields.py`, LS-DYNA `dyna_fields.py`, Ansys는 스킬의 PyDPF 예시. 스터디 `adapter_config.post`(여러 단계 가능)에 붙인다.
 
 ## 3. 자체 CAE 뷰어 연결
 `agent.toml`에 확장자별 명령을 넣으면 웹앱의 [뷰어로 열기]가 그 뷰어를 실행한다.
@@ -37,9 +38,27 @@
 ".d3plot" = ['C:\DDS\Viewer\ddsview.exe', '--open', '{file}']
 "*" = ['C:\DDS\Viewer\ddsview.exe', '{file}']   # 그 밖의 결과 파일
 ```
-뷰어가 웹으로 열려야 하면(사내 웹 뷰어) 뷰어 쪽 URL 규칙을 알려 주면 된다. 그러면 캔버스에 '웹 뷰어' 탭을 붙일 수 있다.
+사내 뷰어가 웹 방식이면 아래 5절의 `web_viewer_url`을 쓴다.
 
-## 4. HPC
-- 사내 스케줄러(LSF/PBS/Slurm)와 제출 방식(ssh, 공유 스토리지)이 정해지면 `agent/dds_agent/job_runner.py`의 `HpcRunner`를 구현한다.
-  - 구성: submit → status → fetch
-- 스터디의 `adapter_config`에 `"runner": "hpc"`를 넣어 쓰게 한다.
+## 4. HPC (구현됨 — 사내 설정·검증 필요)
+`agent/dds_agent/job_runner.py`의 `HpcRunner`가 Slurm·PBS·LSF 프리셋으로 제출 → 상태 폴링 → 종료코드 판정을 한다(가짜 스케줄러로 테스트 통과).
+케이스 폴더(`workspace_dir`)는 **클러스터와 공유되는 스토리지**에 두어야 한다.
+```toml
+[hpc]
+scheduler = "slurm"                 # slurm | pbs | lsf
+ssh = "me@login01"                  # 클러스터 명령을 로그인 노드에서 실행 (비우면 이 PC에서 바로)
+path_map = { 'Z:/' = '/shared/' }   # Windows 공유 드라이브 → 클러스터 경로
+exe_map = { 'abaqus.bat' = 'abaqus', 'lsdyna_smp.exe' = '/opt/lsdyna/ls-dyna_mpp' }   # 실행 파일 → 클러스터 명령
+ncpu = 16
+header = "#SBATCH -p cae\n#SBATCH -t 04:00:00"
+poll_sec = 30
+```
+- 스터디마다 `adapter_config`에 `"runner": "hpc"`를 넣으면 그 스터디의 케이스가 HPC로 제출된다. 전체를 HPC로 보내려면 `runner = "hpc"`로 둔다.
+- 확인 순서: `ssh me@login01 squeue`가 비밀번호 없이 되는지 확인(SSH 키) → 케이스 1건 제출 → 케이스 폴더의 `hpc_job.sh`, `hpc.log`, `.dds_exitcode` 확인
+- 사내 스케줄러의 출력 형식이 다르면 `submit`·`status`·`id_regex`를 `[hpc]`에 직접 지정한다.
+
+## 5. 사내 웹 CAE 뷰어
+서버 `server.toml`에 URL 템플릿을 넣으면, 캔버스 '내 PC 파일'의 결과 파일 옆에 **웹 뷰어** 버튼이 생긴다.
+```toml
+web_viewer_url = "http://cae-viewer.corp/open?host={host}&file={path}"   # {path} 그 PC의 절대경로, {rel} 프로젝트 기준 경로, {host} PC 이름, {project_id}
+```

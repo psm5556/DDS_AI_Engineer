@@ -129,3 +129,10 @@ def update_user(user_id: int, body: schemas.UserAdminUpdate, admin: models.User 
         u.pin_hash, u.failed_logins, u.locked_until = hash_password(body.pin), 0, None
     db.commit()
     return u
+
+
+@router.get("/config/public")
+def public_config(user: models.User = Depends(get_current_user)):
+    """웹앱이 쓰는 서버 설정(비밀 아닌 것만)."""
+    from ..config import settings
+    return {"web_viewer_url": settings.web_viewer_url, "max_upload_mb": settings.max_upload_mb}

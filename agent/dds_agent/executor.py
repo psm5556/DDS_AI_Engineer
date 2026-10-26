@@ -56,7 +56,8 @@ class CaseExecutor:
         self.report({"type": "case.status", "case_id": job["case_id"], "status": "running", "run_dir": str(run_dir)})
         try:
             out = get_adapter(job["adapter"]).run_case(
-                job["params"], run_dir, job.get("adapter_config") or {}, get_runner(self.s.runner), self.s.tools,
+                job["params"], run_dir, job.get("adapter_config") or {},
+                get_runner((job.get("adapter_config") or {}).get("runner") or self.s.runner, self.s.hpc), self.s.tools,
                 job.get("dry_run", False), project_dir=project_dir, tool_commands=self.s.tool_commands,
                 case_meta={"case_id": job["case_id"], "study_id": job["study_id"]}, tool_envs=self.s.tool_env,
             )

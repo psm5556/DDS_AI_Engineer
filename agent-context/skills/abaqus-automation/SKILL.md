@@ -169,3 +169,14 @@ session.printToFile(fileName='images/mises', format=PNG, canvasObjects=(vp,))   
 - `scripts/abq_odb_extract.py`: (abaqus_python) ODB → results.json
 - `scripts/abq_odb_images.py`: (abaqus_cae) ODB → images/*.png
 - `references/cae-model-api.md`, `references/odb-api.md`, `references/inp-templating.md`
+
+## 3D 필드 저장 (형상·필드 학습 → 3D Simulator)
+케이스 폴더에 `fields/<이름>.npz`(points, values, triangles — 외곽 표면 노드)를 남기면, 플랫폼이 서버로 올린다. 그다음 `dds-study.train_field_model(study_id, field="<이름>")`으로 '설계변수 → 3D 형상 + 분포'를 학습하고 Simulator에서 3D로 본다.
+리메쉬로 노드 수가 케이스마다 달라도 서버가 기준 메쉬에 자동으로 보간한다. 단, 형상이 크게 달라지면(위상 변화) 정확도가 떨어진다.
+
+```
+# 해석 후 추출 단계(스터디 adapter_config의 post)로 붙인다
+{"tool": "abaqus_python", "script": "scripts/abq_odb_fields.py", "args": ["job.odb", "--field", "S", "--invariant", "mises", "--name", "stress", "--deformed", "1"]}
+```
+- `--field U --invariant magnitude --name disp` 처럼 변위 크기도 저장할 수 있다. 여러 필드가 필요하면 post를 여러 번 실행하거나 스크립트를 두 번 호출한다.
+- 스크립트: `scripts/abq_odb_fields.py`(Abaqus 내장 python, py2/3 겸용, 외곽 면 자동 추출, ELEMENT_NODAL → 노드 평균)

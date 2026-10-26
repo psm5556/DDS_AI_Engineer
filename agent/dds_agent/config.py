@@ -38,7 +38,8 @@ class AgentSettings:
     # gemini를 ACP 대신 헤드리스(-p --output-format stream-json)로 쓸 때 true
     gemini_headless: bool = False
     headless_extra_args: list[str] = field(default_factory=lambda: ["--approval-mode", "auto_edit"])
-    runner: str = "local"  # local | hpc
+    runner: str = "local"  # local | hpc  (스터디별로 adapter_config.runner 로도 지정)
+    hpc: dict = field(default_factory=dict)  # [hpc] scheduler·ssh·path_map·exe_map·ncpu·header·poll_sec — job_runner.HpcRunner 참고
     auto_update: bool = True  # 서버에 새 버전이 배포되면 유휴 시 자동 업데이트
     tray: bool = True  # Windows 트레이 아이콘으로 연결 상태 표시
     max_parallel_cases: int = 1

@@ -1,13 +1,20 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronRight, Eye, File, Folder, FolderOpen, HardDrive, RefreshCw } from "lucide-react";
+import { ChevronRight, ExternalLink, Eye, File, Folder, FolderOpen, HardDrive, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { api, get } from "../api";
 import { when } from "../format";
 import { useToast } from "../toast";
-import type { LocalTree } from "../types";
+import type { AgentStatus, LocalTree } from "../types";
 
 const VIEWABLE = /\.(odb|d3plot|op2|f06|rst|rth|h3d|sim|fem|prt|stp|step|igs|iges|stl|vtu|vtk|cae|inp|k|key|dyn|png|jpg|csv|json|txt|log)$/i;
 const size = (n: number | null) => (n == null ? "" : n > 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
+
+/** 서버 설정 web_viewer_url 템플릿을 채운다: {path}=그 PC의 절대경로, {rel}, {host}, {project_id} */
+function webViewerUrl(tpl: string, root: string, rel: string, host: string, pid: number): string {
+  const abs = `${root}\\${rel.replace(/\//g, "\\")}`;
+  return tpl.replace(/\{path\}/g, encodeURIComponent(abs)).replace(/\{rel\}/g, encodeURIComponent(rel))
+    .replace(/\{host\}/g, encodeURIComponent(host)).replace(/\{project_id\}/g, String(pid));
+}
 
 /** 내 PC 작업 폴더 열기(탐색기) / CAE 뷰어로 열기 — PC Agent 경유 */
 export function useOpenLocal(pid: number) {
@@ -36,6 +43,8 @@ export function LocalFiles({ pid }: { pid: number }) {
     queryKey: ["local-tree", pid, path], queryFn: () => get<LocalTree>(`/api/projects/${pid}/local/tree?path=${encodeURIComponent(path)}`),
     retry: false,
   });
+  const { data: cfg } = useQuery({ queryKey: ["config"], queryFn: () => get<{ web_viewer_url: string }>("/api/config/public"), staleTime: 600_000 });
+  const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status") });
   const crumbs = path ? path.split("/") : [];
   if (error) {
     return <div className="empty-hero"><HardDrive size={28} /><b>내 PC 작업 폴더를 볼 수 없습니다</b><p>{(error as Error).message}</p></div>;
@@ -62,6 +71,11 @@ export function LocalFiles({ pid }: { pid: number }) {
               <td className="r small muted">{size(e.size)}</td>
               <td className="small muted">{when(e.modified)}</td>
               <td className="r" onClick={(ev) => ev.stopPropagation()}>
+                {!e.dir && VIEWABLE.test(e.name) && cfg?.web_viewer_url && data && (
+                  <button className="icon-btn" title="사내 웹 CAE 뷰어로 열기 (새 창)" aria-label={`${e.name} 웹 뷰어로 열기`}
+                    onClick={() => window.open(webViewerUrl(cfg.web_viewer_url, data.root, e.path, agent?.info?.hostname ?? "", pid), "_blank", "noopener")}>
+                    <ExternalLink size={14} /></button>
+                )}
                 {!e.dir && VIEWABLE.test(e.name) && (
                   <button className="icon-btn" title="CAE 뷰어로 열기 (설정의 [viewers], 없으면 기본 프로그램)" aria-label={`${e.name} 뷰어로 열기`}
                     onClick={() => open.mutate({ path: e.path, viewer: true })}><Eye size={14} /></button>

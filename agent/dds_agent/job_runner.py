@@ -1,7 +1,10 @@
-"""해석/스크립트 실행기. 로컬 실행은 LocalRunner, HPC 제출은 HpcRunner(사내 스케줄러 확정 후 구현)."""
+"""해석/스크립트 실행기. 로컬 실행은 LocalRunner, HPC 제출은 HpcRunner(Slurm/PBS/LSF 프리셋, agent.toml [hpc])."""
 from __future__ import annotations
 
+import re
+import shlex
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,22 +51,119 @@ class LocalRunner(JobRunner):
         return res
 
 
+# 스케줄러 프리셋: {script}=작업 스크립트(클러스터 경로), {job}=작업 ID. agent.toml [hpc]에서 바꿀 수 있다.
+SCHEDULERS: dict[str, dict] = {
+    "slurm": {"submit": ["sbatch", "--parsable", "{script}"], "id_regex": r"^(\d+)", "status": ["squeue", "-h", "-j", "{job}", "-o", "%T"],
+              "cancel": ["scancel", "{job}"], "header": "#SBATCH -J {name}\n#SBATCH -o {log}\n#SBATCH -n {ncpu}"},
+    "pbs": {"submit": ["qsub", "{script}"], "id_regex": r"^(\S+)", "status": ["qstat", "{job}"],
+            "cancel": ["qdel", "{job}"], "header": "#PBS -N {name}\n#PBS -o {log}\n#PBS -j oe\n#PBS -l select=1:ncpus={ncpu}"},
+    "lsf": {"submit": ["bsub", "-J", "{name}", "-o", "{log}", "-n", "{ncpu}", "sh", "{script}"], "id_regex": r"Job <(\d+)>",
+            "status": ["bjobs", "-noheader", "-o", "stat", "{job}"], "cancel": ["bkill", "{job}"], "header": ""},
+}
+FINISHED = re.compile(r"^\s*$|DONE|EXIT|COMPLETED|FAILED|CANCELLED|TIMEOUT|not found|Unknown Job|Invalid job", re.I)
+
+
 class HpcRunner(JobRunner):
-    """사내 HPC 스케줄러(LSF/PBS/Slurm) 연동 자리.
-    구현 시: submit(배치 스크립트 생성 + bsub/qsub/sbatch) → status 폴링 → fetch(결과 동기화) 로 run()을 구성한다."""
+    """사내 HPC 스케줄러(Slurm/PBS/LSF) 실행기.
+    케이스 폴더가 클러스터와 공유되는 스토리지에 있어야 한다(path_map으로 Windows 경로 → 클러스터 경로).
+    흐름: 작업 스크립트 작성(cd → 명령 → 종료코드 파일) → 제출 → 상태 폴링 → 종료코드 파일로 성공/실패 판정.
+    설정 예 (agent.toml):
+      [hpc]
+      scheduler = "slurm"            # slurm | pbs | lsf (submit/status/cancel/header/id_regex 를 직접 지정해도 됨)
+      ssh = "me@login01"             # 비우면 스케줄러 명령을 이 PC에서 바로 실행
+      path_map = { 'Z:/' = '/shared/' }
+      exe_map = { 'abaqus.bat' = 'abaqus', 'run_journal.exe' = '/opt/nx/run_journal' }  # Windows 실행파일 → 클러스터 명령
+      ncpu = 8
+      header = "#SBATCH -p cae"      # 프리셋 헤더 뒤에 덧붙임
+      poll_sec = 20
+    """
 
-    def submit(self, command: list[str], cwd: Path, resources: dict) -> str:
-        raise NotImplementedError("HPC 스케줄러 연동이 아직 설정되지 않았습니다")
+    def __init__(self, cfg: dict | None = None):
+        cfg = dict(cfg or {})
+        preset = SCHEDULERS.get(cfg.get("scheduler", "slurm"), {})
+        self.cfg = {**preset, **{k: v for k, v in cfg.items() if k in preset}, **cfg}
+        self.cfg["header"] = "\n".join(x for x in (preset.get("header", ""), cfg.get("header", "")) if x)
+        self.poll = float(self.cfg.get("poll_sec", 20))
 
-    def status(self, job_id: str) -> str:
-        raise NotImplementedError
+    # ---------- 경로·명령 변환 ----------
+    def remote_path(self, p: str | Path) -> str:
+        s = str(p).replace("\\", "/")
+        for local, remote in (self.cfg.get("path_map") or {}).items():
+            loc = str(local).replace("\\", "/")
+            if s.lower().startswith(loc.lower()):
+                return remote + s[len(loc):]
+        return s
 
-    def fetch(self, job_id: str, dest: Path) -> None:
-        raise NotImplementedError
+    def remote_command(self, command: list[str]) -> list[str]:
+        exe_map = {k.lower(): v for k, v in (self.cfg.get("exe_map") or {}).items()}
+        cmd = list(command)
+        if cmd[:2] == ["cmd", "/c"]:  # Windows .bat 감싸기 제거
+            cmd = cmd[2:]
+        base = Path(cmd[0]).name.lower()
+        cmd[0] = exe_map.get(base) or exe_map.get(cmd[0].lower()) or Path(cmd[0]).stem
+        return [self._map_arg(c) for c in cmd]
 
+    def _map_arg(self, arg: str) -> str:
+        """인자 안의 Windows 경로(예: input=Z:\\x\\a.inp)도 클러스터 경로로 바꾼다."""
+        if not re.search(r"[A-Za-z]:[\\/]|^\\\\", arg):
+            return arg
+        s = arg.replace("\\", "/")
+        for local, remote in (self.cfg.get("path_map") or {}).items():
+            loc = str(local).replace("\\", "/")
+            s = re.sub(re.escape(loc), lambda _m: remote, s, flags=re.I)
+        return s
+
+    def _sched(self, key: str, **kw) -> subprocess.CompletedProcess:
+        args = [str(a).format(**kw) for a in self.cfg[key]]
+        if self.cfg.get("ssh"):
+            args = ["ssh", "-o", "BatchMode=yes", self.cfg["ssh"], " ".join(shlex.quote(a) for a in args)]
+        return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+
+    # ---------- 실행 ----------
     def run(self, command, cwd, timeout=None, env=None):
-        raise NotImplementedError("HPC 스케줄러 연동이 아직 설정되지 않았습니다")
+        cwd = Path(cwd)
+        rdir = self.remote_path(cwd.resolve())
+        rcmd = self.remote_command(command)
+        name = f"dds_{cwd.name}"[:60]
+        log = f"{rdir}/hpc.log"
+        (cwd / ".dds_exitcode").unlink(missing_ok=True)
+        hdr = self.cfg.get("header", "").format(name=name, log=log, ncpu=self.cfg.get("ncpu", 1))
+        script = cwd / "hpc_job.sh"
+        script.write_text("#!/bin/bash\n" + (hdr + "\n" if hdr else "") +
+                          f"cd {shlex.quote(rdir)} || exit 97\n{' '.join(shlex.quote(c) for c in rcmd)}\n"
+                          "echo $? > .dds_exitcode\n", encoding="utf-8", newline="\n")
+        p = self._sched("submit", script=f"{rdir}/hpc_job.sh", name=name, log=log, ncpu=self.cfg.get("ncpu", 1))
+        m = re.search(self.cfg.get("id_regex", r"(\S+)"), (p.stdout or "") + (p.stderr or ""), re.M)
+        if p.returncode != 0 or not m:
+            return JobResult(rcmd, str(cwd), None, p.stdout, f"HPC 제출 실패: {p.stderr or p.stdout}")
+        job = m.group(1)
+        (cwd / "hpc_job_id.txt").write_text(job, encoding="utf-8")
+        t0 = time.time()
+        while True:
+            time.sleep(self.poll)
+            done_file = cwd / ".dds_exitcode"
+            if done_file.exists():
+                break
+            st = self._sched("status", job=job)
+            if FINISHED.search((st.stdout or "") + (st.stderr or "")) and not done_file.exists():
+                time.sleep(self.poll)  # 공유 스토리지 반영 지연 대비 한 번 더 기다림
+                if not done_file.exists():
+                    return JobResult(rcmd, str(cwd), None, _read_tail(cwd / "hpc.log"), f"HPC 작업 {job}이 종료코드 없이 끝났습니다(취소·시간 초과·노드 오류)")
+            if timeout and time.time() - t0 > timeout:
+                self._sched("cancel", job=job)
+                return JobResult(rcmd, str(cwd), None, _read_tail(cwd / "hpc.log"), f"시간 초과({timeout}s) — HPC 작업 {job} 취소")
+        code = int((cwd / ".dds_exitcode").read_text().strip() or 1)
+        res = JobResult(rcmd, str(cwd), code, _read_tail(cwd / "hpc.log"), "" if code == 0 else f"HPC 작업 {job} 종료코드 {code}")
+        (cwd / "run.log").write_text(f"[HPC {job}] $ {' '.join(rcmd)}\n[returncode] {code}\n{res.stdout}\n", encoding="utf-8")
+        return res
 
 
-def get_runner(kind: str = "local") -> JobRunner:
-    return HpcRunner() if kind == "hpc" else LocalRunner()
+def _read_tail(p: Path) -> str:
+    try:
+        return _tail(p.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return ""
+
+
+def get_runner(kind: str = "local", hpc: dict | None = None) -> JobRunner:
+    return HpcRunner(hpc) if kind == "hpc" else LocalRunner()

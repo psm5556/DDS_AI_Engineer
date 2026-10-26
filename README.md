@@ -28,6 +28,7 @@ PIDO 툴처럼 스크립트를 직접 짜고 프로세스를 잇는 대신, 사�
 - **로컬 데이터 규칙**: 프로젝트·스터디·케이스별 폴더와 `cases.csv`를 둔다(`docs/local-data.md`).
   - 캔버스의 **내 PC 파일** 탭에서 탐색기나 CAE 뷰어로 연다.
 - **3D 형상·필드 학습**: 케이스의 `fields/*.npz`로 '설계변수 → 3D 형상 + 응력 분포'를 학습한다(PCA + GP). 결과는 Simulator에서 3D로 본다.
+- **HPC**: Slurm·PBS·LSF로 제출하고 상태를 감시한다(`agent.toml [hpc]`, 스터디별 `runner: "hpc"`). 사내 웹 CAE 뷰어는 서버 `web_viewer_url`로 연결한다.
 - **내 PC 진단**: 설정 화면에서 CAD/CAE 툴 경로·버전, 뷰어, 작업 폴더를 확인한다. 사내 첫 주 검증은 `docs/onsite-validation.md`를 따른다.
 - 디자인은 DDS ReDO 디자인 시스템(`frontend/src/design/tokens.css`)을 따른다. 라이트/다크 모드를 지원한다.
 

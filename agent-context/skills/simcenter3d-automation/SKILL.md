@@ -100,3 +100,13 @@ description: Simcenter 3D(NX CAE Pre/Post) + Simcenter Nastran 배치 자동화 
 - FE 질량(`PARAM,GRDPNT`) 출력과 파싱
 
 상세 API: [references/simcenter-cae-api.md](references/simcenter-cae-api.md) · 결과 파일/pyNastran: [references/nastran-results.md](references/nastran-results.md)
+
+## 3D 필드 저장 (형상·필드 학습 → 3D Simulator)
+케이스 폴더에 `fields/<이름>.npz`(points, values, triangles — 외곽 표면 노드)를 남기면, 플랫폼이 서버로 올린다. 그다음 `dds-study.train_field_model(study_id, field="<이름>")`으로 '설계변수 → 3D 형상 + 분포'를 학습하고 Simulator에서 3D로 본다.
+리메쉬로 노드 수가 케이스마다 달라도 서버가 기준 메쉬에 자동으로 보간한다. 단, 형상이 크게 달라지면(위상 변화) 정확도가 떨어진다.
+
+```
+{"tool": "python", "script": "scripts/op2_fields.py", "args": ["model-solution_1.op2", "--field", "vm", "--name", "stress", "--deformed", "1"]}
+```
+- 형상(GRID·요소)이 OP2에 없으면(`PARAM,POST,-1` 미사용) `--bdf model.dat`을 함께 준다.
+- `--field disp`(변위 크기)가 가장 안정적이다. `vm`은 요소 von Mises를 노드로 평균한 값이다.

@@ -26,7 +26,8 @@
 | `values` | (N,) 또는 (N, 3) | 노드 값(예: von Mises, 변위 벡터) |
 | `triangles` | (M, 3) int | 표면 삼각형(가시화용) |
 
-- 모든 케이스에서 **노드 수와 순서가 같아야** 한다(같은 토폴로지). 메쉬가 바뀌는 문제는 기준 메쉬에 보간하거나 모핑 메쉬를 써서 맞춘다.
+- 노드 수·순서가 케이스마다 같으면(모핑·같은 토폴로지) 가장 정확하다. 리메쉬로 달라지면 서버가 가장 촘촘한 케이스의 메쉬를 기준으로 자동 보간한다(경계상자 정규화 좌표의 최근접 가중). 위상이 바뀌는 큰 형상 변화에는 맞지 않는다.
+- 툴별 추출 스크립트: `abaqus-automation/scripts/abq_odb_fields.py`, `simcenter3d-automation/scripts/op2_fields.py`(OptiStruct 겸용), `lsdyna-automation/scripts/dyna_fields.py`, Ansys는 스킬의 PyDPF 예시
 - 요소 값은 노드로 평균해서 저장한다. 표면 노드만 저장해도 된다(용량 절약).
 - 툴별 추출 방법은 각 스킬의 "결과 추출" 절을 참고한다. 예를 들어 Abaqus는 odb의 표면 노드 좌표와 `S` 불변량, Nastran OP2는 pyNastran으로 추출한다.
 

@@ -82,7 +82,7 @@ def run_script(tool: str, script: str, filename: str = "script.py", args: list[s
     if dry_run:
         return {"dry_run": True, "command": cmd, "run_dir": str(run_dir)}
 
-    res = get_runner(settings.runner).run(cmd, run_dir, timeout=timeout_sec,
+    res = get_runner(settings.runner, settings.hpc).run(cmd, run_dir, timeout=timeout_sec,
                                           env=tool_env(tool, settings.tools, settings.tool_env, str(run_dir)))
     out = {"returncode": res.returncode, "ok": res.ok, "command": cmd, "run_dir": str(run_dir),
            "stdout_tail": res.stdout[-3000:], "stderr_tail": res.stderr[-3000:]}

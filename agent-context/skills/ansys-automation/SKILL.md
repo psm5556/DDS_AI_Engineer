@@ -142,3 +142,27 @@ PyVista 오프스크린 렌더링은 원격/서비스 세션에서 OpenGL이 없
 - [references/pymechanical.md](references/pymechanical.md)
 - [references/pydpf.md](references/pydpf.md)
 - [references/mapdl-batch-apdl.md](references/mapdl-batch-apdl.md)
+
+## 3D 필드 저장 (형상·필드 학습 → 3D Simulator)
+케이스 폴더에 `fields/<이름>.npz`(points, values, triangles — 외곽 표면 노드)를 남기면, 플랫폼이 서버로 올린다. 그다음 `dds-study.train_field_model(study_id, field="<이름>")`으로 '설계변수 → 3D 형상 + 분포'를 학습하고 Simulator에서 3D로 본다.
+리메쉬로 노드 수가 케이스마다 달라도 서버가 기준 메쉬에 자동으로 보간한다. 단, 형상이 크게 달라지면(위상 변화) 정확도가 떨어진다.
+
+- PyDPF로 노드 좌표·표면·노드 평균 등가응력을 뽑아 저장한다(예시 — TODO(사내검증): 버전별 연산자 이름):
+```python
+from ansys.dpf import core as dpf
+import numpy as np, os
+m = dpf.Model("file.rst")
+mesh = m.metadata.meshed_region
+skin = dpf.operators.mesh.skin(mesh=mesh).eval()             # 외곽 표면
+seqv = dpf.operators.result.stress_von_mises(data_sources=m.metadata.data_sources, mesh=skin).eval()[0]
+ids = list(skin.nodes.scoping.ids)
+pts = np.array(skin.nodes.coordinates_field.data)
+val = np.array([seqv.get_entity_data_by_id(i)[0] for i in ids])
+conn = skin.elements.connectivities_field                      # 쉘 요소 연결 → 삼각형으로 나눔
+tris = []
+for e in range(skin.elements.n_elements):
+    c = conn.get_entity_data(e)
+    tris.append(c[:3]); tris += [[c[0], c[2], c[3]]] if len(c) == 4 else []
+os.makedirs("fields", exist_ok=True)
+np.savez_compressed("fields/stress.npz", points=pts, values=val, triangles=np.array(tris, dtype=np.int32))
+```

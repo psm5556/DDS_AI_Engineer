@@ -18,7 +18,7 @@ class ScriptAdapter(CaeAdapter):
         "script": "scripts/plate.py",
         "args": [],
         "inputs": ["models/plate.cae"],
-        "post": {"tool": "abaqus_python", "script": "scripts/extract.py", "args": []},
+        "post": [{"tool": "abaqus_python", "script": "scripts/extract.py", "args": []}],  # 한 개면 객체로 써도 됨
         "timeout_sec": 3600,
     }
 
@@ -39,7 +39,8 @@ class ScriptAdapter(CaeAdapter):
             write_json(run_dir / "params.json", params)
             write_json(run_dir / "case.json", {**(case_meta or {}), "inputs": [Path(r).name for r in config.get("inputs", [])]})
 
-            steps = [config] + ([config["post"]] if config.get("post") else [])
+            post = config.get("post") or []
+            steps = [config] + (post if isinstance(post, list) else [post])  # post: 한 단계 또는 여러 단계(필드 여러 개 추출 등)
             commands, envs = [], []
             for step in steps:
                 script = None

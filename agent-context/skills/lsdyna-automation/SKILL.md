@@ -141,3 +141,13 @@ quit
 - `scripts/dyna_lasso_extract.py`: binout/d3plot 추출(lasso-python 필요)
 - `scripts/dyna_images.cfile`: LS-PrePost 이미지 cfile 템플릿(TODO(사내검증))
 - `references/keyword-editing.md`, `references/results-extraction.md`, `references/lsprepost-cfile.md`
+
+## 3D 필드 저장 (형상·필드 학습 → 3D Simulator)
+케이스 폴더에 `fields/<이름>.npz`(points, values, triangles — 외곽 표면 노드)를 남기면, 플랫폼이 서버로 올린다. 그다음 `dds-study.train_field_model(study_id, field="<이름>")`으로 '설계변수 → 3D 형상 + 분포'를 학습하고 Simulator에서 3D로 본다.
+리메쉬로 노드 수가 케이스마다 달라도 서버가 기준 메쉬에 자동으로 보간한다. 단, 형상이 크게 달라지면(위상 변화) 정확도가 떨어진다.
+
+```
+{"tool": "python", "script": "scripts/dyna_fields.py", "args": ["d3plot", "--field", "vm", "--state", "-1", "--name", "stress", "--deformed", "1"]}
+```
+- 충돌 해석은 `--deformed 1`로 마지막 시점의 변형 형상까지 학습하면, Simulator에서 '찌그러진 모양 + 응력'을 바로 볼 수 있다.
+- `--field eps`(유효 소성 변형률), `disp`(변위 크기)도 된다. d3plot에 해당 결과가 저장되도록 `*DATABASE_EXTENT_BINARY`를 확인한다.
