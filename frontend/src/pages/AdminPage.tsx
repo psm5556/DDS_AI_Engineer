@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { get, post, put } from "../api";
 import { useAuth } from "../auth";
 import { Modal } from "../components/Modal";
 import { PinInput } from "../components/PinInput";
+import { SetupChecklist } from "../components/SetupReadiness";
 import { when } from "../format";
 import { useToast } from "../toast";
 import type { AgentInstance, AgentRelease, User } from "../types";
@@ -13,7 +14,11 @@ import type { AgentInstance, AgentRelease, User } from "../types";
 /** 관리: 사용자 승인 · PC Agent 현황(버전·연결·작업) · Agent 배포 버전 */
 export default function AdminPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<"agents" | "users" | "releases">("agents");
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState<"agents" | "users" | "releases">(() => {
+    const t = params.get("tab");
+    return t === "users" || t === "releases" ? t : "agents";
+  });
   if (!user?.is_admin) return <Navigate to="/" replace />;
   return (
     <div className="page wide">
@@ -109,7 +114,8 @@ function Releases() {
   });
   return (
     <>
-      <div className="notice info" style={{ marginBottom: 16 }}>
+      <SetupChecklist />
+      <div className="notice info" style={{ margin: "16px 0" }}>
         새 버전 배포: <code>python scripts/build_agent_bundle.py --publish --server {location.origin} --notes "변경 내용"</code>
         · 이전 버전을 [최신으로 지정]하면 롤백됩니다.
       </div>

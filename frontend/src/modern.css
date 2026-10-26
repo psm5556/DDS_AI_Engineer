@@ -374,3 +374,15 @@ td.empty-row { padding: 22px 14px !important; text-align: center; }
 .folder-input button { flex: none; }
 .folder-notes { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
 .folder-modal code { font-size: 12px; word-break: break-all; }
+
+/* ---------- PC Agent 설치 준비 ---------- */
+.setup-notice { margin-bottom: 14px; }
+.setup-check ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.setup-check li { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line-2); }
+.setup-check li:first-child { border-top: none; padding-top: 2px; }
+.setup-check li > svg { flex: none; margin-top: 1px; color: var(--err); }
+.setup-check li.ok > svg { color: var(--ok); }
+.setup-check li b { font-size: var(--fs-m); font-weight: 600; }
+.setup-check li .small { margin-top: 4px; color: var(--ink-3); line-height: 1.6; }
+.setup-check li .small button { margin-top: 2px; }
+.setup-check code { font-size: 12px; word-break: break-all; }

@@ -3,9 +3,14 @@
 - 사용자·Agent: 최신 버전 조회, 번들 다운로드(API 토큰), 내 Agent 현황
 """
 import hashlib
+import importlib.util
 import json
+import os
 import re
+import subprocess
+import threading
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse, Response
@@ -20,6 +25,7 @@ from ..ws import manager
 
 router = APIRouter(prefix="/api/agent", tags=["agent-releases"])
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
+_build_lock = threading.Lock()  # 설치 프로그램 자동 빌드는 한 번에 하나만
 
 
 def version_key(v: str | None) -> tuple:
@@ -66,17 +72,32 @@ def download(version: str, user=Depends(get_current_user), db: Session = Depends
 @router.post("/releases", response_model=schemas.AgentReleaseResponse)
 async def upload_release(file: UploadFile = File(...), version: str = Form(...), notes: str = Form(""),
                          make_latest: bool = Form(True), admin=Depends(require_admin), db: Session = Depends(get_db)):
+    data = await file.read()
+    return _register_release(db, data, version, notes, admin.id, make_latest)
+
+
+@router.post("/releases/from-server", response_model=schemas.AgentReleaseResponse)
+def release_from_server(admin=Depends(require_admin), db: Session = Depends(get_db)):
+    """서버에 있는 코드로 Agent 번들을 만들어 최신 버전으로 등록한다(첫 배포를 웹에서 한 번에)."""
+    spec = importlib.util.spec_from_file_location("build_agent_bundle", ROOT / "scripts" / "build_agent_bundle.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    ver = mod.version()
+    bundle = mod.build(ver)
+    return _register_release(db, bundle.read_bytes(), ver, "서버 코드에서 만든 버전", admin.id, True)
+
+
+def _register_release(db: Session, data: bytes, version: str, notes: str, uploaded_by: int, make_latest: bool):
     if not VERSION_RE.match(version):
         raise HTTPException(400, "버전은 1.2.3 형식이어야 합니다")
     if db.query(models.AgentRelease).filter_by(version=version).first():
         raise HTTPException(409, f"이미 있는 버전입니다: {version}")
-    data = await file.read()
     if not data.startswith(b"PK"):
         raise HTTPException(400, "zip 파일이 아닙니다")
     filename = f"dds-agent-{version}.zip"
     (releases_dir() / filename).write_bytes(data)
     r = models.AgentRelease(version=version, filename=filename, sha256=hashlib.sha256(data).hexdigest(),
-                            size=len(data), notes=notes, uploaded_by=admin.id)
+                            size=len(data), notes=notes, uploaded_by=uploaded_by)
     db.add(r)
     db.flush()
     if make_latest:
@@ -215,13 +236,62 @@ def install_script(request: Request):
     return text.replace("__DDS_SERVER_URL__", server)
 
 
+def _setup_exe() -> Path | None:
+    for cand in (runtime_dir() / "DDS-Agent-Setup.exe", ROOT / "dist" / "DDS-Agent-Setup.exe"):
+        if cand.exists():
+            return cand
+    return _build_setup_exe()
+
+
+def _build_setup_exe() -> Path | None:
+    """설치 프로그램이 없으면(저장소에는 빌드 결과가 없다) 서버에서 바로 빌드한다.
+    Windows 기본 .NET Framework의 csc.exe를 쓰므로 추가 설치가 필요 없다(scripts/build_setup_exe.ps1과 같은 명령)."""
+    src = ROOT / "installer" / "DdsAgentSetup.cs"
+    csc = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
+    if not (src.exists() and csc.exists()):
+        return None
+    out = runtime_dir() / "DDS-Agent-Setup.exe"
+    with _build_lock:
+        if out.exists():
+            return out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            r = subprocess.run([str(csc), "/nologo", "/target:winexe", "/codepage:65001", "/optimize+", f"/out:{out}",
+                                "/r:System.dll", "/r:System.Drawing.dll", "/r:System.Windows.Forms.dll", str(src)],
+                               capture_output=True, timeout=180)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return out if r.returncode == 0 and out.exists() else None
+
+
+def _runtime_ready() -> bool:
+    m = runtime_dir() / "manifest.json"
+    if not m.exists():
+        return False
+    try:
+        files = [v["file"] for v in json.loads(m.read_text(encoding="utf-8")).values() if isinstance(v, dict) and v.get("file")]
+    except (ValueError, OSError):
+        return False
+    return bool(files) and all((runtime_dir() / f).exists() for f in files)
+
+
+@router.get("/setup/status")
+def setup_status(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """PC Agent를 설치하는 데 필요한 것이 서버에 준비됐는지: 설치 프로그램 · 포터블 런타임 · 배포된 Agent 버전.
+    (셋 다 저장소(git)에 들어 있지 않아 사내 서버에서는 따로 준비해야 한다)"""
+    rel = latest_release(db)
+    exe, runtime = _setup_exe() is not None, _runtime_ready()
+    return {"setup_exe": exe, "runtime": runtime, "release": rel.version if rel else None, "ready": exe and runtime and bool(rel),
+            "runtime_dir": str(runtime_dir()) if user.is_admin else None}
+
+
 @router.get("/setup.exe")
 def setup_exe(request: Request):
     """사용자용 설치 프로그램. exe 끝에 서버 주소를 붙여서 내려준다(설치 창에 미리 채워짐)."""
-    for cand in (runtime_dir() / "DDS-Agent-Setup.exe", ROOT / "dist" / "DDS-Agent-Setup.exe"):
-        if cand.exists():
-            server = str(request.base_url).rstrip("/")
-            data = cand.read_bytes() + ("DDSCFG" + json.dumps({"server": server})).encode("utf-8")
-            return Response(data, media_type="application/octet-stream",
-                            headers={"Content-Disposition": 'attachment; filename="DDS-Agent-Setup.exe"'})
-    raise HTTPException(404, "서버에 설치 프로그램이 없습니다 (scripts/build_setup_exe.ps1 실행 필요)")
+    exe = _setup_exe()
+    if not exe:
+        raise HTTPException(404, "서버에 설치 프로그램이 없습니다 (scripts/build_setup_exe.ps1 실행 필요)")
+    server = str(request.base_url).rstrip("/")
+    data = exe.read_bytes() + ("DDSCFG" + json.dumps({"server": server})).encode("utf-8")
+    return Response(data, media_type="application/octet-stream",
+                    headers={"Content-Disposition": 'attachment; filename="DDS-Agent-Setup.exe"'})

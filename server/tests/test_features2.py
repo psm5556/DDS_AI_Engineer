@@ -76,6 +76,21 @@ def test_local_folder_change(client, monkeypatch):  # noqa: F811
     client.delete(f"/api/projects/{p['id']}", headers=admin)
 
 
+def test_agent_setup_readiness(client):  # noqa: F811
+    """사내 서버(저장소만 받은 상태)에서 PC Agent 설치 준비: 상태 확인 → 서버 코드로 첫 버전 배포."""
+    admin, _ = _auth(client, "admin")
+    st = client.get("/api/agent/setup/status", headers=admin).json()
+    assert st["runtime"] is False and st["ready"] is False and st["runtime_dir"]  # 테스트 데이터 폴더에는 런타임이 없다
+    r = client.post("/api/agent/releases/from-server", headers=admin)
+    assert r.status_code == 200, r.text
+    ver = r.json()["version"]
+    assert r.json()["is_latest"] and client.get("/api/agent/setup/status", headers=admin).json()["release"] == ver
+    assert client.post("/api/agent/releases/from-server", headers=admin).status_code == 409  # 같은 버전은 한 번만
+    kim, _ = _auth(client, "kim3", admin)
+    assert client.post("/api/agent/releases/from-server", headers=kim).status_code == 403
+    assert client.get("/api/agent/setup/status", headers=kim).json()["runtime_dir"] is None  # 서버 경로는 관리자에게만
+
+
 def test_attachments(client):  # noqa: F811
     admin, _ = _auth(client, "admin")
     pid = client.post("/api/projects", json={"name": "첨부"}, headers=admin).json()["id"]

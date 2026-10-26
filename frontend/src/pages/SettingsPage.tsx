@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { api, del, get, post } from "../api";
 import { useAuth } from "../auth";
 import { PinInput } from "../components/PinInput";
+import { SetupNotice, useSetupStatus } from "../components/SetupReadiness";
 import { copyText, when } from "../format";
 import { useToast } from "../toast";
 import type { AgentInstance, AgentRelease, AgentStatus, ApiToken } from "../types";
@@ -19,6 +20,7 @@ export default function SettingsPage() {
   const { data: mine } = useQuery({ queryKey: ["agent", "mine"], queryFn: () => get<AgentInstance[]>("/api/agent/instances/mine"), refetchInterval: 15000 });
   const { data: latest } = useQuery({ queryKey: ["agent", "latest"], queryFn: () => get<AgentRelease>("/api/agent/releases/latest"), retry: false });
   const { data: tokens } = useQuery({ queryKey: ["tokens"], queryFn: () => get<ApiToken[]>("/api/tokens") });
+  const { data: setup } = useSetupStatus();
   const err = (e: Error) => toast(e.message ?? "처리하지 못했습니다", true);
 
   const issue = useMutation({
@@ -66,8 +68,12 @@ export default function SettingsPage() {
         <details className="block install-block" open={!agent?.connected}>
           <summary className="block-head"><h3><Download size={16} />{agent?.connected ? "다른 PC에 설치하기" : "설치 (처음 한 번)"}</h3>
             <span className="small muted">Python·Node 등 필요한 것은 모두 자동으로 설치됩니다. 관리자 권한도 필요 없습니다.</span></summary>
+          {setup && <SetupNotice st={setup} />}
           <ol className="install-steps">
-            <li><b>설치 파일 받기</b><a className="btn primary" href="/api/agent/setup.exe" download><Download size={14} />DDS-Agent-Setup.exe</a></li>
+            <li><b>설치 파일 받기</b>
+              {setup && !setup.setup_exe
+                ? <button className="primary" disabled title="서버에 설치 프로그램이 없습니다"><Download size={14} />DDS-Agent-Setup.exe</button>
+                : <a className="btn primary" href="/api/agent/setup.exe" download><Download size={14} />DDS-Agent-Setup.exe</a>}</li>
             <li><b>토큰 발급</b>
               {issued?.token ? (
                 <span className="token-box"><code>{issued.token}</code>

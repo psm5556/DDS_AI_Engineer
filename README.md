@@ -83,18 +83,22 @@ cd frontend; npm install; npm run build; cd ..
 1. `python scripts\fetch_runtimes.py` 실행 → `data\agent_runtime\`에 다음이 생긴다.
    - 포터블 Python 3.12, Node 22
    - Agent 의존성 wheel 묶음
-2. `powershell -File scripts\build_setup_exe.ps1` 실행 → `DDS-Agent-Setup.exe`가 빌드되고 `data\agent_runtime\`에 복사된다.
-3. `cd frontend; npm run build` 실행 → `frontend\dist\`
-4. 저장소와 `data\agent_runtime\` 폴더를 사내로 옮긴다.
+2. `cd frontend; npm run build` 실행 → `frontend\dist\`
+3. 저장소와 `data\agent_runtime\` 폴더를 사내로 옮긴다.
+   - **`data\`·`dist\`·`frontend\dist\`는 git에 들어 있지 않다.** git으로 받으면 `data\agent_runtime\`(약 250 MB)은 따로 복사해야 한다.
+     빠뜨리면 설정 화면에서 설치 파일을 받을 수 없다(브라우저: "사이트에서 사용할 수 없는 파일").
 
 **사내 서버**
 1. Python 3.12를 준비하고 사내 미러로 `pip install -r requirements-server.txt`
 2. (선택) `server.toml`을 작성한다: `port`, `data_dir`, `secret_key`
 3. `data\agent_runtime\` 폴더를 서버 `data_dir` 아래에 둔다.
+   - `DDS-Agent-Setup.exe`는 없으면 서버가 처음 요청 때 직접 빌드한다(Windows 기본 .NET Framework csc). 수동: `powershell -File scripts\build_setup_exe.ps1`
 4. 실행: `uvicorn server.app.main:app --host 0.0.0.0 --port 7014`
    - 서비스 등록: NSSM 또는 작업 스케줄러
 5. 첫 가입자가 관리자가 된다. 이후 가입은 관리자가 승인한다(관리 > 사용자).
-6. Agent 첫 배포: `python scripts\build_agent_bundle.py --publish --server http://<서버>:7014 --user admin --pin <PIN> --notes "첫 배포"`
+6. Agent 첫 배포: 웹앱 **관리 > Agent 배포**의 "서버 코드로 첫 버전 배포" 버튼
+   - 같은 화면의 **PC Agent 설치 준비** 점검표에서 설치 프로그램·런타임·배포 버전이 모두 ✓인지 확인한다.
+   - 명령으로: `python scripts\build_agent_bundle.py --publish --server http://<서버>:7014 --user admin --pin <PIN> --notes "첫 배포"`
 
 **사용자 PC**
 1. 웹앱 > 설정 > PC Agent에서 `DDS-Agent-Setup.exe`를 받고 토큰을 발급한다.
