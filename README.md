@@ -60,7 +60,7 @@ PIDO 툴처럼 스크립트를 직접 짜고 프로세스를 잇는 대신, 사�
 ```powershell
 python -m venv .venv; .venv\Scripts\pip install -r requirements-dev.txt
 cd frontend; npm install; npm run build; cd ..
-.venv\Scripts\python scripts\dev_live.py --agent demo     # 서버 + PC Agent, http://127.0.0.1:7013 (admin / PIN 123456)
+.venv\Scripts\python scripts\dev_live.py --agent demo     # 서버 + PC Agent, http://127.0.0.1:7014 (admin / PIN 123456)
 #   --agent claude | gemini | codex : 실제 AI CLI 사용 (먼저 터미널에서 각 CLI 로그인)
 #   프론트 개발 중에는: cd frontend; npm run dev  → http://localhost:5173
 ```
@@ -91,10 +91,10 @@ cd frontend; npm install; npm run build; cd ..
 1. Python 3.12를 준비하고 사내 미러로 `pip install -r requirements-server.txt`
 2. (선택) `server.toml`을 작성한다: `port`, `data_dir`, `secret_key`
 3. `data\agent_runtime\` 폴더를 서버 `data_dir` 아래에 둔다.
-4. 실행: `uvicorn server.app.main:app --host 0.0.0.0 --port 7013`
+4. 실행: `uvicorn server.app.main:app --host 0.0.0.0 --port 7014`
    - 서비스 등록: NSSM 또는 작업 스케줄러
 5. 첫 가입자가 관리자가 된다. 이후 가입은 관리자가 승인한다(관리 > 사용자).
-6. Agent 첫 배포: `python scripts\build_agent_bundle.py --publish --server http://<서버>:7013 --user admin --pin <PIN> --notes "첫 배포"`
+6. Agent 첫 배포: `python scripts\build_agent_bundle.py --publish --server http://<서버>:7014 --user admin --pin <PIN> --notes "첫 배포"`
 
 **사용자 PC**
 1. 웹앱 > 설정 > PC Agent에서 `DDS-Agent-Setup.exe`를 받고 토큰을 발급한다.

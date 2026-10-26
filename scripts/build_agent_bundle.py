@@ -1,6 +1,6 @@
 """PC Agent 배포 번들(zip) 생성 및 서버 등록.
   python scripts/build_agent_bundle.py                         → dist/dds-agent-<버전>.zip
-  python scripts/build_agent_bundle.py --publish --server http://서버:7013 --notes "변경 내용"
+  python scripts/build_agent_bundle.py --publish --server http://서버:7014 --notes "변경 내용"
      (관리자 계정 DDS_ADMIN_USER / DDS_ADMIN_PIN 환경변수 또는 --user/--pin)
 버전은 agent/dds_agent/__init__.py 의 __version__ 이다. 배포 전에 올린다.
 """
@@ -62,7 +62,7 @@ def publish(bundle: Path, ver: str, server: str, user: str, pin: str, notes: str
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--publish", action="store_true")
-    ap.add_argument("--server", default=os.environ.get("DDS_SERVER_URL", "http://127.0.0.1:7013"))
+    ap.add_argument("--server", default=os.environ.get("DDS_SERVER_URL", "http://127.0.0.1:7014"))
     ap.add_argument("--user", default=os.environ.get("DDS_ADMIN_USER", "admin"))
     ap.add_argument("--pin", default=os.environ.get("DDS_ADMIN_PIN", ""))
     ap.add_argument("--notes", default="")

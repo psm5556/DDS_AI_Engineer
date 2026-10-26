@@ -1,5 +1,5 @@
 """개발용 실행: 서버 + (관리자 계정·토큰 자동 준비) + 내 PC Agent를 한 번에 띄운다. Ctrl+C로 함께 종료.
-  .venv\\Scripts\\python scripts\\dev_live.py [--data <폴더>] [--agent demo|gemini|claude|codex] [--port 7013]
+  .venv\\Scripts\\python scripts\\dev_live.py [--data <폴더>] [--agent demo|gemini|claude|codex] [--port 7014]
 웹앱: http://127.0.0.1:<port>  (프론트엔드는 frontend\\dist 빌드본, 개발 중에는 `cd frontend && npm run dev`로 5173 사용)
 처음 실행 시 관리자 계정 admin / PIN 123456 을 만든다(이미 있으면 그대로 사용).
 """
@@ -19,7 +19,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=str(ROOT / "data" / "dev"))
     ap.add_argument("--agent", default="demo", help="대화 기본 에이전트 (demo는 Gemini 없이 흐름 검증용)")
-    ap.add_argument("--port", type=int, default=7013)
+    ap.add_argument("--port", type=int, default=7014)
     ap.add_argument("--admin", default="admin")
     ap.add_argument("--pin", default="123456")
     a = ap.parse_args()
