@@ -65,7 +65,7 @@ cd frontend; npm install; npm run build; cd ..
 ### 테스트
 | 명령 | 확인 내용 |
 |---|---|
-| `.venv\Scripts\python -m pytest server/tests` | API: 인증(PIN·잠금)·공유·Flow·DOE/학습/BO/배포·보고서·Simulator 공유 |
+| `.venv\Scripts\python -m pytest server/tests agent/tests` | API: 인증(PIN·잠금)·공유·Flow·DOE/학습/BO/배포·보고서·Simulator 공유·첨부·3D 형상·필드(리메쉬 포함) / HPC 실행기 |
 | `.venv\Scripts\python scripts\e2e_demo.py` | 서버 + PC Agent + ACP + MCP 실제 프로세스 시나리오 |
 | `.venv\Scripts\python scripts\e2e_install.py` | 포터블 설치 → 연결 → 새 버전 배포 → 자동 업데이트 |
 
