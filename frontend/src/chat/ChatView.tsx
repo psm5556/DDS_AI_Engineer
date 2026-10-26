@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { get, post } from "../api";
+import { api, get, post } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
 import { useAuth } from "../auth";
 import { useCanvas } from "../canvas/CanvasContext";
@@ -13,6 +13,7 @@ import { useFlowDecision } from "../canvas/views";
 import { Markdown } from "../components/Markdown";
 import { Composer } from "./Composer";
 import { FlowCanvas } from "../flow/FlowCanvas";
+import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
 import { AGENT_SEND, FLOW_STATUS, localIso } from "../format";
 import { useLive } from "../live";
 import { useToast } from "../toast";
@@ -40,7 +41,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   const { user } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
-  const [agentChoice, setAgentChoice] = useState<string | null>(null);
+  const [preferred, setPreferred] = usePreferredAgent();
   const [busy, setBusy] = useState(false);
   const [perms, setPerms] = useState<PermissionRequest[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -53,9 +54,18 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   const { data: flows } = useQuery({ queryKey: ["flows", pid], queryFn: () => get<Flow[]>(`/api/projects/${pid}/flows`) });
   const { data: arts } = useQuery({ queryKey: ["artifacts", pid], queryFn: () => get<Artifact[]>(`/api/projects/${pid}/artifacts`) });
   const readOnly = !!session && session.user_id !== user?.id;
-  const clis = (agent?.info?.agents ?? []).filter((a) => a.installed);
-  const chosen = agentChoice ?? agent?.info?.default_agent ?? clis[0]?.name ?? "gemini";
+  const chosen = resolveAgent(agent, preferred);
   const agentLabel = (name: string) => agent?.info?.agents?.find((a) => a.name === name)?.label ?? name;
+  // 진행 중인 대화의 에이전트를 바꾸면 다음 요청부터 그 CLI로 이어 간다(이전 대화 내용은 서버가 넘긴다)
+  const switchAgent = async (name: string) => {
+    setPreferred(name);
+    if (!session || readOnly) return;
+    try {
+      await api(`/api/sessions/${session.id}`, { method: "PUT", body: { agent: name } });
+      qc.invalidateQueries({ queryKey: ["sessions", pid] });
+      toast(`다음 요청부터 ${agentLabel(name)}(으)로 이어 갑니다`);
+    } catch (e) { toast((e as Error).message, true); }
+  };
   const disabled = !agent?.connected;
 
   useEffect(() => {
@@ -213,12 +223,8 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
             onSend={(o) => send(o.text, o.attachmentIds)}
             placeholder={readOnly ? "다른 멤버의 대화입니다. 보내면 내 새 대화로 시작합니다" : disabled ? "PC Agent 연결 후 사용할 수 있습니다"
               : "무엇이든 요청하세요 — 파일은 끌어 놓거나 📎로 첨부"}
-            leftBar={session ? <span className="chip">{agentLabel(session.agent)}{readOnly ? " · 읽기 전용" : ""}</span>
-              : clis.length > 1 ? (
-                <span className="seg" role="radiogroup" aria-label="사용할 AI 에이전트">{clis.map((a) => (
-                  <button type="button" key={a.name} role="radio" aria-checked={chosen === a.name} className={chosen === a.name ? "on" : ""} onClick={() => setAgentChoice(a.name)}>{a.label}</button>
-                ))}</span>
-              ) : <span className="chip">{agentLabel(chosen)}</span>} />
+            leftBar={readOnly ? <span className="chip">{session ? agentLabel(session.agent) : ""} · 읽기 전용</span>
+              : <AgentPicker value={session?.agent ?? chosen} onChange={(n) => void switchAgent(n)} disabled={disabled || busy} />} />
         </div>
       </div>
     </section>

@@ -45,6 +45,11 @@ class AgentHub:
                 self._add_message(st, "system", "PC Agent 연결이 끊어져 요청이 중단되었습니다.")
                 self._broadcast(st, {"kind": "turn_ended", "stop_reason": "disconnected"})
 
+    def forget_session(self, sid: str | None):
+        """대화의 에이전트를 바꿀 때 이전 CLI 세션 상태를 버린다."""
+        if sid:
+            self.turns.pop(sid, None)
+
     # ---------- 세션 ----------
     def ensure_session(self, chat: models.ChatSession) -> str:
         runner = self.runner_for(chat.user_id)
@@ -64,6 +69,7 @@ class AgentHub:
         with SessionLocal() as db:
             chat = db.get(models.ChatSession, chat_id)
             first_turn = not chat.agent_session_id
+            recap = _recap(db, chat.id) if first_turn else ""  # 에이전트를 바꾼 대화면 이전 내용을 넘긴다
             sid = self.ensure_session(chat)
             if chat.agent_session_id != sid:
                 chat.agent_session_id = sid
@@ -81,7 +87,8 @@ class AgentHub:
         self._broadcast(st, {"kind": "turn_started"})
 
         context = (f"[DDS 컨텍스트] project_id={st.project_id}. "
-                   "dds-* MCP 툴과 스킬을 사용하고 작업 규칙(작업 전 Flow 제안 → 승인 후 실행, 데이터는 로컬 폴더 규칙대로)을 따르세요.\n\n") if first_turn else ""
+                   "dds-* MCP 툴과 스킬을 사용하고 작업 규칙(작업 전 Flow 제안 → 승인 후 실행, 데이터는 로컬 폴더 규칙대로)을 따르세요.\n\n"
+                   + recap) if first_turn else ""
 
         def _run():
             stop = "error"
@@ -198,6 +205,18 @@ def _content_text(content) -> str:
         if isinstance(inner, dict) and inner.get("type") == "text":
             parts.append(inner.get("text", ""))
     return "\n".join(parts)
+
+
+def _recap(db, chat_id: int, limit: int = 12, chars: int = 6000) -> str:
+    """에이전트(CLI)를 바꾼 대화의 첫 요청에 붙일 이전 대화 요약(최근 사용자·에이전트 메시지)."""
+    msgs = (db.query(models.ChatMessage).filter(models.ChatMessage.session_id == chat_id,
+                                                 models.ChatMessage.role.in_(("user", "agent")))
+            .order_by(models.ChatMessage.id.desc()).limit(limit).all())
+    if not msgs:
+        return ""
+    lines = [f"{'사용자' if m.role == 'user' else '에이전트'}: {m.content.strip()[:1500]}" for m in reversed(msgs)]
+    body = "\n".join(lines)[-chars:]
+    return f"[이전 대화 — 다른 에이전트와 나눈 내용이다. 이어서 진행하라]\n{body}\n[이전 대화 끝]\n\n"
 
 
 hub = AgentHub()

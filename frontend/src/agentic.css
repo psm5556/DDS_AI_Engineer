@@ -182,3 +182,17 @@ td.nowrap { white-space: nowrap; }
 
 .sim-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .sim-left .field3d-body { height: 420px; }
+
+/* 입력창 아래 AI 에이전트 선택 */
+.agent-pick { position: relative; }
+.agent-pick-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 9px; font-size: 12px; font-weight: 500;
+  border-radius: 8px; background: var(--panel-3); border: 1px solid transparent; box-shadow: none; color: var(--ink-2); }
+.agent-pick-btn:hover:not(:disabled) { border-color: var(--line); color: var(--ink); }
+.agent-pick-menu { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 50; min-width: 190px; padding: 4px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-pop, 0 8px 24px rgba(0,0,0,.14)); }
+.agent-pick-menu button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 0 8px; font-size: 13px;
+  border: none; box-shadow: none; background: transparent; color: var(--ink); text-align: left; border-radius: 6px; }
+.agent-pick-menu button:hover:not(:disabled) { background: var(--panel-3); }
+.agent-pick-menu button:disabled { color: var(--ink-3); }
+.agent-pick-menu .check { width: 14px; color: var(--brand); display: inline-flex; }
+.agent-pick-foot { display: block; padding: 6px 8px 4px; border-top: 1px solid var(--line); margin-top: 4px; color: var(--brand); }

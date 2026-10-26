@@ -22,6 +22,17 @@ def _session_for_member(session_id: int, user: models.User, db: Session) -> mode
     return chat
 
 
+def _check_agent(conn, agent: str):
+    """내 PC Agent에 설정·설치된 AI CLI인지 확인한다(Agent 미연결이면 통과 — 연결 후 요청 때 다시 확인)."""
+    if not conn:
+        return
+    known = {a["name"]: a for a in conn.info.get("agents", [])}
+    if known and agent not in known:
+        raise HTTPException(400, f"내 PC Agent에 설정되지 않은 에이전트입니다: {agent}")
+    if known and not known[agent]["installed"]:
+        raise HTTPException(409, f"{known[agent]['label']}이(가) 내 PC에 설치되어 있지 않습니다. 설정에서 설치하세요.")
+
+
 def _session_for_owner(session_id: int, user: models.User, db: Session) -> models.ChatSession:
     chat = _session_for_member(session_id, user, db)
     if chat.user_id != user.id:
@@ -39,12 +50,7 @@ def create_session(body: schemas.ChatSessionCreate | None = None, project: model
                    user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     conn = registry.get(user.id)
     agent = (body.agent if body else None) or (conn.info.get("default_agent") if conn else None) or "gemini"
-    if conn:
-        known = {a["name"]: a for a in conn.info.get("agents", [])}
-        if known and agent not in known:
-            raise HTTPException(400, f"내 PC Agent에 설정되지 않은 에이전트입니다: {agent}")
-        if known and not known[agent]["installed"]:
-            raise HTTPException(409, f"{known[agent]['label']}이(가) 내 PC에 설치되어 있지 않습니다. 설정에서 설치하세요.")
+    _check_agent(conn, agent)
     s = models.ChatSession(project_id=project.id, user_id=user.id, agent=agent)
     db.add(s)
     db.commit()
@@ -142,7 +148,17 @@ def _session_for_editor(session_id: int, user: models.User, db: Session) -> mode
 def rename_session(session_id: int, body: schemas.SessionUpdate, user: models.User = Depends(get_current_user),
                    db: Session = Depends(get_db)):
     chat = _session_for_editor(session_id, user, db)
-    chat.title = body.title.strip()
+    if body.title is not None:
+        chat.title = body.title.strip()
+    if body.agent and body.agent != chat.agent:
+        if chat.user_id != user.id:
+            raise HTTPException(403, "대화를 시작한 사람만 에이전트를 바꿀 수 있습니다")
+        if hub.status(session_id)["busy"]:
+            raise HTTPException(409, "에이전트가 작업 중입니다. 먼저 중지하세요")
+        _check_agent(registry.get(user.id), body.agent)
+        hub.forget_session(chat.agent_session_id)
+        chat.agent = body.agent
+        chat.agent_session_id = None  # 다음 요청 때 새 CLI로 세션을 열고 이전 대화를 요약해 넘긴다
     db.commit()
     return chat
 

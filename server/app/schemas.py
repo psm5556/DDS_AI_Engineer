@@ -120,7 +120,8 @@ class PromptRequest(BaseModel):
 
 
 class SessionUpdate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
+    title: str | None = Field(None, min_length=1, max_length=200)
+    agent: str | None = None  # 바꾸면 그 AI CLI로 새 세션을 열고, 이전 대화 요약을 넘겨 이어 간다
 
 
 class AttachmentResponse(ORM):

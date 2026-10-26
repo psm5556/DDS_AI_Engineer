@@ -20,9 +20,24 @@ def test_favorite_rename_delete(client):  # noqa: F811
 
     s = client.post(f"/api/projects/{p['id']}/sessions", json={"agent": "demo"}, headers=admin).json()
     assert client.put(f"/api/sessions/{s['id']}", json={"title": "DOE 논의"}, headers=admin).json()["title"] == "DOE 논의"
+    # 진행 중인 대화의 에이전트를 바꾸면 CLI 세션을 새로 열고(agent_session_id 비움) 이전 대화를 요약해 넘긴다
+    from server.app import models
+    from server.app.agent.hub import _recap
+    from server.app.database import SessionLocal
+    with SessionLocal() as db:
+        db.add_all([models.ChatMessage(session_id=s["id"], role="user", content="두께 DOE 해 줘"),
+                    models.ChatMessage(session_id=s["id"], role="agent", content="Flow를 제안했습니다")])
+        db.query(models.ChatSession).filter_by(id=s["id"]).update({"agent_session_id": "old-sid"})
+        db.commit()
+    r = client.put(f"/api/sessions/{s['id']}", json={"agent": "claude"}, headers=admin).json()
+    assert r["agent"] == "claude" and r["agent_session_id"] is None and r["title"] == "DOE 논의"
+    with SessionLocal() as db:
+        rc = _recap(db, s["id"])
+    assert "사용자: 두께 DOE 해 줘" in rc and "에이전트: Flow를 제안했습니다" in rc
     # 다른 멤버(일반)는 남의 대화를 지울 수 없다
     kim, kim_user = _auth(client, "kim2", admin)
     client.put(f"/api/projects/{p['id']}/members/{kim_user['id']}", json={"role": "member"}, headers=admin)
+    assert client.put(f"/api/sessions/{s['id']}", json={"agent": "gemini"}, headers=kim).status_code == 403
     assert client.delete(f"/api/sessions/{s['id']}", headers=kim).status_code == 403
     assert client.delete(f"/api/sessions/{s['id']}", headers=admin).status_code == 200
     assert client.get(f"/api/projects/{p['id']}/sessions", headers=admin).json() == []

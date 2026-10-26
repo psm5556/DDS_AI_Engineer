@@ -6,6 +6,7 @@ import { get, post, uploadFile } from "../api";
 import { useAuth } from "../auth";
 import { Composer, type Outgoing } from "../chat/Composer";
 import { AgentBadge } from "../components/AgentBadge";
+import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
 import { FLOW_STATUS, when } from "../format";
 import { useToast } from "../toast";
 import type { AgentStatus, Attachment, Project } from "../types";
@@ -26,6 +27,7 @@ export default function DashboardPage() {
   const [seed, setSeed] = useState<{ text: string; n: number } | undefined>();
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
   const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status") });
+  const [preferred, setPreferred] = usePreferredAgent();
   const review = (projects ?? []).filter((p) => p.flow_status === "review");
 
   // 프로젝트를 만들고(이름은 요청 앞부분 → 에이전트가 곧 알맞게 바꾼다), 첨부를 올린 뒤 대화로 넘어간다
@@ -54,7 +56,8 @@ export default function DashboardPage() {
             <Link to="/settings" className="btn small primary">설치하기</Link></div>
         )}
         <Composer big autoFocus suggestions={STARTERS.map((x) => x.p)} seed={seed} busy={start.isPending}
-          onSend={(o) => { start.mutate(o); }} hint="→ 추천 받기 · ↑↓ 다른 추천 · 파일은 끌어 놓기 · Enter 시작"
+          onSend={(o) => { start.mutate(o); }}
+          leftBar={<AgentPicker value={resolveAgent(agent, preferred)} onChange={setPreferred} disabled={!agent?.connected} />} hint="→ 추천 받기 · ↑↓ 다른 추천 · 파일은 끌어 놓기 · Enter 시작"
           placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘" />
         <div className="starters">
           {STARTERS.map(({ icon: Icon, t, p }) => (
