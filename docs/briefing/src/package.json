@@ -1,0 +1,12 @@
+{
+  "name": "dds-briefing-deck",
+  "private": true,
+  "description": "경영진 보고 슬라이드 생성기",
+  "scripts": {
+    "assets": "node make_assets.mjs",
+    "build": "node build.js"
+  },
+  "dependencies": {
+    "pptxgenjs": "3.12.0"
+  }
+}
