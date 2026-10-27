@@ -4,603 +4,1172 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
-/* 레이아웃: 위에서 아래로 읽는 한 편의 이야기. 사람이 하는 일은 주황, AI가 하는 일은 청록 — 페이지 전체에서 같은 뜻 */
+/* 레이아웃: 1280×720 슬라이드 한 장을 화면 크기에 맞춰 보여 주고, → 키 한 번에 장면 하나씩 넘긴다.
+   주황 = 사람이 하는 일, 청록 = AI가 하는 일 — 모든 장에서 같은 뜻 */
 :root {
-  --bg: #F4F7F8;
+  --bg: #E6EDF0;
   --surface: #FFFFFF;
+  --panel: #F2F6F7;
   --ink: #15232D;
   --muted: #586A75;
-  --line: #D7E1E5;
+  --line: #D5E0E4;
   --ai: #0C7882;
-  --ai-soft: #DFF1F2;
+  --ai-soft: #DDF0F1;
   --human: #D9671F;
-  --human-soft: #FCEADB;
+  --human-soft: #FCE9DA;
   --ok: #23905A;
-  --ok-soft: #DDF2E5;
-  /* 해석 결과 컨투어 색(파랑→빨강): 이 분야에서 '힘을 받는 정도'를 보여 주는 익숙한 색 */
+  --ok-soft: #DCF1E4;
+  --bad: #C8372D;
+  --bad-soft: #FBE2DF;
+  /* 표지·마지막 장은 두 테마 모두 어두운 판 */
+  --night: #0F2530;
+  --night-2: #173441;
+  --night-line: #2B4C5A;
+  --night-ink: #EAF2F5;
+  --night-muted: #A2B9C3;
+  --night-ai: #5CC8D1;
+  --night-ai-soft: #133F48;
+  --night-human: #F5A266;
+  --night-human-soft: #4A2D18;
+  --night-ok: #6FD39C;
+  --night-ok-soft: #173F2B;
+  /* 제품 그림 재료(두 테마 공통) */
+  --prod-body: #F7FAFB;
+  --prod-line: #5E717C;
+  --prod-door: #DCE6EA;
+  --glass: #1F2D36;
+  --metal: #8F9EA7;
+  /* 해석 결과 색(파랑 → 빨강 = 적음 → 많음): 이 분야에서 익숙한 컨투어 색 */
   --c1: #2F5BD3; --c2: #19A7C9; --c3: #3DBB6A; --c4: #F0C43A; --c5: #E5483B;
   --display: "Do Hyeon", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
   --body: "IBM Plex Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
-  --r: 16px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0E181F; --surface: #15232C; --ink: #E7EEF1; --muted: #9DB0BA; --line: #29404B;
-    --ai: #45BCC6; --ai-soft: #12333A; --human: #F29A5A; --human-soft: #3A2516; --ok: #4CC584; --ok-soft: #133426;
+    --bg: #081116; --surface: #12212A; --panel: #192B35; --ink: #E7EEF1; --muted: #9DB0BA; --line: #2A414C;
+    --ai: #45BCC6; --ai-soft: #12343B; --human: #F29A5A; --human-soft: #3B2617; --ok: #4CC584; --ok-soft: #133426;
+    --bad: #F0675C; --bad-soft: #3D1B18; --night: #06131A; --night-2: #102530; --night-line: #23424F;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0E181F; --surface: #15232C; --ink: #E7EEF1; --muted: #9DB0BA; --line: #29404B;
-  --ai: #45BCC6; --ai-soft: #12333A; --human: #F29A5A; --human-soft: #3A2516; --ok: #4CC584; --ok-soft: #133426;
+  --bg: #081116; --surface: #12212A; --panel: #192B35; --ink: #E7EEF1; --muted: #9DB0BA; --line: #2A414C;
+  --ai: #45BCC6; --ai-soft: #12343B; --human: #F29A5A; --human-soft: #3B2617; --ok: #4CC584; --ok-soft: #133426;
+  --bad: #F0675C; --bad-soft: #3D1B18; --night: #06131A; --night-2: #102530; --night-line: #23424F;
   color-scheme: dark;
 }
-* { box-sizing: border-box; }
-body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.65; margin: 0; word-break: keep-all; overflow-wrap: break-word; }
-.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-section { padding-block: 56px; border-top: 1px solid var(--line); }
-h1, h2, h3 { font-family: var(--display); font-weight: 400; text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
-h1 { font-size: clamp(34px, 5.6vw, 58px); line-height: 1.15; }
-h2 { font-size: clamp(28px, 3.8vw, 40px); line-height: 1.2; }
-h3 { font-size: 23px; line-height: 1.25; }
+html { height: 100%; box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
+body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); word-break: keep-all; overflow-wrap: break-word; overflow: hidden; }
+.app { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 0; }
+.viewport { position: relative; min-height: 0; overflow: hidden; }
+.stage { position: absolute; left: 50%; top: 50%; width: 1280px; height: 720px; transform: translate(-50%, -50%) scale(var(--s, .5)); }
+
+/* ---------- 슬라이드 공통 ---------- */
+.slide { position: absolute; inset: 0; background: var(--surface); border-radius: 20px; box-shadow: 0 1px 2px rgb(0 0 0 / .06), 0 14px 40px rgb(0 0 0 / .08); padding: 44px 60px 40px; display: flex; flex-direction: column; gap: 22px; overflow: hidden; font-size: 19px; line-height: 1.55; opacity: 0; visibility: hidden; transform: translateX(28px); transition: opacity .4s ease, transform .4s ease, visibility 0s .4s; }
+.slide.past { transform: translateX(-28px); }
+.slide.active { opacity: 1; visibility: visible; transform: none; transition: opacity .4s ease, transform .4s ease, visibility 0s; }
+.slide.night { background: var(--night); color: var(--night-ink); }
+.slide [data-step] { opacity: 0; transform: translateY(12px); transition: opacity .5s ease, transform .5s ease; }
+.slide [data-step].on { opacity: 1; transform: none; }
+.slide [data-step]:not(.on) { pointer-events: none; }
+.slide [data-until] { transition: opacity .45s ease, transform .45s ease; }
+.slide [data-until].off { opacity: 0; transform: translateY(-12px); pointer-events: none; }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: 68px; line-height: 1.12; }
+h2 { font-size: 44px; line-height: 1.15; }
+h3 { font-size: 30px; line-height: 1.2; }
 p { margin: 0; }
-.eyebrow { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; color: var(--muted); }
-.lead { font-size: 19px; color: var(--muted); max-width: 46em; }
-.sec-head { display: grid; gap: 10px; margin-bottom: 30px; }
-.who-ai { color: var(--ai); }
-.who-human { color: var(--human); }
-svg.i { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.sh { display: grid; gap: 8px; }
+.eyebrow { font-size: 15px; font-weight: 700; letter-spacing: .08em; color: var(--muted); }
+.sub { font-size: 20px; color: var(--muted); }
+.meta { font-size: 14px; color: var(--muted); font-weight: 500; }
+.night .eyebrow, .night .sub { color: var(--night-muted); }
+svg.i { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.prod { display: block; overflow: visible; flex: none; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; padding: 4px 12px; border-radius: 999px; white-space: nowrap; line-height: 1.4; }
 .chip.ai { background: var(--ai-soft); color: var(--ai); }
 .chip.human { background: var(--human-soft); color: var(--human); }
 .chip.ok { background: var(--ok-soft); color: var(--ok); }
-.note { font-size: 14px; color: var(--muted); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+.chip.warn { background: var(--human-soft); color: var(--human); }
+.chip.ex { background: transparent; color: var(--muted); border: 1.5px dashed var(--line); font-weight: 600; }
+.night .chip.ai { background: var(--night-ai-soft); color: var(--night-ai); }
+.night .chip.human { background: var(--night-human-soft); color: var(--night-human); }
+.shake { animation: shake .16s linear infinite; }
+@keyframes shake {
+  0%, 100% { transform: translate(calc(var(--amp, 3px) * -1), 0) rotate(-.6deg); }
+  50% { transform: translate(var(--amp, 3px), 1px) rotate(.6deg); }
+}
+@keyframes blink { 50% { opacity: .35; } }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-/* ---------- 맨 위 ---------- */
-.hero { padding-block: 64px 56px; border-top: 0; }
-.hero .eyebrow { margin-bottom: 18px; }
-.hero h1 { max-width: 15em; }
-.hero h1 em { font-style: normal; color: var(--ai); }
-.hero .lead { margin-top: 18px; }
-.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+/* ---------- 1. 표지 ---------- */
+#s1 { padding: 60px 72px 48px; justify-content: space-between; }
+#s1 .eyebrow { color: var(--night-muted); }
+#s1 h1 { margin-top: 18px; }
+#s1 h1 em { font-style: normal; color: var(--night-ai); }
+#s1 .sub { margin-top: 16px; font-size: 21px; }
+.t-flow { display: grid; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr) 40px minmax(0, 1fr) 40px minmax(0, 1fr); align-items: stretch; }
+.t-node { background: var(--night-2); border: 1.5px solid var(--night-line); border-radius: 18px; padding: 18px 20px; display: grid; gap: 8px; align-content: start; animation: lift 8s ease-in-out infinite; }
+.t-node:nth-of-type(2) { animation-delay: 2s; }
+.t-node:nth-of-type(3) { animation-delay: 4s; }
+.t-node:nth-of-type(4) { animation-delay: 6s; }
+@keyframes lift {
+  0%, 18% { transform: translateY(-6px); border-color: var(--night-muted); }
+  26%, 100% { transform: none; border-color: var(--night-line); }
+}
+.t-node .ico { width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; }
+.t-node.human .ico { background: var(--night-human-soft); color: var(--night-human); }
+.t-node.ai .ico { background: var(--night-ai-soft); color: var(--night-ai); }
+.t-node.tool .ico { background: var(--night); color: var(--night-ink); border: 1.5px solid var(--night-line); }
+.t-node.best .ico { background: var(--night-ok-soft); color: var(--night-ok); }
+.t-node b { font-size: 21px; }
+.t-node span:last-child { font-size: 16px; color: var(--night-muted); line-height: 1.45; }
+.t-arrow { display: grid; place-items: center; color: var(--night-muted); }
+.t-bottom { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.t-lbl { font-size: 15px; font-weight: 700; letter-spacing: .06em; color: var(--night-muted); margin-right: 4px; }
+.t-case { display: flex; align-items: center; gap: 12px; background: var(--night-2); border: 1.5px solid var(--night-line); border-radius: 14px; padding: 8px 18px 8px 10px; }
+.t-case svg.prod { width: 40px; height: 46px; }
+.t-case b { display: block; font-size: 18px; line-height: 1.3; }
+.t-case span { font-size: 15px; color: var(--night-muted); }
+.t-legend { margin-left: auto; display: flex; gap: 8px; }
 
-/* 흐름(상자 → 화살표 → 상자) — 좁으면 위에서 아래로 */
-.flow { display: flex; align-items: stretch; margin-top: 36px; }
-.node { flex: 1 1 0; min-width: 0; background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r); padding: 20px 18px; display: grid; gap: 10px; align-content: start; }
-.node .ico { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; }
-.node.human .ico { background: var(--human-soft); color: var(--human); }
-.node.ai .ico { background: var(--ai-soft); color: var(--ai); }
-.node.tool .ico { background: var(--bg); color: var(--ink); border: 1.5px solid var(--line); }
-.node.win .ico { background: var(--ok-soft); color: var(--ok); }
-.node b { font-size: 19px; }
-.node p { font-size: 15px; color: var(--muted); line-height: 1.5; }
-.arrow { flex: 0 0 44px; display: grid; place-items: center; color: var(--muted); }
-.arrow svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+/* ---------- 2. 비교: 같은 문제, 두 방법 ---------- */
+.sh.row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; }
+.washer-mini { width: 96px; height: 112px; margin-right: 18px; }
+.race { display: grid; gap: 12px; }
+.race-scale, .lane { display: grid; grid-template-columns: 240px minmax(0, 1fr) 140px; gap: 22px; align-items: center; }
+.race-scale { padding-inline: 22px; }
+.race-scale .day { font-size: 15px; color: var(--muted); font-weight: 600; display: flex; align-items: baseline; gap: 10px; }
+.race-scale .day b { font-family: var(--display); font-weight: 400; font-size: 34px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ticks-row { position: relative; height: 22px; font-size: 14px; color: var(--muted); font-weight: 600; }
+.ticks-row span { position: absolute; top: 0; transform: translateX(-50%); }
+.ticks-row span:first-child { transform: none; }
+.ticks-row span:last-child { transform: translateX(-100%); }
+.lane { background: var(--panel); border-radius: 18px; padding: 16px 22px; }
+.lane-head b { display: block; font-size: 22px; line-height: 1.3; }
+.lane-head span { display: block; font-size: 15px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
+.lane.human .lane-head b { color: var(--human); }
+.lane.ai .lane-head b { color: var(--ai); }
+.lane-main { display: grid; gap: 9px; min-width: 0; }
+.lane-steps { display: flex; gap: 8px; flex-wrap: wrap; }
+.lane-steps span { font-size: 14.5px; font-weight: 600; padding: 4px 11px; border-radius: 999px; background: var(--surface); color: var(--muted); border: 1.5px solid var(--line); transition: background .15s, color .15s, border-color .15s; }
+.lane.human .lane-steps span.cur { background: var(--human); border-color: var(--human); color: var(--surface); }
+.lane.ai .lane-steps span.cur { background: var(--ai); border-color: var(--ai); color: var(--surface); }
+.lane.ai .lane-steps span.done { background: var(--ai-soft); border-color: var(--ai-soft); color: var(--ai); }
+.bar { position: relative; height: 16px; border-radius: 8px; background: var(--surface); border: 1.5px solid var(--line); overflow: hidden; }
+.bar .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--human); }
+.lane.ai .bar .fill { background: var(--ai); }
+.bar .notch { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--surface); opacity: 0; }
+.bar .notch.on { opacity: 1; }
+.bar .rest { position: absolute; top: 0; bottom: 0; left: calc(100% / 7); right: 0; background: repeating-linear-gradient(135deg, var(--ai-soft) 0 6px, transparent 6px 12px); opacity: 0; transition: opacity .3s; }
+.bar .rest.on { opacity: 1; }
+.lane-say { font-size: 14.5px; color: var(--muted); font-weight: 600; min-height: 22px; }
+.lane.ai.fin .lane-say { color: var(--ai); }
+.lane-count { text-align: right; }
+.lane-count b { display: block; font-family: var(--display); font-weight: 400; font-size: 52px; line-height: 1; font-variant-numeric: tabular-nums; }
+.lane-count span { font-size: 14.5px; color: var(--muted); font-weight: 600; }
+.lane.human .lane-count b { color: var(--human); }
+.lane.ai .lane-count b { color: var(--ai); }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.tile { border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 20px; display: grid; gap: 2px; }
+.tile .k { font-size: 15px; color: var(--muted); font-weight: 700; }
+.tile .v { font-family: var(--display); font-size: 34px; line-height: 1.2; }
+.tile .v .old { color: var(--muted); }
+.tile .v .new { color: var(--ai); }
+.tile .d { font-size: 14.5px; color: var(--muted); }
+.ex-note { position: absolute; right: 60px; bottom: 14px; font-size: 13px; color: var(--muted); }
 
-/* ---------- 지금의 어려움: 다람쥐 쳇바퀴 ---------- */
-.pain { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: center; }
-.loop { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1; margin: 0 auto; }
-.loop svg.ring { position: absolute; inset: 0; width: 100%; height: 100%; }
-.loop .step { position: absolute; transform: translate(-50%, -50%); background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 6px 12px; font-size: 15px; font-weight: 600; white-space: nowrap; color: var(--human); }
-.loop .center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; font-family: var(--display); font-size: 22px; line-height: 1.3; color: var(--muted); }
-.problems { display: grid; gap: 14px; }
-.problem { display: flex; gap: 14px; align-items: flex-start; background: var(--surface); border-radius: var(--r); padding: 18px; border: 1.5px solid var(--line); }
-.problem .n { flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--human-soft); color: var(--human); display: grid; place-items: center; font-weight: 700; }
-.problem b { display: block; font-size: 18px; margin-bottom: 2px; }
-.problem p { color: var(--muted); font-size: 15.5px; }
+/* ---------- 3. 데모: 드럼세탁기 (앱 화면) ---------- */
+#s3, #s4 { gap: 18px; }
+#s3 .sh, #s4 .sh { gap: 4px; }
+#s3 h2, #s4 h2 { font-size: 40px; }
+.win { flex: 1; min-height: 0; border: 1.5px solid var(--line); border-radius: 16px; overflow: hidden; display: grid; grid-template-rows: 38px minmax(0, 1fr); background: var(--surface); box-shadow: 0 10px 30px rgb(0 0 0 / .07); }
+.win-bar { display: flex; align-items: center; gap: 8px; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 14px; color: var(--muted); font-weight: 600; }
+.win-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.win-bar span { margin-left: 8px; }
+.win-body { display: grid; grid-template-columns: 380px minmax(0, 1fr); min-height: 0; }
+.chat { border-right: 1px solid var(--line); display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+.msgs { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.msg { max-width: 94%; display: grid; gap: 4px; }
+.msg .who { font-size: 13px; font-weight: 700; }
+.msg.me { align-self: flex-end; }
+.msg.me .who { color: var(--human); text-align: right; }
+.msg.ai .who { color: var(--ai); }
+.msg p { padding: 9px 13px; border-radius: 14px; font-size: 15px; line-height: 1.5; }
+.msg.me p { background: var(--human-soft); border-bottom-right-radius: 4px; min-height: 2.5em; }
+.msg.ai p { background: var(--panel); border-bottom-left-radius: 4px; }
+.approve-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.approve { font: 700 15px var(--body); background: var(--human); color: var(--surface); border: 0; border-radius: 10px; padding: 8px 16px; cursor: pointer; animation: pulse 1.4s ease-in-out infinite; }
+.approve:focus-visible { outline: 3px solid var(--human); outline-offset: 2px; }
+.approve.done { background: var(--ok-soft); color: var(--ok); animation: none; cursor: default; }
+.approve-row small { font-size: 13px; color: var(--muted); line-height: 1.4; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 var(--human-soft); } 50% { box-shadow: 0 0 0 7px var(--human-soft); } }
+.input { margin: 0 14px 14px; border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 14px; font-size: 15px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+.input svg.i { width: 20px; height: 20px; }
+.panel { display: flex; flex-direction: column; gap: 12px; padding: 14px 20px 18px; min-height: 0; min-width: 0; background: var(--panel); }
+.tabs { display: flex; gap: 6px; }
+.tab { font-size: 14px; font-weight: 700; padding: 5px 14px; border-radius: 999px; color: var(--muted); transition: background .2s, color .2s; }
+.tab.on { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1.5px var(--line); }
+.flowg { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
+.flowg:not(.show) { display: none; }
+.flowg li { position: relative; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 9px 10px 10px; display: grid; gap: 1px; font-size: 12.5px; color: var(--muted); line-height: 1.35; transition: border-color .2s, background .2s; animation: rise .4s ease both; animation-delay: calc(var(--i) * .12s); }
+.flowg li b { font-size: 14.5px; color: var(--ink); }
+.flowg li::after { content: ""; position: absolute; left: 100%; top: 50%; width: 18px; height: 2px; background: var(--line); }
+.flowg li:last-child::after { display: none; }
+.flowg .st { width: 12px; height: 12px; border-radius: 50%; background: var(--line); margin-bottom: 4px; position: relative; }
+.flowg li.run { border-color: var(--ai); }
+.flowg li.run .st { background: var(--ai); animation: blink .8s infinite; }
+.flowg li.done { border-color: var(--ok); background: var(--ok-soft); }
+.flowg li.done .st { background: var(--ok); }
+.flowg li.done .st::after { content: ""; position: absolute; left: 4px; top: 1.5px; width: 3px; height: 6px; border: solid var(--surface); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.zone { flex: 1; min-height: 0; display: grid; }
+.zone > * { min-height: 0; }
+.empty, .wait { display: grid; place-content: center; justify-items: center; gap: 10px; border: 2px dashed var(--line); border-radius: 14px; color: var(--muted); font-size: 16px; font-weight: 600; text-align: center; padding: 20px; }
+.empty svg.i { width: 34px; height: 34px; }
+.wait { border-color: var(--human); color: var(--human); }
+.wait svg.i { width: 34px; height: 34px; }
+.card { background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 16px; min-width: 0; }
+.card h4 { margin: 0; font-size: 15px; font-weight: 700; }
+.runzone { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 14px; }
+.count-big { font-family: var(--display); font-size: 40px; line-height: 1.1; color: var(--ai); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.count-big small { font-size: 22px; color: var(--muted); }
+.cases { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; margin: 10px 0 8px; }
+.cases i { aspect-ratio: 1; border-radius: 4px; border: 1.5px solid var(--line); background: var(--surface); }
+.cases i.run { border-color: var(--ai); animation: blink .6s infinite; }
+.cases i.done { background: var(--ai); border-color: var(--ai); }
+#d1-plot { display: block; width: 100%; height: auto; margin-top: 4px; }
+#d1-heat { opacity: 0; }
+.ax { stroke: var(--line); stroke-width: 1.5; fill: none; }
+.axl { fill: var(--muted); font: 600 13px var(--body); }
+.pt { stroke: var(--surface); stroke-width: 1.5; opacity: 0; transition: opacity .25s; }
+.pt.on { opacity: 1; }
+.nowmark circle { fill: none; stroke: var(--human); stroke-width: 3; }
+.nowmark text, #d1-star text { font: 700 13px var(--body); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.nowmark text { fill: var(--human); }
+#d1-star { opacity: 0; transition: opacity .4s; }
+#d1-star.on { opacity: 1; }
+#d1-star path { fill: var(--c4); stroke: var(--ink); stroke-width: 1.5; }
+#d1-star text { fill: var(--ink); }
+.result { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; }
+.ba { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; height: 100%; align-content: center; }
+.ba figure { margin: 0; display: grid; gap: 6px; justify-items: center; text-align: center; }
+.ba svg.prod { width: 110px; height: 128px; margin-bottom: 6px; }
+.ba figcaption { font-size: 15px; font-weight: 700; color: var(--muted); }
+.ba .val { font-family: var(--display); font-size: 30px; line-height: 1.1; }
+.ba .before .val { color: var(--human); }
+.ba .after .val { color: var(--ai); }
+.sum { display: grid; align-content: start; gap: 10px; }
+.big-claim { font-family: var(--display); font-size: 38px; line-height: 1.1; color: var(--ai); }
+.recs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 15px; }
+.recs li { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-block: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
-/* ---------- 식당 비유 ---------- */
-.analogy { display: grid; gap: 12px; }
-.pair { display: grid; grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); align-items: center; gap: 8px; }
-.side { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r); padding: 14px 16px; min-width: 0; }
-.side.us { border-color: var(--ai); }
-.side .ico { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none; }
-.side.cafe .ico { background: var(--bg); color: var(--ink); border: 1.5px solid var(--line); }
-.side.us .ico { background: var(--ai-soft); color: var(--ai); }
-.side.us.h .ico { background: var(--human-soft); color: var(--human); }
-.side.us.h { border-color: var(--human); }
-.side b { display: block; font-size: 17px; }
-.side span { font-size: 14.5px; color: var(--muted); }
-.pair .eq { text-align: center; color: var(--muted); font-size: 22px; font-weight: 700; }
-.pair-head { display: grid; grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); gap: 8px; font-weight: 700; color: var(--muted); font-size: 15px; }
+/* ---------- 4. 데모: 스마트폰 낙하 ---------- */
+.ph-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 370px minmax(0, 1fr); gap: 20px; }
+.drop { background: var(--panel); border-radius: 18px; padding: 10px 16px 14px; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 4px; min-height: 0; }
+#ph-scene { width: 100%; height: 100%; min-height: 0; display: block; }
+.ruler { stroke: var(--muted); stroke-width: 2; fill: none; }
+.rlbl { fill: var(--ink); font: 700 20px var(--body); }
+.floor { stroke: var(--ink); stroke-width: 3; }
+.hatch { stroke: var(--muted); stroke-width: 1.5; }
+.ph-frame { fill: var(--metal); }
+.ph-glass { fill: var(--glass); }
+.burst { color: var(--bad); stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; fill: none; opacity: 0; }
+.burst.on { opacity: 1; }
+.burst.ok { color: var(--ai); }
+.drop-status { text-align: center; font-size: 16.5px; font-weight: 600; min-height: 54px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.ph-right { display: grid; min-height: 0; }
+.ph-right > * { grid-area: 1 / 1; min-width: 0; }
+.old-way { background: var(--human-soft); border-radius: 18px; padding: 28px 30px; display: grid; align-content: start; gap: 18px; }
+.old-way h3 { font-size: 34px; }
+.old-way .chip { background: var(--surface); }
+.loop { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: lp; }
+.loop li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 14px; align-items: center; font-size: 18px; font-weight: 600; background: var(--surface); border-radius: 12px; padding: 10px 16px; }
+.loop li::before { counter-increment: lp; content: counter(lp); width: 34px; height: 34px; border-radius: 50%; background: var(--human); color: var(--surface); display: grid; place-items: center; font-weight: 700; font-size: 16px; }
+.loop li em { font-style: normal; font-size: 15px; color: var(--human); }
+.tally { display: flex; gap: 10px; align-items: center; font-size: 18px; color: var(--human); font-weight: 700; }
+.sim { border: 1.5px solid var(--line); border-radius: 18px; padding: 16px 22px 18px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; background: var(--surface); }
+.sim-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sim-head .ttl { display: flex; align-items: center; gap: 10px; }
+.sim-head b { font-size: 21px; }
+.sim-body { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 24px; align-items: center; min-height: 0; }
+.corner { background: var(--panel); border-radius: 14px; padding: 6px; display: grid; gap: 2px; }
+.corner svg { display: block; width: 100%; height: auto; }
+.corner .cap { font-size: 13px; color: var(--muted); text-align: center; font-weight: 600; padding-bottom: 4px; }
+.cn-lbl { font: 700 14px var(--body); }
+.ctl { display: grid; gap: 10px; }
+.rng { position: relative; padding-bottom: 16px; }
+.rng label { display: flex; justify-content: space-between; font-size: 16px; font-weight: 600; }
+.rng output { font-variant-numeric: tabular-nums; color: var(--ai); font-weight: 700; }
+.rng input { width: 100%; margin: 6px 0 0; accent-color: var(--ai); height: 24px; cursor: pointer; }
+.rng input:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px; border-radius: 6px; }
+.rec { position: absolute; bottom: -2px; transform: translateX(-50%); font-size: 12px; font-weight: 700; color: var(--ai); opacity: 0; transition: opacity .3s; white-space: nowrap; }
+.rec.on { opacity: 1; }
+.readout { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; font-weight: 600; }
+.readout .num { font-family: var(--display); font-weight: 400; font-size: 46px; line-height: 1; font-variant-numeric: tabular-nums; }
+.num.bad { color: var(--bad); }
+.num.ok { color: var(--ok); }
+.gauge { position: relative; height: 18px; border-radius: 9px; background: var(--panel); border: 1.5px solid var(--line); margin-top: 16px; }
+.gauge .g-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 9px; background: var(--ok); }
+.gauge.bad .g-fill { background: var(--bad); }
+.gauge .g-line { position: absolute; top: -8px; bottom: -8px; left: 57.14%; width: 3px; margin-left: -1.5px; background: var(--ink); border-radius: 2px; }
+.gauge .g-lbl { position: absolute; bottom: calc(100% + 8px); left: 57.14%; transform: translateX(-50%); font-size: 12.5px; color: var(--muted); white-space: nowrap; font-weight: 700; }
+.readout.sm b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.readout.sm b.over { color: var(--human); }
+.verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 50px; }
+.verdict .note { font-size: 14.5px; color: var(--muted); line-height: 1.4; flex: 1; min-width: 0; font-weight: 500; }
+.speed { display: flex; align-items: center; gap: 12px; background: var(--ai-soft); color: var(--ai); border-radius: 12px; padding: 9px 16px; font-size: 16px; font-weight: 700; }
+.speed b { font-family: var(--display); font-weight: 400; font-size: 28px; line-height: 1; }
+.speed .vs { color: var(--muted); font-weight: 600; }
+.speed .chip { margin-left: auto; }
 
-/* ---------- 6단계 ---------- */
-.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; counter-reset: s; }
-.stepcard { background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r); padding: 20px; display: grid; gap: 10px; align-content: start; position: relative; }
-.stepcard .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.stepcard .num { font-family: var(--display); font-size: 40px; line-height: 1; color: var(--line); }
-.stepcard .ico { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; }
-.stepcard.human .ico { background: var(--human-soft); color: var(--human); }
-.stepcard.ai .ico { background: var(--ai-soft); color: var(--ai); }
-.stepcard h3 { font-size: 22px; }
-.who { display: flex; flex-wrap: wrap; gap: 6px; }
-.stepcard p { color: var(--muted); font-size: 15.5px; }
-.stepcard .say { font-size: 15px; background: var(--bg); border-radius: 10px; padding: 8px 12px; }
+/* ---------- 5. 비교: 일이 끝난 뒤 ---------- */
+.kb { flex: 1; min-height: 0; display: grid; grid-template-columns: 390px minmax(0, 1fr); gap: 22px; }
+.kb-col { border-radius: 18px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.kb-old { background: var(--panel); }
+.kb-new { border: 2px solid var(--ai); }
+.kb-col h3 { font-size: 30px; }
+.kb-head { display: grid; gap: 8px; justify-items: start; }
+.pcs { display: grid; gap: 10px; }
+.pc { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; align-items: center; background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.pc .ico { width: 42px; height: 42px; border-radius: 12px; background: var(--human-soft); color: var(--human); display: grid; place-items: center; }
+.pc b { display: block; font-size: 16px; }
+.pc span { font-size: 14px; color: var(--muted); }
+.pc.gone { opacity: .6; border-style: dashed; }
+.kb-say { margin-top: auto; font-size: 18px; font-weight: 700; line-height: 1.45; }
+.kb-old .kb-say { color: var(--human); }
+.kb-new .kb-say { color: var(--ai); }
+.shelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.item { border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 3px 12px; align-items: center; background: var(--panel); }
+.item svg.prod { width: 40px; height: 48px; grid-row: span 3; }
+.item b { font-size: 16px; line-height: 1.3; }
+.item span { font-size: 13.5px; color: var(--muted); line-height: 1.35; }
+.item .tag { justify-self: start; font-size: 12.5px; font-weight: 700; color: var(--ai); background: var(--ai-soft); padding: 1px 8px; border-radius: 999px; }
+.item.next { background: transparent; border-style: dashed; }
 
-/* ---------- 실제 사례 ---------- */
-.case { display: grid; gap: 22px; }
-.bubble { position: relative; background: var(--human-soft); border-radius: 18px 18px 18px 4px; padding: 18px 22px; font-size: 19px; font-weight: 600; max-width: 40em; }
-.bubble small { display: block; font-size: 13px; font-weight: 600; color: var(--human); margin-bottom: 4px; letter-spacing: 0.04em; }
-.timeline { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-.tl { background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start; }
-.tl .k { font-size: 13px; font-weight: 700; color: var(--ai); letter-spacing: 0.04em; }
-.tl b { font-size: 16.5px; line-height: 1.35; }
-.tl span { font-size: 14px; color: var(--muted); line-height: 1.45; }
-.compare { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; align-items: stretch; }
-.panel { background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r); padding: 22px; min-width: 0; display: grid; gap: 14px; align-content: start; }
-.panel h3 { font-size: 21px; }
-.brackets { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
-.brk { display: grid; gap: 6px; }
-.brk svg { width: 100%; height: auto; display: block; }
-.brk .cap { font-size: 14.5px; font-weight: 600; }
-.brk .cap span { font-weight: 400; color: var(--muted); }
-.scale { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.scale i { display: block; width: 120px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--c1), var(--c2), var(--c3), var(--c4), var(--c5)); }
-.bars { display: grid; gap: 12px; }
-.bar { display: grid; gap: 4px; }
-.bar .lab { display: flex; justify-content: space-between; font-size: 15px; font-variant-numeric: tabular-nums; }
-.bar .track { height: 26px; background: var(--bg); border-radius: 8px; overflow: hidden; }
-.bar .fill { height: 100%; border-radius: 8px; }
-.bar.before .fill { background: var(--muted); opacity: 0.55; width: 100%; }
-.bar.after .fill { background: var(--ai); width: 69.1%; }
-.bignum { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.bignum strong { font-family: var(--display); font-weight: 400; font-size: 64px; line-height: 1; color: var(--ai); }
-.bignum span { font-size: 17px; color: var(--muted); }
-.checks { display: grid; gap: 8px; }
-.checks div { display: flex; gap: 10px; align-items: flex-start; font-size: 15.5px; }
-.checks svg { width: 22px; height: 22px; color: var(--ok); margin-top: 2px; }
+/* ---------- 6. 안심 ---------- */
+.safe { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 36px; align-items: center; }
+.map { display: grid; }
+.ext { width: 240px; margin-left: 26px; display: flex; gap: 12px; align-items: center; background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 16px; color: var(--muted); }
+.ext svg.i { width: 32px; height: 32px; }
+.ext b { display: block; font-size: 16px; color: var(--ink); line-height: 1.3; }
+.ext span { font-size: 14px; }
+.vlink { position: relative; height: 92px; width: 240px; margin-left: 26px; }
+.vlink::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 2.5px dashed var(--muted); }
+.vlink .lbl { position: absolute; left: calc(50% + 18px); top: 50%; transform: translateY(-50%); font-size: 14.5px; color: var(--muted); font-weight: 600; white-space: nowrap; line-height: 1.4; }
+.vlink .dot { position: absolute; left: calc(50% - 5px); top: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); animation: vdot 2.6s ease-in-out infinite alternate; }
+@keyframes vdot { from { top: 0; } to { top: calc(100% - 12px); } }
+.inside { position: relative; border: 2.5px dashed var(--ai); border-radius: 22px; padding: 30px 24px 24px; display: grid; grid-template-columns: 240px minmax(0, 1fr) 240px; align-items: center; }
+.inside .tag { position: absolute; top: -15px; right: 24px; background: var(--surface); padding: 0 10px; font-weight: 700; color: var(--ai); font-size: 16px; }
+.nd { background: var(--surface); border: 1.5px solid var(--line); border-radius: 16px; padding: 16px 18px; display: grid; gap: 6px; justify-items: start; }
+.nd .ico { width: 46px; height: 46px; border-radius: 12px; background: var(--ai-soft); color: var(--ai); display: grid; place-items: center; }
+.nd b { font-size: 20px; }
+.nd ul { margin: 0; padding-left: 18px; font-size: 14.5px; color: var(--muted); line-height: 1.6; }
+.hlink { position: relative; height: 64px; margin-inline: 8px; }
+.hlink::before { content: ""; position: absolute; left: 0; right: 8px; top: 50%; border-top: 2.5px solid var(--ai); }
+.hlink::after { content: ""; position: absolute; right: 0; top: calc(50% - 6px); border-style: solid; border-width: 7px 0 7px 11px; border-color: transparent transparent transparent var(--ai); margin-top: -.5px; }
+.hlink .lbl { position: absolute; left: 0; right: 0; top: 2px; text-align: center; font-size: 14px; color: var(--ai); font-weight: 700; }
+.hlink .dot { position: absolute; top: calc(50% - 5px); left: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--ai); animation: hdot 2.2s linear infinite; }
+@keyframes hdot { from { left: 0; } to { left: calc(100% - 22px); } }
+.rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; }
+.rules li { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 16px; align-items: start; }
+.rules .ico { width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center; background: var(--ok-soft); color: var(--ok); }
+.rules li.h .ico { background: var(--human-soft); color: var(--human); }
+.rules b { display: block; font-size: 20px; line-height: 1.35; }
+.rules p { margin-top: 2px; font-size: 15.5px; color: var(--muted); line-height: 1.5; }
 
-/* ---------- 다른 예시 ---------- */
-.examples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.ex { background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r); padding: 20px; display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 14px; align-items: start; }
-.ex .ico { width: 52px; height: 52px; border-radius: 50%; background: var(--bg); border: 1.5px solid var(--line); display: grid; place-items: center; color: var(--ink); }
-.ex q { display: block; font-size: 17.5px; font-weight: 600; quotes: "“" "”"; }
-.ex p { margin-top: 6px; font-size: 14.5px; color: var(--muted); }
-
-/* ---------- 전·후 비교 ---------- */
-.ba { display: grid; grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr); border: 1.5px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--surface); }
-.ba > div { padding: 14px 18px; border-top: 1px solid var(--line); font-size: 16px; min-width: 0; }
-.ba .h { border-top: 0; font-weight: 700; font-size: 15px; }
-.ba .h.now { color: var(--muted); }
-.ba .h.new { color: var(--ai); background: var(--ai-soft); }
-.ba .k { font-weight: 700; color: var(--muted); font-size: 15px; }
-.ba .new { background: color-mix(in srgb, var(--ai-soft) 45%, var(--surface)); font-weight: 600; }
-
-/* ---------- 안심: 회사 안 그림 ---------- */
-.safe { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
-.inside { border: 2px dashed var(--ai); border-radius: 22px; padding: 22px; position: relative; display: grid; gap: 14px; }
-.inside > .tag { position: absolute; top: -14px; left: 20px; background: var(--bg); padding: 0 10px; font-weight: 700; color: var(--ai); font-size: 15px; }
-.inside .row { display: grid; grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr) 36px minmax(0, 1fr); align-items: center; }
-.box { background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 14px 12px; text-align: center; display: grid; gap: 6px; justify-items: center; min-width: 0; }
-.box svg.i { color: var(--ai); }
-.box b { font-size: 16px; }
-.box span { font-size: 13.5px; color: var(--muted); line-height: 1.4; }
-.dbl { color: var(--muted); display: grid; place-items: center; }
-.dbl svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.outside { display: flex; gap: 12px; align-items: center; font-size: 14.5px; color: var(--muted); }
-.outside .box { flex: none; padding: 10px 14px; }
-.guards { display: grid; gap: 12px; }
-.guard { display: flex; gap: 14px; align-items: flex-start; }
-.guard .ico { width: 44px; height: 44px; border-radius: 12px; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; flex: none; }
-.guard b { display: block; font-size: 17px; }
-.guard p { color: var(--muted); font-size: 15px; }
-
-/* ---------- 진행 상황 ---------- */
-.track { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin-bottom: 28px; }
-.ms { display: grid; gap: 10px; justify-items: center; text-align: center; position: relative; padding: 0 6px; }
-.ms::before { content: ""; position: absolute; top: 19px; left: -50%; width: 100%; height: 4px; background: var(--line); z-index: 0; }
-.ms:first-child::before { display: none; }
-.ms.done::before, .ms.now::before { background: var(--ai); }
-.ms .dot { width: 42px; height: 42px; border-radius: 50%; background: var(--surface); border: 3px solid var(--line); display: grid; place-items: center; z-index: 1; font-weight: 700; color: var(--muted); }
-.ms.done .dot { background: var(--ai); border-color: var(--ai); color: var(--surface); }
-.ms.now .dot { border-color: var(--human); color: var(--human); box-shadow: 0 0 0 6px var(--human-soft); }
-.ms .dot svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.ms b { font-size: 16px; }
-.ms span { font-size: 13.5px; color: var(--muted); line-height: 1.4; }
-.ms.now b { color: var(--human); }
-.done-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.stat { background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r); padding: 18px; display: grid; gap: 4px; }
-.stat strong { font-family: var(--display); font-weight: 400; font-size: 40px; line-height: 1.05; color: var(--ai); }
-.stat span { font-size: 15px; color: var(--muted); }
-
-/* ---------- 다음 단계 ---------- */
+/* ---------- 7. 다음 단계 ---------- */
+#s7 { padding: 52px 72px 40px; gap: 26px; }
+.track { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.track li { position: relative; display: grid; gap: 6px; justify-items: start; align-content: start; padding-right: 22px; }
+.track li::before { content: ""; position: absolute; top: 21px; left: 48px; right: 4px; height: 3px; background: var(--night-line); }
+.track li:last-child::before { display: none; }
+.track li.done::before { background: var(--night-ai); }
+.track .dot { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--night-line); display: grid; place-items: center; font-weight: 700; color: var(--night-muted); background: var(--night); position: relative; z-index: 1; margin-bottom: 6px; }
+.track li.done .dot { background: var(--night-ai); border-color: var(--night-ai); color: var(--night); }
+.track li.now .dot { border-color: var(--night-human); color: var(--night-human); box-shadow: 0 0 0 6px var(--night-human-soft); }
+.track .dot svg.i { width: 22px; height: 22px; stroke-width: 3; }
+.track b { font-size: 20px; }
+.track li.now b { color: var(--night-human); }
+.track span { font-size: 15px; color: var(--night-muted); line-height: 1.45; }
 .asks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.ask { background: var(--human-soft); border-radius: var(--r); padding: 22px; display: grid; gap: 8px; align-content: start; }
-.ask .ico { color: var(--human); }
-.ask b { font-size: 19px; }
-.ask p { font-size: 15.5px; color: var(--ink); opacity: 0.85; }
-.closing { margin-top: 40px; text-align: center; font-family: var(--display); font-size: clamp(26px, 3.4vw, 36px); line-height: 1.3; }
-.closing .who-human, .closing .who-ai { white-space: nowrap; }
-footer { padding-block: 28px 48px; text-align: center; }
+.ask { background: var(--night-2); border: 1.5px solid var(--night-line); border-radius: 16px; padding: 18px 20px; display: grid; gap: 6px; align-content: start; }
+.ask svg.i { color: var(--night-human); width: 28px; height: 28px; }
+.ask b { font-size: 20px; }
+.ask p { font-size: 15.5px; color: var(--night-muted); line-height: 1.5; }
+.closing { font-family: var(--display); font-size: 42px; line-height: 1.2; margin-top: auto; }
+.closing .h { color: var(--night-human); }
+.closing .a { color: var(--night-ai); }
+.fine { font-size: 14px; color: var(--night-muted); }
 
-/* ---------- 좁은 화면 ---------- */
-@media (max-width: 860px) {
-  .pain, .compare, .safe { grid-template-columns: minmax(0, 1fr); }
-  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .done-grid, .asks { grid-template-columns: minmax(0, 1fr); }
-  .examples { grid-template-columns: minmax(0, 1fr); }
+/* ---------- 아래 조작 막대 ---------- */
+.bar-nav { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding-block: 10px 12px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: 600 14px var(--body); cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.primary { background: var(--ai); border-color: var(--ai); color: var(--surface); min-width: 210px; }
+.btn.icon { width: 38px; padding: 0; }
+.btn svg.i { width: 18px; height: 18px; }
+.btn:focus-visible, .dots button:focus-visible { outline: 3px solid var(--ai); outline-offset: 2px; }
+.dots { display: flex; gap: 2px; align-items: center; }
+.dots button { width: 22px; height: 22px; border: 0; padding: 0; background: transparent; cursor: pointer; display: grid; place-items: center; border-radius: 6px; }
+.dots button::before { content: ""; width: 8px; height: 8px; border-radius: 4px; background: var(--line); transition: width .25s, background .25s; }
+.dots button[aria-current="step"]::before { width: 20px; background: var(--ai); }
+.count { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 128px; text-align: center; font-weight: 600; }
+.keys { font-size: 13px; color: var(--muted); }
+@media (max-width: 760px) {
+  .keys, .btn .lbl-sm { display: none; }
+  .count { min-width: 0; }
+  .btn.primary { min-width: 0; }
 }
-@media (max-width: 640px) {
-  body { font-size: 16px; }
-  .flow { flex-direction: column; }
-  .arrow { flex-basis: 36px; }
-  .arrow svg { transform: rotate(90deg); }
-  .steps, .timeline { grid-template-columns: minmax(0, 1fr); }
-  .pair, .pair-head { grid-template-columns: minmax(0, 1fr); }
-  .pair .eq { transform: rotate(90deg); line-height: 1; }
-  .pair-head > :nth-child(2), .pair-head > :nth-child(3) { display: none; }
-  .brackets { grid-template-columns: minmax(0, 1fr); }
-  .ba { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .ba .k { grid-column: 1 / -1; background: var(--bg); padding-block: 8px; }
-  .ba .h.blank { display: none; }
-  .inside .row { grid-template-columns: minmax(0, 1fr); }
-  .dbl svg { transform: rotate(90deg); }
-  .track { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .ms { grid-template-columns: 42px minmax(0, 1fr); justify-items: start; text-align: left; column-gap: 12px; row-gap: 0; }
-  .ms .dot { grid-row: span 2; }
-  .ms::before { display: none; }
-  .loop .step { font-size: 13px; padding: 4px 8px; }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .ms.now .dot { animation: pulse 2.4s ease-in-out infinite; }
-  @keyframes pulse { 50% { box-shadow: 0 0 0 11px var(--human-soft); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 </style>
 
-<!-- 아이콘 모음 (선으로 그린 간단한 그림) -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-person" viewBox="0 0 48 48"><circle cx="24" cy="15" r="7"/><path d="M10 41c1.5-8 7-12 14-12s12.5 4 14 12"/></symbol>
-  <symbol id="i-chat" viewBox="0 0 48 48"><path d="M8 11h32v21H22l-8 7v-7H8z"/><path d="M16 21.5h.01M24 21.5h.01M32 21.5h.01" stroke-width="4"/></symbol>
-  <symbol id="i-bot" viewBox="0 0 48 48"><rect x="10" y="15" width="28" height="22" rx="7"/><path d="M24 9v6"/><circle cx="24" cy="7.5" r="2"/><path d="M18.5 25.5h.01M29.5 25.5h.01" stroke-width="5"/><path d="M19.5 31.5h9"/><path d="M6 23v7M42 23v7"/></symbol>
-  <symbol id="i-pc" viewBox="0 0 48 48"><rect x="6" y="9" width="36" height="24" rx="3"/><path d="M17 41h14M24 33v8"/></symbol>
-  <symbol id="i-doc" viewBox="0 0 48 48"><path d="M13 6h15l9 9v27H13z"/><path d="M28 6v9h9"/><path d="M18 24h14M18 30h14M18 36h9"/></symbol>
-  <symbol id="i-plan" viewBox="0 0 48 48"><rect x="11" y="9" width="26" height="33" rx="3"/><path d="M18 9V5.5h12V9"/><path d="M17 20l2.5 2.5 4-4M27 21h4M17 30l2.5 2.5 4-4M27 31h4"/></symbol>
-  <symbol id="i-cube" viewBox="0 0 48 48"><path d="M24 6l16 9v18l-16 9-16-9V15z"/><path d="M8 15l16 9 16-9M24 24v18"/></symbol>
-  <symbol id="i-flask" viewBox="0 0 48 48"><path d="M19 6h10M21 6v12L10 38a3 3 0 0 0 2.7 4h22.6a3 3 0 0 0 2.7-4L27 18V6"/><path d="M14.5 31h19"/></symbol>
-  <symbol id="i-bulb" viewBox="0 0 48 48"><path d="M17 30.5a11 11 0 1 1 14 0c-1.4 1.2-2 2.6-2 4.5H19c0-1.9-.6-3.3-2-4.5z"/><path d="M19 40h10M21.5 44h5"/></symbol>
-  <symbol id="i-trophy" viewBox="0 0 48 48"><path d="M16 7h16v11a8 8 0 0 1-16 0z"/><path d="M16 10H9a7 7 0 0 0 7.5 8M32 10h7a7 7 0 0 1-7.5 8"/><path d="M24 26v7M18 41h12M20 33h8v8h-8z"/></symbol>
-  <symbol id="i-chart" viewBox="0 0 48 48"><path d="M7 41h34"/><path d="M13 41V27h6v14M22 41V19h6v22M31 41V11h6v30"/></symbol>
-  <symbol id="i-db" viewBox="0 0 48 48"><ellipse cx="24" cy="11" rx="14" ry="5"/><path d="M10 11v26c0 2.8 6.3 5 14 5s14-2.2 14-5V11"/><path d="M10 24c0 2.8 6.3 5 14 5s14-2.2 14-5"/></symbol>
-  <symbol id="i-check" viewBox="0 0 48 48"><path d="M10 25l9 9 19-19"/></symbol>
-  <symbol id="i-shield" viewBox="0 0 48 48"><path d="M24 5l15 5.5v11c0 10-6.5 17.5-15 20.5-8.5-3-15-10.5-15-20.5v-11z"/><path d="M17 24l5 5 9-10"/></symbol>
-  <symbol id="i-hand" viewBox="0 0 48 48"><path d="M17 25V11a3 3 0 0 1 6 0v12M23 22V8a3 3 0 0 1 6 0v14M29 22V11a3 3 0 0 1 6 0v15c0 9-5 16-13 16-6 0-9-4-12-9l-4-7a3 3 0 0 1 5-3l3 4"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 48 48"><rect x="10" y="21" width="28" height="21" rx="4"/><path d="M16 21v-6a8 8 0 0 1 16 0v6"/><path d="M24 29v6"/></symbol>
-  <symbol id="i-people" viewBox="0 0 48 48"><circle cx="17" cy="16" r="6"/><circle cx="33" cy="18" r="5"/><path d="M5 40c1-7 5.5-11 12-11s11 4 12 11"/><path d="M29 30c1.3-.6 2.6-1 4-1 5.5 0 9 3.5 10 9"/></symbol>
-  <symbol id="i-web" viewBox="0 0 48 48"><rect x="5" y="8" width="38" height="32" rx="3"/><path d="M5 16h38"/><path d="M10 12h.01M14 12h.01M18 12h.01" stroke-width="3"/><path d="M12 24h14M12 31h22"/></symbol>
-  <symbol id="i-building" viewBox="0 0 48 48"><path d="M8 42V8h20v34M28 18h12v24"/><path d="M5 42h38"/><path d="M14 15h3M20 15h3M14 22h3M20 22h3M14 29h3M20 29h3M33 25h3M33 32h3"/></symbol>
-  <symbol id="i-car" viewBox="0 0 48 48"><path d="M7 31l3.5-9.5A4 4 0 0 1 14.3 19h19.4a4 4 0 0 1 3.8 2.5L41 31v6H7z"/><path d="M7 31h34"/><circle cx="15" cy="37" r="3.5"/><circle cx="33" cy="37" r="3.5"/></symbol>
-  <symbol id="i-thermo" viewBox="0 0 48 48"><path d="M20 9a4 4 0 0 1 8 0v19.5a8 8 0 1 1-8 0z"/><path d="M24 20v13"/><path d="M33 12h5M33 18h5M33 24h3"/></symbol>
-  <symbol id="i-light" viewBox="0 0 48 48"><path d="M14 16h20l-3 9H17z"/><path d="M24 6v4"/><path d="M17 25l-7 15M24 25v15M31 25l7 15"/></symbol>
-  <symbol id="i-part" viewBox="0 0 48 48"><path d="M8 12h32v9h-9v15H17V21H8z"/><path d="M24 4v8" stroke-dasharray="2 3"/></symbol>
-  <symbol id="i-loop" viewBox="0 0 48 48"><path d="M38 20a15 15 0 0 0-27-6M10 28a15 15 0 0 0 27 6"/><path d="M11 6v8h8M37 42v-8h-8"/></symbol>
-  <symbol id="i-moon" viewBox="0 0 48 48"><path d="M36 30A15 15 0 0 1 18 12a15 15 0 1 0 18 18z"/></symbol>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></symbol>
+    <symbol id="i-ai" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3.5"/><path d="M12 3v4M9 12.5v1M15 12.5v1M2 12v3M22 12v3"/></symbol>
+    <symbol id="i-tool" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M7 12l3-3 2 2 4-4"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-6.5z"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H10l-5 4v-4H4z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.8-3.4 8-8 9-4.6-1-8-4.2-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="7" rx="2"/><rect x="4" y="13.5" width="16" height="7" rx="2"/><path d="M8 7h.01M8 17h.01"/></symbol>
+    <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 19h19"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18h10.5a4 4 0 0 0 .4-8 6 6 0 0 0-11.6 1.2A3.5 3.5 0 0 0 7 18z"/></symbol>
+    <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15.5 14.3A4.8 4.8 0 0 1 21 19"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v3M21 12v2.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/><path d="M12 8v4l3 2"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5v14M15.5 5v14"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="p-washer" viewBox="0 0 120 140">
+      <rect x="10" y="6" width="100" height="126" rx="12" style="fill:var(--prod-body);stroke:var(--prod-line);stroke-width:3"/>
+      <path d="M10 32h100" style="stroke:var(--prod-line);stroke-width:2.5"/>
+      <rect x="20" y="14" width="40" height="10" rx="3" style="fill:var(--glass)"/>
+      <circle cx="94" cy="19" r="6" style="fill:var(--prod-door);stroke:var(--prod-line);stroke-width:2"/>
+      <circle cx="60" cy="82" r="36" style="fill:var(--prod-door);stroke:var(--prod-line);stroke-width:3"/>
+      <circle cx="60" cy="82" r="25" style="fill:var(--glass)"/>
+      <path d="M45 76a17 17 0 0 1 24-9" style="fill:none;stroke:var(--prod-door);stroke-width:3;stroke-linecap:round;opacity:.55"/>
+      <rect x="18" y="131" width="16" height="6" rx="2" style="fill:var(--prod-line)"/>
+      <rect x="86" y="131" width="16" height="6" rx="2" style="fill:var(--prod-line)"/>
+    </symbol>
+    <symbol id="p-phone" viewBox="0 0 120 140">
+      <rect x="34" y="6" width="52" height="128" rx="11" style="fill:var(--metal)"/>
+      <rect x="38" y="10" width="44" height="120" rx="8" style="fill:var(--glass)"/>
+      <rect x="52" y="14" width="16" height="4" rx="2" style="fill:var(--metal)"/>
+    </symbol>
+    <symbol id="p-fridge" viewBox="0 0 120 140">
+      <rect x="28" y="4" width="64" height="132" rx="8" style="fill:var(--prod-body);stroke:var(--prod-line);stroke-width:3"/>
+      <path d="M28 50h64" style="stroke:var(--prod-line);stroke-width:2.5"/>
+      <rect x="80" y="20" width="5" height="20" rx="2" style="fill:var(--prod-line)"/>
+      <rect x="80" y="62" width="5" height="34" rx="2" style="fill:var(--prod-line)"/>
+    </symbol>
+    <symbol id="p-aircon" viewBox="0 0 120 140">
+      <rect x="8" y="30" width="104" height="76" rx="6" style="fill:var(--prod-body);stroke:var(--prod-line);stroke-width:3"/>
+      <circle cx="48" cy="68" r="27" style="fill:var(--prod-door);stroke:var(--prod-line);stroke-width:2.5"/>
+      <path d="M48 68l12-14M48 68l-15-6M48 68l4 18" style="stroke:var(--prod-line);stroke-width:3;stroke-linecap:round"/>
+      <path d="M86 48h16M86 58h16M86 68h16M86 78h16M86 88h16" style="stroke:var(--prod-line);stroke-width:2.5"/>
+      <rect x="16" y="106" width="12" height="8" style="fill:var(--prod-line)"/>
+      <rect x="92" y="106" width="12" height="8" style="fill:var(--prod-line)"/>
+    </symbol>
+    <symbol id="p-tv" viewBox="0 0 120 140">
+      <rect x="6" y="26" width="108" height="66" rx="4" style="fill:var(--glass);stroke:var(--prod-line);stroke-width:3"/>
+      <path d="M60 92v14M38 108h44" style="stroke:var(--prod-line);stroke-width:4;stroke-linecap:round"/>
+    </symbol>
+    <symbol id="p-buds" viewBox="0 0 120 140">
+      <rect x="18" y="46" width="84" height="56" rx="26" style="fill:var(--prod-body);stroke:var(--prod-line);stroke-width:3"/>
+      <path d="M20 66h80" style="stroke:var(--prod-line);stroke-width:2.5"/>
+      <circle cx="60" cy="84" r="3.5" style="fill:var(--ai)"/>
+    </symbol>
+  </defs>
 </svg>
 
-<main>
-  <!-- 맨 위: 한 문장과 큰 흐름 -->
-  <header class="hero">
-    <div class="wrap">
-      <p class="eyebrow">DDS AI Engineer · 경영진 보고 · 2026년 10월</p>
-      <h1>말로 부탁하면, <em>AI 조수</em>가 설계 실험을 대신 해 줍니다</h1>
-      <p class="lead">엔지니어가 “이 부품을 더 가볍게 만들어 줘”라고 말하면, AI 조수가 회사 PC의 설계·해석 프로그램을 직접 움직여 여러 번 실험하고, 가장 좋은 설계와 보고서를 돌려줍니다.</p>
-      <div class="legend">
-        <span class="chip human"><svg class="i" style="width:16px;height:16px"><use href="#i-person"/></svg>사람이 하는 일</span>
-        <span class="chip ai"><svg class="i" style="width:16px;height:16px"><use href="#i-bot"/></svg>AI 조수가 하는 일</span>
-      </div>
-      <div class="flow" role="list" aria-label="전체 흐름">
-        <div class="node human" role="listitem">
-          <div class="ico"><svg class="i"><use href="#i-chat"/></svg></div>
-          <b>말로 부탁</b><p>엔지니어가 평소 말로 요청합니다. 명령어를 몰라도 됩니다.</p>
-        </div>
-        <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
-        <div class="node ai" role="listitem">
-          <div class="ico"><svg class="i"><use href="#i-bot"/></svg></div>
-          <b>AI 조수가 계획</b><p>할 일 순서를 그림으로 보여 주고, 사람이 OK하면 시작합니다.</p>
-        </div>
-        <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
-        <div class="node tool" role="listitem">
-          <div class="ico"><svg class="i"><use href="#i-pc"/></svg></div>
-          <b>설계 프로그램이 계산</b><p>회사가 이미 쓰는 프로그램(NX, Abaqus 등)을 AI가 대신 조작합니다.</p>
-        </div>
-        <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
-        <div class="node win" role="listitem">
-          <div class="ico"><svg class="i"><use href="#i-trophy"/></svg></div>
-          <b>가장 좋은 답</b><p>최적 설계, 3D로 미리 보는 시뮬레이터, 보고서를 받습니다.</p>
-        </div>
-      </div>
+<div class="app">
+<main class="viewport" id="viewport">
+<div class="stage" id="stage">
+
+<!-- 1. 표지 -->
+<section class="slide night" id="s1" data-title="표지" data-dur="9000" aria-label="1. 표지">
+  <div>
+    <p class="eyebrow">DDS AI Engineer · 경영진 보고 · 2026년 10월</p>
+    <h1>말로 부탁하면,<br><em>AI 조수</em>가 설계 실험을 대신 합니다</h1>
+    <p class="sub">설계 실험(CAE 해석) = 제품을 만들기 전에 컴퓨터 안에서 흔들고, 떨어뜨리고, 바람을 불어 보는 일</p>
+  </div>
+  <div class="t-flow">
+    <div class="t-node human"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><b>엔지니어</b><span>“세탁기가 덜 흔들리게 해 줘”</span></div>
+    <span class="t-arrow"><svg class="i"><use href="#i-right"/></svg></span>
+    <div class="t-node ai"><span class="ico"><svg class="i"><use href="#i-ai"/></svg></span><b>AI 조수</b><span>계획을 짜고 계산을 맡깁니다</span></div>
+    <span class="t-arrow"><svg class="i"><use href="#i-right"/></svg></span>
+    <div class="t-node tool"><span class="ico"><svg class="i"><use href="#i-tool"/></svg></span><b>설계·해석 프로그램</b><span>PC에서 수십 번 계산합니다</span></div>
+    <span class="t-arrow"><svg class="i"><use href="#i-right"/></svg></span>
+    <div class="t-node best"><span class="ico"><svg class="i"><use href="#i-star"/></svg></span><b>가장 좋은 설계</b><span>엔지니어가 확인하고 정합니다</span></div>
+  </div>
+  <div class="t-bottom">
+    <span class="t-lbl">오늘 볼 실제 문제</span>
+    <div class="t-case"><svg class="prod"><use href="#p-washer"/></svg><div><b>드럼세탁기</b><span>탈수할 때 덜 흔들리게</span></div></div>
+    <div class="t-case"><svg class="prod"><use href="#p-phone"/></svg><div><b>스마트폰</b><span>떨어뜨려도 화면이 안 깨지게</span></div></div>
+    <span class="t-legend"><span class="chip human">주황 = 사람이 하는 일</span><span class="chip ai">청록 = AI가 하는 일</span></span>
+  </div>
+</section>
+
+<!-- 2. 비교 ①: 같은 문제, 두 방법 -->
+<section class="slide" id="s2" data-title="비교: 걸리는 시간" data-steps="2" data-labels="두 방법 동시에 출발|결과 정리" data-dur="4000,11500,8000" aria-label="2. 같은 문제를 두 가지 방법으로">
+  <header class="sh row">
+    <div class="sh">
+      <p class="eyebrow">비교 ① 같은 문제를 두 가지 방법으로</p>
+      <h2>드럼세탁기가 탈수할 때 덜컹거립니다</h2>
+      <p class="sub">할 일: 흔들림이 가장 작은 <b>스프링·댐퍼</b> 값 찾기 (RecurDyn으로 움직임 해석)</p>
     </div>
+    <svg class="prod washer-mini shake" style="--amp:3px" role="img" aria-label="흔들리는 드럼세탁기"><use href="#p-washer"/></svg>
   </header>
-
-  <!-- 1. 지금의 어려움 -->
-  <section id="problem">
-    <div class="wrap">
-      <div class="sec-head">
-        <p class="eyebrow">1 · 지금은 무엇이 어려운가</p>
-        <h2>설계 하나 바꿀 때마다, 사람이 이 바퀴를 손으로 돌립니다</h2>
-      </div>
-      <div class="pain">
-        <div class="loop" aria-label="사람이 손으로 반복하는 다섯 단계">
-          <svg class="ring" viewBox="0 0 400 400" aria-hidden="true">
-            <defs><marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--human)"/></marker></defs>
-            <circle cx="200" cy="200" r="140" fill="none" stroke-width="22" style="stroke:var(--human-soft)"/>
-            <path d="M240.9 66.1 A140 140 0 0 1 314.7 119.7" fill="none" stroke-width="3" marker-end="url(#ah)" style="stroke:var(--human)"/>
-            <path d="M340.0 197.6 A140 140 0 0 1 311.8 284.3" fill="none" stroke-width="3" marker-end="url(#ah)" style="stroke:var(--human)"/>
-            <path d="M245.6 332.4 A140 140 0 0 1 154.4 332.4" fill="none" stroke-width="3" marker-end="url(#ah)" style="stroke:var(--human)"/>
-            <path d="M88.2 284.3 A140 140 0 0 1 60.0 197.6" fill="none" stroke-width="3" marker-end="url(#ah)" style="stroke:var(--human)"/>
-            <path d="M85.3 119.7 A140 140 0 0 1 159.1 66.1" fill="none" stroke-width="3" marker-end="url(#ah)" style="stroke:var(--human)"/>
-          </svg>
-          <span class="step" style="left:50%;top:15%">① 모양 고치기</span>
-          <span class="step" style="left:83%;top:39%">② 계산 준비</span>
-          <span class="step" style="left:70%;top:78%">③ 몇 시간 기다리기</span>
-          <span class="step" style="left:30%;top:78%">④ 결과 옮겨 적기</span>
-          <span class="step" style="left:17%;top:39%">⑤ 비교하고 다시</span>
-          <div class="center">한 바퀴마다<br>사람 손이 필요</div>
-        </div>
-        <div class="problems">
-          <div class="problem"><span class="n">1</span><div><b>오래 걸려요</b><p>한 바퀴에 반나절에서 며칠. 그래서 설계안을 몇 개밖에 못 비교합니다.</p></div></div>
-          <div class="problem"><span class="n">2</span><div><b>할 줄 아는 사람이 적어요</b><p>자동으로 돌리려면 컴퓨터 명령문(스크립트)을 짜야 해서, 일부 전문가만 할 수 있습니다.</p></div></div>
-          <div class="problem"><span class="n">3</span><div><b>결과가 흩어져요</b><p>계산 결과가 개인 PC와 엑셀에 흩어져, 다음 설계에 다시 쓰기 어렵습니다.</p></div></div>
-        </div>
-      </div>
+  <div class="race">
+    <div class="race-scale">
+      <div class="day">지난 날 <b id="r-day">0일</b></div>
+      <div class="ticks-row"><span style="left:0">오늘</span><span style="left:50%">1주</span><span style="left:100%">2주</span></div>
+      <div></div>
     </div>
-  </section>
-
-  <!-- 2. 식당 비유 -->
-  <section id="analogy">
-    <div class="wrap">
-      <div class="sec-head">
-        <p class="eyebrow">2 · 쉽게 비유하면</p>
-        <h2>식당과 똑같습니다</h2>
-        <p class="lead">손님은 주문만 하면 됩니다. 요리 순서를 정하고 주방을 움직이는 일은 매니저가 합니다.</p>
+    <div class="lane human" id="laneA">
+      <div class="lane-head"><b>지금 방식</b><span>엔지니어가 조합마다<br>4단계를 손으로</span></div>
+      <div class="lane-main">
+        <div class="lane-steps"><span>① 모델 고치기</span><span>② 해석 조건 넣기</span><span>③ 계산 기다리기</span><span>④ 결과 엑셀 정리</span></div>
+        <div class="bar"><i class="fill"></i></div>
+        <p class="lane-say" id="sayA">출발 전</p>
       </div>
-      <div class="analogy">
-        <div class="pair-head"><span>식당에서는</span><span></span><span>우리 시스템에서는</span></div>
-        <div class="pair">
-          <div class="side cafe"><div class="ico"><svg class="i"><use href="#i-person"/></svg></div><div><b>손님이 주문</b><span>“매콤한 걸로 주세요”</span></div></div>
-          <div class="eq" aria-hidden="true">=</div>
-          <div class="side us h"><div class="ico"><svg class="i"><use href="#i-chat"/></svg></div><div><b>엔지니어가 말로 부탁</b><span>“더 가볍게, 강도는 그대로”</span></div></div>
-        </div>
-        <div class="pair">
-          <div class="side cafe"><div class="ico"><svg class="i"><use href="#i-plan"/></svg></div><div><b>매니저가 주문서 확인</b><span>“이 순서로 만들까요?”</span></div></div>
-          <div class="eq" aria-hidden="true">=</div>
-          <div class="side us"><div class="ico"><svg class="i"><use href="#i-bot"/></svg></div><div><b>AI 조수가 작업 계획표</b><span>사람이 OK해야 시작</span></div></div>
-        </div>
-        <div class="pair">
-          <div class="side cafe"><div class="ico"><svg class="i"><use href="#i-flask"/></svg></div><div><b>주방에서 요리</b><span>여러 번 맛보며 간 맞추기</span></div></div>
-          <div class="eq" aria-hidden="true">=</div>
-          <div class="side us"><div class="ico"><svg class="i"><use href="#i-pc"/></svg></div><div><b>설계 프로그램이 계산</b><span>모양을 바꿔 가며 수십 번</span></div></div>
-        </div>
-        <div class="pair">
-          <div class="side cafe"><div class="ico"><svg class="i"><use href="#i-db"/></svg></div><div><b>레시피 노트에 기록</b><span>다음엔 맛을 미리 압니다</span></div></div>
-          <div class="eq" aria-hidden="true">=</div>
-          <div class="side us"><div class="ico"><svg class="i"><use href="#i-bulb"/></svg></div><div><b>AI가 결과를 공부</b><span>계산 안 해도 답을 바로 예측</span></div></div>
-        </div>
-        <div class="pair">
-          <div class="side cafe"><div class="ico"><svg class="i"><use href="#i-trophy"/></svg></div><div><b>최고의 한 접시</b><span>사진과 설명까지</span></div></div>
-          <div class="eq" aria-hidden="true">=</div>
-          <div class="side us"><div class="ico"><svg class="i"><use href="#i-doc"/></svg></div><div><b>최적 설계와 보고서</b><span>3D로 보고, 팀과 공유</span></div></div>
-        </div>
-      </div>
+      <div class="lane-count"><b id="cA">0</b><span>개 조합 해 봄</span></div>
     </div>
-  </section>
-
-  <!-- 3. 6단계 -->
-  <section id="flow">
-    <div class="wrap">
-      <div class="sec-head">
-        <p class="eyebrow">3 · 한눈에 보는 일의 순서</p>
-        <h2>사람은 부탁하고 확인만, 나머지는 AI 조수가</h2>
+    <div class="lane ai" id="laneB">
+      <div class="lane-head"><b>DDS AI Engineer</b><span>엔지니어는 말로 한 번<br>부탁하고 확인만</span></div>
+      <div class="lane-main">
+        <div class="lane-steps"><span>① 말로 부탁 (10분)</span><span>② AI가 밤새 계산</span><span>③ 확인·승인 (30분)</span></div>
+        <div class="bar"><i class="fill"></i><i class="rest"></i></div>
+        <p class="lane-say" id="sayB">출발 전</p>
       </div>
-      <div class="steps">
-        <article class="stepcard human">
-          <div class="top"><div class="ico"><svg class="i"><use href="#i-chat"/></svg></div><span class="num">1</span></div>
-          <div class="who"><span class="chip human">사람</span></div>
-          <h3>말로 부탁하기</h3>
-          <p class="say">“브래킷 무게를 줄여 줘. 강도 기준은 지키고.”</p>
-        </article>
-        <article class="stepcard ai">
-          <div class="top"><div class="ico"><svg class="i"><use href="#i-plan"/></svg></div><span class="num">2</span></div>
-          <div class="who"><span class="chip ai">AI 조수</span><span class="chip human">사람이 OK</span></div>
-          <h3>계획표 보여 주기</h3>
-          <p>무엇을 어떤 순서로 할지 그림으로 보여 줍니다. 사람이 승인해야 다음으로 갑니다.</p>
-        </article>
-        <article class="stepcard ai">
-          <div class="top"><div class="ico"><svg class="i"><use href="#i-cube"/></svg></div><span class="num">3</span></div>
-          <div class="who"><span class="chip ai">AI 조수</span></div>
-          <h3>모양 만들고 계산하기</h3>
-          <p>설계 프로그램(CAD)으로 모양을 만들고, 해석 프로그램(CAE)으로 힘을 얼마나 받는지 계산합니다.</p>
-        </article>
-        <article class="stepcard ai">
-          <div class="top"><div class="ico"><svg class="i"><use href="#i-flask"/></svg></div><span class="num">4</span></div>
-          <div class="who"><span class="chip ai">AI 조수</span></div>
-          <h3>여러 번 바꿔 보며 실험</h3>
-          <p>두께·높이 같은 치수를 골고루 바꿔 수십 번 자동으로 계산합니다. 사람이 퇴근한 밤에도 돕니다.</p>
-        </article>
-        <article class="stepcard ai">
-          <div class="top"><div class="ico"><svg class="i"><use href="#i-bulb"/></svg></div><span class="num">5</span></div>
-          <div class="who"><span class="chip ai">AI 조수</span></div>
-          <h3>결과를 공부해 예측</h3>
-          <p>실험 결과로 “이 치수면 이런 결과”를 배웁니다. 이후엔 계산하지 않아도 바로 답을 예측합니다.</p>
-        </article>
-        <article class="stepcard ai">
-          <div class="top"><div class="ico"><svg class="i"><use href="#i-trophy"/></svg></div><span class="num">6</span></div>
-          <div class="who"><span class="chip ai">AI 조수</span><span class="chip human">사람이 결정</span></div>
-          <h3>최고의 답과 보고서</h3>
-          <p>가장 좋은 설계, 슬라이더로 움직여 보는 3D 시뮬레이터, 보고서를 받고 사람이 최종 결정합니다.</p>
-        </article>
-      </div>
+      <div class="lane-count"><b id="cB">0</b><span>개 조합 해 봄</span></div>
     </div>
-  </section>
+  </div>
+  <div class="tiles" data-step="2">
+    <div class="tile"><span class="k">걸린 기간</span><span class="v"><span class="old">2주</span> → <span class="new">2일</span></span><span class="d">남은 12일은 다음 과제에</span></div>
+    <div class="tile"><span class="k">해 본 조합</span><span class="v"><span class="old">12개</span> → <span class="new">60개</span></span><span class="d">예측 모델로 1만 개를 더 미리 봅니다</span></div>
+    <div class="tile"><span class="k">엔지니어 손이 간 시간</span><span class="v"><span class="old">6일</span> → <span class="new">40분</span></span><span class="d">조합마다 반나절 × 12번 → 부탁 10분 + 확인 30분</span></div>
+  </div>
+  <p class="ex-note" data-step="2">숫자는 이해를 돕기 위한 예시입니다</p>
+</section>
 
-  <!-- 4. 실제 사례 -->
-  <section id="case">
-    <div class="wrap">
-      <div class="sec-head">
-        <p class="eyebrow">4 · 실제로 돌려 본 사례</p>
-        <h2>선반 받침대(브래킷)를 더 가볍게</h2>
-        <p class="lead">벽에 붙어 끝에 2 kN(약 200 kg 무게)을 버티는 금속 받침대입니다. 아래는 이 시스템에 실제로 말을 걸어 끝까지 돌린 과정입니다.</p>
-      </div>
-      <div class="case">
-        <div class="bubble"><small>엔지니어가 한 말</small>“브래킷 무게를 최대한 줄여 줘. 단, 힘을 받는 정도(응력)는 250 MPa를 넘으면 안 돼.”</div>
-        <div class="timeline">
-          <div class="tl"><span class="k">AI 조수 ①</span><b>계획표 8단계 제안</b><span>모양 → 해석 준비 → 실험 → 공부 → 3D → 보고서. 엔지니어가 승인</span></div>
-          <div class="tl"><span class="k">AI 조수 ②</span><b>3D 모양 만들기</b><span>판 두께와 갈비뼈(리브) 높이를 바꿀 수 있게 설계</span></div>
-          <div class="tl"><span class="k">AI 조수 ③</span><b>20가지 모양 자동 계산</b><span>두께 6~14 mm, 리브 10~40 mm를 골고루. 실행 전 “내 PC에서 해도 될까요?” 확인</span></div>
-          <div class="tl"><span class="k">AI 조수 ④</span><b>결과를 공부</b><span>무게·응력을 바로 맞히는 예측 모델과 3D 응력 그림을 학습</span></div>
-          <div class="tl"><span class="k">AI 조수 ⑤</span><b>최적 설계 + 보고서</b><span>3D 시뮬레이터 공개, Word 보고서 자동 작성</span></div>
-        </div>
-        <div class="compare">
-          <div class="panel">
-            <h3>모양이 이렇게 바뀌었어요</h3>
-            <div class="brackets">
-              <figure class="brk" style="margin:0">
-                <svg viewBox="0 0 320 170" role="img" aria-label="처음 설계: 판 두께 10 mm, 리브 25 mm">
-                  <defs><linearGradient id="g1" x1="0" x2="1"><stop offset="0" style="stop-color:var(--c5)"/><stop offset=".3" style="stop-color:var(--c4)"/><stop offset=".55" style="stop-color:var(--c3)"/><stop offset=".8" style="stop-color:var(--c2)"/><stop offset="1" style="stop-color:var(--c1)"/></linearGradient></defs>
-                  <rect x="8" y="14" width="22" height="140" style="fill:var(--line)"/>
-                  <path d="M8 24l22-10M8 44l22-10M8 64l22-10M8 84l22-10M8 104l22-10M8 124l22-10M8 144l22-10" stroke-width="1.2" opacity=".6" style="stroke:var(--muted)"/>
-                  <rect x="30" y="40" width="250" height="30" fill="url(#g1)"/>
-                  <polygon points="30,70 30,145 250,70" fill="url(#g1)" opacity=".85"/>
-                  <path d="M280 2v32" stroke-width="3" style="stroke:var(--ink)"/><path d="M272 24l8 10 8-10" fill="none" stroke-width="3" stroke-linejoin="round" style="stroke:var(--ink)"/>
-                  <text x="292" y="22" font-size="13" font-family="IBM Plex Sans KR, sans-serif" style="fill:var(--ink)">2 kN</text>
-                </svg>
-                <figcaption class="cap">처음 설계 <span>· 두께 10 mm · 리브 25 mm</span></figcaption>
-              </figure>
-              <figure class="brk" style="margin:0">
-                <svg viewBox="0 0 320 170" role="img" aria-label="AI가 찾은 설계: 판 두께 6 mm, 리브 약 26 mm">
-                  <rect x="8" y="14" width="22" height="140" style="fill:var(--line)"/>
-                  <path d="M8 24l22-10M8 44l22-10M8 64l22-10M8 84l22-10M8 104l22-10M8 124l22-10M8 144l22-10" stroke-width="1.2" opacity=".6" style="stroke:var(--muted)"/>
-                  <rect x="30" y="40" width="250" height="18" fill="url(#g1)"/>
-                  <polygon points="30,58 30,137 250,58" fill="url(#g1)" opacity=".85"/>
-                  <path d="M280 2v32" stroke-width="3" style="stroke:var(--ink)"/><path d="M272 24l8 10 8-10" fill="none" stroke-width="3" stroke-linejoin="round" style="stroke:var(--ink)"/>
-                  <text x="292" y="22" font-size="13" font-family="IBM Plex Sans KR, sans-serif" style="fill:var(--ink)">2 kN</text>
-                </svg>
-                <figcaption class="cap">AI가 찾은 설계 <span>· 두께 6 mm · 리브 26 mm</span></figcaption>
-              </figure>
-            </div>
-            <div class="scale"><span>힘을 덜 받음</span><i></i><span>많이 받음</span></div>
-            <p class="note">판은 얇게, 갈비뼈(리브)는 조금 높게. 사람이 직관으로 정하기 어려운 조합을 실험으로 찾았습니다.</p>
+<!-- 3. 데모 ①: 드럼세탁기 -->
+<section class="slide" id="s3" data-title="데모: 드럼세탁기" data-steps="4" data-labels="부탁 입력|AI 계획 보기|승인하고 계산|결과 보기" data-dur="3000,4500,4500,8500,8000" aria-label="3. 데모 드럼세탁기 탈수 진동">
+  <header class="sh">
+    <p class="eyebrow">데모 ① 드럼세탁기 탈수 진동</p>
+    <h2>부탁 한 줄이 계획 → 계산 → 결과로 이어집니다</h2>
+  </header>
+  <div class="win">
+    <div class="win-bar"><i></i><i></i><i></i><span>DDS AI Engineer · 세탁기 탈수 진동 줄이기</span></div>
+    <div class="win-body">
+      <aside class="chat">
+        <div class="msgs">
+          <div class="msg me" data-step="1"><span class="who">엔지니어</span><p id="d1-typed"></p></div>
+          <div class="msg ai" data-step="2"><span class="who">AI 조수</span><p>이렇게 진행할게요. 오른쪽 계획을 보고 승인해 주세요.</p>
+            <div class="approve-row"><button type="button" class="approve" id="d1-approve">계획 승인</button><small>사람이 눌러야<br>계산이 시작됩니다</small></div>
           </div>
-          <div class="panel">
-            <h3>결과</h3>
-            <div class="bignum"><strong>31%</strong><span>더 가벼워짐</span></div>
-            <div class="bars">
-              <div class="bar before"><div class="lab"><span>처음 설계</span><b>1,178 g</b></div><div class="track"><div class="fill"></div></div></div>
-              <div class="bar after"><div class="lab"><span>AI가 찾은 설계</span><b>814 g</b></div><div class="track"><div class="fill"></div></div></div>
+          <div class="msg ai" data-step="3"><p>조합 60개를 PC에서 계산하고 있어요. 끝나면 예측 모델로 가장 좋은 값을 찾을게요.</p></div>
+          <div class="msg ai" data-step="4"><p>찾았어요. 흔들림이 38% 줄어드는 값입니다. 보고서도 만들어 두었어요.</p></div>
+        </div>
+        <div class="input"><span>무엇을 도와드릴까요?</span><svg class="i"><use href="#i-send"/></svg></div>
+      </aside>
+      <div class="panel">
+        <div class="tabs"><span class="tab on" id="d1-tab1">작업 흐름</span><span class="tab" id="d1-tab2">결과</span></div>
+        <ol class="flowg" id="d1-flow">
+          <li style="--i:0"><i class="st"></i><b>모델 불러오기</b>RecurDyn 세탁기 모델</li>
+          <li style="--i:1"><i class="st"></i><b>바꿀 값 정하기</b>스프링·댐퍼 4개</li>
+          <li style="--i:2"><i class="st"></i><b>조합 60개 계산</b>PC에서 자동으로</li>
+          <li style="--i:3"><i class="st"></i><b>예측 모델</b>계산 결과로 학습</li>
+          <li style="--i:4"><i class="st"></i><b>최적 값 찾기</b>흔들림이 가장 작게</li>
+          <li style="--i:5"><i class="st"></i><b>보고서</b>Word·웹으로</li>
+        </ol>
+        <div class="zone">
+          <div class="empty" id="d1-empty"><svg class="i"><use href="#i-chat"/></svg><span>부탁하면 AI가 짠 계획이 여기에 그려집니다</span></div>
+          <div class="wait" id="d1-wait" hidden><svg class="i"><use href="#i-user"/></svg><span>엔지니어가 계획을 확인하고 <b>승인</b>하면<br>계산을 시작합니다</span></div>
+          <div class="runzone" id="d1-run" hidden>
+            <div class="card">
+              <h4>계산 진행</h4>
+              <div class="count-big"><span id="d1-n">0</span><small> / 60</small></div>
+              <div class="cases" id="d1-cases"></div>
+              <p class="meta" id="d1-say">준비 중</p>
             </div>
-            <div class="checks">
-              <div><svg class="i"><use href="#i-check"/></svg><span>강도 기준 지킴: 응력 250 MPa 이하</span></div>
-              <div><svg class="i"><use href="#i-check"/></svg><span>3D 시뮬레이터로 치수를 바꿔 보면 결과가 즉시 나옴</span></div>
-              <div><svg class="i"><use href="#i-check"/></svg><span>보고서까지 자동, 사람은 부탁·승인·확인만</span></div>
+            <div class="card">
+              <h4>조합마다 흔들림</h4>
+              <svg id="d1-plot" viewBox="0 0 420 230" role="img" aria-label="계산한 조합마다 흔들림 크기를 색으로 찍은 그림">
+                <g id="d1-heat"></g>
+                <path class="ax" d="M46 24V196H410"/>
+                <text class="axl" x="228" y="222" text-anchor="middle">스프링 단단함 →</text>
+                <text class="axl" x="40" y="14">↑ 댐퍼 힘</text>
+                <g id="d1-pts"></g>
+                <g class="nowmark"><circle cx="169.8" cy="137.5" r="11"/><text x="169.8" y="164" text-anchor="middle">지금 설계</text></g>
+                <g id="d1-star"><path id="d1-star-p" d=""/><text x="286" y="54" text-anchor="middle">가장 덜 흔들림</text></g>
+              </svg>
+              <p class="meta">점 = 계산한 조합 · 배경 = 예측 모델이 채운 지도 · 파랑 적게 → 빨강 많이</p>
             </div>
-            <p class="note">연습용 계산 모델(데모)로 돌린 결과입니다. 실제 회사 해석 프로그램으로 확인하는 일은 사내에서 진행합니다.</p>
+          </div>
+          <div class="result" id="d1-res" hidden>
+            <div class="card">
+              <div class="ba">
+                <figure class="before"><svg class="prod shake" style="--amp:7px" role="img" aria-label="지금 설계: 크게 흔들림"><use href="#p-washer"/></svg><figcaption>지금 설계</figcaption><span class="val">흔들림 4.2 mm</span></figure>
+                <figure class="after"><svg class="prod shake" style="--amp:2px" role="img" aria-label="AI 추천 설계: 조금 흔들림"><use href="#p-washer"/></svg><figcaption>AI 추천 설계</figcaption><span class="val">흔들림 2.6 mm</span></figure>
+              </div>
+            </div>
+            <div class="card sum">
+              <span class="big-claim">38% 덜 흔들림</span>
+              <ul class="recs"><li>스프링 단단함 <b>+12%</b></li><li>댐퍼 힘 <b>+25%</b></li><li>부품 크기·무게 <b>그대로</b></li></ul>
+              <div class="chips"><span class="chip ok">보고서 완성</span><span class="chip ai">3D 시뮬레이터 공유</span></div>
+              <div><span class="chip ex">예시 숫자</span></div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- 5. 다른 예시 -->
-  <section id="examples">
-    <div class="wrap">
-      <div class="sec-head">
-        <p class="eyebrow">5 · 이런 일도 말로 부탁할 수 있어요</p>
-        <h2>회사에서 쓰는 설계·해석 프로그램 29종을 다룹니다</h2>
-        <p class="lead">아래는 부탁 예시입니다. 프로그램마다 “다루는 법”(스킬)을 AI 조수에게 미리 가르쳐 두었습니다.</p>
-      </div>
-      <div class="examples">
-        <div class="ex"><div class="ico"><svg class="i"><use href="#i-car"/></svg></div><div><q>범퍼 두께를 세 가지로 바꿔 충돌 해석하고, 찌그러짐을 비교해 줘</q><p>충돌 해석 · LS-DYNA</p></div></div>
-        <div class="ex"><div class="ico"><svg class="i"><use href="#i-thermo"/></svg></div><div><q>칩 온도가 85도를 넘지 않는 가장 작은 방열판을 찾아 줘</q><p>열 해석 · Celsius, Flotherm</p></div></div>
-        <div class="ex"><div class="ico"><svg class="i"><use href="#i-light"/></svg></div><div><q>LED 빛이 화면에 고르게 퍼지도록 렌즈 모양을 바꿔 봐 줘</q><p>빛 해석 · LightTools</p></div></div>
-        <div class="ex"><div class="ico"><svg class="i"><use href="#i-part"/></svg></div><div><q>플라스틱 부품이 가장 덜 휘는 주입구 위치를 찾아 줘</q><p>사출 성형 · Moldflow, Moldex3D</p></div></div>
-      </div>
+<!-- 4. 데모 ②: 스마트폰 낙하 -->
+<section class="slide" id="s4" data-title="데모: 스마트폰 낙하" data-steps="4" data-labels="떨어뜨리기|예측 모델 열기|AI가 값 찾기|새 설계로 다시 떨어뜨리기" data-dur="3500,3500,4000,8500,7000" aria-label="4. 데모 스마트폰 낙하">
+  <header class="sh">
+    <p class="eyebrow">데모 ② 스마트폰 낙하 · 비교 ② 기다리는 시간</p>
+    <h2>값을 바꾸면, 다시 떨어뜨리지 않아도 바로 답이 나옵니다</h2>
+  </header>
+  <div class="ph-grid">
+    <div class="drop">
+      <svg id="ph-scene" viewBox="0 0 380 420" role="img" aria-label="스마트폰을 1.5 m 높이에서 모서리로 떨어뜨리는 장면">
+        <defs>
+          <radialGradient id="ph-grad"><stop id="ph-g0" offset="0" stop-color="#E5483B" stop-opacity=".95"/><stop id="ph-g1" offset="1" stop-color="#E5483B" stop-opacity="0"/></radialGradient>
+        </defs>
+        <path class="ruler" d="M60 202V380M50 202h20M50 380h20"/>
+        <text class="rlbl" x="74" y="298">1.5 m</text>
+        <path class="floor" d="M24 380H360"/>
+        <path class="hatch" d="M44 381l-14 16M84 381l-14 16M124 381l-14 16M164 381l-14 16M204 381l-14 16M244 381l-14 16M284 381l-14 16M324 381l-14 16M360 381l-14 16"/>
+        <g id="ph" transform="translate(200 130)">
+          <rect id="ph-body" class="ph-frame" x="-36" y="-72" width="72" height="144" rx="12"/>
+          <rect id="ph-screen" class="ph-glass" x="-31" y="-67" width="62" height="134" rx="8"/>
+          <circle id="ph-hot" cx="24" cy="60" r="34" fill="url(#ph-grad)" opacity="0"/>
+        </g>
+        <g id="ph-burst" class="burst"><path d="M190 368l-6-18M197 368l9-16M184 373l-18-7M201 373l17-8"/></g>
+      </svg>
+      <p class="drop-status" id="ph-status">지금 설계를 1.5 m 높이에서 모서리로 떨어뜨리면?</p>
     </div>
-  </section>
-
-  <!-- 6. 전·후 비교 -->
-  <section id="change">
-    <div class="wrap">
-      <div class="sec-head">
-        <p class="eyebrow">6 · 무엇이 달라지나</p>
-        <h2>전문가 몇 명의 일에서, 누구나 하는 일로</h2>
+    <div class="ph-right">
+      <div class="old-way" data-until="1">
+        <span><span class="chip human">지금 방식</span></span>
+        <h3>값 하나를 바꿀 때마다<br>처음부터 다시 떨어뜨립니다</h3>
+        <ol class="loop">
+          <li>프레임 모양 고치기</li>
+          <li>낙하 해석 설정 (LS-DYNA)</li>
+          <li>계산 기다리기 <em>1번에 몇 시간</em></li>
+          <li>깨지면 1번으로 다시</li>
+        </ol>
+        <p class="tally"><svg class="i"><use href="#i-repeat"/></svg>하루에 2~3번 시도하면 끝</p>
       </div>
-      <div class="ba">
-        <div class="h blank"></div><div class="h now">지금</div><div class="h new">DDS AI Engineer</div>
-        <div class="k">누가</div><div>스크립트를 짤 줄 아는 일부 전문가</div><div class="new">설계 엔지니어 누구나</div>
-        <div class="k">어떻게</div><div>프로그램마다 손으로 클릭, 명령문 작성</div><div class="new">평소 말로 부탁</div>
-        <div class="k">몇 번</div><div>시간이 없어 설계안 몇 개만</div><div class="new">수십 번 자동 실험, 밤에도</div>
-        <div class="k">결과</div><div>개인 PC와 엑셀에 흩어짐</div><div class="new">한 곳에 쌓여 다음 설계에 다시 씀</div>
-        <div class="k">보고</div><div>그래프·보고서를 손으로</div><div class="new">그래프·3D·보고서 자동</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 7. 안심 -->
-  <section id="safe">
-    <div class="wrap">
-      <div class="sec-head">
-        <p class="eyebrow">7 · 안심하고 쓸 수 있게</p>
-        <h2>AI가 혼자 결정하지 않고, 설계 자료는 회사 안에 둡니다</h2>
-      </div>
-      <div class="safe">
-        <div class="inside" aria-label="회사 안 구성도">
-          <span class="tag">회사 안 (사내망)</span>
-          <div class="row">
-            <div class="box"><svg class="i"><use href="#i-web"/></svg><b>웹 화면</b><span>대화·결과·3D 보기</span></div>
-            <div class="dbl" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 9h16M15 4l5 5M20 15H4M9 20l-5-5"/></svg></div>
-            <div class="box"><svg class="i"><use href="#i-building"/></svg><b>회사 서버</b><span>결과 보관·학습·보고서</span></div>
-            <div class="dbl" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 9h16M15 4l5 5M20 15H4M9 20l-5-5"/></svg></div>
-            <div class="box"><svg class="i"><use href="#i-pc"/></svg><b>내 PC 도우미</b><span>설계 프로그램 실행, 원본 파일 보관</span></div>
+      <div class="sim" data-step="2">
+        <div class="sim-head">
+          <div class="ttl"><span class="chip ai">DDS AI Engineer</span><b>3D 시뮬레이터 (예측 모델)</b></div>
+          <span class="meta">AI가 미리 해 둔 낙하 해석 40번으로 만듦</span>
+        </div>
+        <div class="sim-body">
+          <div class="corner">
+            <svg id="ph-corner" viewBox="0 0 300 250" role="img" aria-label="부딪히는 모서리 확대 그림">
+              <defs>
+                <clipPath id="cn-clip"><path id="cn-clipp" d=""/></clipPath>
+                <radialGradient id="cn-grad"><stop id="cn-g0" offset="0" stop-color="#E5483B" stop-opacity=".95"/><stop id="cn-g1" offset="1" stop-color="#E5483B" stop-opacity="0"/></radialGradient>
+              </defs>
+              <path id="cn-frame" class="ph-frame" d=""/>
+              <path id="cn-glass" class="ph-glass" d=""/>
+              <circle id="cn-hot" r="96" fill="url(#cn-grad)" clip-path="url(#cn-clip)"/>
+              <text id="cn-flbl" class="cn-lbl" x="196" y="56" style="fill:var(--glass)">프레임</text>
+              <text class="cn-lbl" x="176" y="200" style="fill:var(--prod-door)">화면 유리</text>
+            </svg>
+            <span class="cap">부딪히는 모서리 확대</span>
           </div>
-          <div class="outside"><div class="box"><svg class="i" style="width:24px;height:24px"><use href="#i-bot"/></svg></div><span>AI와의 대화는 회사가 허용한 AI 계정(Gemini·Claude 등)으로만 합니다.</span></div>
+          <div class="ctl">
+            <div class="rng"><label for="ph-t">모서리 프레임 두께 <output id="ph-t-out" for="ph-t">0.80 mm</output></label><input type="range" id="ph-t" min="0.6" max="1.4" step="0.05" value="0.8"><span class="rec" id="ph-t-rec">▲ AI 추천</span></div>
+            <div class="rng"><label for="ph-r">모서리 둥글기 <output id="ph-r-out" for="ph-r">0.80 mm</output></label><input type="range" id="ph-r" min="0.5" max="2" step="0.05" value="0.8"><span class="rec" id="ph-r-rec">▲ AI 추천</span></div>
+            <div class="readout"><span>화면이 받는 충격</span><b class="num bad" id="ph-s">115%</b></div>
+            <div class="gauge bad" id="ph-gauge"><i class="g-fill" id="ph-gfill"></i><i class="g-line"></i><span class="g-lbl">깨지는 선 100%</span></div>
+            <div class="readout sm"><span>무게 변화 (한도 +1.0 g)</span><b id="ph-w">+0.0 g</b></div>
+            <div class="verdict"><span class="chip bad" id="ph-v">깨질 수 있음</span><span class="note" id="ph-note">직접 움직여 보세요. 값을 바꾸면 바로 답이 나옵니다.</span></div>
+          </div>
         </div>
-        <div class="guards">
-          <div class="guard"><div class="ico"><svg class="i"><use href="#i-hand"/></svg></div><div><b>사람이 먼저 승인</b><p>계획표를 보고 OK해야 시작하고, 내 PC에서 실행하기 전에 한 번 더 묻습니다.</p></div></div>
-          <div class="guard"><div class="ico"><svg class="i"><use href="#i-lock"/></svg></div><div><b>설계 자료는 회사 안에</b><p>큰 원본 파일은 내 PC에, 숫자 결과와 그림은 회사 서버에 저장합니다.</p></div></div>
-          <div class="guard"><div class="ico"><svg class="i"><use href="#i-people"/></svg></div><div><b>팀 단위로 공유</b><p>프로젝트 멤버만 보고, 가입은 관리자가 승인합니다.</p></div></div>
-          <div class="guard"><div class="ico"><svg class="i"><use href="#i-shield"/></svg></div><div><b>결과는 사람이 확인</b><p>처음엔 작은 모델로 시험하고, 중요한 결정은 엔지니어가 내립니다.</p></div></div>
-        </div>
+        <div class="speed"><svg class="i"><use href="#i-clock"/></svg><span>답이 나오는 시간</span><b>0.01초</b><span class="vs">지금 방식: 1번에 몇 시간</span><span class="chip ex">예시 숫자</span></div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- 8. 진행 상황 -->
-  <section id="status">
-    <div class="wrap">
-      <div class="sec-head">
-        <p class="eyebrow">8 · 지금 어디까지 왔나</p>
-        <h2>만들기는 끝났고, 회사 프로그램으로 확인할 차례입니다</h2>
+<!-- 5. 비교 ③: 일이 끝난 뒤 -->
+<section class="slide" id="s5" data-title="비교: 쌓이는 자산" data-steps="2" data-labels="앞으로는|다른 제품으로 넓히기" data-dur="5000,5500,7000" aria-label="5. 한 번 한 실험이 회사 자산으로">
+  <header class="sh">
+    <p class="eyebrow">비교 ③ 일이 끝난 뒤</p>
+    <h2>한 번 한 실험이 회사 자산으로 쌓입니다</h2>
+  </header>
+  <div class="kb">
+    <div class="kb-col kb-old">
+      <div class="kb-head"><span class="chip human">지금</span><h3>사람마다, PC마다 흩어집니다</h3></div>
+      <div class="pcs">
+        <div class="pc"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>A 책임 PC</b><span>세탁기_진동_v7_최종_진짜.xlsx</span></div></div>
+        <div class="pc"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>B 선임 PC</b><span>낙하해석_스크립트_수정2.py</span></div></div>
+        <div class="pc gone"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>C 책임 PC</b><span>부서 이동 → 파일 위치 모름</span></div></div>
       </div>
-      <div class="track" role="list" aria-label="진행 단계">
-        <div class="ms done" role="listitem"><div class="dot"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><b>만들기</b><span>웹 화면·AI 조수·설치 프로그램</span></div>
-        <div class="ms now" role="listitem"><div class="dot">2</div><b>회사 서버 설치</b><span>준비 스크립트 1개로 설치</span></div>
-        <div class="ms" role="listitem"><div class="dot">3</div><b>실제 프로그램 확인</b><span>라이선스 있는 PC에서 작은 모델로</span></div>
-        <div class="ms" role="listitem"><div class="dot">4</div><b>시범 운영</b><span>1~2개 팀, 자주 쓰는 프로그램부터</span></div>
-        <div class="ms" role="listitem"><div class="dot">5</div><b>전사 확대</b><span>사내 표준 해석 방식 반영</span></div>
-      </div>
-      <div class="done-grid">
-        <div class="stat"><strong>29종</strong><span>연결 준비가 끝난 설계·해석 프로그램 (CAD, 구조, 충돌, 유동·열, 전자기, 광학, 사출 등)</span></div>
-        <div class="stat"><strong>6단계</strong><span>부탁부터 보고서까지 한 화면에서 이어지는 흐름 (실험·예측·최적화·3D·보고서)</span></div>
-        <div class="stat"><strong>설치 1번</strong><span>각자 PC에 도우미를 설치하면 프로그램 위치를 스스로 찾고 업데이트도 자동</span></div>
-      </div>
-      <p class="note" style="margin-top:16px">아직 확인하지 못한 것: 집 PC에는 회사 프로그램 라이선스가 없어, 실제 프로그램과의 연결은 사내에서 처음 확인합니다.</p>
+      <p class="kb-say">담당자가 바뀌면 같은 실험을<br>처음부터 다시 합니다.</p>
     </div>
-  </section>
+    <div class="kb-col kb-new" data-step="1">
+      <div class="kb-head"><span class="chip ai">DDS AI Engineer</span><h3>팀 프로젝트 한곳에 모두 남습니다</h3><span class="meta">부탁 · 계획 · 계산 결과 · 예측 모델 · 보고서</span></div>
+      <div class="shelf">
+        <article class="item"><svg class="prod"><use href="#p-washer"/></svg><b>드럼세탁기 탈수 진동</b><span>예측 모델 · 보고서</span><span class="tag">RecurDyn</span></article>
+        <article class="item"><svg class="prod"><use href="#p-phone"/></svg><b>스마트폰 낙하</b><span>예측 모델 · 보고서</span><span class="tag">LS-DYNA</span></article>
+        <article class="item next" data-step="2"><svg class="prod"><use href="#p-fridge"/></svg><b>냉장고 문 여닫기 내구</b><span>같은 방식으로</span><span class="tag">Abaqus</span></article>
+        <article class="item next" data-step="2"><svg class="prod"><use href="#p-aircon"/></svg><b>에어컨 실외기 팬 소음</b><span>같은 방식으로</span><span class="tag">Fluent</span></article>
+        <article class="item next" data-step="2"><svg class="prod"><use href="#p-tv"/></svg><b>TV 포장 상자 낙하</b><span>같은 방식으로</span><span class="tag">LS-DYNA</span></article>
+        <article class="item next" data-step="2"><svg class="prod"><use href="#p-buds"/></svg><b>무선 이어폰 케이스 휨</b><span>같은 방식으로</span><span class="tag">Moldflow</span></article>
+      </div>
+      <p class="kb-say" data-step="2">다음 사람은 “지난번 세탁기 진동 모델에서 시작해 줘”라고<br>말하면 이어서 합니다. <span class="meta">(점선 = 같은 방식으로 넓힐 과제)</span></p>
+    </div>
+  </div>
+</section>
 
-  <!-- 9. 다음 단계 -->
-  <section id="next">
-    <div class="wrap">
-      <div class="sec-head">
-        <p class="eyebrow">9 · 부탁드리는 것</p>
-        <h2>시범 운영을 위해 세 가지가 필요합니다</h2>
+<!-- 6. 안심 -->
+<section class="slide" id="s6" data-title="안심하고 쓰기" data-dur="9000" aria-label="6. 안심하고 쓸 수 있게">
+  <header class="sh">
+    <p class="eyebrow">안심하고 쓸 수 있게</p>
+    <h2>설계 파일은 회사 안에, 계산 시작은 사람이 정합니다</h2>
+  </header>
+  <div class="safe">
+    <div class="map">
+      <div class="ext"><svg class="i"><use href="#i-cloud"/></svg><div><b>회사가 허용한 AI 서비스</b><span>Gemini·Claude 등</span></div></div>
+      <div class="vlink"><i class="dot"></i><span class="lbl">주고받는 것:<br>부탁·계획·스크립트 같은 글</span></div>
+      <div class="inside">
+        <span class="tag">회사 안 (사내망)</span>
+        <div class="nd"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><b>엔지니어 PC</b><ul><li>설계 원본 파일</li><li>CAD·CAE 프로그램</li><li>AI 조수가 여기서 일함</li></ul></div>
+        <div class="hlink"><span class="lbl">숫자 결과·그림</span><i class="dot"></i></div>
+        <div class="nd"><span class="ico"><svg class="i"><use href="#i-server"/></svg></span><b>사내 서버</b><ul><li>결과·예측 모델</li><li>보고서·대화 기록</li><li>팀원과 공유</li></ul></div>
       </div>
-      <div class="asks">
-        <div class="ask"><svg class="i ico"><use href="#i-people"/></svg><b>시범 팀 1~2곳</b><p>반복 해석이 많은 팀을 정해 주시면, 그 팀의 실제 업무로 먼저 확인합니다.</p></div>
-        <div class="ask"><svg class="i ico"><use href="#i-pc"/></svg><b>라이선스 있는 PC 사용</b><p>실제 설계·해석 프로그램이 설치된 PC에서 확인하고 고칠 시간이 필요합니다.</p></div>
-        <div class="ask"><svg class="i ico"><use href="#i-building"/></svg><b>사내 서버 1대</b><p>웹 화면과 결과를 보관할 서버입니다. 설치는 준비 스크립트로 바로 됩니다.</p></div>
-      </div>
-      <p class="closing">말로 부탁하면 <span class="who-ai">실험은 AI가</span>, <span class="who-human">판단은 사람이</span>.</p>
     </div>
-  </section>
+    <ul class="rules">
+      <li class="h"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><div><b>계산 전에 엔지니어가 승인</b><p>AI가 짠 계획을 보고 ‘승인’을 눌러야 시작합니다.</p></div></li>
+      <li><span class="ico"><svg class="i"><use href="#i-shield"/></svg></span><div><b>큰 원본 파일은 PC에</b><p>서버에는 숫자 결과·그림·보고서만 올라갑니다.</p></div></li>
+      <li><span class="ico"><svg class="i"><use href="#i-history"/></svg></span><div><b>팀원만 보고, 기록은 모두 남김</b><p>프로젝트 멤버만 볼 수 있고, 누가 무엇을 부탁했는지 남습니다.</p></div></li>
+    </ul>
+  </div>
+</section>
+
+<!-- 7. 다음 단계 -->
+<section class="slide night" id="s7" data-title="다음 단계" data-dur="10000" aria-label="7. 다음 단계와 부탁드리는 것">
+  <header class="sh">
+    <p class="eyebrow">다음 단계</p>
+    <h2>실제 제품 하나로 시범 운영을 시작하겠습니다</h2>
+  </header>
+  <ol class="track">
+    <li class="done"><span class="dot"><svg class="i"><use href="#i-check"/></svg></span><b>만들기</b><span>웹 화면·AI 조수·설치 프로그램<br>연결 준비된 프로그램 29종</span></li>
+    <li class="now"><span class="dot">2</span><b>사내 서버 설치</b><span>준비 스크립트로 설치합니다</span></li>
+    <li><span class="dot">3</span><b>시범 과제 1개</b><span>예: 세탁기 진동 또는<br>스마트폰 낙하</span></li>
+    <li><span class="dot">4</span><b>부서로 넓히기</b><span>자주 쓰는 프로그램부터</span></li>
+  </ol>
+  <div class="asks">
+    <div class="ask"><svg class="i"><use href="#i-team"/></svg><b>시범 팀 1~2곳</b><p>반복 해석이 많은 팀의 실제 과제로 먼저 확인합니다.</p></div>
+    <div class="ask"><svg class="i"><use href="#i-key"/></svg><b>라이선스 있는 PC</b><p>실제 프로그램이 깔린 PC에서 연결을 확인하고 고칩니다.</p></div>
+    <div class="ask"><svg class="i"><use href="#i-server"/></svg><b>사내 서버 1대</b><p>웹 화면과 결과를 보관합니다.</p></div>
+  </div>
+  <p class="closing">말로 부탁하면 <span class="a">실험은 AI가</span>, <span class="h">판단은 사람이</span>.</p>
+  <p class="fine">이 자료의 숫자는 이해를 돕기 위한 예시입니다. 실제 프로그램과의 연결과 효과는 시범 운영에서 확인합니다.</p>
+</section>
+
+</div>
 </main>
-<footer class="wrap note">DDS AI Engineer · 사내 CAE 자동화 플랫폼 · 2026년 10월</footer>
+<nav class="bar-nav" aria-label="슬라이드 넘기기">
+  <button type="button" class="btn icon" id="prev" aria-label="이전"><svg class="i"><use href="#i-left"/></svg></button>
+  <div class="dots" id="dots"></div>
+  <span class="count" id="count" aria-live="polite">1 / 7</span>
+  <button type="button" class="btn primary" id="next"><span id="next-lbl">다음 장</span><svg class="i"><use href="#i-right"/></svg></button>
+  <button type="button" class="btn" id="play" aria-pressed="false"><svg class="i"><use id="play-ico" href="#i-play"/></svg><span class="lbl-sm" id="play-lbl">자동 재생</span></button>
+  <button type="button" class="btn" id="full"><svg class="i"><use href="#i-expand"/></svg><span class="lbl-sm">전체 화면</span></button>
+  <span class="keys">← → 키로 넘기기 · F 전체 화면</span>
+</nav>
+</div>
+
+<script>
+// 슬라이드 넘기기: → 한 번 = 장면 하나(PPT 애니메이션처럼), 장면을 다 보면 다음 장
+(() => {
+  "use strict";
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const slides = $$(".slide");
+  const vp = $("#viewport"), stage = $("#stage");
+  let cur = 0, step = 0, playing = false, autoT = 0;
+
+  // 화면 크기에 맞춰 1280×720 판을 키우거나 줄인다
+  function fit() {
+    const w = vp.clientWidth, h = vp.clientHeight;
+    if (w && h) stage.style.setProperty("--s", Math.min(w / 1280, h / 720));
+  }
+  if ("ResizeObserver" in window) new ResizeObserver(fit).observe(vp);
+  addEventListener("resize", fit);
+  fit();
+
+  // 애니메이션 도구: 장면을 넘기면 진행 중인 것은 모두 멈춘다
+  let jobs = [];
+  function later(ms, fn, g) {
+    const id = setTimeout(fn, reduced ? 0 : ms);
+    jobs.push({ g, stop: () => clearTimeout(id) });
+  }
+  function tween(ms, fn, done, g) {
+    if (reduced) { fn(1); if (done) done(); return; }
+    const job = { g, id: 0 };
+    job.stop = () => cancelAnimationFrame(job.id);
+    let t0 = null;
+    const tick = (t) => {
+      if (t0 === null) t0 = t;
+      const p = Math.min(1, (t - t0) / ms);
+      fn(p);
+      if (p < 1) job.id = requestAnimationFrame(tick);
+      else { jobs = jobs.filter((j) => j !== job); if (done) done(); }
+    };
+    job.id = requestAnimationFrame(tick);
+    jobs.push(job);
+  }
+  function cancelJobs(g) {
+    jobs = jobs.filter((j) => { if (g && j.g !== g) return true; j.stop(); return false; });
+  }
+  const ease = (p) => (p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  // 해석 결과 색(파랑 → 빨강): CSS 토큰과 같은 값
+  const css = getComputedStyle(document.documentElement);
+  const FALLBACK = ["#2F5BD3", "#19A7C9", "#3DBB6A", "#F0C43A", "#E5483B"];
+  const STOPS = ["--c1", "--c2", "--c3", "--c4", "--c5"].map((n, i) => {
+    const h = (css.getPropertyValue(n).trim() || FALLBACK[i]).replace("#", "");
+    return [0, 2, 4].map((k) => parseInt(h.slice(k, k + 2), 16));
+  });
+  function cmap(v, lo, hi) {
+    const p = clamp((v - lo) / (hi - lo), 0, 1) * 4, i = Math.min(3, Math.floor(p)), f = p - i;
+    const a = STOPS[i], b = STOPS[i + 1];
+    return `rgb(${a.map((x, k) => Math.round(x + (b[k] - x) * f)).join(",")})`;
+  }
+  const NS = "http://www.w3.org/2000/svg";
+  function mk(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  // ---------- 2. 두 방법 경주 ----------
+  const hooks = {};
+  (() => {
+    const A = $("#laneA"), B = $("#laneB");
+    const chipsA = $$(".lane-steps span", A), chipsB = $$(".lane-steps span", B);
+    const fillA = $(".fill", A), fillB = $(".fill", B), rest = $(".rest", B), barA = $(".bar", A);
+    const notches = Array.from({ length: 11 }, (_, i) => {
+      const n = document.createElement("i");
+      n.className = "notch";
+      n.style.left = `calc(${((i + 1) / 12) * 100}% - 1px)`;
+      return barA.appendChild(n);
+    });
+    const DOING = ["모델 고치는 중", "해석 조건 넣는 중", "계산 기다리는 중", "결과 정리하는 중"];
+    function set(p) {
+      const day = p * 14;
+      $("#r-day").textContent = `${Math.floor(day + 1e-6)}일`;
+      const done = Math.min(12, Math.floor(p * 12 + 1e-6));
+      const sub = p >= 1 ? -1 : Math.floor(((p * 12) % 1) * 4);
+      fillA.style.width = `${p * 100}%`;
+      chipsA.forEach((c, i) => c.classList.toggle("cur", p > 0 && i === sub));
+      notches.forEach((n, i) => n.classList.toggle("on", i < done));
+      $("#cA").textContent = done;
+      $("#sayA").textContent = p <= 0 ? "출발 전" : p >= 1 ? "2주 동안 조합 12개" : `${done + 1}번째 조합 · ${DOING[sub]}`;
+      const ph = day <= 0 ? -1 : day < .15 ? 0 : day < 1.6 ? 1 : day < 2 ? 2 : 3;
+      fillB.style.width = `${(Math.min(day, 2) / 14) * 100}%`;
+      chipsB.forEach((c, i) => { c.classList.toggle("cur", i === ph); c.classList.toggle("done", i < ph); });
+      $("#cB").textContent = day < .15 ? 0 : Math.min(60, Math.round((60 * (day - .15)) / 1.45));
+      rest.classList.toggle("on", day >= 2);
+      B.classList.toggle("fin", day >= 2);
+      $("#sayB").textContent = ["출발 전", "엔지니어가 말로 부탁하는 중", "AI가 계산하는 중 · 동시에 4개", "엔지니어가 결과를 확인하는 중", "끝 · 남은 12일은 다음 과제에"][ph + 1];
+    }
+    hooks.s2 = (k, from) => {
+      if (k === 0) set(0);
+      else if (k === 1 && from === 0) { set(0); tween(10000, set); }
+      else set(1);
+    };
+  })();
+
+  // ---------- 3. 데모: 드럼세탁기 ----------
+  (() => {
+    const TEXT = "탈수할 때 세탁기가 덜 흔들리게 스프링·댐퍼 값을 찾아 줘. 지금 쓰는 부품 범위 안에서.";
+    const typed = $("#d1-typed"), flow = $("#d1-flow"), nodes = $$("li", flow);
+    const empty = $("#d1-empty"), wait = $("#d1-wait"), run = $("#d1-run"), res = $("#d1-res");
+    const approve = $("#d1-approve"), tab1 = $("#d1-tab1"), tab2 = $("#d1-tab2");
+    const cells = Array.from({ length: 60 }, () => $("#d1-cases").appendChild(document.createElement("i")));
+    // 흔들림 지도(예시): 스프링·댐퍼가 적당히 셀 때 가장 작다
+    const X0 = 46, X1 = 410, Y0 = 24, Y1 = 196;
+    const px = (x) => X0 + x * (X1 - X0), py = (y) => Y1 - y * (Y1 - Y0);
+    const vib = (x, y) => 2.5 + 4 * (2 * (x - .66) ** 2 + 1.6 * (y - .72) ** 2);
+    // 라틴 하이퍼큐브 60점(고정 시드) — 실제 DOE와 같은 고르게 퍼진 배치
+    let seed = 20261027;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const perm = (n) => { const a = [...Array(n).keys()]; for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    const ix = perm(60), iy = perm(60);
+    const pts = ix.map((v, i) => [(v + rnd()) / 60, (iy[i] + rnd()) / 60]);
+    const heat = $("#d1-heat"), gp = $("#d1-pts");
+    const NX = 28, NY = 14;
+    for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) {
+      mk("rect", { x: X0 + (i * (X1 - X0)) / NX, y: Y0 + ((NY - 1 - j) * (Y1 - Y0)) / NY, width: (X1 - X0) / NX + .6, height: (Y1 - Y0) / NY + .6, fill: cmap(vib((i + .5) / NX, (j + .5) / NY), 2.5, 6.5) }, heat);
+    }
+    const dots = pts.map(([x, y]) => mk("circle", { cx: px(x), cy: py(y), r: 5.5, fill: cmap(vib(x, y), 2.5, 6.5), class: "pt" }, gp));
+    // 별 모양(최적 값)
+    const sx = px(.66), sy = py(.72);
+    $("#d1-star-p").setAttribute("d", Array.from({ length: 10 }, (_, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 5.5 : 13;
+      return `${i ? "L" : "M"}${(sx + r * Math.cos(a)).toFixed(1)} ${(sy + r * Math.sin(a)).toFixed(1)}`;
+    }).join("") + "Z");
+    const star = $("#d1-star");
+
+    function clearRun() {
+      nodes.forEach((n) => (n.className = ""));
+      cells.forEach((c) => (c.className = ""));
+      dots.forEach((d) => d.classList.remove("on"));
+      $("#d1-n").textContent = "0";
+      heat.style.opacity = 0;
+      star.classList.remove("on");
+      $("#d1-say").textContent = "준비 중";
+    }
+    function runAt(p) {
+      const t = p * 7;
+      const st = (a, b) => (t < a ? "" : t < b ? "run" : "done");
+      [st(0, .5), st(.5, 1), st(1, 5), st(5, 5.8), st(5.8, 6.6), ""].forEach((s, i) => (nodes[i].className = s));
+      const n = clamp(Math.floor(((t - 1) / 4) * 60), 0, 60);
+      cells.forEach((c, i) => (c.className = i < n ? "done" : t >= 1 && t < 5 && i < n + 4 ? "run" : ""));
+      dots.forEach((d, i) => d.classList.toggle("on", i < n));
+      $("#d1-n").textContent = n;
+      heat.style.opacity = clamp((t - 5) / .8, 0, 1) * .5;
+      star.classList.toggle("on", t >= 6.6);
+      $("#d1-say").textContent = t < 1 ? "준비 중" : t < 5 ? "계산 중 · 동시에 4개" : t < 5.8 ? "예측 모델 만드는 중" : t < 6.6 ? "가장 좋은 값 찾는 중" : "완료 · 별이 가장 좋은 값";
+    }
+    function base(k) {
+      typed.textContent = k >= 1 ? TEXT : "";
+      flow.classList.toggle("show", k >= 2);
+      empty.hidden = k >= 2; wait.hidden = k !== 2; run.hidden = k !== 3; res.hidden = k < 4;
+      approve.classList.toggle("done", k >= 3);
+      approve.textContent = k >= 3 ? "승인함" : "계획 승인";
+      approve.disabled = k >= 3;
+      tab1.classList.toggle("on", k < 4); tab2.classList.toggle("on", k >= 4);
+      if (k >= 3) runAt(1); else clearRun();
+      if (k >= 4) nodes[5].className = "done";
+    }
+    hooks.s3 = (k, from) => {
+      base(k);
+      if (from !== k - 1) return;
+      if (k === 1) { typed.textContent = ""; tween(2400, (p) => (typed.textContent = TEXT.slice(0, Math.round(p * TEXT.length)))); }
+      if (k === 3) { clearRun(); tween(7000, runAt); }
+    };
+    // 데모 화면의 '계획 승인' 버튼을 눌러도 다음 장면으로 간다
+    approve.addEventListener("click", () => { if (slides[cur].id === "s3" && step === 2) next(); });
+  })();
+
+  // ---------- 4. 데모: 스마트폰 낙하 ----------
+  (() => {
+    const ph = $("#ph"), body = $("#ph-body"), scr = $("#ph-screen"), hot = $("#ph-hot"), burst = $("#ph-burst"), status = $("#ph-status");
+    const T = $("#ph-t"), R = $("#ph-r");
+    const OLD = { t: .8, r: .8 }, NEW = { t: 1.1, r: 1.6 };
+    // 예측 모델(예시): 두께와 둥글기로 화면이 받는 충격(%)과 무게 변화(g)를 바로 계산
+    const stress = (t, r) => { const u = (t - .6) / .8, v = (r - .5) / 1.5; return 136 - 34 * u - 70 * v + 48 * v * v; };
+    const dW = (t, r) => 3 * (t - .8) - .1 * (r - .8);
+    const CY0 = 130, CY1 = 302.1, DEG = 32;
+    const place = (cy, deg) => ph.setAttribute("transform", `translate(200 ${cy.toFixed(1)}) rotate(${deg.toFixed(1)})`);
+    function look(d) { const rx = 8 + d.r * 5; body.setAttribute("rx", rx); scr.setAttribute("rx", Math.max(4, rx - 4)); }
+    function heatOn(d, on) {
+      const s = stress(d.t, d.r), c = cmap(s, 75, 120);
+      $("#ph-g0").setAttribute("stop-color", c); $("#ph-g1").setAttribute("stop-color", c);
+      hot.setAttribute("opacity", on ? 1 : 0);
+      burst.classList.toggle("on", on); burst.classList.toggle("ok", s < 100);
+    }
+    function say(d, down) {
+      status.textContent = "";
+      if (!down) { status.textContent = d === OLD ? "지금 설계를 1.5 m 높이에서 모서리로 떨어뜨리면?" : "AI 추천 설계로 다시 떨어뜨리면?"; return; }
+      const s = Math.round(stress(d.t, d.r)), bad = s >= 100;
+      const chip = document.createElement("span");
+      chip.className = `chip ${bad ? "bad" : "ok"}`;
+      chip.textContent = `화면이 받는 충격 ${s}%`;
+      const txt = document.createElement("span");
+      txt.textContent = bad ? "깨질 수 있습니다" : `통과 · 무게 +${dW(d.t, d.r).toFixed(1)} g`;
+      status.append(chip, txt);
+    }
+    function still(d, down) { look(d); place(down ? CY1 : CY0, down ? DEG : 0); heatOn(d, down); say(d, down); }
+    function drop(d) {
+      still(d, false);
+      tween(950, (p) => place(CY0 + (CY1 - CY0) * p * p, DEG * p), () => {
+        heatOn(d, true); say(d, true);
+        tween(320, (q) => { const b = Math.sin(Math.PI * q); place(CY1 - 9 * b, DEG - 3 * b); });
+      });
+    }
+
+    // 3D 시뮬레이터: 모서리 확대 그림·게이지·판정
+    const outT = $("#ph-t-out"), outR = $("#ph-r-out"), sEl = $("#ph-s"), gauge = $("#ph-gauge"), gfill = $("#ph-gfill");
+    const wEl = $("#ph-w"), vEl = $("#ph-v"), note = $("#ph-note"), recT = $("#ph-t-rec"), recR = $("#ph-r-rec");
+    const at = (el, v) => `calc(8px + (100% - 16px) * ${(v - Number(el.min)) / (Number(el.max) - Number(el.min))})`;
+    recT.style.left = at(T, NEW.t); recR.style.left = at(R, NEW.r);
+    const recOn = (on) => { recT.classList.toggle("on", on); recR.classList.toggle("on", on); };
+    function corner(t, r, s) {
+      const Rr = 14 + r * 26, th = 8 + t * 18, x = 40, y = 40;
+      const outer = `M${x} 250V${(y + Rr).toFixed(1)}A${Rr.toFixed(1)} ${Rr.toFixed(1)} 0 0 1 ${(x + Rr).toFixed(1)} ${y}H300V250Z`;
+      const xi = x + th, yi = y + th, Ri = Math.max(6, Rr - th * .7);
+      $("#cn-frame").setAttribute("d", outer);
+      $("#cn-clipp").setAttribute("d", outer);
+      $("#cn-glass").setAttribute("d", `M${xi.toFixed(1)} 250V${(yi + Ri).toFixed(1)}A${Ri.toFixed(1)} ${Ri.toFixed(1)} 0 0 1 ${(xi + Ri).toFixed(1)} ${yi.toFixed(1)}H300V250Z`);
+      const c = cmap(s, 75, 120);
+      $("#cn-g0").setAttribute("stop-color", c); $("#cn-g1").setAttribute("stop-color", c);
+      $("#cn-hot").setAttribute("cx", (x + Rr * .3 + 10).toFixed(1));
+      $("#cn-hot").setAttribute("cy", (y + Rr * .3 + 10).toFixed(1));
+      $("#cn-flbl").setAttribute("y", (y + th / 2 + 5).toFixed(1));
+    }
+    function sim(t, r, msg) {
+      T.value = t; R.value = r;
+      outT.textContent = `${t.toFixed(2)} mm`; outR.textContent = `${r.toFixed(2)} mm`;
+      const s = stress(t, r), w = dW(t, r), bad = s >= 100, heavy = w > 1.0;
+      sEl.textContent = `${Math.round(s)}%`;
+      sEl.className = `num ${bad ? "bad" : "ok"}`;
+      gfill.style.width = `${clamp((s - 60) / 70, 0, 1) * 100}%`;
+      gauge.classList.toggle("bad", bad);
+      wEl.textContent = `${w < 0 ? "−" : "+"}${Math.abs(w).toFixed(1)} g`;
+      wEl.classList.toggle("over", heavy);
+      vEl.className = `chip ${bad ? "bad" : heavy ? "warn" : "ok"}`;
+      vEl.textContent = bad ? "깨질 수 있음" : heavy ? "무게 한도 넘음" : "통과";
+      if (msg) note.textContent = msg;
+      corner(t, r, s);
+    }
+    const NOTE_TRY = "직접 움직여 보세요. 값을 바꾸면 바로 답이 나옵니다.";
+    const NOTE_REC = "AI 추천: 모서리를 더 둥글게, 두께는 조금만 → 통과, 무게는 두께만 늘릴 때의 절반 이하";
+    function tour() {
+      recOn(false);
+      sim(OLD.t, OLD.r, "먼저 두께만 늘려 봅니다");
+      tween(1800, (p) => sim(OLD.t + .6 * ease(p), OLD.r), () => {
+        sim(1.4, OLD.r, "두께만 늘리면 충격은 줄지만, 무게가 1.8 g 늘어 한도를 넘습니다");
+        later(1900, () => {
+          note.textContent = "AI가 모서리를 둥글게 바꿔 봅니다";
+          tween(2000, (p) => sim(1.4 - .3 * ease(p), OLD.r + .8 * ease(p)), () => { sim(NEW.t, NEW.r, NOTE_REC); recOn(true); }, "sim");
+        }, "sim");
+      }, "sim");
+    }
+    hooks.s4 = (k, from) => {
+      const anim = from === k - 1;
+      if (k <= 2) { recOn(false); sim(OLD.t, OLD.r, NOTE_TRY); }
+      else if (k === 3 && anim) tour();
+      else { sim(NEW.t, NEW.r, NOTE_REC); recOn(true); }
+      if (k === 0) still(OLD, false);
+      else if (k === 1) { if (anim) drop(OLD); else still(OLD, true); }
+      else if (k < 4) still(OLD, true);
+      else if (anim) drop(NEW); else still(NEW, true);
+    };
+    [T, R].forEach((el) => el.addEventListener("input", () => {
+      cancelJobs("sim"); stopPlay();
+      sim(Number(T.value), Number(R.value), "직접 바꾼 값의 예측입니다. 다시 떨어뜨려 보지 않아도 바로 나옵니다.");
+    }));
+    sim(OLD.t, OLD.r, NOTE_TRY);
+  })();
+
+  // ---------- 넘기기·자동 재생·전체 화면 ----------
+  const dotsBox = $("#dots");
+  const dots = slides.map((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("aria-label", `${i + 1}. ${s.dataset.title}`);
+    b.title = s.dataset.title;
+    b.addEventListener("click", () => go(i, 0, -1));
+    return dotsBox.appendChild(b);
+  });
+  const stepsOf = (i) => Number(slides[i].dataset.steps || 0);
+  const last = slides.length - 1;
+
+  function render(from) {
+    cancelJobs();
+    slides.forEach((s, i) => {
+      s.classList.toggle("active", i === cur);
+      s.classList.toggle("past", i < cur);
+      s.inert = i !== cur;
+      s.setAttribute("aria-hidden", String(i !== cur));
+    });
+    const s = slides[cur];
+    $$("[data-step]", s).forEach((el) => el.classList.toggle("on", Number(el.dataset.step) <= step));
+    $$("[data-until]", s).forEach((el) => el.classList.toggle("off", step > Number(el.dataset.until)));
+    if (hooks[s.id]) hooks[s.id](step, from);
+    updateBar();
+    schedule();
+  }
+  function go(i, k, from) { cur = i; step = k; render(from); }
+  function next() {
+    if (step < stepsOf(cur)) go(cur, step + 1, step);
+    else if (cur < last) go(cur + 1, 0, -1);
+    else { stopPlay(); go(0, 0, -1); }
+  }
+  function prev() {
+    if (step > 0) go(cur, step - 1, null);
+    else if (cur > 0) go(cur - 1, stepsOf(cur - 1), null);
+  }
+  function updateBar() {
+    const n = stepsOf(cur);
+    $("#count").textContent = `${cur + 1} / ${slides.length}` + (n ? ` · 장면 ${step + 1}/${n + 1}` : "");
+    const labels = (slides[cur].dataset.labels || "").split("|");
+    $("#next-lbl").textContent = step < n ? labels[step] || "다음 장면" : cur < last ? "다음 장" : "처음으로";
+    $("#prev").disabled = cur === 0 && step === 0;
+    dots.forEach((d, i) => d.setAttribute("aria-current", i === cur ? "step" : "false"));
+  }
+  function schedule() {
+    clearTimeout(autoT);
+    if (!playing) return;
+    const durs = (slides[cur].dataset.dur || "").split(",").map(Number);
+    autoT = setTimeout(() => {
+      if (cur === last && step === stepsOf(cur)) stopPlay();
+      else next();
+    }, durs[step] || 6000);
+  }
+  function setPlay(on) {
+    playing = on;
+    $("#play-lbl").textContent = on ? "멈춤" : "자동 재생";
+    $("#play-ico").setAttribute("href", on ? "#i-pause" : "#i-play");
+    $("#play").setAttribute("aria-pressed", String(on));
+    if (on && cur === last && step === stepsOf(cur)) go(0, 0, -1);
+    else schedule();
+  }
+  function stopPlay() { if (playing) setPlay(false); }
+  function toggleFull() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else {
+        const r = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+        if (r && r.catch) r.catch(() => {});
+      }
+    } catch (_) { /* 전체 화면을 막은 환경 */ }
+  }
+  $("#next").addEventListener("click", next);
+  $("#prev").addEventListener("click", prev);
+  $("#play").addEventListener("click", () => setPlay(!playing));
+  $("#full").addEventListener("click", toggleFull);
+  addEventListener("keydown", (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const tag = e.target && e.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if (tag === "BUTTON" && (e.key === "Enter" || e.key === " ")) return;
+    const k = e.key;
+    if (k === "ArrowRight" || k === "PageDown" || k === " " || k === "Enter") { e.preventDefault(); next(); }
+    else if (k === "ArrowLeft" || k === "PageUp" || k === "Backspace") { e.preventDefault(); prev(); }
+    else if (k === "Home") go(0, 0, -1);
+    else if (k === "End") go(last, stepsOf(last), null);
+    else if (k === "f" || k === "F") toggleFull();
+    else if (k === "p" || k === "P") setPlay(!playing);
+  });
+  render(-1);
+})();
+</script>
