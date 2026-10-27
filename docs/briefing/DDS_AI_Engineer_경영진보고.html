@@ -141,50 +141,49 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .t-case span { font-size: 15px; color: var(--night-muted); }
 .t-legend { margin-left: auto; display: flex; gap: 8px; }
 
-/* ---------- 2. 비교: 같은 문제, 두 방법 ---------- */
+/* ---------- 2. 비교: 기존 DDS와 DDS AI Engineer ---------- */
+#s2 { gap: 20px; }
 .sh.row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; }
-.washer-mini { width: 96px; height: 112px; margin-right: 18px; }
-.race { display: grid; gap: 12px; }
-.race-scale, .lane { display: grid; grid-template-columns: 240px minmax(0, 1fr) 140px; gap: 22px; align-items: center; }
-.race-scale { padding-inline: 22px; }
-.race-scale .day { font-size: 15px; color: var(--muted); font-weight: 600; display: flex; align-items: baseline; gap: 10px; }
-.race-scale .day b { font-family: var(--display); font-weight: 400; font-size: 34px; color: var(--ink); font-variant-numeric: tabular-nums; }
-.ticks-row { position: relative; height: 22px; font-size: 14px; color: var(--muted); font-weight: 600; }
-.ticks-row span { position: absolute; top: 0; transform: translateX(-50%); }
-.ticks-row span:first-child { transform: none; }
-.ticks-row span:last-child { transform: translateX(-100%); }
-.lane { background: var(--panel); border-radius: 18px; padding: 16px 22px; }
-.lane-head b { display: block; font-size: 22px; line-height: 1.3; }
-.lane-head span { display: block; font-size: 15px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
-.lane.human .lane-head b { color: var(--human); }
-.lane.ai .lane-head b { color: var(--ai); }
-.lane-main { display: grid; gap: 9px; min-width: 0; }
-.lane-steps { display: flex; gap: 8px; flex-wrap: wrap; }
-.lane-steps span { font-size: 14.5px; font-weight: 600; padding: 4px 11px; border-radius: 999px; background: var(--surface); color: var(--muted); border: 1.5px solid var(--line); transition: background .15s, color .15s, border-color .15s; }
-.lane.human .lane-steps span.cur { background: var(--human); border-color: var(--human); color: var(--surface); }
-.lane.ai .lane-steps span.cur { background: var(--ai); border-color: var(--ai); color: var(--surface); }
-.lane.ai .lane-steps span.done { background: var(--ai-soft); border-color: var(--ai-soft); color: var(--ai); }
-.bar { position: relative; height: 16px; border-radius: 8px; background: var(--surface); border: 1.5px solid var(--line); overflow: hidden; }
-.bar .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--human); }
-.lane.ai .bar .fill { background: var(--ai); }
-.bar .notch { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--surface); opacity: 0; }
-.bar .notch.on { opacity: 1; }
-.bar .rest { position: absolute; top: 0; bottom: 0; left: calc(100% / 7); right: 0; background: repeating-linear-gradient(135deg, var(--ai-soft) 0 6px, transparent 6px 12px); opacity: 0; transition: opacity .3s; }
-.bar .rest.on { opacity: 1; }
-.lane-say { font-size: 14.5px; color: var(--muted); font-weight: 600; min-height: 22px; }
-.lane.ai.fin .lane-say { color: var(--ai); }
-.lane-count { text-align: right; }
-.lane-count b { display: block; font-family: var(--display); font-weight: 400; font-size: 52px; line-height: 1; font-variant-numeric: tabular-nums; }
-.lane-count span { font-size: 14.5px; color: var(--muted); font-weight: 600; }
-.lane.human .lane-count b { color: var(--human); }
-.lane.ai .lane-count b { color: var(--ai); }
-.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.tile { border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 20px; display: grid; gap: 2px; }
-.tile .k { font-size: 15px; color: var(--muted); font-weight: 700; }
-.tile .v { font-family: var(--display); font-size: 34px; line-height: 1.2; }
-.tile .v .old { color: var(--muted); }
-.tile .v .new { color: var(--ai); }
-.tile .d { font-size: 14.5px; color: var(--muted); }
+.washer-mini { width: 84px; height: 98px; margin-right: 14px; }
+.cmp { display: grid; gap: 10px; }
+.cmp-row { display: grid; grid-template-columns: 168px repeat(5, minmax(0, 1fr)) 128px; gap: 10px; align-items: stretch; padding-inline: 14px; }
+.cmp-cols span { font-size: 15px; font-weight: 700; color: var(--muted); text-align: center; }
+.cmp-row.old, .cmp-row.new { background: var(--panel); border-radius: 18px; padding-block: 12px; }
+.who { display: grid; align-content: center; gap: 6px; }
+.who b { font-size: 22px; line-height: 1.25; }
+.who > span { font-size: 14px; color: var(--muted); line-height: 1.45; }
+.old .who b { color: var(--human); }
+.new .who b { color: var(--ai); }
+.hs { display: flex; flex-wrap: wrap; gap: 5px; }
+.hs i { font-style: normal; font-size: 13px; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1.5px solid var(--line); color: var(--muted); background: var(--surface); transition: background .2s, color .2s, border-color .2s; }
+.hs i.on { background: var(--human); border-color: var(--human); color: var(--surface); }
+.cell { background: var(--surface); border: 1.5px dashed var(--line); border-radius: 12px; padding: 10px 12px; display: grid; align-content: space-between; justify-items: start; gap: 8px; min-height: 104px; transition: background .25s, border-color .25s, box-shadow .25s; }
+.cell > * { opacity: 0; transition: opacity .3s; }
+.cell.cur > *, .cell.done > * { opacity: 1; }
+.cell b { font-size: 15.5px; line-height: 1.4; }
+.cell .tag { font-size: 12.5px; font-weight: 700; padding: 1px 9px; border-radius: 999px; }
+.old .cell.cur { border: 1.5px solid var(--human); box-shadow: 0 0 0 4px var(--human-soft); }
+.old .cell.done { border: 1.5px solid var(--human-soft); background: var(--human-soft); }
+.old .cell .tag { background: var(--human); color: var(--surface); }
+.old .cell.hold .tag { animation: blink .8s infinite; }
+.new .cell.cur { border: 1.5px solid var(--ai); box-shadow: 0 0 0 4px var(--ai-soft); }
+.new .cell.done { border: 1.5px solid var(--ai-soft); background: var(--ai-soft); }
+.new .cell .tag { background: var(--ai); color: var(--surface); }
+.met { display: grid; align-content: center; justify-items: end; text-align: right; }
+.met span { font-size: 13.5px; color: var(--muted); font-weight: 600; }
+.met b { font-family: var(--display); font-weight: 400; font-size: 40px; line-height: 1.05; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+.met b.sm { font-size: 28px; margin-bottom: 0; }
+.old .met b { color: var(--human); }
+.new .met b { color: var(--ai); }
+.met em { font-style: normal; font-size: 13px; font-weight: 700; color: var(--human); margin: -4px 0 4px; opacity: 0; transition: opacity .3s; }
+.met em.on { opacity: 1; }
+.gains { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.gain { border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 16px; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 12px; align-content: start; }
+.gain .ico { grid-row: span 2; width: 40px; height: 40px; border-radius: 12px; background: var(--ai-soft); color: var(--ai); display: grid; place-items: center; }
+.gain b { font-size: 17px; line-height: 1.35; }
+.gain p { font-size: 14px; line-height: 1.45; display: grid; gap: 1px; }
+.gain .was { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--human); }
+.gain .now { color: var(--ai); font-weight: 700; }
 .ex-note { position: absolute; right: 60px; bottom: 14px; font-size: 13px; color: var(--muted); }
 
 /* ---------- 3. 데모: 드럼세탁기 (앱 화면) ---------- */
@@ -272,19 +271,28 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .recs li { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-block: 4px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
-/* ---------- 4. 데모: 스마트폰 낙하 ---------- */
+/* ---------- 4. 데모: 드럼세탁기 3D Simulator ---------- */
 .ph-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 370px minmax(0, 1fr); gap: 20px; }
 .drop { background: var(--panel); border-radius: 18px; padding: 10px 16px 14px; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 4px; min-height: 0; }
-#ph-scene { width: 100%; height: 100%; min-height: 0; display: block; }
-.ruler { stroke: var(--muted); stroke-width: 2; fill: none; }
-.rlbl { fill: var(--ink); font: 700 20px var(--body); }
+#wm-scene { width: 100%; height: 100%; min-height: 0; display: block; }
 .floor { stroke: var(--ink); stroke-width: 3; }
 .hatch { stroke: var(--muted); stroke-width: 1.5; }
-.ph-frame { fill: var(--metal); }
-.ph-glass { fill: var(--glass); }
-.burst { color: var(--bad); stroke: currentColor; stroke-width: 3.5; stroke-linecap: round; fill: none; opacity: 0; }
-.burst.on { opacity: 1; }
-.burst.ok { color: var(--ai); }
+.wm-cab { fill: var(--prod-body); stroke: var(--prod-line); stroke-width: 3; }
+.wm-line { fill: none; stroke: var(--prod-line); stroke-width: 2.5; }
+.wm-in { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+.wm-cap { fill: var(--muted); font: 700 13px var(--body); }
+.wm-spring { fill: none; stroke: var(--prod-line); stroke-width: 3; stroke-linejoin: round; }
+.wm-cyl { fill: var(--metal); }
+.wm-rod { stroke: var(--prod-line); stroke-width: 4; stroke-linecap: round; }
+.wm-tub { fill: var(--prod-door); stroke: var(--prod-line); stroke-width: 3; }
+.wm-drum { fill: var(--glass); }
+.wm-lifter { stroke: var(--prod-door); stroke-width: 6; stroke-linecap: round; opacity: .5; }
+.wm-lump { fill: var(--prod-door); }
+.wm-lim { fill: none; stroke: var(--prod-door); stroke-width: 2; stroke-dasharray: 5 5; }
+.wm-orbit { fill: none; stroke: var(--ok); stroke-width: 3.5; }
+.wm-orbit.bad { stroke: var(--bad); }
+.wm-hub { fill: var(--surface); stroke: var(--glass); stroke-width: 2; }
+.wm-key { fill: var(--muted); font: 600 13px var(--body); }
 .drop-status { text-align: center; font-size: 16.5px; font-weight: 600; min-height: 54px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
 .ph-right { display: grid; min-height: 0; }
 .ph-right > * { grid-area: 1 / 1; min-width: 0; }
@@ -300,12 +308,16 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .sim-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .sim-head .ttl { display: flex; align-items: center; gap: 10px; }
 .sim-head b { font-size: 21px; }
-.sim-body { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 24px; align-items: center; min-height: 0; }
+.sim-body { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 26px; align-items: center; min-height: 0; }
 .corner { background: var(--panel); border-radius: 14px; padding: 6px; display: grid; gap: 2px; }
 .corner svg { display: block; width: 100%; height: auto; }
 .corner .cap { font-size: 13px; color: var(--muted); text-align: center; font-weight: 600; padding-bottom: 4px; }
-.cn-lbl { font: 700 14px var(--body); }
-.ctl { display: grid; gap: 10px; }
+.wm-ell { fill: none; stroke: var(--ok); stroke-width: 2.5; stroke-dasharray: 6 4; }
+.wm-ell-l { fill: var(--ok); font: 700 12.5px var(--body); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.wm-ev { fill: var(--ink); opacity: 0; }
+.wm-ev.on { opacity: .45; }
+.wm-pt { fill: var(--surface); stroke: var(--ink); stroke-width: 3; }
+.ctl { display: grid; gap: 8px; align-content: center; }
 .rng { position: relative; padding-bottom: 16px; }
 .rng label { display: flex; justify-content: space-between; font-size: 16px; font-weight: 600; }
 .rng output { font-variant-numeric: tabular-nums; color: var(--ai); font-weight: 700; }
@@ -315,21 +327,23 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .rec.on { opacity: 1; }
 .readout { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; font-weight: 600; }
 .readout .num { font-family: var(--display); font-weight: 400; font-size: 46px; line-height: 1; font-variant-numeric: tabular-nums; }
+.readout .unit { font-size: 16px; color: var(--muted); font-weight: 600; }
 .num.bad { color: var(--bad); }
 .num.ok { color: var(--ok); }
 .gauge { position: relative; height: 18px; border-radius: 9px; background: var(--panel); border: 1.5px solid var(--line); margin-top: 16px; }
 .gauge .g-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 9px; background: var(--ok); }
 .gauge.bad .g-fill { background: var(--bad); }
-.gauge .g-line { position: absolute; top: -8px; bottom: -8px; left: 57.14%; width: 3px; margin-left: -1.5px; background: var(--ink); border-radius: 2px; }
-.gauge .g-lbl { position: absolute; bottom: calc(100% + 8px); left: 57.14%; transform: translateX(-50%); font-size: 12.5px; color: var(--muted); white-space: nowrap; font-weight: 700; }
-.readout.sm b { font-size: 20px; font-variant-numeric: tabular-nums; }
-.readout.sm b.over { color: var(--human); }
+.gauge .g-line { position: absolute; top: -8px; bottom: -8px; left: 50%; width: 3px; margin-left: -1.5px; background: var(--ink); border-radius: 2px; }
+.gauge .g-lbl { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); font-size: 12.5px; color: var(--muted); white-space: nowrap; font-weight: 700; }
 .verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 50px; }
 .verdict .note { font-size: 14.5px; color: var(--muted); line-height: 1.4; flex: 1; min-width: 0; font-weight: 500; }
+.strip { display: grid; }
+.strip > * { grid-area: 1 / 1; }
 .speed { display: flex; align-items: center; gap: 12px; background: var(--ai-soft); color: var(--ai); border-radius: 12px; padding: 9px 16px; font-size: 16px; font-weight: 700; }
-.speed b { font-family: var(--display); font-weight: 400; font-size: 28px; line-height: 1; }
+.speed b { font-family: var(--display); font-weight: 400; font-size: 28px; line-height: 1; font-variant-numeric: tabular-nums; }
 .speed .vs { color: var(--muted); font-weight: 600; }
 .speed .chip { margin-left: auto; }
+.speed.verify { background: var(--ok-soft); color: var(--ok); }
 
 /* ---------- 5. 비교: 일이 끝난 뒤 ---------- */
 .kb { flex: 1; min-height: 0; display: grid; grid-template-columns: 390px minmax(0, 1fr); gap: 22px; }
@@ -348,11 +362,12 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .kb-old .kb-say { color: var(--human); }
 .kb-new .kb-say { color: var(--ai); }
 .shelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.item { border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 3px 12px; align-items: center; background: var(--panel); }
-.item svg.prod { width: 40px; height: 48px; grid-row: span 3; }
+.next-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.item { border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 2px 12px; align-items: center; background: var(--panel); }
+.item .ico { grid-row: span 2; width: 40px; height: 40px; border-radius: 12px; background: var(--ai-soft); color: var(--ai); display: grid; place-items: center; }
+.item svg.prod { width: 40px; height: 48px; grid-row: span 2; }
 .item b { font-size: 16px; line-height: 1.3; }
 .item span { font-size: 13.5px; color: var(--muted); line-height: 1.35; }
-.item .tag { justify-self: start; font-size: 12.5px; font-weight: 700; color: var(--ai); background: var(--ai-soft); padding: 1px 8px; border-radius: 999px; }
 .item.next { background: transparent; border-style: dashed; }
 
 /* ---------- 6. 안심 ---------- */
@@ -460,6 +475,11 @@ svg.prod { display: block; overflow: visible; flex: none; }
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></symbol>
     <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5v14M15.5 5v14"/></symbol>
     <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4.5l-3 15"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M3.5 15h17M9.5 4v16"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 4v16h16"/><path d="M7.5 15l4-5 3 3 5-6.5"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></symbol>
     <symbol id="p-washer" viewBox="0 0 120 140">
       <rect x="10" y="6" width="100" height="126" rx="12" style="fill:var(--prod-body);stroke:var(--prod-line);stroke-width:3"/>
       <path d="M10 32h100" style="stroke:var(--prod-line);stroke-width:2.5"/>
@@ -470,34 +490,6 @@ svg.prod { display: block; overflow: visible; flex: none; }
       <path d="M45 76a17 17 0 0 1 24-9" style="fill:none;stroke:var(--prod-door);stroke-width:3;stroke-linecap:round;opacity:.55"/>
       <rect x="18" y="131" width="16" height="6" rx="2" style="fill:var(--prod-line)"/>
       <rect x="86" y="131" width="16" height="6" rx="2" style="fill:var(--prod-line)"/>
-    </symbol>
-    <symbol id="p-phone" viewBox="0 0 120 140">
-      <rect x="34" y="6" width="52" height="128" rx="11" style="fill:var(--metal)"/>
-      <rect x="38" y="10" width="44" height="120" rx="8" style="fill:var(--glass)"/>
-      <rect x="52" y="14" width="16" height="4" rx="2" style="fill:var(--metal)"/>
-    </symbol>
-    <symbol id="p-fridge" viewBox="0 0 120 140">
-      <rect x="28" y="4" width="64" height="132" rx="8" style="fill:var(--prod-body);stroke:var(--prod-line);stroke-width:3"/>
-      <path d="M28 50h64" style="stroke:var(--prod-line);stroke-width:2.5"/>
-      <rect x="80" y="20" width="5" height="20" rx="2" style="fill:var(--prod-line)"/>
-      <rect x="80" y="62" width="5" height="34" rx="2" style="fill:var(--prod-line)"/>
-    </symbol>
-    <symbol id="p-aircon" viewBox="0 0 120 140">
-      <rect x="8" y="30" width="104" height="76" rx="6" style="fill:var(--prod-body);stroke:var(--prod-line);stroke-width:3"/>
-      <circle cx="48" cy="68" r="27" style="fill:var(--prod-door);stroke:var(--prod-line);stroke-width:2.5"/>
-      <path d="M48 68l12-14M48 68l-15-6M48 68l4 18" style="stroke:var(--prod-line);stroke-width:3;stroke-linecap:round"/>
-      <path d="M86 48h16M86 58h16M86 68h16M86 78h16M86 88h16" style="stroke:var(--prod-line);stroke-width:2.5"/>
-      <rect x="16" y="106" width="12" height="8" style="fill:var(--prod-line)"/>
-      <rect x="92" y="106" width="12" height="8" style="fill:var(--prod-line)"/>
-    </symbol>
-    <symbol id="p-tv" viewBox="0 0 120 140">
-      <rect x="6" y="26" width="108" height="66" rx="4" style="fill:var(--glass);stroke:var(--prod-line);stroke-width:3"/>
-      <path d="M60 92v14M38 108h44" style="stroke:var(--prod-line);stroke-width:4;stroke-linecap:round"/>
-    </symbol>
-    <symbol id="p-buds" viewBox="0 0 120 140">
-      <rect x="18" y="46" width="84" height="56" rx="26" style="fill:var(--prod-body);stroke:var(--prod-line);stroke-width:3"/>
-      <path d="M20 66h80" style="stroke:var(--prod-line);stroke-width:2.5"/>
-      <circle cx="60" cy="84" r="3.5" style="fill:var(--ai)"/>
     </symbol>
   </defs>
 </svg>
@@ -510,86 +502,84 @@ svg.prod { display: block; overflow: visible; flex: none; }
 <section class="slide night" id="s1" data-title="표지" data-dur="9000" aria-label="1. 표지">
   <div>
     <p class="eyebrow">DDS AI Engineer · 경영진 보고 · 2026년 10월</p>
-    <h1>말로 부탁하면,<br><em>AI 조수</em>가 설계 실험을 대신 합니다</h1>
-    <p class="sub">설계 실험(CAE 해석) = 제품을 만들기 전에 컴퓨터 안에서 흔들고, 떨어뜨리고, 바람을 불어 보는 일</p>
+    <h1>말로 요청하면,<br><em>AI 어시스턴트</em>가 해석을 대신 합니다</h1>
+    <p class="sub">기존 DDS에서 메뉴로 하나하나 설정하던 해석 자동화·DOE·학습·Simulator 배포를 대화로</p>
   </div>
   <div class="t-flow">
-    <div class="t-node human"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><b>엔지니어</b><span>“세탁기가 덜 흔들리게 해 줘”</span></div>
+    <div class="t-node human"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><b>엔지니어</b><span>“탈수 진동을 줄여 줘”</span></div>
     <span class="t-arrow"><svg class="i"><use href="#i-right"/></svg></span>
-    <div class="t-node ai"><span class="ico"><svg class="i"><use href="#i-ai"/></svg></span><b>AI 조수</b><span>계획을 짜고 계산을 맡깁니다</span></div>
+    <div class="t-node ai"><span class="ico"><svg class="i"><use href="#i-ai"/></svg></span><b>AI 어시스턴트</b><span>해석 계획과 스크립트를 만듭니다</span></div>
     <span class="t-arrow"><svg class="i"><use href="#i-right"/></svg></span>
-    <div class="t-node tool"><span class="ico"><svg class="i"><use href="#i-tool"/></svg></span><b>설계·해석 프로그램</b><span>PC에서 수십 번 계산합니다</span></div>
+    <div class="t-node tool"><span class="ico"><svg class="i"><use href="#i-tool"/></svg></span><b>CAD·CAE 툴</b><span>PC에서 AI가 직접 실행합니다</span></div>
     <span class="t-arrow"><svg class="i"><use href="#i-right"/></svg></span>
-    <div class="t-node best"><span class="ico"><svg class="i"><use href="#i-star"/></svg></span><b>가장 좋은 설계</b><span>엔지니어가 확인하고 정합니다</span></div>
+    <div class="t-node best"><span class="ico"><svg class="i"><use href="#i-star"/></svg></span><b>최적 설계</b><span>엔지니어가 확인하고 결정합니다</span></div>
   </div>
   <div class="t-bottom">
-    <span class="t-lbl">오늘 볼 실제 문제</span>
-    <div class="t-case"><svg class="prod"><use href="#p-washer"/></svg><div><b>드럼세탁기</b><span>탈수할 때 덜 흔들리게</span></div></div>
-    <div class="t-case"><svg class="prod"><use href="#p-phone"/></svg><div><b>스마트폰</b><span>떨어뜨려도 화면이 안 깨지게</span></div></div>
-    <span class="t-legend"><span class="chip human">주황 = 사람이 하는 일</span><span class="chip ai">청록 = AI가 하는 일</span></span>
+    <span class="t-lbl">오늘의 데모</span>
+    <div class="t-case"><svg class="prod"><use href="#p-washer"/></svg><div><b>드럼세탁기 탈수 진동</b><span>해석 자동화 → 최적화 → 3D Simulator 예측</span></div></div>
+    <span class="t-legend"><span class="chip human">주황 = 엔지니어가 하는 일</span><span class="chip ai">청록 = AI가 하는 일</span></span>
   </div>
 </section>
 
-<!-- 2. 비교 ①: 같은 문제, 두 방법 -->
-<section class="slide" id="s2" data-title="비교: 걸리는 시간" data-steps="2" data-labels="두 방법 동시에 출발|결과 정리" data-dur="4000,11500,8000" aria-label="2. 같은 문제를 두 가지 방법으로">
+<!-- 2. 비교 ①: 기존 DDS와 DDS AI Engineer -->
+<section class="slide" id="s2" data-title="비교: 기존 DDS" data-steps="3" data-labels="기존 DDS로 진행|AI Engineer로 진행|달라지는 점" data-dur="5000,9500,7500,9000" aria-label="2. 기존 DDS와 DDS AI Engineer 비교">
   <header class="sh row">
     <div class="sh">
-      <p class="eyebrow">비교 ① 같은 문제를 두 가지 방법으로</p>
-      <h2>드럼세탁기가 탈수할 때 덜컹거립니다</h2>
-      <p class="sub">할 일: 흔들림이 가장 작은 <b>스프링·댐퍼</b> 값 찾기 (RecurDyn으로 움직임 해석)</p>
+      <p class="eyebrow">비교 ① 기존 DDS와 무엇이 다른가</p>
+      <h2>단계마다 사람이 설정하던 일을 AI가 맡습니다</h2>
+      <p class="sub">같은 과제: 드럼세탁기 탈수 진동 최적화 (RecurDyn · 설계 변수 4개 · DOE 60케이스)</p>
     </div>
-    <svg class="prod washer-mini shake" style="--amp:3px" role="img" aria-label="흔들리는 드럼세탁기"><use href="#p-washer"/></svg>
+    <svg class="prod washer-mini shake" style="--amp:2px" role="img" aria-label="탈수 중 진동하는 드럼세탁기"><use href="#p-washer"/></svg>
   </header>
-  <div class="race">
-    <div class="race-scale">
-      <div class="day">지난 날 <b id="r-day">0일</b></div>
-      <div class="ticks-row"><span style="left:0">오늘</span><span style="left:50%">1주</span><span style="left:100%">2주</span></div>
-      <div></div>
+  <div class="cmp">
+    <div class="cmp-row cmp-cols" aria-hidden="true">
+      <span></span><span>① 모델 준비</span><span>② 해석 자동화</span><span>③ DOE</span><span>④ 학습·최적화</span><span>⑤ Simulator·보고서</span><span></span>
     </div>
-    <div class="lane human" id="laneA">
-      <div class="lane-head"><b>지금 방식</b><span>엔지니어가 조합마다<br>4단계를 손으로</span></div>
-      <div class="lane-main">
-        <div class="lane-steps"><span>① 모델 고치기</span><span>② 해석 조건 넣기</span><span>③ 계산 기다리기</span><span>④ 결과 엑셀 정리</span></div>
-        <div class="bar"><i class="fill"></i></div>
-        <p class="lane-say" id="sayA">출발 전</p>
-      </div>
-      <div class="lane-count"><b id="cA">0</b><span>개 조합 해 봄</span></div>
+    <div class="cmp-row old" id="cmpA">
+      <div class="who"><b>기존 DDS</b><span>메뉴·템플릿 방식<br>교육·매뉴얼 숙지 필요</span></div>
+      <div class="cell"><b>CAD·CAE 툴에서 사람이 직접</b><span class="tag">DDS는 툴 조작 불가</span></div>
+      <div class="cell"><b>관리자 템플릿 요청 또는 스크립트 직접 작성</b><span class="tag">템플릿 대기 3일</span></div>
+      <div class="cell"><b>변수·범위·샘플 수 직접 입력</b><span class="tag">매뉴얼 확인</span></div>
+      <div class="cell"><b>학습 옵션과 목적·제약 직접 설정</b><span class="tag">사용자 교육</span></div>
+      <div class="cell"><b>배포 설정, 보고서 직접 작성</b><span class="tag">수작업</span></div>
+      <div class="met"><span>사람이 설정</span><b id="mA1">–</b><span>걸린 기간</span><b class="sm" id="mA2">–</b></div>
     </div>
-    <div class="lane ai" id="laneB">
-      <div class="lane-head"><b>DDS AI Engineer</b><span>엔지니어는 말로 한 번<br>부탁하고 확인만</span></div>
-      <div class="lane-main">
-        <div class="lane-steps"><span>① 말로 부탁 (10분)</span><span>② AI가 밤새 계산</span><span>③ 확인·승인 (30분)</span></div>
-        <div class="bar"><i class="fill"></i><i class="rest"></i></div>
-        <p class="lane-say" id="sayB">출발 전</p>
-      </div>
-      <div class="lane-count"><b id="cB">0</b><span>개 조합 해 봄</span></div>
+    <div class="cmp-row new" id="cmpB">
+      <div class="who"><b>DDS AI Engineer</b><span class="hs"><i>말로 요청</i><i>계획 승인</i><i>결과 판단</i></span></div>
+      <div class="cell"><b>AI가 툴을 직접 실행해 모델 준비</b><span class="tag">RecurDyn 연동</span></div>
+      <div class="cell"><b>문제에 맞는 스크립트를 AI가 작성</b><span class="tag">템플릿 불필요</span></div>
+      <div class="cell"><b>변수·범위·케이스 수를 AI가 제안</b><span class="tag">60케이스</span></div>
+      <div class="cell"><b>예측 모델 학습, 최적점 탐색</b><span class="tag">진동 −38%</span></div>
+      <div class="cell"><b>3D Simulator 배포, 보고서 작성</b><span class="tag">자동</span></div>
+      <div class="met"><span>사람이 설정</span><b id="mB1">–</b><em id="mB3">대신 승인 1번</em><span>걸린 기간</span><b class="sm" id="mB2">–</b></div>
     </div>
   </div>
-  <div class="tiles" data-step="2">
-    <div class="tile"><span class="k">걸린 기간</span><span class="v"><span class="old">2주</span> → <span class="new">2일</span></span><span class="d">남은 12일은 다음 과제에</span></div>
-    <div class="tile"><span class="k">해 본 조합</span><span class="v"><span class="old">12개</span> → <span class="new">60개</span></span><span class="d">예측 모델로 1만 개를 더 미리 봅니다</span></div>
-    <div class="tile"><span class="k">엔지니어 손이 간 시간</span><span class="v"><span class="old">6일</span> → <span class="new">40분</span></span><span class="d">조합마다 반나절 × 12번 → 부탁 10분 + 확인 30분</span></div>
+  <div class="gains" data-step="3">
+    <div class="gain"><span class="ico"><svg class="i"><use href="#i-tool"/></svg></span><b>툴을 직접 조작</b><p><span class="was">툴 작업은 사람이 따로</span><span class="now">AI가 CAD·CAE 툴 29종 실행</span></p></div>
+    <div class="gain"><span class="ico"><svg class="i"><use href="#i-code"/></svg></span><b>템플릿 없이 새 문제도</b><p><span class="was">정해진 템플릿·직접 쓴 스크립트</span><span class="now">문제마다 AI가 스크립트 작성</span></p></div>
+    <div class="gain"><span class="ico"><svg class="i"><use href="#i-chat"/></svg></span><b>교육·매뉴얼 없이</b><p><span class="was">메뉴·옵션 숙지</span><span class="now">대화로 요청, Flow로 확인</span></p></div>
+    <div class="gain"><span class="ico"><svg class="i"><use href="#i-check"/></svg></span><b>설정 대신 승인</b><p><span class="was">모든 단계를 사람이 설정</span><span class="now">AI가 제안, 엔지니어는 승인·판단</span></p></div>
   </div>
-  <p class="ex-note" data-step="2">숫자는 이해를 돕기 위한 예시입니다</p>
+  <p class="ex-note" data-step="3">숫자는 이해를 돕기 위한 예시입니다</p>
 </section>
 
 <!-- 3. 데모 ①: 드럼세탁기 -->
-<section class="slide" id="s3" data-title="데모: 드럼세탁기" data-steps="4" data-labels="부탁 입력|AI 계획 보기|승인하고 계산|결과 보기" data-dur="3000,4500,4500,8500,8000" aria-label="3. 데모 드럼세탁기 탈수 진동">
+<section class="slide" id="s3" data-title="데모: 해석 자동화·최적화" data-steps="4" data-labels="요청 입력|AI 계획 보기|승인하고 해석|결과 보기" data-dur="3000,4500,4500,8500,8000" aria-label="3. 데모 드럼세탁기 탈수 진동 최적화">
   <header class="sh">
-    <p class="eyebrow">데모 ① 드럼세탁기 탈수 진동</p>
-    <h2>부탁 한 줄이 계획 → 계산 → 결과로 이어집니다</h2>
+    <p class="eyebrow">데모 ① 드럼세탁기 탈수 진동 · 해석 자동화 → DOE → 최적화</p>
+    <h2>요청 한 줄이 계획 → 해석 → 결과로 이어집니다</h2>
   </header>
   <div class="win">
-    <div class="win-bar"><i></i><i></i><i></i><span>DDS AI Engineer · 세탁기 탈수 진동 줄이기</span></div>
+    <div class="win-bar"><i></i><i></i><i></i><span>DDS AI Engineer · 드럼세탁기 탈수 진동 저감</span></div>
     <div class="win-body">
       <aside class="chat">
         <div class="msgs">
           <div class="msg me" data-step="1"><span class="who">엔지니어</span><p id="d1-typed"></p></div>
-          <div class="msg ai" data-step="2"><span class="who">AI 조수</span><p>이렇게 진행할게요. 오른쪽 계획을 보고 승인해 주세요.</p>
-            <div class="approve-row"><button type="button" class="approve" id="d1-approve">계획 승인</button><small>사람이 눌러야<br>계산이 시작됩니다</small></div>
+          <div class="msg ai" data-step="2"><span class="who">AI 어시스턴트</span><p>이렇게 진행할게요. 오른쪽 계획(Flow)을 확인하고 승인해 주세요.</p>
+            <div class="approve-row"><button type="button" class="approve" id="d1-approve">계획 승인</button><small>승인해야<br>해석이 시작됩니다</small></div>
           </div>
-          <div class="msg ai" data-step="3"><p>조합 60개를 PC에서 계산하고 있어요. 끝나면 예측 모델로 가장 좋은 값을 찾을게요.</p></div>
-          <div class="msg ai" data-step="4"><p>찾았어요. 흔들림이 38% 줄어드는 값입니다. 보고서도 만들어 두었어요.</p></div>
+          <div class="msg ai" data-step="3"><p>DOE 60케이스를 PC에서 해석하고 있어요. 끝나면 예측 모델(Surrogate)로 최적점을 찾을게요.</p></div>
+          <div class="msg ai" data-step="4"><p>최적점을 찾았어요. 진동이 38% 줄어듭니다. 보고서와 3D Simulator도 만들어 두었어요.</p></div>
         </div>
         <div class="input"><span>무엇을 도와드릴까요?</span><svg class="i"><use href="#i-send"/></svg></div>
       </aside>
@@ -597,47 +587,47 @@ svg.prod { display: block; overflow: visible; flex: none; }
         <div class="tabs"><span class="tab on" id="d1-tab1">작업 흐름</span><span class="tab" id="d1-tab2">결과</span></div>
         <ol class="flowg" id="d1-flow">
           <li style="--i:0"><i class="st"></i><b>모델 불러오기</b>RecurDyn 세탁기 모델</li>
-          <li style="--i:1"><i class="st"></i><b>바꿀 값 정하기</b>스프링·댐퍼 4개</li>
-          <li style="--i:2"><i class="st"></i><b>조합 60개 계산</b>PC에서 자동으로</li>
-          <li style="--i:3"><i class="st"></i><b>예측 모델</b>계산 결과로 학습</li>
-          <li style="--i:4"><i class="st"></i><b>최적 값 찾기</b>흔들림이 가장 작게</li>
-          <li style="--i:5"><i class="st"></i><b>보고서</b>Word·웹으로</li>
+          <li style="--i:1"><i class="st"></i><b>설계 변수 정의</b>스프링·댐퍼 등 4개</li>
+          <li style="--i:2"><i class="st"></i><b>DOE 해석</b>60케이스 자동 실행</li>
+          <li style="--i:3"><i class="st"></i><b>예측 모델 학습</b>해석 결과로 학습</li>
+          <li style="--i:4"><i class="st"></i><b>최적화</b>진동 최소</li>
+          <li style="--i:5"><i class="st"></i><b>배포·보고서</b>Simulator·Word</li>
         </ol>
         <div class="zone">
-          <div class="empty" id="d1-empty"><svg class="i"><use href="#i-chat"/></svg><span>부탁하면 AI가 짠 계획이 여기에 그려집니다</span></div>
-          <div class="wait" id="d1-wait" hidden><svg class="i"><use href="#i-user"/></svg><span>엔지니어가 계획을 확인하고 <b>승인</b>하면<br>계산을 시작합니다</span></div>
+          <div class="empty" id="d1-empty"><svg class="i"><use href="#i-chat"/></svg><span>요청하면 AI가 세운 계획(Flow)이 여기에 그려집니다</span></div>
+          <div class="wait" id="d1-wait" hidden><svg class="i"><use href="#i-user"/></svg><span>엔지니어가 계획을 확인하고 <b>승인</b>하면<br>해석을 시작합니다</span></div>
           <div class="runzone" id="d1-run" hidden>
             <div class="card">
-              <h4>계산 진행</h4>
+              <h4>해석 진행</h4>
               <div class="count-big"><span id="d1-n">0</span><small> / 60</small></div>
               <div class="cases" id="d1-cases"></div>
               <p class="meta" id="d1-say">준비 중</p>
             </div>
             <div class="card">
-              <h4>조합마다 흔들림</h4>
-              <svg id="d1-plot" viewBox="0 0 420 230" role="img" aria-label="계산한 조합마다 흔들림 크기를 색으로 찍은 그림">
+              <h4>케이스별 진동 변위</h4>
+              <svg id="d1-plot" viewBox="0 0 420 230" role="img" aria-label="해석 케이스마다 진동 변위를 색으로 찍은 그림">
                 <g id="d1-heat"></g>
                 <path class="ax" d="M46 24V196H410"/>
-                <text class="axl" x="228" y="222" text-anchor="middle">스프링 단단함 →</text>
-                <text class="axl" x="40" y="14">↑ 댐퍼 힘</text>
+                <text class="axl" x="228" y="222" text-anchor="middle">스프링 강성 →</text>
+                <text class="axl" x="40" y="14">↑ 댐퍼 감쇠력</text>
                 <g id="d1-pts"></g>
-                <g class="nowmark"><circle cx="169.8" cy="137.5" r="11"/><text x="169.8" y="164" text-anchor="middle">지금 설계</text></g>
-                <g id="d1-star"><path id="d1-star-p" d=""/><text x="286" y="54" text-anchor="middle">가장 덜 흔들림</text></g>
+                <g class="nowmark"><circle cx="169.8" cy="137.5" r="11"/><text x="169.8" y="164" text-anchor="middle">현재 설계</text></g>
+                <g id="d1-star"><path id="d1-star-p" d=""/><text x="286" y="54" text-anchor="middle">최적점 (진동 최소)</text></g>
               </svg>
-              <p class="meta">점 = 계산한 조합 · 배경 = 예측 모델이 채운 지도 · 파랑 적게 → 빨강 많이</p>
+              <p class="meta">점 = 해석 케이스 · 배경 = 예측 모델 · 파랑 작음 → 빨강 큼</p>
             </div>
           </div>
           <div class="result" id="d1-res" hidden>
             <div class="card">
               <div class="ba">
-                <figure class="before"><svg class="prod shake" style="--amp:7px" role="img" aria-label="지금 설계: 크게 흔들림"><use href="#p-washer"/></svg><figcaption>지금 설계</figcaption><span class="val">흔들림 4.2 mm</span></figure>
-                <figure class="after"><svg class="prod shake" style="--amp:2px" role="img" aria-label="AI 추천 설계: 조금 흔들림"><use href="#p-washer"/></svg><figcaption>AI 추천 설계</figcaption><span class="val">흔들림 2.6 mm</span></figure>
+                <figure class="before"><svg class="prod shake" style="--amp:7px" role="img" aria-label="현재 설계: 진동이 큼"><use href="#p-washer"/></svg><figcaption>현재 설계</figcaption><span class="val">진동 4.2 mm</span></figure>
+                <figure class="after"><svg class="prod shake" style="--amp:2px" role="img" aria-label="AI 추천 설계: 진동이 작음"><use href="#p-washer"/></svg><figcaption>AI 추천 설계</figcaption><span class="val">진동 2.6 mm</span></figure>
               </div>
             </div>
             <div class="card sum">
-              <span class="big-claim">38% 덜 흔들림</span>
-              <ul class="recs"><li>스프링 단단함 <b>+12%</b></li><li>댐퍼 힘 <b>+25%</b></li><li>부품 크기·무게 <b>그대로</b></li></ul>
-              <div class="chips"><span class="chip ok">보고서 완성</span><span class="chip ai">3D 시뮬레이터 공유</span></div>
+              <span class="big-claim">진동 38% 감소</span>
+              <ul class="recs"><li>스프링 강성 <b>+12%</b></li><li>댐퍼 감쇠력 <b>+25%</b></li><li>부품 크기·무게 <b>그대로</b></li></ul>
+              <div class="chips"><span class="chip ok">보고서 완성</span><span class="chip ai">3D Simulator 배포</span></div>
               <div><span class="chip ex">예시 숫자</span></div>
             </div>
           </div>
@@ -647,105 +637,133 @@ svg.prod { display: block; overflow: visible; flex: none; }
   </div>
 </section>
 
-<!-- 4. 데모 ②: 스마트폰 낙하 -->
-<section class="slide" id="s4" data-title="데모: 스마트폰 낙하" data-steps="4" data-labels="떨어뜨리기|예측 모델 열기|AI가 값 찾기|새 설계로 다시 떨어뜨리기" data-dur="3500,3500,4000,8500,7000" aria-label="4. 데모 스마트폰 낙하">
+<!-- 4. 데모 ②: 드럼세탁기 3D Simulator 예측 -->
+<section class="slide" id="s4" data-title="데모: 3D Simulator 예측" data-steps="3" data-labels="1,400 rpm 예측|AI가 해결안 탐색|검증 해석으로 확인" data-dur="5500,6500,8000,8000" aria-label="4. 데모 드럼세탁기 3D Simulator 예측">
   <header class="sh">
-    <p class="eyebrow">데모 ② 스마트폰 낙하 · 비교 ② 기다리는 시간</p>
-    <h2>값을 바꾸면, 다시 떨어뜨리지 않아도 바로 답이 나옵니다</h2>
+    <p class="eyebrow">데모 ② 드럼세탁기 3D Simulator · 비교 ② 기다리는 시간</p>
+    <h2>조건을 바꾸면, 해석을 다시 돌리지 않아도 바로 예측합니다</h2>
   </header>
   <div class="ph-grid">
     <div class="drop">
-      <svg id="ph-scene" viewBox="0 0 380 420" role="img" aria-label="스마트폰을 1.5 m 높이에서 모서리로 떨어뜨리는 장면">
-        <defs>
-          <radialGradient id="ph-grad"><stop id="ph-g0" offset="0" stop-color="#E5483B" stop-opacity=".95"/><stop id="ph-g1" offset="1" stop-color="#E5483B" stop-opacity="0"/></radialGradient>
-        </defs>
-        <path class="ruler" d="M60 202V380M50 202h20M50 380h20"/>
-        <text class="rlbl" x="74" y="298">1.5 m</text>
-        <path class="floor" d="M24 380H360"/>
-        <path class="hatch" d="M44 381l-14 16M84 381l-14 16M124 381l-14 16M164 381l-14 16M204 381l-14 16M244 381l-14 16M284 381l-14 16M324 381l-14 16M360 381l-14 16"/>
-        <g id="ph" transform="translate(200 130)">
-          <rect id="ph-body" class="ph-frame" x="-36" y="-72" width="72" height="144" rx="12"/>
-          <rect id="ph-screen" class="ph-glass" x="-31" y="-67" width="62" height="134" rx="8"/>
-          <circle id="ph-hot" cx="24" cy="60" r="34" fill="url(#ph-grad)" opacity="0"/>
+      <svg id="wm-scene" viewBox="0 0 380 420" role="img" aria-label="탈수 중인 드럼세탁기 단면. 통이 스프링과 댐퍼에 매달려 진동한다">
+        <g id="wm-body">
+          <rect class="wm-cab" x="58" y="24" width="264" height="328" rx="16"/>
+          <path class="wm-line" d="M58 70H322"/>
+          <rect x="74" y="38" width="74" height="18" rx="4" style="fill:var(--glass)"/>
+          <circle cx="294" cy="47" r="10" style="fill:var(--prod-door);stroke:var(--prod-line);stroke-width:2"/>
+          <rect class="wm-in" x="76" y="84" width="228" height="256" rx="8"/>
+          <text class="wm-cap" x="88" y="104">단면</text>
+          <path class="wm-spring" id="wm-s1"/>
+          <path class="wm-spring" id="wm-s2"/>
+          <line class="wm-rod" id="wm-r1"/>
+          <line class="wm-rod" id="wm-r2"/>
+          <rect class="wm-cyl" x="126" y="306" width="12" height="34" rx="3"/>
+          <rect class="wm-cyl" x="242" y="306" width="12" height="34" rx="3"/>
+          <g id="wm-tub" transform="translate(190 214)">
+            <circle class="wm-tub" r="88"/>
+            <circle class="wm-drum" r="68"/>
+            <g id="wm-rot">
+              <path class="wm-lifter" d="M54 0h12M-27 46.8l-6 10.4M-27 -46.8l-6 -10.4"/>
+              <circle class="wm-lump" cx="40" cy="0" r="14"/>
+            </g>
+          </g>
+          <circle class="wm-lim" cx="190" cy="214" r="21"/>
+          <circle class="wm-orbit" id="wm-orb" cx="190" cy="214" r="12"/>
+          <circle class="wm-hub" id="wm-hub" cx="190" cy="214" r="6"/>
+          <rect x="80" y="352" width="24" height="10" rx="2" style="fill:var(--prod-line)"/>
+          <rect x="276" y="352" width="24" height="10" rx="2" style="fill:var(--prod-line)"/>
         </g>
-        <g id="ph-burst" class="burst"><path d="M190 368l-6-18M197 368l9-16M184 373l-18-7M201 373l17-8"/></g>
+        <path class="floor" d="M24 364H356"/>
+        <path class="hatch" d="M44 365l-12 13M84 365l-12 13M124 365l-12 13M164 365l-12 13M204 365l-12 13M244 365l-12 13M284 365l-12 13M324 365l-12 13M356 365l-12 13"/>
+        <path class="wm-orbit" id="wm-orb-key" d="M36 400h22"/>
+        <text class="wm-key" x="64" y="405">통 중심 궤적</text>
+        <path class="wm-lim" d="M168 400h22" style="stroke:var(--muted)"/>
+        <text class="wm-key" x="196" y="405">기준 3.0 mm · 과장 표시</text>
       </svg>
-      <p class="drop-status" id="ph-status">지금 설계를 1.5 m 높이에서 모서리로 떨어뜨리면?</p>
+      <p class="drop-status" id="wm-status"></p>
     </div>
     <div class="ph-right">
-      <div class="old-way" data-until="1">
-        <span><span class="chip human">지금 방식</span></span>
-        <h3>값 하나를 바꿀 때마다<br>처음부터 다시 떨어뜨립니다</h3>
+      <div class="old-way" data-until="0">
+        <span><span class="chip human">기존 방식</span></span>
+        <h3>조건 하나를 바꿀 때마다<br>해석을 다시 돌립니다</h3>
         <ol class="loop">
-          <li>프레임 모양 고치기</li>
-          <li>낙하 해석 설정 (LS-DYNA)</li>
-          <li>계산 기다리기 <em>1번에 몇 시간</em></li>
-          <li>깨지면 1번으로 다시</li>
+          <li>해석 조건 수정 (탈수 rpm)</li>
+          <li>해석 제출 (RecurDyn)</li>
+          <li>결과 기다리기 <em>1회 3시간</em></li>
+          <li>기준을 넘으면 1번으로</li>
         </ol>
-        <p class="tally"><svg class="i"><use href="#i-repeat"/></svg>하루에 2~3번 시도하면 끝</p>
+        <p class="tally"><svg class="i"><use href="#i-repeat"/></svg>하루에 확인할 수 있는 조건 2~3개</p>
       </div>
-      <div class="sim" data-step="2">
+      <div class="sim" data-step="1">
         <div class="sim-head">
-          <div class="ttl"><span class="chip ai">DDS AI Engineer</span><b>3D 시뮬레이터 (예측 모델)</b></div>
-          <span class="meta">AI가 미리 해 둔 낙하 해석 40번으로 만듦</span>
+          <div class="ttl"><span class="chip ai">DDS AI Engineer</span><b>3D Simulator · 탈수 진동 예측</b></div>
+          <span class="meta">데모 ①의 해석 60케이스로 학습 · 정확도 R² 0.97</span>
         </div>
         <div class="sim-body">
           <div class="corner">
-            <svg id="ph-corner" viewBox="0 0 300 250" role="img" aria-label="부딪히는 모서리 확대 그림">
-              <defs>
-                <clipPath id="cn-clip"><path id="cn-clipp" d=""/></clipPath>
-                <radialGradient id="cn-grad"><stop id="cn-g0" offset="0" stop-color="#E5483B" stop-opacity=".95"/><stop id="cn-g1" offset="1" stop-color="#E5483B" stop-opacity="0"/></radialGradient>
-              </defs>
-              <path id="cn-frame" class="ph-frame" d=""/>
-              <path id="cn-glass" class="ph-glass" d=""/>
-              <circle id="cn-hot" r="96" fill="url(#cn-grad)" clip-path="url(#cn-clip)"/>
-              <text id="cn-flbl" class="cn-lbl" x="196" y="56" style="fill:var(--glass)">프레임</text>
-              <text class="cn-lbl" x="176" y="200" style="fill:var(--prod-door)">화면 유리</text>
+            <svg id="wm-map" viewBox="0 0 300 250" role="img" aria-label="스프링 강성과 댐퍼 감쇠력에 따른 예측 진동 지도">
+              <g id="wm-heat"></g>
+              <path class="ax" d="M44 22V208H290"/>
+              <text class="axl" x="44" y="224">−10%</text>
+              <text class="axl" x="290" y="224" text-anchor="end">+30%</text>
+              <text class="axl" x="167" y="242" text-anchor="middle">스프링 강성 →</text>
+              <text class="axl" x="38" y="13">↑ 댐퍼 감쇠력</text>
+              <ellipse class="wm-ell" id="wm-ell"/>
+              <text class="wm-ell-l" id="wm-ell-l" text-anchor="middle">기준 통과 영역</text>
+              <g id="wm-evs"></g>
+              <circle class="wm-pt" id="wm-pt" r="8"/>
             </svg>
-            <span class="cap">부딪히는 모서리 확대</span>
+            <span class="cap">예측 지도 (지금 회전수 기준)</span>
           </div>
           <div class="ctl">
-            <div class="rng"><label for="ph-t">모서리 프레임 두께 <output id="ph-t-out" for="ph-t">0.80 mm</output></label><input type="range" id="ph-t" min="0.6" max="1.4" step="0.05" value="0.8"><span class="rec" id="ph-t-rec">▲ AI 추천</span></div>
-            <div class="rng"><label for="ph-r">모서리 둥글기 <output id="ph-r-out" for="ph-r">0.80 mm</output></label><input type="range" id="ph-r" min="0.5" max="2" step="0.05" value="0.8"><span class="rec" id="ph-r-rec">▲ AI 추천</span></div>
-            <div class="readout"><span>화면이 받는 충격</span><b class="num bad" id="ph-s">115%</b></div>
-            <div class="gauge bad" id="ph-gauge"><i class="g-fill" id="ph-gfill"></i><i class="g-line"></i><span class="g-lbl">깨지는 선 100%</span></div>
-            <div class="readout sm"><span>무게 변화 (한도 +1.0 g)</span><b id="ph-w">+0.0 g</b></div>
-            <div class="verdict"><span class="chip bad" id="ph-v">깨질 수 있음</span><span class="note" id="ph-note">직접 움직여 보세요. 값을 바꾸면 바로 답이 나옵니다.</span></div>
+            <div class="rng"><label for="wm-rpm">탈수 회전수 <output id="wm-rpm-out" for="wm-rpm">1,200 rpm</output></label><input type="range" id="wm-rpm" min="1000" max="1400" step="10" value="1200"></div>
+            <div class="rng"><label for="wm-k">스프링 강성 <output id="wm-k-out" for="wm-k">+12%</output></label><input type="range" id="wm-k" min="-10" max="30" step="1" value="12"><span class="rec" id="wm-k-rec">▲ AI 추천</span></div>
+            <div class="rng"><label for="wm-c">댐퍼 감쇠력 <output id="wm-c-out" for="wm-c">+25%</output></label><input type="range" id="wm-c" min="-10" max="50" step="1" value="25"><span class="rec" id="wm-c-rec">▲ AI 추천</span></div>
+            <div class="readout"><span>예측 진동 변위</span><span><b class="num ok" id="wm-a">2.6</b> <span class="unit">mm ± 0.1</span></span></div>
+            <div class="gauge" id="wm-gauge"><i class="g-fill" id="wm-gfill"></i><i class="g-line"></i><span class="g-lbl">기준 3.0 mm</span></div>
+            <div class="verdict"><span class="chip ok" id="wm-v">기준 통과</span><span class="note" id="wm-note"></span></div>
           </div>
         </div>
-        <div class="speed"><svg class="i"><use href="#i-clock"/></svg><span>답이 나오는 시간</span><b>0.01초</b><span class="vs">지금 방식: 1번에 몇 시간</span><span class="chip ex">예시 숫자</span></div>
+        <div class="strip">
+          <div class="speed" data-until="2"><svg class="i"><use href="#i-clock"/></svg><span>예측 시간</span><b>0.01초</b><span class="vs">해석 1회: 3시간</span><span class="chip ex">예시 숫자</span></div>
+          <div class="speed verify" data-step="3"><svg class="i"><use href="#i-check"/></svg><span>검증 해석 1회</span><b id="wm-ver">2.95 mm</b><span class="vs" id="wm-ver-t">예측 2.9 mm와 오차 2%</span><span class="chip ex">예시 숫자</span></div>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
 <!-- 5. 비교 ③: 일이 끝난 뒤 -->
-<section class="slide" id="s5" data-title="비교: 쌓이는 자산" data-steps="2" data-labels="앞으로는|다른 제품으로 넓히기" data-dur="5000,5500,7000" aria-label="5. 한 번 한 실험이 회사 자산으로">
+<section class="slide" id="s5" data-title="비교: 쌓이는 자산" data-steps="2" data-labels="DDS AI Engineer에서는|다음 과제로 잇기" data-dur="5000,6000,7500" aria-label="5. 한 번 한 해석이 팀의 자산으로">
   <header class="sh">
-    <p class="eyebrow">비교 ③ 일이 끝난 뒤</p>
-    <h2>한 번 한 실험이 회사 자산으로 쌓입니다</h2>
+    <p class="eyebrow">비교 ③ 과제가 끝난 뒤</p>
+    <h2>한 번 한 해석이 팀의 자산으로 쌓입니다</h2>
   </header>
   <div class="kb">
     <div class="kb-col kb-old">
-      <div class="kb-head"><span class="chip human">지금</span><h3>사람마다, PC마다 흩어집니다</h3></div>
+      <div class="kb-head"><span class="chip human">기존 DDS</span><h3>템플릿은 관리자에게,<br>스크립트는 개인 PC에</h3></div>
       <div class="pcs">
-        <div class="pc"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>A 책임 PC</b><span>세탁기_진동_v7_최종_진짜.xlsx</span></div></div>
-        <div class="pc"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>B 선임 PC</b><span>낙하해석_스크립트_수정2.py</span></div></div>
-        <div class="pc gone"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>C 책임 PC</b><span>부서 이동 → 파일 위치 모름</span></div></div>
+        <div class="pc"><span class="ico"><svg class="i"><use href="#i-server"/></svg></span><div><b>관리자 템플릿</b><span>정해진 해석만 자동화 · 새 문제는 요청 후 대기</span></div></div>
+        <div class="pc"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>A 책임 PC</b><span>탈수진동_스크립트_v7_최종.py</span></div></div>
+        <div class="pc gone"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>C 책임 PC</b><span>부서 이동 → 스크립트 위치 모름</span></div></div>
       </div>
-      <p class="kb-say">담당자가 바뀌면 같은 실험을<br>처음부터 다시 합니다.</p>
+      <p class="kb-say">담당자가 바뀌면 같은 준비를<br>처음부터 다시 합니다.</p>
     </div>
     <div class="kb-col kb-new" data-step="1">
-      <div class="kb-head"><span class="chip ai">DDS AI Engineer</span><h3>팀 프로젝트 한곳에 모두 남습니다</h3><span class="meta">부탁 · 계획 · 계산 결과 · 예측 모델 · 보고서</span></div>
+      <div class="kb-head"><span class="chip ai">DDS AI Engineer</span><h3>프로젝트 한곳에 모두 남고, AI가 다시 씁니다</h3><span class="meta">드럼세탁기 탈수 진동 프로젝트에 남은 것</span></div>
       <div class="shelf">
-        <article class="item"><svg class="prod"><use href="#p-washer"/></svg><b>드럼세탁기 탈수 진동</b><span>예측 모델 · 보고서</span><span class="tag">RecurDyn</span></article>
-        <article class="item"><svg class="prod"><use href="#p-phone"/></svg><b>스마트폰 낙하</b><span>예측 모델 · 보고서</span><span class="tag">LS-DYNA</span></article>
-        <article class="item next" data-step="2"><svg class="prod"><use href="#p-fridge"/></svg><b>냉장고 문 여닫기 내구</b><span>같은 방식으로</span><span class="tag">Abaqus</span></article>
-        <article class="item next" data-step="2"><svg class="prod"><use href="#p-aircon"/></svg><b>에어컨 실외기 팬 소음</b><span>같은 방식으로</span><span class="tag">Fluent</span></article>
-        <article class="item next" data-step="2"><svg class="prod"><use href="#p-tv"/></svg><b>TV 포장 상자 낙하</b><span>같은 방식으로</span><span class="tag">LS-DYNA</span></article>
-        <article class="item next" data-step="2"><svg class="prod"><use href="#p-buds"/></svg><b>무선 이어폰 케이스 휨</b><span>같은 방식으로</span><span class="tag">Moldflow</span></article>
+        <article class="item"><span class="ico"><svg class="i"><use href="#i-chat"/></svg></span><b>대화·계획 (Flow)</b><span>누가 무엇을 왜 요청했는지</span></article>
+        <article class="item"><span class="ico"><svg class="i"><use href="#i-code"/></svg></span><b>해석 스크립트</b><span>RecurDyn 자동화</span></article>
+        <article class="item"><span class="ico"><svg class="i"><use href="#i-grid"/></svg></span><b>해석 결과 60케이스</b><span>변수·결과값·이미지</span></article>
+        <article class="item"><span class="ico"><svg class="i"><use href="#i-chart"/></svg></span><b>예측 모델</b><span>정확도 R² 0.97</span></article>
+        <article class="item"><span class="ico"><svg class="i"><use href="#i-cube"/></svg></span><b>3D Simulator</b><span>팀원 누구나 바로 예측</span></article>
+        <article class="item"><span class="ico"><svg class="i"><use href="#i-doc"/></svg></span><b>보고서</b><span>Word·HTML</span></article>
       </div>
-      <p class="kb-say" data-step="2">다음 사람은 “지난번 세탁기 진동 모델에서 시작해 줘”라고<br>말하면 이어서 합니다. <span class="meta">(점선 = 같은 방식으로 넓힐 과제)</span></p>
+      <div class="next-row" data-step="2">
+        <article class="item next"><svg class="prod"><use href="#p-washer"/></svg><b>신모델 드럼세탁기 25 kg</b><span>같은 Flow·스크립트로 바로 시작</span></article>
+        <article class="item next"><svg class="prod"><use href="#p-washer"/></svg><b>세탁건조기 탈수 진동</b><span>케이스만 추가해 예측 모델 재학습</span></article>
+      </div>
+      <p class="kb-say" data-step="2">다음 담당자는 “지난번 탈수 진동 프로젝트에서 시작해 줘”<br>한마디로 이어갑니다.</p>
     </div>
   </div>
 </section>
@@ -754,46 +772,46 @@ svg.prod { display: block; overflow: visible; flex: none; }
 <section class="slide" id="s6" data-title="안심하고 쓰기" data-dur="9000" aria-label="6. 안심하고 쓸 수 있게">
   <header class="sh">
     <p class="eyebrow">안심하고 쓸 수 있게</p>
-    <h2>설계 파일은 회사 안에, 계산 시작은 사람이 정합니다</h2>
+    <h2>설계 파일은 회사 안에, 해석 실행은 엔지니어가 승인합니다</h2>
   </header>
   <div class="safe">
     <div class="map">
       <div class="ext"><svg class="i"><use href="#i-cloud"/></svg><div><b>회사가 허용한 AI 서비스</b><span>Gemini·Claude 등</span></div></div>
-      <div class="vlink"><i class="dot"></i><span class="lbl">주고받는 것:<br>부탁·계획·스크립트 같은 글</span></div>
+      <div class="vlink"><i class="dot"></i><span class="lbl">주고받는 것:<br>요청·계획·스크립트 (텍스트)</span></div>
       <div class="inside">
         <span class="tag">회사 안 (사내망)</span>
-        <div class="nd"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><b>엔지니어 PC</b><ul><li>설계 원본 파일</li><li>CAD·CAE 프로그램</li><li>AI 조수가 여기서 일함</li></ul></div>
-        <div class="hlink"><span class="lbl">숫자 결과·그림</span><i class="dot"></i></div>
-        <div class="nd"><span class="ico"><svg class="i"><use href="#i-server"/></svg></span><b>사내 서버</b><ul><li>결과·예측 모델</li><li>보고서·대화 기록</li><li>팀원과 공유</li></ul></div>
+        <div class="nd"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><b>엔지니어 PC</b><ul><li>설계 원본·해석 파일</li><li>CAD·CAE 툴</li><li>AI 어시스턴트가 여기서 실행</li></ul></div>
+        <div class="hlink"><span class="lbl">결과값·이미지</span><i class="dot"></i></div>
+        <div class="nd"><span class="ico"><svg class="i"><use href="#i-server"/></svg></span><b>사내 서버</b><ul><li>해석 결과·예측 모델</li><li>보고서·대화 기록</li><li>팀원과 공유</li></ul></div>
       </div>
     </div>
     <ul class="rules">
-      <li class="h"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><div><b>계산 전에 엔지니어가 승인</b><p>AI가 짠 계획을 보고 ‘승인’을 눌러야 시작합니다.</p></div></li>
-      <li><span class="ico"><svg class="i"><use href="#i-shield"/></svg></span><div><b>큰 원본 파일은 PC에</b><p>서버에는 숫자 결과·그림·보고서만 올라갑니다.</p></div></li>
-      <li><span class="ico"><svg class="i"><use href="#i-history"/></svg></span><div><b>팀원만 보고, 기록은 모두 남김</b><p>프로젝트 멤버만 볼 수 있고, 누가 무엇을 부탁했는지 남습니다.</p></div></li>
+      <li class="h"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><div><b>해석 전에 엔지니어가 승인</b><p>AI가 세운 계획을 보고 ‘승인’을 눌러야 실행합니다.</p></div></li>
+      <li><span class="ico"><svg class="i"><use href="#i-shield"/></svg></span><div><b>원본 해석 파일은 PC에</b><p>odb·d3plot 같은 원본은 PC에 두고, 서버에는 결과값·이미지·보고서만 올라갑니다.</p></div></li>
+      <li><span class="ico"><svg class="i"><use href="#i-history"/></svg></span><div><b>프로젝트 멤버만, 기록은 모두 남김</b><p>멤버만 볼 수 있고, 누가 무엇을 요청했는지 남습니다.</p></div></li>
     </ul>
   </div>
 </section>
 
 <!-- 7. 다음 단계 -->
-<section class="slide night" id="s7" data-title="다음 단계" data-dur="10000" aria-label="7. 다음 단계와 부탁드리는 것">
+<section class="slide night" id="s7" data-title="다음 단계" data-dur="10000" aria-label="7. 다음 단계와 요청 사항">
   <header class="sh">
     <p class="eyebrow">다음 단계</p>
     <h2>실제 제품 하나로 시범 운영을 시작하겠습니다</h2>
   </header>
   <ol class="track">
-    <li class="done"><span class="dot"><svg class="i"><use href="#i-check"/></svg></span><b>만들기</b><span>웹 화면·AI 조수·설치 프로그램<br>연결 준비된 프로그램 29종</span></li>
+    <li class="done"><span class="dot"><svg class="i"><use href="#i-check"/></svg></span><b>개발</b><span>웹앱·AI 어시스턴트·PC Agent<br>연동 준비된 CAD/CAE 툴 29종</span></li>
     <li class="now"><span class="dot">2</span><b>사내 서버 설치</b><span>준비 스크립트로 설치합니다</span></li>
-    <li><span class="dot">3</span><b>시범 과제 1개</b><span>예: 세탁기 진동 또는<br>스마트폰 낙하</span></li>
-    <li><span class="dot">4</span><b>부서로 넓히기</b><span>자주 쓰는 프로그램부터</span></li>
+    <li><span class="dot">3</span><b>시범 과제 1개</b><span>예: 드럼세탁기 탈수 진동</span></li>
+    <li><span class="dot">4</span><b>부서로 확대</b><span>자주 쓰는 툴부터</span></li>
   </ol>
   <div class="asks">
-    <div class="ask"><svg class="i"><use href="#i-team"/></svg><b>시범 팀 1~2곳</b><p>반복 해석이 많은 팀의 실제 과제로 먼저 확인합니다.</p></div>
-    <div class="ask"><svg class="i"><use href="#i-key"/></svg><b>라이선스 있는 PC</b><p>실제 프로그램이 깔린 PC에서 연결을 확인하고 고칩니다.</p></div>
-    <div class="ask"><svg class="i"><use href="#i-server"/></svg><b>사내 서버 1대</b><p>웹 화면과 결과를 보관합니다.</p></div>
+    <div class="ask"><svg class="i"><use href="#i-team"/></svg><b>시범 팀 1~2곳</b><p>반복 해석이 많은 팀의 실제 과제로 먼저 검증합니다.</p></div>
+    <div class="ask"><svg class="i"><use href="#i-key"/></svg><b>라이선스 있는 PC</b><p>실제 툴이 설치된 PC에서 연동을 검증하고 보완합니다.</p></div>
+    <div class="ask"><svg class="i"><use href="#i-server"/></svg><b>사내 서버 1대</b><p>웹앱과 해석 결과를 보관합니다.</p></div>
   </div>
-  <p class="closing">말로 부탁하면 <span class="a">실험은 AI가</span>, <span class="h">판단은 사람이</span>.</p>
-  <p class="fine">이 자료의 숫자는 이해를 돕기 위한 예시입니다. 실제 프로그램과의 연결과 효과는 시범 운영에서 확인합니다.</p>
+  <p class="closing">말로 요청하면 <span class="a">해석은 AI가</span>, <span class="h">판단은 엔지니어가</span>.</p>
+  <p class="fine">이 자료의 숫자는 이해를 돕기 위한 예시입니다. 실제 툴 연동과 효과는 시범 운영에서 검증합니다.</p>
 </section>
 
 </div>
@@ -850,6 +868,20 @@ svg.prod { display: block; overflow: visible; flex: none; }
     job.id = requestAnimationFrame(tick);
     jobs.push(job);
   }
+  // 끝없이 도는 움직임(세탁기 회전): 장면을 넘기면 다른 움직임과 함께 멈춘다
+  function loop(fn, g) {
+    if (reduced) { fn(0); return; }
+    const job = { g, id: 0 };
+    job.stop = () => cancelAnimationFrame(job.id);
+    let prevT = null;
+    const tick = (t) => {
+      fn(prevT === null ? 0 : Math.min(.05, (t - prevT) / 1000));
+      prevT = t;
+      job.id = requestAnimationFrame(tick);
+    };
+    job.id = requestAnimationFrame(tick);
+    jobs.push(job);
+  }
   function cancelJobs(g) {
     jobs = jobs.filter((j) => { if (g && j.g !== g) return true; j.stop(); return false; });
   }
@@ -876,52 +908,55 @@ svg.prod { display: block; overflow: visible; flex: none; }
     return e;
   }
 
-  // ---------- 2. 두 방법 경주 ----------
+  // ---------- 2. 기존 DDS와 비교 ----------
   const hooks = {};
   (() => {
-    const A = $("#laneA"), B = $("#laneB");
-    const chipsA = $$(".lane-steps span", A), chipsB = $$(".lane-steps span", B);
-    const fillA = $(".fill", A), fillB = $(".fill", B), rest = $(".rest", B), barA = $(".bar", A);
-    const notches = Array.from({ length: 11 }, (_, i) => {
-      const n = document.createElement("i");
-      n.className = "notch";
-      n.style.left = `calc(${((i + 1) / 12) * 100}% - 1px)`;
-      return barA.appendChild(n);
-    });
-    const DOING = ["모델 고치는 중", "해석 조건 넣는 중", "계산 기다리는 중", "결과 정리하는 중"];
-    function set(p) {
-      const day = p * 14;
-      $("#r-day").textContent = `${Math.floor(day + 1e-6)}일`;
-      const done = Math.min(12, Math.floor(p * 12 + 1e-6));
-      const sub = p >= 1 ? -1 : Math.floor(((p * 12) % 1) * 4);
-      fillA.style.width = `${p * 100}%`;
-      chipsA.forEach((c, i) => c.classList.toggle("cur", p > 0 && i === sub));
-      notches.forEach((n, i) => n.classList.toggle("on", i < done));
-      $("#cA").textContent = done;
-      $("#sayA").textContent = p <= 0 ? "출발 전" : p >= 1 ? "2주 동안 조합 12개" : `${done + 1}번째 조합 · ${DOING[sub]}`;
-      const ph = day <= 0 ? -1 : day < .15 ? 0 : day < 1.6 ? 1 : day < 2 ? 2 : 3;
-      fillB.style.width = `${(Math.min(day, 2) / 14) * 100}%`;
-      chipsB.forEach((c, i) => { c.classList.toggle("cur", i === ph); c.classList.toggle("done", i < ph); });
-      $("#cB").textContent = day < .15 ? 0 : Math.min(60, Math.round((60 * (day - .15)) / 1.45));
-      rest.classList.toggle("on", day >= 2);
-      B.classList.toggle("fin", day >= 2);
-      $("#sayB").textContent = ["출발 전", "엔지니어가 말로 부탁하는 중", "AI가 계산하는 중 · 동시에 4개", "엔지니어가 결과를 확인하는 중", "끝 · 남은 12일은 다음 과제에"][ph + 1];
+    const cA = $$("#cmpA .cell"), cB = $$("#cmpB .cell"), hs = $$("#cmpB .hs i");
+    // 기존 DDS(예시): 단계별 걸린 날, 그중 템플릿을 기다린 날, 사람이 설정한 항목 수
+    const DAYS = [1, 4, 1, 1, 1], WAIT = [0, 3, 0, 0, 0], ITEMS = [6, 8, 7, 7, 4];
+    const TOTAL = DAYS.reduce((a, b) => a + b, 0);
+    function setA(p) {
+      const day = p * TOTAL;
+      let acc = 0, n = 0;
+      DAYS.forEach((d, i) => {
+        const f = clamp((day - acc) / d, 0, 1);
+        n += Math.floor(clamp((day - acc - WAIT[i]) / (d - WAIT[i]), 0, 1) * ITEMS[i] + 1e-6);
+        cA[i].className = `cell${f >= 1 ? " done" : day > acc ? " cur" : ""}`;
+        cA[i].classList.toggle("hold", day > acc && day < acc + WAIT[i]);
+        acc += d;
+      });
+      $("#mA1").textContent = p <= 0 ? "–" : `${n}개`;
+      $("#mA2").textContent = p <= 0 ? "–" : `${Math.ceil(day - 1e-6)}일`;
+    }
+    // AI Engineer: 사람은 요청·승인·판단만 하고, 다섯 단계는 AI가 밤새 이어서 한다
+    function setB(p) {
+      hs[0].classList.toggle("on", p > 0);
+      hs[1].classList.toggle("on", p >= .12);
+      hs[2].classList.toggle("on", p >= .92);
+      cB.forEach((c, i) => {
+        const a = .2 + i * .144, b = a + .144;
+        c.className = `cell${p >= b ? " done" : p > a ? " cur" : ""}`;
+      });
+      $("#mB1").textContent = p <= 0 ? "–" : "0개";
+      $("#mB3").classList.toggle("on", p >= .12);
+      $("#mB2").textContent = p <= 0 ? "–" : `${p < .56 ? 1 : 2}일`;
     }
     hooks.s2 = (k, from) => {
-      if (k === 0) set(0);
-      else if (k === 1 && from === 0) { set(0); tween(10000, set); }
-      else set(1);
+      if (k === 0) { setA(0); setB(0); }
+      else if (k === 1) { setB(0); if (from === 0) { setA(0); tween(8000, setA); } else setA(1); }
+      else if (k === 2) { setA(1); if (from === 1) { setB(0); tween(6000, setB); } else setB(1); }
+      else { setA(1); setB(1); }
     };
   })();
 
   // ---------- 3. 데모: 드럼세탁기 ----------
   (() => {
-    const TEXT = "탈수할 때 세탁기가 덜 흔들리게 스프링·댐퍼 값을 찾아 줘. 지금 쓰는 부품 범위 안에서.";
+    const TEXT = "탈수 진동이 줄도록 스프링·댐퍼를 최적화해 줘. 1,000~1,400 rpm 조건, 현재 부품 범위 안에서.";
     const typed = $("#d1-typed"), flow = $("#d1-flow"), nodes = $$("li", flow);
     const empty = $("#d1-empty"), wait = $("#d1-wait"), run = $("#d1-run"), res = $("#d1-res");
     const approve = $("#d1-approve"), tab1 = $("#d1-tab1"), tab2 = $("#d1-tab2");
     const cells = Array.from({ length: 60 }, () => $("#d1-cases").appendChild(document.createElement("i")));
-    // 흔들림 지도(예시): 스프링·댐퍼가 적당히 셀 때 가장 작다
+    // 진동 지도(예시): 스프링·댐퍼가 적당히 셀 때 가장 작다
     const X0 = 46, X1 = 410, Y0 = 24, Y1 = 196;
     const px = (x) => X0 + x * (X1 - X0), py = (y) => Y1 - y * (Y1 - Y0);
     const vib = (x, y) => 2.5 + 4 * (2 * (x - .66) ** 2 + 1.6 * (y - .72) ** 2);
@@ -964,7 +999,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       $("#d1-n").textContent = n;
       heat.style.opacity = clamp((t - 5) / .8, 0, 1) * .5;
       star.classList.toggle("on", t >= 6.6);
-      $("#d1-say").textContent = t < 1 ? "준비 중" : t < 5 ? "계산 중 · 동시에 4개" : t < 5.8 ? "예측 모델 만드는 중" : t < 6.6 ? "가장 좋은 값 찾는 중" : "완료 · 별이 가장 좋은 값";
+      $("#d1-say").textContent = t < 1 ? "준비 중" : t < 5 ? "해석 중 · 동시에 4개" : t < 5.8 ? "예측 모델 학습 중" : t < 6.6 ? "최적점 찾는 중" : "완료 · 별 = 최적점";
     }
     function base(k) {
       typed.textContent = k >= 1 ? TEXT : "";
@@ -987,105 +1022,160 @@ svg.prod { display: block; overflow: visible; flex: none; }
     approve.addEventListener("click", () => { if (slides[cur].id === "s3" && step === 2) next(); });
   })();
 
-  // ---------- 4. 데모: 스마트폰 낙하 ----------
+  // ---------- 4. 데모: 드럼세탁기 3D Simulator ----------
   (() => {
-    const ph = $("#ph"), body = $("#ph-body"), scr = $("#ph-screen"), hot = $("#ph-hot"), burst = $("#ph-burst"), status = $("#ph-status");
-    const T = $("#ph-t"), R = $("#ph-r");
-    const OLD = { t: .8, r: .8 }, NEW = { t: 1.1, r: 1.6 };
-    // 예측 모델(예시): 두께와 둥글기로 화면이 받는 충격(%)과 무게 변화(g)를 바로 계산
-    const stress = (t, r) => { const u = (t - .6) / .8, v = (r - .5) / 1.5; return 136 - 34 * u - 70 * v + 48 * v * v; };
-    const dW = (t, r) => 3 * (t - .8) - .1 * (r - .8);
-    const CY0 = 130, CY1 = 302.1, DEG = 32;
-    const place = (cy, deg) => ph.setAttribute("transform", `translate(200 ${cy.toFixed(1)}) rotate(${deg.toFixed(1)})`);
-    function look(d) { const rx = 8 + d.r * 5; body.setAttribute("rx", rx); scr.setAttribute("rx", Math.max(4, rx - 4)); }
-    function heatOn(d, on) {
-      const s = stress(d.t, d.r), c = cmap(s, 75, 120);
-      $("#ph-g0").setAttribute("stop-color", c); $("#ph-g1").setAttribute("stop-color", c);
-      hot.setAttribute("opacity", on ? 1 : 0);
-      burst.classList.toggle("on", on); burst.classList.toggle("ok", s < 100);
+    const LIM = 3.0;
+    // 예측 모델(예시): 회전수가 오르면 진동이 커지고, 가장 좋은 스프링·댐퍼 값도 함께 올라간다
+    function amp(k, c, rpm) {
+      const s = (rpm - 1200) / 200;
+      const dx = (k - (12 + 6 * s)) / 37.5, dy = (c - (25 + 8 * s)) / 65.8;
+      return 2.6 + .3 * s + 3.67 * (1 + .25 * s) * (2 * dx * dx + 1.6 * dy * dy);
     }
-    function say(d, down) {
-      status.textContent = "";
-      if (!down) { status.textContent = d === OLD ? "지금 설계를 1.5 m 높이에서 모서리로 떨어뜨리면?" : "AI 추천 설계로 다시 떨어뜨리면?"; return; }
-      const s = Math.round(stress(d.t, d.r)), bad = s >= 100;
-      const chip = document.createElement("span");
-      chip.className = `chip ${bad ? "bad" : "ok"}`;
-      chip.textContent = `화면이 받는 충격 ${s}%`;
-      const txt = document.createElement("span");
-      txt.textContent = bad ? "깨질 수 있습니다" : `통과 · 무게 +${dW(d.t, d.r).toFixed(1)} g`;
-      status.append(chip, txt);
+    const OLD = { k: 12, c: 25 }, NEW = { k: 18, c: 33 };
+    const K = $("#wm-k"), Cc = $("#wm-c"), RPM = $("#wm-rpm");
+    const outK = $("#wm-k-out"), outC = $("#wm-c-out"), outR = $("#wm-rpm-out");
+    const aEl = $("#wm-a"), gauge = $("#wm-gauge"), gfill = $("#wm-gfill"), vEl = $("#wm-v"), note = $("#wm-note");
+    const recK = $("#wm-k-rec"), recC = $("#wm-c-rec"), status = $("#wm-status"), ver = $("#wm-ver");
+    const pct = (v) => `${v > 0.5 ? "+" : v < -0.5 ? "−" : ""}${Math.abs(Math.round(v))}%`;
+    const rpmTxt = (r) => `${(Math.round(r / 10) * 10).toLocaleString("en-US")} rpm`;
+    const at = (el, v) => `calc(8px + (100% - 16px) * ${(v - Number(el.min)) / (Number(el.max) - Number(el.min))})`;
+    recK.style.left = at(K, NEW.k); recC.style.left = at(Cc, NEW.c);
+    const recOn = (on) => { recK.classList.toggle("on", on); recC.classList.toggle("on", on); };
+
+    // 예측 지도: 가로 스프링 −10~+30%, 세로 댐퍼 −10~+50%
+    const X0 = 44, X1 = 290, Y0 = 22, Y1 = 208;
+    const mx = (k) => X0 + ((k + 10) / 40) * (X1 - X0), my = (c) => Y1 - ((c + 10) / 60) * (Y1 - Y0);
+    const NX = 24, NY = 14, heat = $("#wm-heat"), grid = [];
+    for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) {
+      const r = mk("rect", { x: X0 + (i * (X1 - X0)) / NX, y: Y0 + ((NY - 1 - j) * (Y1 - Y0)) / NY, width: (X1 - X0) / NX + .6, height: (Y1 - Y0) / NY + .6, opacity: .55 }, heat);
+      grid.push({ r, k: -10 + ((i + .5) / NX) * 40, c: -10 + ((j + .5) / NY) * 60 });
     }
-    function still(d, down) { look(d); place(down ? CY1 : CY0, down ? DEG : 0); heatOn(d, down); say(d, down); }
-    function drop(d) {
-      still(d, false);
-      tween(950, (p) => place(CY0 + (CY1 - CY0) * p * p, DEG * p), () => {
-        heatOn(d, true); say(d, true);
-        tween(320, (q) => { const b = Math.sin(Math.PI * q); place(CY1 - 9 * b, DEG - 3 * b); });
-      });
+    // AI가 훑어본 조합(점): 고정 시드로 흩뿌림
+    let seed = 1400;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const evs = Array.from({ length: 48 }, () => mk("circle", { cx: (X0 + 6 + rnd() * (X1 - X0 - 12)).toFixed(1), cy: (Y0 + 6 + rnd() * (Y1 - Y0 - 12)).toFixed(1), r: 2.6, class: "wm-ev" }, $("#wm-evs")));
+    const evOn = (p) => evs.forEach((e, i) => e.classList.toggle("on", i < Math.round(p * evs.length)));
+    const ell = $("#wm-ell"), ellL = $("#wm-ell-l"), pt = $("#wm-pt");
+    let heatRpm = null;
+    function drawMap(k, c, rpm) {
+      const r10 = Math.round(rpm / 10) * 10;
+      if (r10 !== heatRpm) {
+        heatRpm = r10;
+        grid.forEach((g) => g.r.setAttribute("fill", cmap(amp(g.k, g.c, r10), 2.3, 6)));
+        // 기준 3.0 mm를 넘지 않는 영역은 타원이 된다
+        const s = (r10 - 1200) / 200, q = (LIM - (2.6 + .3 * s)) / (3.67 * (1 + .25 * s));
+        const ex = mx(12 + 6 * s), ey = my(25 + 8 * s);
+        const rx = (Math.sqrt(q / 2) * 37.5 * (X1 - X0)) / 40, ry = (Math.sqrt(q / 1.6) * 65.8 * (Y1 - Y0)) / 60;
+        ell.setAttribute("cx", ex.toFixed(1)); ell.setAttribute("cy", ey.toFixed(1));
+        ell.setAttribute("rx", rx.toFixed(1)); ell.setAttribute("ry", ry.toFixed(1));
+        ellL.setAttribute("x", ex.toFixed(1)); ellL.setAttribute("y", (ey - ry - 6).toFixed(1));
+      }
+      pt.setAttribute("cx", mx(k).toFixed(1)); pt.setAttribute("cy", my(c).toFixed(1));
     }
 
-    // 3D 시뮬레이터: 모서리 확대 그림·게이지·판정
-    const outT = $("#ph-t-out"), outR = $("#ph-r-out"), sEl = $("#ph-s"), gauge = $("#ph-gauge"), gfill = $("#ph-gfill");
-    const wEl = $("#ph-w"), vEl = $("#ph-v"), note = $("#ph-note"), recT = $("#ph-t-rec"), recR = $("#ph-r-rec");
-    const at = (el, v) => `calc(8px + (100% - 16px) * ${(v - Number(el.min)) / (Number(el.max) - Number(el.min))})`;
-    recT.style.left = at(T, NEW.t); recR.style.left = at(R, NEW.r);
-    const recOn = (on) => { recT.classList.toggle("on", on); recR.classList.toggle("on", on); };
-    function corner(t, r, s) {
-      const Rr = 14 + r * 26, th = 8 + t * 18, x = 40, y = 40;
-      const outer = `M${x} 250V${(y + Rr).toFixed(1)}A${Rr.toFixed(1)} ${Rr.toFixed(1)} 0 0 1 ${(x + Rr).toFixed(1)} ${y}H300V250Z`;
-      const xi = x + th, yi = y + th, Ri = Math.max(6, Rr - th * .7);
-      $("#cn-frame").setAttribute("d", outer);
-      $("#cn-clipp").setAttribute("d", outer);
-      $("#cn-glass").setAttribute("d", `M${xi.toFixed(1)} 250V${(yi + Ri).toFixed(1)}A${Ri.toFixed(1)} ${Ri.toFixed(1)} 0 0 1 ${(xi + Ri).toFixed(1)} ${yi.toFixed(1)}H300V250Z`);
-      const c = cmap(s, 75, 120);
-      $("#cn-g0").setAttribute("stop-color", c); $("#cn-g1").setAttribute("stop-color", c);
-      $("#cn-hot").setAttribute("cx", (x + Rr * .3 + 10).toFixed(1));
-      $("#cn-hot").setAttribute("cy", (y + Rr * .3 + 10).toFixed(1));
-      $("#cn-flbl").setAttribute("y", (y + th / 2 + 5).toFixed(1));
+    // 세탁기 단면: 통이 스프링(위)·댐퍼(아래)에 매달려 돈다. 진동 변위는 과장해서 그린다(기준 3.0 mm = 반지름 21)
+    const body = $("#wm-body"), tub = $("#wm-tub"), rot = $("#wm-rot"), orb = $("#wm-orb"), orbKey = $("#wm-orb-key"), hub = $("#wm-hub");
+    const sp1 = $("#wm-s1"), sp2 = $("#wm-s2"), rod1 = $("#wm-r1"), rod2 = $("#wm-r2");
+    const CX = 190, CY = 214;
+    function zig(x0, y0, x1, y1) {
+      const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L, n = 8, w = 7, a = 8;
+      let d = `M${x0} ${y0}L${(x0 + ux * a).toFixed(1)} ${(y0 + uy * a).toFixed(1)}`;
+      for (let i = 0; i < n; i++) {
+        const t = a + ((L - 2 * a) * (i + .5)) / n, s = i % 2 ? -w : w;
+        d += `L${(x0 + ux * t - uy * s).toFixed(1)} ${(y0 + uy * t + ux * s).toFixed(1)}`;
+      }
+      return `${d}L${(x1 - ux * a).toFixed(1)} ${(y1 - uy * a).toFixed(1)}L${x1.toFixed(1)} ${y1.toFixed(1)}`;
     }
-    function sim(t, r, msg) {
-      T.value = t; R.value = r;
-      outT.textContent = `${t.toFixed(2)} mm`; outR.textContent = `${r.toFixed(2)} mm`;
-      const s = stress(t, r), w = dW(t, r), bad = s >= 100, heavy = w > 1.0;
-      sEl.textContent = `${Math.round(s)}%`;
-      sEl.className = `num ${bad ? "bad" : "ok"}`;
-      gfill.style.width = `${clamp((s - 60) / 70, 0, 1) * 100}%`;
+    const line = (el, x1, y1, x2, y2) => { el.setAttribute("x1", x1); el.setAttribute("y1", y1); el.setAttribute("x2", x2.toFixed(1)); el.setAttribute("y2", y2.toFixed(1)); };
+    let S = { k: OLD.k, c: OLD.c, rpm: 1200 }, A = amp(OLD.k, OLD.c, 1200), th = -Math.PI / 4;
+    function drawWasher() {
+      const R = clamp(8 + 22 * (A - 2.4), 5, 26), ox = R * Math.cos(th), oy = R * Math.sin(th);
+      body.setAttribute("transform", `translate(${(ox * .08).toFixed(2)} ${(oy * .08).toFixed(2)})`);
+      tub.setAttribute("transform", `translate(${(CX + ox).toFixed(1)} ${(CY + oy).toFixed(1)})`);
+      rot.setAttribute("transform", `rotate(${((th * 180) / Math.PI).toFixed(1)})`);
+      hub.setAttribute("cx", (CX + ox).toFixed(1)); hub.setAttribute("cy", (CY + oy).toFixed(1));
+      orb.setAttribute("r", R.toFixed(1));
+      sp1.setAttribute("d", zig(124, 86, 124.6 + ox, 155.1 + oy));
+      sp2.setAttribute("d", zig(256, 86, 255.4 + ox, 155.1 + oy));
+      line(rod1, 132, 306, 139.5 + ox, 286 + oy);
+      line(rod2, 248, 306, 240.5 + ox, 286 + oy);
+    }
+
+    function sim(k, c, rpm, msg) {
+      S = { k, c, rpm };
+      K.value = k; Cc.value = c; RPM.value = rpm;
+      outK.textContent = pct(k); outC.textContent = pct(c); outR.textContent = rpmTxt(rpm);
+      A = amp(k, c, rpm);
+      const a1 = Math.round(A * 10) / 10, bad = a1 > LIM;
+      aEl.textContent = a1.toFixed(1);
+      aEl.className = `num ${bad ? "bad" : "ok"}`;
+      gfill.style.width = `${clamp(A / 6, 0, 1) * 100}%`;
       gauge.classList.toggle("bad", bad);
-      wEl.textContent = `${w < 0 ? "−" : "+"}${Math.abs(w).toFixed(1)} g`;
-      wEl.classList.toggle("over", heavy);
-      vEl.className = `chip ${bad ? "bad" : heavy ? "warn" : "ok"}`;
-      vEl.textContent = bad ? "깨질 수 있음" : heavy ? "무게 한도 넘음" : "통과";
+      vEl.className = `chip ${bad ? "bad" : "ok"}`;
+      vEl.textContent = bad ? "기준 초과" : "기준 통과";
+      orb.classList.toggle("bad", bad); orbKey.classList.toggle("bad", bad);
       if (msg) note.textContent = msg;
-      corner(t, r, s);
+      drawMap(k, c, rpm);
+      drawWasher();
     }
-    const NOTE_TRY = "직접 움직여 보세요. 값을 바꾸면 바로 답이 나옵니다.";
-    const NOTE_REC = "AI 추천: 모서리를 더 둥글게, 두께는 조금만 → 통과, 무게는 두께만 늘릴 때의 절반 이하";
+    // 세탁기 아래 한 줄: 지금 조건의 예측값(또는 정해 준 글)과 설명
+    function say(txt, label) {
+      const a1 = Math.round(A * 10) / 10, bad = !label && a1 > LIM;
+      const chip = document.createElement("span");
+      chip.className = `chip ${bad ? "bad" : "ok"}`;
+      chip.textContent = label || `${rpmTxt(S.rpm)} · 진동 ${a1.toFixed(1)} mm`;
+      const t = document.createElement("span");
+      t.textContent = txt;
+      status.replaceChildren(chip, t);
+    }
+    const NOTE_TRY = "직접 움직여 보세요. 값을 바꾸면 바로 예측합니다.";
+    const NOTE_HI = "1,400 rpm에서는 기준 3.0 mm를 넘습니다. 해석 없이 0.01초 만에 나온 예측입니다.";
+    const NOTE_REC = "AI 추천: 스프링 +18%, 댐퍼 +33% → 1,400 rpm에서도 기준 통과";
+    const NOTE_VER = "추천 설계로 해석을 1번만 돌려 예측이 맞는지 확인했습니다.";
     function tour() {
-      recOn(false);
-      sim(OLD.t, OLD.r, "먼저 두께만 늘려 봅니다");
-      tween(1800, (p) => sim(OLD.t + .6 * ease(p), OLD.r), () => {
-        sim(1.4, OLD.r, "두께만 늘리면 충격은 줄지만, 무게가 1.8 g 늘어 한도를 넘습니다");
-        later(1900, () => {
-          note.textContent = "AI가 모서리를 둥글게 바꿔 봅니다";
-          tween(2000, (p) => sim(1.4 - .3 * ease(p), OLD.r + .8 * ease(p)), () => { sim(NEW.t, NEW.r, NOTE_REC); recOn(true); }, "sim");
+      recOn(false); evOn(0);
+      sim(OLD.k, OLD.c, 1400, "AI가 예측 모델로 스프링·댐퍼 조합을 탐색합니다");
+      say("AI가 해결안을 찾는 중");
+      tween(1500, (p) => {
+        evOn(p);
+        note.textContent = `AI가 예측 모델로 조합을 탐색합니다 · ${Math.round(p * 1000).toLocaleString("en-US")}개`;
+      }, () => {
+        tween(1800, (p) => sim(OLD.k + (NEW.k - OLD.k) * ease(p), OLD.c + (NEW.c - OLD.c) * ease(p), 1400), () => {
+          sim(NEW.k, NEW.c, 1400, NOTE_REC); recOn(true); say("AI 추천 설계 (예측)");
         }, "sim");
       }, "sim");
     }
     hooks.s4 = (k, from) => {
       const anim = from === k - 1;
-      if (k <= 2) { recOn(false); sim(OLD.t, OLD.r, NOTE_TRY); }
-      else if (k === 3 && anim) tour();
-      else { sim(NEW.t, NEW.r, NOTE_REC); recOn(true); }
-      if (k === 0) still(OLD, false);
-      else if (k === 1) { if (anim) drop(OLD); else still(OLD, true); }
-      else if (k < 4) still(OLD, true);
-      else if (anim) drop(NEW); else still(NEW, true);
+      loop((dt) => { th += dt * 2 * Math.PI * (S.rpm / 1200); drawWasher(); }, "spin");
+      recOn(k >= 2); evOn(k >= 2 ? 1 : 0);
+      ver.textContent = "2.95 mm";
+      if (k === 0) { sim(OLD.k, OLD.c, 1200, NOTE_TRY); say("질문: 1,400 rpm으로 올려도 될까?"); }
+      else if (k === 1 && anim) {
+        sim(OLD.k, OLD.c, 1200, "탈수 회전수를 1,400 rpm으로 올려 봅니다");
+        say("회전수 올리는 중");
+        tween(2600, (p) => sim(OLD.k, OLD.c, 1200 + 200 * ease(p)), () => { sim(OLD.k, OLD.c, 1400, NOTE_HI); say("기준 3.0 mm 초과"); }, "sim");
+      }
+      else if (k === 1) { sim(OLD.k, OLD.c, 1400, NOTE_HI); say("기준 3.0 mm 초과"); }
+      else if (k === 2 && anim) tour();
+      else if (k === 2) { sim(NEW.k, NEW.c, 1400, NOTE_REC); say("AI 추천 설계 (예측)"); }
+      else {
+        sim(NEW.k, NEW.c, 1400, NOTE_VER);
+        say("1,400 rpm 가능", "검증 해석 2.95 mm");
+        if (anim) {
+          say("RecurDyn으로 검증 해석 중", "해석 1회");
+          tween(2200, (p) => (ver.textContent = `해석 중 ${Math.round(p * 100)}%`), () => {
+            ver.textContent = "2.95 mm"; say("1,400 rpm 가능", "검증 해석 2.95 mm");
+          }, "sim");
+        }
+      }
     };
-    [T, R].forEach((el) => el.addEventListener("input", () => {
+    [K, Cc, RPM].forEach((el) => el.addEventListener("input", () => {
       cancelJobs("sim"); stopPlay();
-      sim(Number(T.value), Number(R.value), "직접 바꾼 값의 예측입니다. 다시 떨어뜨려 보지 않아도 바로 나옵니다.");
+      sim(Number(K.value), Number(Cc.value), Number(RPM.value), "직접 바꾼 값의 예측입니다. 해석을 다시 돌리지 않아도 바로 나옵니다.");
+      say("직접 바꾼 조건");
     }));
-    sim(OLD.t, OLD.r, NOTE_TRY);
+    sim(OLD.k, OLD.c, 1200, NOTE_TRY);
   })();
 
   // ---------- 넘기기·자동 재생·전체 화면 ----------
