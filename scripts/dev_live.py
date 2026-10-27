@@ -30,8 +30,10 @@ def main():
         subprocess.call(["cmd", "/c", "mklink", "/J", str(data / "agent_runtime"), str(rt)], stdout=subprocess.DEVNULL)
     base = f"http://127.0.0.1:{a.port}"
     env = {**os.environ, "DDS_DATA_DIR": str(data), "PYTHONIOENCODING": "utf-8"}
+    # 서버·Agent는 따로 프로세스 그룹으로 — 콘솔 Ctrl+C가 직접 닿지 않게(끄는 것은 이 스크립트가 한다)
+    group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {}
     server = subprocess.Popen([sys.executable, "-m", "uvicorn", "server.app.main:app", "--host", "127.0.0.1", "--port", str(a.port)],
-                              cwd=ROOT, env=env)
+                              cwd=ROOT, env=env, **group)
     agent = None
     try:
         c = httpx.Client(base_url=base, timeout=30)
@@ -55,11 +57,25 @@ def main():
                            encoding="utf-8")
         # 서버 주소는 이번 실행 포트로 (예전 agent.toml에 다른 포트가 적혀 있어도 따라온다)
         agent = subprocess.Popen([sys.executable, "-m", "agent.dds_agent.main"], cwd=ROOT,
-                                 env={**env, "DDS_AGENT_CONFIG": str(cfg), "DDS_DEFAULT_AGENT": a.agent, "DDS_SERVER_URL": base})
-        print(f"\n웹앱: {base}   (관리자 {a.admin} / PIN {a.pin})   기본 에이전트: {a.agent}\n종료: Ctrl+C\n", flush=True)
-        server.wait()
+                                 env={**env, "DDS_AGENT_CONFIG": str(cfg), "DDS_DEFAULT_AGENT": a.agent, "DDS_SERVER_URL": base}, **group)
+        print(f"\n웹앱: {base}   (관리자 {a.admin} / PIN {a.pin})   기본 에이전트: {a.agent}\n종료: Ctrl+C 두 번\n", flush=True)
+        # 백그라운드 실행에서 콘솔 Ctrl+C 신호가 한 번씩 들어와 통째로 꺼지는 일이 있었다(원인 불명).
+        # 한 번은 기록만 하고, 3초 안에 두 번 눌러야 끈다. 꺼질 때는 이유를 남긴다.
+        last = 0.0
+        while server.poll() is None:
+            try:
+                server.wait()
+            except KeyboardInterrupt:
+                now = time.time()
+                if now - last < 3:
+                    print(f"[dev_live] {time.strftime('%H:%M:%S')} Ctrl+C 두 번 — 종료합니다", flush=True)
+                    break
+                last = now
+                print(f"[dev_live] {time.strftime('%H:%M:%S')} Ctrl+C 신호를 받았습니다 — 끄려면 3초 안에 한 번 더", flush=True)
+        if server.poll() is not None:
+            print(f"[dev_live] {time.strftime('%H:%M:%S')} 서버가 스스로 종료됨 (코드 {server.returncode})", flush=True)
     except KeyboardInterrupt:
-        pass
+        print(f"[dev_live] {time.strftime('%H:%M:%S')} 시작 중 Ctrl+C — 종료합니다", flush=True)
     finally:
         for p in (agent, server):
             if p and p.poll() is None:
