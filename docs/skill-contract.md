@@ -72,6 +72,7 @@
 | `catia_com` · `catia_batch` | `{python} {script}`(COM) · `{catia} -batch -macro {script}` |
 | `solidworks_com` | `{python} {script}`(COM) |
 | `creo_trail` · `creo_python` | `{creo} -g:no_graphics -i:rpc_input {script}` · `{python} {script}`(Creoson) |
+| `lighttools_com` | `{python} {script}`(LightTools COM API, LTAPI4) |
 
 지원 툴 목록과 기본 설치 경로는 `cae_adapters/catalog.py` 한 곳에 있다. PC Agent는 `agent.toml`에 경로가 없으면 기본 설치 경로에서 툴을 자동으로 찾는다.
 | `python` | 플랫폼 venv 파이썬 |

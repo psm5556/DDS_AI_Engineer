@@ -65,7 +65,7 @@ await step("CAD·CAE 툴", async () => {
   await page.goto(BASE + "/tools");
   await page.waitForTimeout(2500);
   await shot("tools");
-  await page.locator(".tool-row").first().click();
+  await page.locator(".tool-app").first().click();
   await shot("tools-drawer");
   await page.keyboard.press("Escape");
 });

@@ -47,6 +47,7 @@ P0012_<프로젝트>/            ← 지금 작업 폴더(cwd)
   - 유동·열: `starccm-automation`, `fluent-automation`, `openfoam-automation`, `flotherm-automation`
   - 다중물리: `comsol-automation` / 다물체 동역학: `adams-automation`, `recurdyn-automation`
   - 사출 성형: `moldflow-automation`, `moldex3d-automation` / 1D 시스템: `amesim-automation` / 피로: `ncode-automation`
+  - 광학(조명·배광): `lighttools-automation`
   - DOE·학습·최적화는 `doe-surrogate-optimization`, 흐름 설계는 `workflow-planning` 스킬을 봅니다.
 - 입출력 규약은 `dds-cae.case_contract`로 확인합니다. 스크립트는 `params.json`을 읽고 `results.json`(숫자 평탄 딕셔너리)을 씁니다. 이미지는 `images/`에 저장합니다.
 - 모델 구조를 모르면 스킬의 inspect 스크립트를 `dds-cae.run_script`로 먼저 실행해 파악합니다(파라미터 이름, 세트, 스텝 등).

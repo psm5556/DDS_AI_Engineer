@@ -13,7 +13,7 @@ from pathlib import Path
 PARAM, COND, RUN, RESULT, IMAGE, FIELD = "파라미터 변경", "해석 조건 변경", "배치 실행", "결과 추출", "이미지 저장", "3D 필드"
 EXPORT, MASS, LIVE, MESH = "형상 내보내기", "질량특성", "Live Link", "메쉬·전처리"
 
-CATEGORIES = ["CAD", "전처리·후처리", "구조 해석", "충돌·비선형", "유동·열", "다중물리", "다물체 동역학", "사출 성형", "1D 시스템", "피로·내구"]
+CATEGORIES = ["CAD", "전처리·후처리", "구조 해석", "충돌·비선형", "유동·열", "다중물리", "다물체 동역학", "사출 성형", "1D 시스템", "피로·내구", "광학"]
 
 PF = os.environ.get("ProgramFiles", r"C:\Program Files")
 
@@ -103,6 +103,11 @@ TOOLS: list[dict] = [
     # ---------- 피로·내구 ----------
     {"id": "ncode", "name": "nCode DesignLife", "vendor": "HBK", "category": "피로·내구", "skill": "ncode-automation",
      "paths": ["ncode"], "run": ["ncode"], "can": [PARAM, COND, RUN, RESULT, IMAGE], "guess": {}},
+    # ---------- 광학 ----------
+    {"id": "lighttools", "name": "LightTools", "vendor": "Synopsys", "category": "광학", "skill": "lighttools-automation",
+     "paths": ["lighttools"], "run": ["lighttools_com"], "can": [PARAM, COND, RUN, RESULT, IMAGE, FIELD, LIVE],
+     # 버전마다 설치 폴더 이름이 다르다(예전 ORA, 현재 Synopsys) — TODO(사내검증) 실행 파일 이름
+     "guess": {"lighttools": [PF + r"\Synopsys\LightTools*\bin\lt.exe", PF + r"\Optical Research Associates\LightTools*\bin\lt.exe"]}},
 ]
 
 

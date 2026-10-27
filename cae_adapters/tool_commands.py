@@ -58,6 +58,8 @@ DEFAULT_TOOL_COMMANDS: dict[str, list[str]] = {
     "solidworks_com": ["{python}", "{script}", "{args}"],
     "creo_trail": ["{creo}", "-g:no_graphics", "-i:rpc_input", "{script}"],
     "creo_python": ["{python}", "{script}", "{args}"],  # Creoson(JSON) 또는 Creo Toolkit 래퍼
+    # 광학
+    "lighttools_com": ["{python}", "{script}", "{args}"],  # LightTools COM API(LTAPI4, pywin32)
     "python": ["{python}", "{script}", "{args}"],
 }
 
@@ -91,6 +93,7 @@ DEFAULT_TOOL_PATHS: dict[str, str] = {
     "catia": "CNEXT",
     "creo": "parametric",
     "solidworks": "",  # COM 자동화라 명령에는 안 쓰고 설치 확인용(SLDWORKS.exe)
+    "lighttools": "",  # COM 자동화. 설치 확인과 LightTools를 새로 띄울 때 사용(lt.exe)
 }
 
 

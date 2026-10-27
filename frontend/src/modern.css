@@ -291,21 +291,11 @@ details.install-block + .block { margin-top: 16px; }
 .tools-mine { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-s); color: var(--ink-2); white-space: nowrap; cursor: pointer; }
 .tools-mine.off { color: var(--ink-4); cursor: not-allowed; }
 .tools-sec h2 { margin: 26px 4px 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-4); letter-spacing: 0.02em; }
-.tool-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
-.tool-row { display: grid; grid-template-columns: minmax(180px, 1.1fr) minmax(0, 1.6fr) 128px 16px; align-items: center; gap: 16px; width: 100%; min-height: 56px;
-  padding: 8px 14px 8px 16px; border: none; border-radius: 0; background: none; box-shadow: none; text-align: left; font-weight: 400; color: var(--ink); }
-.tool-row + .tool-row { border-top: 1px solid var(--line-2); }
-.tool-row:hover:not(:disabled), .tool-row.on { background: var(--hover); }
-.tool-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
-.tool-name b { font-size: var(--fs-m); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.tool-name small { font-size: 12px; color: var(--ink-4); }
-.tool-can { font-size: 12.5px; color: var(--ink-3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tool-st { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
 .tool-st.ok { color: var(--ok); }
 .tool-st.warn { color: var(--warn); }
 .tool-st.off { color: var(--ink-4); font-weight: 400; }
 .tool-st.big { justify-content: flex-start; font-size: var(--fs-m); font-weight: 600; }
-.tool-go { color: var(--ink-5); }
 
 /* 오른쪽 자세히 패널 */
 .drawer-scrim { position: fixed; inset: 0; z-index: 55; background: rgb(0 0 0 / 0.18); }
@@ -402,3 +392,39 @@ td.empty-row { padding: 22px 14px !important; text-align: center; }
 .np-err { color: var(--err); }
 .np-ask { margin-top: 6px; margin-bottom: -4px; }
 .np-input.mono::placeholder { font-family: var(--font); font-size: var(--fs-s); }
+
+/* ---------- CAD·CAE 툴: 분야별 앱 아이콘 ---------- */
+.tool-legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 14px 2px 0; }
+.tool-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.tool-legend .lg { width: 10px; height: 10px; border-radius: 3px; }
+.tool-legend .lg.ok { background: var(--ok); }
+.tool-legend .lg.warn { background: #f59e0b; }
+.tool-legend .lg.off { background: var(--ink-5); }
+.tool-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+.tool-app { white-space: normal; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; min-height: 0; padding: 14px 6px 12px;
+  border: 1px solid transparent; border-radius: 14px; background: none; box-shadow: none; color: var(--ink); font-weight: 400; cursor: pointer; }
+.tool-app:hover:not(:disabled), .tool-app.on { background: var(--hover); }
+.tool-app:focus-visible { outline: 2px solid var(--brand-500); outline-offset: 1px; }
+.tool-app-name { font-size: 12.5px; line-height: 1.35; text-align: center; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; }
+.tool-app.missing .tool-app-name { color: var(--ink-4); }
+.tool-icon { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: -0.02em;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.18); user-select: none; transition: transform .12s, filter .12s; }
+.tool-app:hover .tool-icon { transform: translateY(-1px); }
+.tool-icon.missing { filter: grayscale(0.7); opacity: 0.5; }
+.tool-icon-badge { position: absolute; right: -4px; bottom: -4px; width: 40%; height: 40%; min-width: 16px; min-height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; color: #fff; font-style: normal; font-size: 12px; font-weight: 800;
+  border: 2px solid var(--paper); }
+.tool-icon-badge.ok { background: var(--ok); }
+.tool-icon-badge.warn { background: #f59e0b; }
+.drawer-head .tool-icon { margin-right: 4px; }
+
+/* 분야 카드 격자: 23종이 한 화면에 */
+.app-main .page.tools-page { max-width: 1120px; }
+.tool-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 16px; align-items: stretch; }
+.tool-cat { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 12px 8px 6px; }
+.tool-cat h2 { display: flex; align-items: center; gap: 6px; margin: 0 8px 4px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); letter-spacing: 0.02em; }
+.tool-cat h2 .cnt { font-weight: 500; color: var(--ink-5); }
+.tool-cat .tool-apps { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
+.tool-cat .tool-app { padding: 10px 2px 8px; gap: 6px; border-radius: 12px; }
+.tool-cat .tool-app-name { font-size: 12px; }

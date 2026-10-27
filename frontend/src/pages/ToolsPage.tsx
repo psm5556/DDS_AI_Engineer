@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, ChevronRight, CircleDashed, Copy, RefreshCw, Search, Wrench, X } from "lucide-react";
+import { CheckCircle2, CircleDashed, Copy, RefreshCw, Search, Wrench, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { get } from "../api";
+import { ToolIcon, toolLabel } from "../components/ToolIcon";
 import { copyText } from "../format";
 import { useToast } from "../toast";
 import type { AgentStatus } from "../types";
@@ -22,8 +23,8 @@ const STATUS = {
   missing: { label: "설치·경로 필요", cls: "off", icon: null },
 } as const;
 
-/** CAD·CAE 툴: 에이전트가 다룰 수 있는 툴과 내 PC 설치 상태.
- *  한 줄 요약(+다시 확인) → 검색·필터 한 줄 → 분야별 목록(상태는 오른쪽 끝에 한 줄로) → 누르면 오른쪽에 자세히 */
+/** CAD·CAE 툴: 에이전트가 다룰 수 있는 툴과 내 PC 설치 상태 — 분야별 앱 아이콘으로 한눈에.
+ *  한 줄 요약(+다시 확인) → 검색·필터 한 줄 → 분야별 앱 아이콘(상태는 색·표시로) → 누르면 오른쪽에 자세히 */
 export default function ToolsPage() {
   const [mine, setMine] = useState(false);
   const [q, setQ] = useState("");
@@ -80,25 +81,36 @@ export default function ToolsPage() {
           <input type="checkbox" checked={mine} disabled={!diag.data} onChange={(e) => setMine(e.target.checked)} />내 PC에 있는 것만</label>
       </div>
 
-      {cats.map((c) => (
-        <section key={c} className="tools-sec">
-          <h2>{c}</h2>
-          <div className="tool-list">
-            {shown.filter((t) => t.category === c).map((t) => {
-              const st = state[t.id];
-              const S = st ? STATUS[st.status] : null;
-              return (
-                <button key={t.id} className={`tool-row ${open === t.id ? "on" : ""}`} onClick={() => setOpen(t.id)}>
-                  <span className="tool-name"><b>{t.name}</b><small>{t.vendor}</small></span>
-                  <span className="tool-can">{t.can.join(" · ")}</span>
-                  <span className={`tool-st ${S?.cls ?? "off"}`}>{S?.icon && <S.icon size={13} />}{S ? S.label : "확인 전"}</span>
-                  <ChevronRight size={15} className="tool-go" />
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      ))}
+      {/* 분야별 앱 아이콘: 바로 쓸 수 있는 툴은 컬러+체크, 없는 툴은 흐리게 — 한눈에 */}
+      {diag.data && (
+        <div className="tool-legend small muted">
+          <span><i className="lg ok" />바로 사용</span><span><i className="lg warn" />일부만 확인됨</span><span><i className="lg off" />설치·경로 필요(흐리게)</span>
+        </div>
+      )}
+      {/* 분야마다 작은 카드 — 카드를 나란히 놓아 전체 툴이 한 화면에 들어온다 */}
+      <div className="tool-cats">
+        {cats.map((c) => {
+          const list = shown.filter((t) => t.category === c);
+          return (
+            <section key={c} className="tool-cat">
+              <h2>{c}<span className="cnt">{list.length}</span></h2>
+              <div className="tool-apps">
+                {list.map((t) => {
+                  const st = state[t.id];
+                  const S = st ? STATUS[st.status] : null;
+                  return (
+                    <button key={t.id} className={`tool-app ${open === t.id ? "on" : ""} ${st?.status ?? ""}`} onClick={() => setOpen(t.id)}
+                      title={`${t.name} · ${t.vendor}${S ? ` — ${S.label}` : ""}`} aria-label={`${t.name}${S ? `, ${S.label}` : ""}`}>
+                      <ToolIcon id={t.id} name={t.name} status={st?.status} size={52} />
+                      <span className="tool-app-name">{toolLabel(t.id, t.name)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
+      </div>
       {!!cat && !shown.length && <div className="empty-hero"><Wrench size={28} /><b>조건에 맞는 툴이 없습니다</b></div>}
       {sel && <ToolDrawer t={sel} st={state[sel.id]} onClose={() => setOpen(null)} />}
     </div>
@@ -125,6 +137,7 @@ function ToolDrawer({ t, st, onClose }: { t: CatalogTool; st?: ToolState; onClos
       <div className="drawer-scrim" onClick={onClose} aria-hidden="true" />
       <aside className="drawer" role="dialog" aria-modal="true" aria-label={`${t.name} 자세히`}>
         <header className="drawer-head">
+          <ToolIcon id={t.id} name={t.name} status={st?.status} size={44} />
           <div className="grow"><h3>{t.name}</h3><span className="small muted">{t.vendor} · {t.category}</span></div>
           <button ref={closeRef} className="icon-btn" onClick={onClose} aria-label="닫기" title="닫기 (Esc)"><X size={17} /></button>
         </header>
