@@ -7,7 +7,7 @@ Altair MotionSolve 케이스 템플릿 (XML 모델, DDS 규약 준수)
 실행 (tool 키 'motionsolve_python'):
   python ms_case.py model=door.xml inspect=1
   python ms_case.py model=door.xml map=ms_map.json image=1
-솔버 경로: 환경변수 DDS_MOTIONSOLVE (PC Agent가 agent.toml/자동 탐지 값으로 넣는다)
+솔버 경로: 환경변수 DDS_MOTIONSOLVE (PC Agent가 자동으로 찾은 경로를 넣는다)
 """
 import csv
 import glob
@@ -133,7 +133,7 @@ def main():
 
     solver = os.environ.get("DDS_MOTIONSOLVE") or os.environ.get("DDS_TOOL_MOTIONSOLVE")
     if not solver:
-        fail("MotionSolve not configured. Set agent.toml [tools] motionsolve = '.../hwsolvers/scripts/motionsolve.bat'")
+        fail("MotionSolve not found on this PC. Ask the user to pick motionsolve.bat in the web app (CAD/CAE tools > Altair MotionSolve)")
     log("run: %s %s" % (solver, deck))
     with open(os.path.join(CASE, "solver.log"), "w", encoding="utf-8", errors="replace") as lf:
         rc = subprocess.call([solver, deck], cwd=CASE, stdout=lf, stderr=subprocess.STDOUT,

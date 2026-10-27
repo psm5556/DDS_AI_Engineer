@@ -150,7 +150,7 @@ def main():
         import cst.interface
         import cst.results
     except ImportError as e:
-        fail("CST python libraries not importable (%s). Set agent.toml [tools] cst = '.../CST DESIGN ENVIRONMENT.exe'" % e)
+        fail("CST python libraries not importable (%s). If CST is installed, ask the user to pick 'CST DESIGN ENVIRONMENT.exe' in the web app (CAD/CAE tools > CST Studio Suite)" % e)
     path = find_project(a)
     if flag(a, "attach"):
         de = cst.interface.DesignEnvironment.connect_to_any()  # TODO(사내검증)

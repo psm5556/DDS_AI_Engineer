@@ -49,7 +49,12 @@ class AgentSettings:
     # 결과 파일을 여는 CAE 뷰어: 확장자 → 명령(목록, {file} 치환). 없으면 Windows 기본 연결 프로그램으로 연다.
     # 예) [viewers]  ".odb" = ["C:/DDS/Viewer/ddsview.exe", "--open", "{file}"]   "*" = [...]  (모든 결과 파일)
     viewers: dict[str, list[str]] = field(default_factory=dict)
-    discovered: dict[str, str] = field(default_factory=dict)  # 기본 설치 경로에서 자동으로 찾은 툴 경로(agent.toml에 없을 때)
+    # 툴 경로는 사용자가 적지 않는다: PC Agent가 찾아 tools.json에 두고(toolscan.py) 아래 값은 apply_tools가 채운다
+    tool_source: dict[str, str] = field(default_factory=dict)  # 키 → picked(웹에서 직접 고름) | config(agent.toml) | path(PATH) | auto(자동으로 찾음)
+    tools_rev: str = ""  # 툴 경로가 바뀌면 달라지는 값 — 웹이 '내 PC 툴' 화면을 새로 고칠 때 쓴다
+    base_tools: dict[str, str] = field(default_factory=dict)  # 기본값 + agent.toml [tools]
+    base_tool_env: dict[str, dict[str, str]] = field(default_factory=dict)
+    config_tools: set[str] = field(default_factory=set)  # agent.toml [tools]에 적힌 키
 
     @property
     def ws_url(self) -> str:
@@ -86,7 +91,9 @@ def load_settings(path: Path | None = None) -> AgentSettings:
     s = AgentSettings()
     path = path or CONFIG_PATH
     if path.exists():
-        for key, value in tomllib.loads(path.read_text(encoding="utf-8")).items():
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        s.config_tools = set(data.get("tools") or {})
+        for key, value in data.items():
             if key in ("tools", "tool_commands", "tool_env", "agents", "viewers"):
                 getattr(s, key).update(value)
             elif hasattr(s, key):
@@ -98,18 +105,44 @@ def load_settings(path: Path | None = None) -> AgentSettings:
         s.workspace_dir = Path(os.environ["DDS_WORKSPACE"])
     s.workspace_dir = s.workspace_dir.expanduser().resolve()  # ACP session/new는 절대경로 cwd만 받는다
     s.workspace_dir.mkdir(parents=True, exist_ok=True)
-    _discover_tools(s)
+    s.base_tools, s.base_tool_env = dict(s.tools), {k: dict(v) for k, v in s.tool_env.items()}
+    apply_tools(s)
     return s
 
 
-def _discover_tools(s: AgentSettings):
-    """agent.toml에 경로가 없거나 틀린 툴은 기본 설치 경로(cae_adapters/catalog.py)에서 찾아 쓴다 — 사용자가 설정하지 않아도 되게."""
+def apply_tools(s: AgentSettings, state: dict | None = None):
+    """툴 실행 파일 경로를 정한다 — 사용자는 아무것도 적지 않아도 된다. 우선순위:
+    웹에서 직접 고른 것(picked) > agent.toml [tools]·PATH에 있는 것 > 자동으로 찾은 것(tools.json found) > 기본 설치 경로.
+    없어진 파일(제거·업그레이드)은 건너뛰므로 다시 부르면 지금 PC 상태를 따라간다."""
+    import hashlib
+    import json
+
     from cae_adapters.catalog import discover, path_keys, resolve
 
+    from . import toolscan
+
+    st = state if state is not None else toolscan.load_state()
+    tools, source = dict(s.base_tools or s.tools), {}
     for key in sorted(path_keys()):
-        if resolve(s.tools.get(key)):
-            continue
-        found = discover(key)
-        if found:
-            s.tools[key] = found
-            s.discovered[key] = found
+        picked = st["picked"].get(key)
+        if picked and resolve(picked):
+            tools[key], source[key] = picked, "picked"
+        elif resolve(tools.get(key)):
+            source[key] = "config" if key in s.config_tools else "path"
+        else:
+            found = st["found"].get(key)
+            found = found if found and resolve(found) else discover(key)
+            if found:
+                tools[key], source[key] = found, "auto"
+    for k in [k for k in s.tools if k not in tools]:
+        del s.tools[k]
+    s.tools.update(tools)  # 같은 dict를 고쳐 실행 중인 케이스 실행기도 새 경로를 본다
+    s.tool_source = source
+    # Amesim 내장 파이썬은 AME(설치 폴더)·PATH가 있어야 돈다 — agent.toml·시스템에 없으면 찾은 경로로 채운다
+    s.tool_env.clear()
+    s.tool_env.update({k: dict(v) for k, v in s.base_tool_env.items()})
+    ame_py = resolve(tools.get("amesim_python")) if source.get("amesim_python") else None
+    if ame_py and "amesim" not in s.tool_env and not os.environ.get("AME"):
+        ame = str(Path(ame_py).parent.parent)
+        s.tool_env["amesim"] = {"AME": ame, "PATH": ame + ";" + ame + "\\win64;{PATH}"}
+    s.tools_rev = hashlib.sha1(json.dumps([sorted(tools.items()), sorted(source.items())]).encode()).hexdigest()[:10]

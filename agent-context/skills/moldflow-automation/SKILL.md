@@ -30,7 +30,7 @@ description: Autodesk Moldflow Insight/Synergy 사출 성형 해석 배치 자�
 | 로그 파싱 → results.json | `python` | `python scripts/mf_parse_output.py` |
 | 플롯 값·이미지·휨 필드 | `moldflow_synergy` | `python scripts/mf_synergy_post.py ...` |
 
-경로 키는 `moldflow_runstudy`, `moldflow_studyrlt`이다(agent.toml `[tools]`). Python 스크립트는 환경변수 `DDS_TOOL_MOLDFLOW_RUNSTUDY`, `DDS_TOOL_MOLDFLOW_STUDYRLT`로 경로를 받는다.
+경로 키는 `moldflow_runstudy`, `moldflow_studyrlt`이다(PC Agent가 자동으로 찾는다). Python 스크립트는 환경변수 `DDS_TOOL_MOLDFLOW_RUNSTUDY`, `DDS_TOOL_MOLDFLOW_STUDYRLT`로 경로를 받는다.
 
 **A. 공정조건 DOE (프로젝트 폴더 통째 복사, COM 수정)**
 ```json

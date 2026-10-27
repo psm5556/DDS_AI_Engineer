@@ -7,7 +7,7 @@ Fluent 저널 템플릿 렌더 + Fluent 배치 실행 + 완료 판정 (tool 키:
 - {{name}} 을 params.json 값으로 치환해 run.jou 를 쓴다. 우선순위: params.json > --set 기본값 > 내장값.
   내장값: case_file = case.json inputs 또는 cwd 의 *.cas.h5 / *.cas / *.cas.gz (하나일 때).
 - 주석(';') 줄의 값 없는 플레이스홀더는 그대로 둔다. 명령 줄에 값이 없으면 실패한다.
-- 실행 파일: --fluent > 환경변수 DDS_FLUENT(agent.toml [tools].fluent) > 'fluent'.
+- 실행 파일: --fluent > 환경변수 DDS_FLUENT(PC Agent가 찾은 fluent 경로) > 'fluent'.
 - 명령: <fluent> <dim> -g -t<np> -i run.jou [-wait(Windows)] [-hidden]
   TODO(사내검증): Windows 에서 -wait 없이 런처가 바로 반환되는지, -hidden 지원 여부.
 - 판정: 종료코드, 트랜스크립트(fluent.trn)/콘솔 로그의 오류 패턴, --require 파일 존재.

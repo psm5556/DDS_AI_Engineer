@@ -33,7 +33,8 @@ def _version(path: str, args: list[str] | None) -> str | None:
         return None
     try:
         cmd = (["cmd", "/c", path] if path.lower().endswith((".bat", ".cmd")) else [path]) + args
-        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=25)
+        p = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace",
+                           timeout=25, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         out = (p.stdout or p.stderr).strip().splitlines()
         return out[0][:160] if out else None
     except (OSError, subprocess.TimeoutExpired):
@@ -55,14 +56,20 @@ def diagnose(s: AgentSettings) -> dict:
     catalog = tool_status(paths)
     for t in catalog:
         for e in t["executables"]:
-            e["auto"] = e["key"] in s.discovered  # 기본 설치 경로에서 자동으로 찾음
+            e["source"] = s.tool_source.get(e["key"])  # picked(직접 고름) | config | path | auto(자동으로 찾음)
+            e["auto"] = e["source"] in ("auto", "path")
             label, vargs = LABELS.get(e["key"], (e["key"], None))
             e["version"] = _version(e["found"], vargs) if e["found"] and vargs else None
     viewers = [{"ext": ext, "command": cmd, "found": bool(_resolve(cmd[0]))} for ext, cmd in s.viewers.items()]
+    from .toolscan import load_state
+
+    st = load_state()
     ws = s.workspace_dir
     usage = shutil.disk_usage(ws if ws.exists() else ws.parent)
     return {
         "workspace": str(ws), "workspace_free_gb": round(usage.free / 1e9, 1),
         "tools": tools, "catalog": catalog, "viewers": viewers, "agents": s.available_agents(),
-        "hints": [t["label"] + ": agent.toml [tools]에 경로를 지정하세요" for t in tools if not t["found"]],
+        "hints": [t["label"] + ": 찾지 못했습니다(설치돼 있다면 웹앱 CAD·CAE 툴 화면에서 실행 파일을 고르세요)"
+                  for t in tools if not t["found"]],
+        "scan": {"scanned_at": st.get("scanned_at"), "seconds": st.get("seconds")},
     }

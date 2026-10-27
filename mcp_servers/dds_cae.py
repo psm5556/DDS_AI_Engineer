@@ -4,7 +4,7 @@ import shutil
 import time
 from pathlib import Path
 
-from _common import ROOT, api, resolve_pid, settings
+from _common import ROOT, api, fresh_tools, resolve_pid, settings
 from mcp.server import MCPServer
 
 from agent.dds_agent.job_runner import get_runner
@@ -31,9 +31,11 @@ def list_tools() -> dict:
     """이 PC에서 쓸 수 있는 CAD/CAE 툴과 실행 방법.
     - tools: 지원 툴별 상태(ready=바로 사용, partial=일부만 찾음, missing=설치·경로 필요), 읽을 스킬, 쓸 수 있는 tool 키
     - commands: tool 키별 명령 템플릿과 실행 파일 존재 여부(run_script·스터디 adapter_config의 tool 값)
-    missing인 툴은 사용자에게 설치나 agent.toml [tools] 경로 지정이 필요하다고 알린다."""
+    PC Agent가 설치된 툴을 자동으로 찾는다. missing인 툴은 사용자에게 설치가 필요하다고 알리고, 설치돼 있는데 못 찾았다면
+    웹앱 'CAD·CAE 툴' 화면에서 그 툴을 눌러 실행 파일을 고르면 된다고 안내한다(설정 파일을 고치라고 하지 않는다)."""
     from cae_adapters.catalog import TOOLS, tool_status
 
+    fresh_tools()
     paths = {**DEFAULT_TOOL_PATHS, **settings.tools}
     status = {t["id"]: t for t in tool_status(paths)}
     tools = [{"id": t["id"], "name": t["name"], "category": t["category"], "skill": t["skill"], "tool_keys": t["run"],
@@ -84,6 +86,7 @@ def run_script(tool: str, script: str, filename: str = "script.py", args: list[s
         if not src.exists():
             return {"error": f"입력 파일이 없습니다: {rel}"}
         (shutil.copytree(src, run_dir / src.name, dirs_exist_ok=True) if src.is_dir() else shutil.copy2(src, run_dir))
+    fresh_tools()
     try:
         cmd = build_command(tool, filename, [str(a) for a in args or []], settings.tools, settings.tool_commands)
     except ValueError as e:

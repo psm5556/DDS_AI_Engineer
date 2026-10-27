@@ -143,12 +143,31 @@ $Cfg = Join-Path $CfgDir 'agent.toml'
 if (Test-Path $Cfg) {
     $lines = Get-Content $Cfg -Encoding UTF8 | Where-Object { $_ -notmatch '^\s*(server_url|token)\s*=' }
 } else {
-    $lines = @('# DDS PC Agent 설정. 툴 경로 예: [tools] abaqus = "C:\\SIMULIA\\Commands\\abaqus.bat"',
+    $lines = @('# DDS PC Agent 설정. CAD/CAE 툴 경로는 적지 않아도 됩니다(PC Agent가 자동으로 찾아 tools.json에 둠)',
                "workspace_dir = '$($env:USERPROFILE)\DDS_Workspace'", '')
 }
 $head = @("server_url = '$Server'", "token = '$Token'")
 [IO.File]::WriteAllLines($Cfg, [string[]]($head + $lines), (New-Object Text.UTF8Encoding $false))
 Ok $Cfg
+
+# 4-1. CAD·CAE 툴 찾기 — 설치된 앱 목록·시작 메뉴·환경변수·모든 드라이브에서 찾아 tools.json에 저장한다.
+#      사용자는 경로를 적지 않는다. PC Agent도 실행 중에 툴 설치·제거를 알아채 다시 찾는다(agent/dds_agent/toolscan.py).
+Step 'CAD·CAE 툴 찾기'
+$eap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'   # 툴 찾기에 실패해도 설치는 계속한다
+try {
+    $env:PYTHONIOENCODING = 'utf-8'
+    Push-Location $VerDir
+    $out = & $Py -m agent.dds_agent.toolscan 2>$null | Select-Object -Last 1
+    $found = $out | ConvertFrom-Json
+    if ($found.ready.Count -gt 0) { Ok ("바로 쓸 수 있는 툴 $($found.ready.Count)종: " + ($found.ready -join ', ')) }
+    else { Write-Host '  찾은 CAD·CAE 툴이 없습니다. 나중에 설치하면 PC Agent가 저절로 찾습니다.' }
+} catch {
+    Write-Host '  툴 찾기를 건너뜁니다. PC Agent가 시작할 때 다시 찾습니다.' -ForegroundColor Yellow
+} finally {
+    Pop-Location
+    $ErrorActionPreference = $eap
+}
 
 # 5. 에이전트 CLI (선택)
 $pkgs = @{

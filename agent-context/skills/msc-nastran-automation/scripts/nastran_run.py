@@ -11,7 +11,7 @@ One call per DOE/optimization case, run in the case folder:
                         [--nastran "C:/MSC.Software/MSC_Nastran/2024.1/bin/nastran.exe"]
                         [--extra "mem=4gb smp=4"] [--images vm,disp] [--skip-run]
 Executable: --nastran, else env DDS_MSC_NASTRAN / DDS_TOOL_MSC_NASTRAN (set by the platform from
-agent.toml [tools] msc_nastran), else "nastran" on PATH.
+the path the PC Agent found), else "nastran" on PATH.
 The study adapter copies only the step script into the case folder, so list the helper modules in
 "inputs" (scripts/bdf_card_edit.py, scripts/nastran_op2_extract.py) - they are imported from the cwd.
 """

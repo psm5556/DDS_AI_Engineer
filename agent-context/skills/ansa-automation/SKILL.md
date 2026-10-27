@@ -24,7 +24,7 @@ description: BETA CAE ANSA·META 배치 자동화. ANSA Python API(`ansa.base`, 
 | `ansa` | `{ansa} -nogui -exec "load_script: '{script}'" -exec "main()"` | ANSA 배치. 스크립트에 `main()`이 있어야 한다. 인자는 넘길 수 없으므로 cwd의 `params.json`, `ansa_config.json`을 읽는다 |
 | `meta` | `{meta} -b -s {script}` | META 세션(.ses) 배치 |
 | `msc_nastran` / `python` | 솔버 실행, 결과 추출 | `msc-nastran-automation` 참고 |
-경로 키는 `agent.toml [tools]`의 `ansa`(예: `C:/Program Files/BETA_CAE_Systems/ansa_v24.1.0/ansa64.bat`), `meta`(`.../meta_post_v24.1.0/meta_post64.bat`)다.
+경로 키는 `ansa`(예: `C:/Program Files/BETA_CAE_Systems/ansa_v24.1.0/ansa64.bat`), `meta`(`.../meta_post_v24.1.0/meta_post64.bat`)다. PC Agent가 설치 위치를 자동으로 찾는다.
 
 **ANSA(덱 생성) → MSC Nastran(실행·추출)** 스터디 예시:
 ```json

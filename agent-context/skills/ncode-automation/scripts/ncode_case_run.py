@@ -177,7 +177,7 @@ def main():
 
     exe = a.ncode or os.environ.get("DDS_TOOL_NCODE") or os.environ.get("DDS_NCODE")
     if not exe:
-        raise RuntimeError("nCode path not set (--ncode or agent.toml [tools] ncode)")
+        raise RuntimeError("nCode path not set (--ncode, or ask the user to pick the nCode executable in the web app CAD/CAE tools page)")
     t0 = time.time()
     run([exe] + [x.replace("{flo}", flo) for x in a.ncode_args.split()], "ncode_stdout.txt", timeout)
 

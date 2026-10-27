@@ -31,7 +31,7 @@ description: HBK nCode DesignLife 피로 해석 배치 자동화. 플로(.flo) �
           "args": ["--csv", "out/damage*.csv", "--target-life", "1.0", "--plot"]},
  "outputs": ["max_damage", "min_life", "life_margin"], "timeout_sec": 7200}
 ```
-- 실행파일은 `--ncode`를 생략하면 환경변수 `DDS_TOOL_NCODE`(agent.toml `[tools] ncode`)를 쓴다.
+- 실행파일은 `--ncode`를 생략하면 환경변수 `DDS_TOOL_NCODE`(사용자가 웹앱 'CAD·CAE 툴' 화면에서 고른 `ncode` 경로)를 쓴다.
 - TODO(사내검증): **DesignLife 배치 실행 명령행**(실행파일 이름, 플로 실행/종료 옵션)을 사내 설치본 문서("command line" 항목)로 확인하고 `--ncode-args`에 넣는다. 기본값 `{flo}`는 확인되지 않은 가정이다.
 - `inputs`의 하위 폴더 구조(`loads/`)가 케이스 폴더에 그대로 복사되는지 확인한다. 플로 안의 파일 경로는 상대경로나 `{{__case_dir__}}`로 둔다(3-3).
 - FE 해석과 피로를 한 케이스에서 하려면, FE 스킬의 실행 스크립트를 본 단계로 두고 `post`에서 `ncode_case_run.py`와 `ncode_extract.py`를 차례로 부르는 작은 래퍼 스크립트를 쓴다(어댑터의 `post`는 한 단계뿐이다).

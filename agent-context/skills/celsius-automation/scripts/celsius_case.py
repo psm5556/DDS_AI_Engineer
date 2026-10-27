@@ -90,7 +90,7 @@ def main():
     if a.cmd:
         exe = os.environ.get("DDS_CELSIUS") or os.environ.get("DDS_TOOL_CELSIUS") or ""
         if "{exe}" in a.cmd and not exe:
-            fail("Celsius not configured. Set agent.toml [tools] celsius = '<batch executable>'")
+            fail("Celsius executable not found on this PC. Ask the user to pick it in the web app (CAD/CAE tools > Cadence Celsius)")
         line = a.cmd.replace("{exe}", '"%s"' % exe).replace("{project}", a.project)
         for k, v in params.items():
             line = line.replace("{%s}" % k, str(v))

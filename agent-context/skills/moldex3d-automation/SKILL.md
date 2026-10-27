@@ -13,7 +13,7 @@ description: CoreTech Moldex3D 사출 성형 해석(충전, 보압, 냉각, 휨)
 - 공정조건(용융/금형 온도, 충전 시간, V/P 전환, 보압, 냉각 시간), 게이트 후보, 두께 변형별로 충전·보압·냉각·휨 결과를 비교할 때 쓴다.
 - 이미 해석한 런에서 내보낸 요약표와 노드 값만 정리할 때 쓴다(가장 확실한 경로).
 - 공정조건 DOE만 필요하고 Moldex3D Expert 라이선스가 있으면 내장 DOE가 더 간단하다. 플랫폼 루프는 형상·게이트를 함께 바꾸거나 다른 툴과 연결할 때 쓴다.
-- `moldex3d_python` 경로 키 기본값이 비어 있다. agent.toml `[tools]`에 Moldex3D가 제공하는 Python을 지정해야 `moldex3d` 키를 쓸 수 있다. TODO(사내검증): 설치본의 Python 위치와 버전.
+- `moldex3d_python` 경로 키 기본값이 비어 있다. 사용자가 웹앱 'CAD·CAE 툴' 화면에서 Moldex3D가 제공하는 Python을 골라야 `moldex3d` 키를 쓸 수 있다. TODO(사내검증): 설치본의 Python 위치와 버전.
 - Moldex3D Python 버전을 모르므로 `moldex3d` 키 스크립트는 **py2/py3 겸용**으로 쓴다(f-string 금지, 출력은 영문 ASCII).
 
 ## 2. 실행 방법 (tool 키)
@@ -83,7 +83,7 @@ description: CoreTech Moldex3D 사출 성형 해석(충전, 보압, 냉각, 휨)
 - 학습: `dds-study.train_field_model(study_id, field="warpage")`.
 
 ## 9. 흔한 오류와 대처
-- **`'moldex3d_python' 실행 파일 경로가 설정되지 않았습니다`**: agent.toml `[tools]`에 경로를 넣는다.
+- **`'moldex3d_python' 실행 파일을 이 PC에서 찾지 못했습니다`**: 사용자에게 웹앱 'CAD·CAE 툴' 화면에서 Moldex3D의 Python을 고르도록 안내한다.
 - **`params key not used anywhere`**: PARAM_MAP, 템플릿, 명령 인자 중 한 곳에 연결한다. 의도적으로 안 쓰는 키면 `STRICT_PARAMS = False`.
 - **`NotImplementedError: apply_params_api`**: 확인된 API로 훅을 채우거나 텍스트 템플릿 방식을 쓴다.
 - **로그 판정 오탐**: 경고 문장에 `error`가 들어간 경우다. `FAIL_PATTERNS`를 솔버 로그 형식에 맞게 좁힌다.

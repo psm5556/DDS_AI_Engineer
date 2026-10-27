@@ -21,7 +21,7 @@ description: MSC Nastran 단독 해석 덱(.bdf/.dat/.nas) 자동화. 고정필�
 | 판정 + 추출 + 이미지 + 필드만 | `python` | `python nastran_op2_extract.py --job case` |
 | 카드 수정만 | `python` | `python bdf_card_edit.py --deck plate.bdf --out case.bdf --verify` |
 
-실행파일은 `agent.toml [tools] msc_nastran`(예: `C:/MSC.Software/MSC_Nastran/2024.1/bin/nastran.exe`)에서 오고, 플랫폼이 `DDS_MSC_NASTRAN` 환경변수로 넘겨 준다. `nastran_run.py`는 `--nastran` → `DDS_MSC_NASTRAN` → PATH의 `nastran` 순서로 찾는다.
+실행파일은 PC Agent가 자동으로 찾은 `msc_nastran` 경로(예: `C:/MSC.Software/MSC_Nastran/2024.1/bin/nastran.exe`)이고, 플랫폼이 `DDS_MSC_NASTRAN` 환경변수로 넘겨 준다. `nastran_run.py`는 `--nastran` → `DDS_MSC_NASTRAN` → PATH의 `nastran` 순서로 찾는다.
 
 **A. 드라이버 하나로 (권장)**
 ```json

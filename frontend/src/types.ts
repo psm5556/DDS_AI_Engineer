@@ -35,7 +35,7 @@ export interface PermissionRequest { request_id: string; title: string; tool_kin
 export interface AgentCli { name: string; label: string; installed: boolean; installable?: boolean; login?: string }
 export interface AgentStatus {
   connected: boolean; active_project_id: number | null;
-  info: { hostname?: string; version?: string; agents?: AgentCli[]; default_agent?: string; workspace?: string } | null;
+  info: { hostname?: string; version?: string; agents?: AgentCli[]; default_agent?: string; workspace?: string; tools_rev?: string } | null;
 }
 
 export interface Variable { name: string; lower: number; upper: number }

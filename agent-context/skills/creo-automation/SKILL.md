@@ -27,7 +27,7 @@ description: PTC Creo Parametric 자동화 — Creoson(JSON over HTTP, creopyson
 | `creo_python` | `{python} {script} {args}` | Creoson 스크립트, trail 치환 드라이버 |
 | `creo_trail` | `{creo} -g:no_graphics -i:rpc_input {script}` | 고정 trail 파일을 그대로 1회 재생(파라미터 치환 없음) |
 
-경로 키 `creo`(기본 `parametric`)는 `agent.toml [tools]`에 `...\Creo 9.0.x.0\Parametric\bin\parametric.exe`처럼 지정한다. 플랫폼은 이를 환경변수 `DDS_CREO`로도 넘긴다.
+경로 키 `creo`(기본 `parametric`)는 PC Agent가 `...\Creo 9.0.x.0\Parametric\bin\parametric.exe` 같은 설치 위치에서 자동으로 찾는다. 플랫폼은 이를 환경변수 `DDS_CREO`로도 넘긴다.
 
 | 템플릿 | 용도 |
 |---|---|

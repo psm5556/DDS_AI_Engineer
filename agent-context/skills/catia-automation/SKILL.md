@@ -21,7 +21,7 @@ description: Dassault CATIA V5 자동화 — COM(win32com, CATIA.Application)이
 | `catia_com` | `{python} {script} {args}` | **기본**. pywin32로 CATIA COM 제어. 실행 중 세션 attach 가능 |
 | `catia_batch` | `{catia} -batch -macro {script}` | CATScript 매크로를 GUI 없이 실행. 인자 전달 불가 |
 
-경로 키 `catia`(기본 `CNEXT`)는 `agent.toml [tools]`에 `...\B28\win_b64\code\bin\CNEXT.exe`처럼 지정한다.
+경로 키 `catia`(기본 `CNEXT`)는 PC Agent가 `...\B28\win_b64\code\bin\CNEXT.exe` 같은 설치 위치에서 자동으로 찾는다.
 
 | 템플릿 | 용도 |
 |---|---|

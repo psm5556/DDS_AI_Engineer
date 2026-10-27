@@ -59,7 +59,7 @@ PIDO 툴처럼 스크립트를 직접 짜고 프로세스를 잇는 대신, 사�
   - 전처리: + Altair SimLab / 유동·열: + Cadence Celsius / 전자기: CST Studio Suite
   - 다물체: Adams, RecurDyn, Altair MotionSolve / 사출: Moldflow, Moldex3D / 1D: Amesim / 피로: nCode DesignLife
   - 광학: LightTools / 설계 최적화: Altair Inspire / AI 예측: Altair PhysicsAI
-  - PC Agent는 기본 설치 경로에서 툴을 자동으로 찾는다. 다른 위치면 `agent.toml [tools]`에 적는다.
+  - 툴 경로는 아무도 적지 않는다. PC Agent가 설치할 때 설치된 앱 목록·시작 메뉴·환경변수·모든 드라이브에서 찾고, 실행 중에도 설치·제거·업그레이드를 알아채 다시 찾는다. 못 찾은 툴만 웹 화면에서 실행 파일을 고른다.
 - 프로세스: `workflow-planning`, `doe-surrogate-optimization`, `live-modeling`
 - 툴 API 중 사내에서 확인이 필요한 부분은 각 스킬에 `TODO(사내검증)`로 표시돼 있다.
 
@@ -105,17 +105,8 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 2. 설치 창에서 토큰을 붙여 넣고 사용할 AI CLI를 고른 뒤 [설치]
    - 포터블 Python·Node가 사용자 폴더에 설치된다. 관리자 권한은 필요 없다.
 3. 처음 한 번 각 AI CLI에 로그인한다: `gemini` / `claude` → `/login` / `codex login`
-4. CAD/CAE 툴 경로를 `%USERPROFILE%\.dds-agent\agent.toml`에 적는다.
-   ```toml
-   [tools]
-   nx_run_journal = 'C:\Program Files\Siemens\NX2312\NXBIN\run_journal.exe'
-   abaqus = 'C:\SIMULIA\Commands\abaqus.bat'
-   lsdyna = 'C:\LSDYNA\program\ls-dyna_smp_d_R13.exe'
-   ansys_python = 'C:\Users\me\ansys-venv\Scripts\python.exe'
-   [tool_env.amesim]
-   AME = 'C:\Simcenter\Amesim\2310'
-   PATH = 'C:\Simcenter\Amesim\2310;C:\Simcenter\Amesim\2310\win64;{PATH}'
-   ```
+4. CAD/CAE 툴은 설치 프로그램이 자동으로 찾는다(설치 창에 "바로 쓸 수 있는 툴 N종"). 이후 툴을 설치·제거하면 PC Agent가 알아서 반영한다.
+   - 웹앱 **CAD·CAE 툴** 화면에서 확인한다. 못 찾은 툴은 눌러서 "찾아보기…"로 실행 파일을 고른다(설정 파일을 고치지 않는다).
 5. 웹앱 오른쪽 위와 Windows 트레이에서 "PC Agent 연결됨"을 확인한다.
 
 **사내 검증 (라이선스 필요)**

@@ -390,6 +390,11 @@ class FolderPick(BaseModel):
     title: str | None = Field(None, max_length=100)
 
 
+class ToolPath(BaseModel):
+    """CAD/CAE 툴 실행 파일을 사용자가 직접 정할 때(빈 값이면 자동으로 찾은 것으로 되돌린다)."""
+    path: str | None = Field(None, max_length=1000)
+
+
 class FieldModelResponse(ORM):
     id: int
     study_id: int

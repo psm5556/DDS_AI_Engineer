@@ -16,11 +16,12 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import websockets
 
-from . import __version__, installer, updater
+from . import __version__, installer, toolscan, updater
 from .acp_runner import AcpRunner
 from .config import REPO_ROOT, load_settings
 from .context import sync_project_context
@@ -32,6 +33,8 @@ from .tray import Tray
 
 log = logging.getLogger("dds-agent")
 HEARTBEAT_SEC = 30
+TOOL_WATCH_SEC = 300  # 설치 상태가 바뀌었는지 보는 간격
+TOOL_FULL_SCAN_SEC = 12 * 3600  # 바뀐 흔적이 없어도 이 간격으로 다시 찾는다(폴더만 복사해 설치한 툴 등)
 
 
 def file_sha256(path: Path) -> str:
@@ -99,7 +102,7 @@ class Agent:
     def hello(self) -> dict:
         return {"type": "hello", "hostname": socket.gethostname(), "version": __version__, "platform": platform.platform(),
                 "agents": self.s.available_agents(), "default_agent": self.s.default_agent,
-                "workspace": str(self.s.workspace_dir), "tools": sorted(self.s.tools)}
+                "workspace": str(self.s.workspace_dir), "tools": sorted(self.s.tools), "tools_rev": self.s.tools_rev}
 
     def mcp_servers(self, project_id: int) -> list[dict]:
         """ACP session/new에 넘길 MCP 서버 정의. 세션별로 DDS_PROJECT_ID를 고정한다."""
@@ -202,20 +205,79 @@ class Agent:
         sync_project_context(Path(info["path"]))
         return info
 
-    def _pick_folder(self, initial: str | None, title: str | None) -> dict:
-        """이 PC에 Windows 폴더 선택 창을 띄워 고른 경로를 돌려준다(취소하면 빈 값). Tk는 별도 프로세스로 띄운다."""
+    @staticmethod
+    def _dialog(ask: str, *args: str) -> str:
+        """이 PC에 Windows 선택 창(tkinter filedialog)을 띄워 고른 경로를 돌려준다(취소하면 빈 값). Tk는 별도 프로세스로 띄운다."""
         code = ("import sys, tkinter as tk\nfrom tkinter import filedialog\n"
                 "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
-                "p = filedialog.askdirectory(parent=r, initialdir=sys.argv[1] or None, title=sys.argv[2], mustexist=False)\n"
-                "sys.stdout.write(p or '')\n")
+                f"p = {ask}\nsys.stdout.write(p or '')\n")
         try:
-            out = subprocess.run([sys.executable, "-c", code, initial or "", title or "작업 폴더 선택"], capture_output=True,
-                                 text=True, encoding="utf-8", timeout=900, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            out = subprocess.run([sys.executable, "-c", code, *args], capture_output=True, text=True, encoding="utf-8",
+                                 timeout=900, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except subprocess.TimeoutExpired:
-            return {"path": ""}
+            return ""
         if out.returncode != 0:
-            raise RuntimeError("폴더 선택 창을 열지 못했습니다. 경로를 직접 입력하세요")
-        return {"path": str(Path(out.stdout.strip())) if out.stdout.strip() else ""}
+            raise RuntimeError("선택 창을 열지 못했습니다")
+        return str(Path(out.stdout.strip())) if out.stdout.strip() else ""
+
+    def _pick_folder(self, initial: str | None, title: str | None) -> dict:
+        try:
+            path = self._dialog("filedialog.askdirectory(parent=r, initialdir=sys.argv[1] or None, title=sys.argv[2], mustexist=False)",
+                                initial or "", title or "작업 폴더 선택")
+        except RuntimeError:
+            raise RuntimeError("폴더 선택 창을 열지 못했습니다. 경로를 직접 입력하세요") from None
+        return {"path": path}
+
+    # ---------- CAD/CAE 툴 경로 (사용자는 적지 않는다: 자동으로 찾고, 못 찾으면 웹에서 파일을 고른다) ----------
+    def _pick_tool(self, key: str) -> dict:
+        """툴 실행 파일을 이 PC의 파일 선택 창으로 고르게 하고 저장한다(취소하면 빈 값)."""
+        names = toolscan.file_names(key)
+        cur = self.s.tools.get(key) or ""
+        initial = str(Path(cur).parent) if Path(cur).is_absolute() else os.environ.get("ProgramFiles", "C:\\")
+        path = self._dialog("filedialog.askopenfilename(parent=r, initialdir=sys.argv[1], title=sys.argv[2], "
+                            "filetypes=[('실행 파일', '*.exe *.bat *.cmd'), ('모든 파일', '*.*')])",
+                            initial, f"{' 또는 '.join(names) or key} 선택")
+        return self._set_tool(key, path) if path else {"key": key, "path": ""}
+
+    def _set_tool(self, key: str, path: str | None) -> dict:
+        info = toolscan.set_picked(key, path)
+        toolscan.refresh(self.s, max_age=10 ** 9)  # 다시 찾지 않고 반영만
+        self.send_threadsafe(self.hello())  # 웹의 툴 화면이 새로 고치게
+        return info
+
+    def _diagnose(self, rescan: bool = False) -> dict:
+        from .diagnose import diagnose
+
+        if rescan:  # 툴 화면 '다시 확인' — 지금 PC를 다시 훑는다(방금 찾았으면 그 결과를 쓴다)
+            rev = self.s.tools_rev
+            toolscan.refresh(self.s, max_age=15)
+            if self.s.tools_rev != rev:
+                self.send_threadsafe(self.hello())
+        return diagnose(self.s)
+
+    async def _watch_tools(self):
+        """CAD/CAE 툴 설치 상태를 계속 따라간다. 시작할 때 찾고(설치 직후 찾았으면 그 결과를 쓴다), 이후 5분마다
+        설치된 앱 목록·시작 메뉴·환경변수가 바뀌었거나(설치·제거·업그레이드) 쓰던 실행 파일이 없어졌으면 다시 찾는다.
+        바뀌면 서버에 알려 웹의 툴 화면이 저절로 새로 고쳐진다."""
+        from cae_adapters.catalog import resolve
+
+        first = True
+        while not (self.restart or self.quit):
+            try:
+                st = toolscan.load_state()
+                fp = await asyncio.to_thread(toolscan.fingerprint)
+                gone = [k for k, src in self.s.tool_source.items() if not resolve(self.s.tools.get(k))]
+                stale = time.time() - st.get("scanned_ts", 0) > TOOL_FULL_SCAN_SEC
+                if first or fp != st.get("fingerprint") or gone or stale:
+                    rev = self.s.tools_rev
+                    st = await asyncio.to_thread(toolscan.refresh, self.s, 600 if first and not gone else 0)
+                    if self.s.tools_rev != rev:
+                        log.info("CAD/CAE 툴 경로가 바뀌었습니다 — 바로 사용: %s", ", ".join(st.get("ready", [])) or "없음")
+                        self.send_threadsafe(self.hello())
+                first = False
+            except Exception:
+                log.exception("CAD/CAE 툴 찾기 실패")
+            await asyncio.sleep(TOOL_WATCH_SEC)
 
     # ---------- 상태 보고 / 자동 업데이트 ----------
     def status(self) -> dict:
@@ -325,8 +387,11 @@ class Agent:
             asyncio.create_task(self._respond(rid, self._local_open, msg["project_id"], msg.get("project_name"),
                                               msg.get("path", ""), bool(msg.get("with_viewer")), msg.get("project_uid")))
         elif t == "local.diagnose":
-            from .diagnose import diagnose
-            asyncio.create_task(self._respond(rid, diagnose, self.s))
+            asyncio.create_task(self._respond(rid, self._diagnose, bool(msg.get("rescan"))))
+        elif t == "tools.pick":
+            asyncio.create_task(self._respond(rid, self._pick_tool, msg["key"]))
+        elif t == "tools.set":
+            asyncio.create_task(self._respond(rid, self._set_tool, msg["key"], msg.get("path")))
         elif t == "local.tree":
             asyncio.create_task(self._respond(rid, self._local_tree, msg["project_id"], msg.get("project_name"), msg.get("path", ""),
                                               msg.get("project_uid")))
@@ -370,6 +435,7 @@ class Agent:
         delay = 1
         self._start_tray()
         asyncio.create_task(self._background())
+        asyncio.create_task(self._watch_tools())
         while not (self.restart or self.quit):
             try:
                 async with websockets.connect(f"{self.s.ws_url}?token={self.s.token}", max_size=16 * 1024 * 1024,

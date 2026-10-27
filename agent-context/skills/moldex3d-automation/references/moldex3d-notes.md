@@ -16,7 +16,7 @@
 | 결과 내보내기 | Studio 결과 화면에서 노드 값/요약표를 텍스트(CSV 등)로 내보내기 | TODO(사내검증): 메뉴, 열 이름, 단위 표기 |
 
 ## 확인 절차 (처음 한 번)
-1. `moldex3d_python`(agent.toml `[tools]`)에 Moldex3D가 제공하는 Python 실행파일을 지정한다. 별도 Python이 없으면 설치 폴더에서 `python.exe`를 찾는다.
+1. 웹앱 'CAD·CAE 툴' 화면에서 Moldex3D를 눌러 `moldex3d_python`에 Moldex3D가 제공하는 Python 실행파일을 고른다(설치 위치를 확인하면 `catalog.py` guess에 넣어 자동으로 찾게 한다). 별도 Python이 없으면 설치 폴더에서 `python.exe`를 찾는다.
 2. `run_script(tool="moldex3d", script="scripts/m3d_probe_api.py")`로 `api_probe.txt`를 받는다. 모듈 이름, 공개 함수/클래스, 설치 폴더의 실행파일 목록이 나온다.
 3. Moldex3D 설치 폴더의 API 문서/예제(설치본 Help 또는 CoreTech 고객 포털)에서 다음 호출을 확인한다.
    - 프로젝트/런 열기·저장, 해석조건(용융 온도, 금형 온도, 충전 시간, V/P 전환, 보압 프로파일, 냉각 시간) 변경

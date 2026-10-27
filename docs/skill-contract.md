@@ -39,7 +39,7 @@
   ```
   - 처리 순서: 케이스마다 `inputs` 파일 복사 → `params.json` 작성 → 툴 명령 실행 → `results.json` 읽기.
 
-`tool` 키와 명령 템플릿은 `agent.toml`(`%USERPROFILE%\.dds-agent\agent.toml`)의 `[tool_commands]`에 정의한다. `{exe}`는 `[tools]`의 실행파일 경로(툴별 추가 환경변수는 `[tool_env.<tool>]`), `{script}`는 스크립트 파일, `{args}`는 추가 인자다.
+`tool` 키별 기본 명령 템플릿은 아래 표와 같다(`cae_adapters/tool_commands.py`). `{exe}` 자리에는 PC Agent가 찾은 실행 파일 경로가 들어가고(아래 '툴 경로'), `{script}`는 스크립트 파일, `{args}`는 추가 인자다. 사내 사정으로 명령을 바꿔야 할 때만 `agent.toml`의 `[tool_commands]`·`[tool_env.<tool>]`을 쓴다.
 
 | tool 키 | 기본 명령 템플릿 |
 |---|---|
@@ -80,8 +80,15 @@
 | `inspire_script` | `{altair_inspire} -script {script}`(Inspire 파이썬) |
 | `physicsai_export` · `physicsai_hw` | `{python} {script}`(DDS 케이스→데이터셋) · `{altair_hw} -b -f {script}` |
 
-지원 툴 목록과 기본 설치 경로는 `cae_adapters/catalog.py` 한 곳에 있다. PC Agent는 `agent.toml`에 경로가 없으면 기본 설치 경로에서 툴을 자동으로 찾는다.
 | `python` | 플랫폼 venv 파이썬 |
+
+### 툴 경로 — 사용자는 적지 않는다
+- 지원 툴 목록·기본 설치 경로(`guess`)·설치 흔적 단어(`FIND`)는 `cae_adapters/catalog.py` 한 곳에 있다.
+- PC Agent(`agent/dds_agent/toolscan.py`)가 설치할 때 한 번, 실행 중에는 설치 상태가 바뀔 때마다(5분마다 확인) 찾는다.
+  - 찾는 곳: 기본 설치 경로와 같은 구조의 다른 드라이브·폴더, 설치된 앱 목록(레지스트리), 시작 메뉴 바로가기, 환경변수·PATH
+  - 버전이 여러 개면 최신을 쓰고, 제거·업그레이드로 파일이 없어지면 다시 찾는다. 결과는 `%USERPROFILE%\.dds-agent\tools.json`
+- 못 찾은 툴은 사용자가 웹앱 'CAD·CAE 툴' 화면에서 실행 파일을 고른다(자동보다 우선). 에이전트는 사용자에게 설정 파일을 고치라고 하지 않는다.
+- 우선순위: 웹에서 고른 것 > `agent.toml [tools]`(관리자 배포용) > PATH > 자동으로 찾은 것
 
 ## 3. 스킬 폴더 구조 (Gemini CLI Agent Skill)
 ```

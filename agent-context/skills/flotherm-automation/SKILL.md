@@ -13,7 +13,7 @@ description: Siemens Simcenter Flotherm(전자장비 냉각) 배치 자동화. G
   - FloXML은 **모델 정의**(형상·물성)를 기술하는 별도 XML 형식이다. 모델을 처음부터 만들 때 쓰고, 이 스킬은 기존 프로젝트 변경을 다룬다.
 - **요소·속성 이름을 지어내지 않는다.** 이 스킬의 FloSCRIPT 템플릿은 순서만 보여 주는 뼈대다. 실제 명령은 사내 Flotherm GUI에서 **FloSCRIPT 녹화**로 얻는다(프로젝트 열기 → 값 변경 → 해석 → 결과 표 내보내기 → 저장). 녹화 메뉴 위치는 버전마다 다르다. TODO(사내검증)
 - 라이선스: Flotherm 솔버 토큰. 동시 케이스 수를 라이선스 수 이하로 둔다.
-- 경로 키 `flotherm`의 기본값은 비어 있다. `agent.toml [tools]`에 `flotherm.bat` 또는 실행 파일 경로를 지정해야 한다. TODO(사내검증): 설치 폴더의 배치 진입점(`flotherm.bat` 등)과 환경 변수 설정 필요 여부.
+- 경로 키 `flotherm`은 PC Agent가 설치 위치에서 자동으로 찾는다. 못 찾으면 사용자가 웹앱 'CAD·CAE 툴' 화면에서 `flotherm.bat`을 고른다. TODO(사내검증): 설치 폴더의 배치 진입점(`flotherm.bat` 등)과 환경 변수 설정 필요 여부.
 
 ## 2. 실행 방법 (tool 키)
 | 작업 | tool 키 | 명령 |
@@ -81,7 +81,7 @@ description: Siemens Simcenter Flotherm(전자장비 냉각) 배치 자동화. G
 ## 9. 흔한 오류와 대처
 | 증상 | 원인 / 대처 |
 |---|---|
-| 실행 파일 경로 미설정 | `agent.toml [tools] flotherm` 지정 |
+| 실행 파일을 못 찾음 | 사용자에게 웹앱 'CAD·CAE 툴' 화면에서 Flotherm 실행 파일을 고르도록 안내 |
 | 렌더 실패 `no value for placeholder` | params.json 키와 템플릿 이름 불일치. `--set`으로 기본값 지정 |
 | XML 파싱 오류 | 녹화 파일 수정 중 태그 손상. 플레이스홀더는 속성 값 안에만 넣는다 |
 | 값이 바뀌지 않음 | 녹화 스크립트가 객체를 이름이 아닌 위치로 선택. 객체 이름 기반 선택으로 다시 녹화 |

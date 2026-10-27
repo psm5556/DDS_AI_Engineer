@@ -44,7 +44,7 @@ description: MSC Adams(Adams View/Car, Adams Solver) 다물체 동역학 배치 
  "post": {"tool": "python", "script": "scripts/adams_extract.py", "args": ["--metric", "max_toe=absmax:REQ_TOE.F2"]},
  "outputs": ["max_toe"]}
 ```
-- `args`의 값은 템플릿 치환되지 않는다. `--adams`를 생략하면 환경변수 `DDS_TOOL_ADAMS`(agent.toml `[tools] adams` 경로)를 쓴다.
+- `args`의 값은 템플릿 치환되지 않는다. `--adams`를 생략하면 환경변수 `DDS_TOOL_ADAMS`(PC Agent가 찾은 `adams` 경로)를 쓴다.
 - 솔버 인자는 `--solver-args "ru-standard i {acf} exit"`가 기본이다. TODO(사내검증): 버전별 명령행 형식(`-c` 커맨드라인 모드 필요 여부, `i`/`b` 선택). `b`는 백그라운드로 돌아 즉시 반환될 수 있으니 판정용으로 쓰지 않는다.
 - Adams Car 이벤트: `files_only`로 만든 .adm/.acf를 Car 솔버로 푼다(`mdi acar ru-solver case.acf`). 현재 이 명령의 tool 키는 없다. `--solver-args "acar ru-solver {acf}"`로 우회한다. TODO(사내검증).
 

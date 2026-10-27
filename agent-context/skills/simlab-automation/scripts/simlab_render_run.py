@@ -4,7 +4,7 @@ Altair SimLab 케이스 실행 (녹화 저널 템플릿 -> 배치 실행 -> 결�
 
   python simlab_render_run.py --template bracket_journal.py.tmpl --results results.csv --require bracket.op2
 - {{이름}} 을 params.json 값으로, {{case_dir}} 를 케이스 폴더 경로로 채워 case_journal.py 를 만든다.
-- SimLab 실행 파일: 환경변수 DDS_SIMLAB (PC Agent가 agent.toml/자동 탐지 값으로 넣는다)
+- SimLab 실행 파일: 환경변수 DDS_SIMLAB (PC Agent가 자동으로 찾은 경로를 넣는다)
 - 성공하면 results.csv(이름,값) -> results.json. 실패하면 results.json 을 쓰지 않고 종료 코드 1.
 """
 import argparse
@@ -75,7 +75,7 @@ def main():
         return
     exe = os.environ.get("DDS_SIMLAB") or os.environ.get("DDS_TOOL_SIMLAB")
     if not exe:
-        fail("SimLab not configured. Set agent.toml [tools] simlab = '.../SimLab*/bin/win64/SimLab.bat'")
+        fail("SimLab not found on this PC. Ask the user to pick SimLab.bat in the web app (CAD/CAE tools > Altair SimLab)")
     logp = os.path.join(CASE, "simlab.log")
     with open(logp, "w", encoding="utf-8", errors="replace") as lf:
         rc = subprocess.call([exe, "-auto", os.path.join(CASE, a.out)], cwd=CASE, stdout=lf, stderr=subprocess.STDOUT,

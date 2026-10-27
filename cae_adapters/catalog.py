@@ -1,7 +1,9 @@
 """지원하는 CAD/CAE 툴 목록 — 웹앱 'CAD·CAE 툴' 화면, PC Agent 진단, 에이전트의 dds-cae.list_tools가 모두 이 표를 쓴다.
 
 각 툴: id, 이름, 회사, 분야, 스킬 폴더, 필요한 실행 파일 키(paths), 실행 명령 키(run), 에이전트가 할 수 있는 일(can),
-Live Link 지원 여부, 이 PC에서 자동으로 찾을 기본 설치 경로(guess, glob — 여러 버전이면 이름순 마지막=최신).
+Live Link 지원 여부, 이 PC에서 자동으로 찾을 기본 설치 경로(guess, glob).
+PC Agent는 guess를 기본 위치뿐 아니라 다른 드라이브·설치된 앱 목록·시작 메뉴·환경변수에서 찾은 설치 폴더에도 적용한다
+(agent/dds_agent/toolscan.py). 새 툴을 넣을 때는 TOOLS에 guess를, FIND에 설치 흔적을 알아볼 단어를 넣는다.
 """
 from __future__ import annotations
 
@@ -117,7 +119,8 @@ TOOLS: list[dict] = [
      "paths": ["moldex3d_python"], "run": ["moldex3d"], "can": [PARAM, COND, RUN, RESULT, IMAGE], "guess": {}},
     # ---------- 1D 시스템 ----------
     {"id": "amesim", "name": "Simcenter Amesim", "vendor": "Siemens", "category": "1D 시스템", "skill": "amesim-automation",
-     "paths": ["amesim_python"], "run": ["amesim"], "can": [PARAM, COND, RUN, RESULT, IMAGE], "guess": {}},
+     "paths": ["amesim_python"], "run": ["amesim"], "can": [PARAM, COND, RUN, RESULT, IMAGE],
+     "guess": {"amesim_python": [PF + r"\Simcenter\*\Amesim\win64\AMEPython.exe"]}},
     # ---------- 피로·내구 ----------
     {"id": "ncode", "name": "nCode DesignLife", "vendor": "HBK", "category": "피로·내구", "skill": "ncode-automation",
      "paths": ["ncode"], "run": ["ncode"], "can": [PARAM, COND, RUN, RESULT, IMAGE], "guess": {}},
@@ -136,6 +139,21 @@ TOOLS: list[dict] = [
      "paths": ["altair_hw"], "run": ["physicsai_export", "physicsai_hw"], "can": [DATA, ML, FIELD],
      "guess": {"altair_hw": [PF + r"\Altair\*\hwdesktop\hw\bin\win64\hw.exe"]}},
 ]
+
+
+# 설치 흔적(설치된 앱 이름·회사, 바로가기 이름, 환경변수 이름, 경로)에서 이 툴로 볼 단어 — 소문자, 단어 앞부분 일치
+FIND: dict[str, list[str]] = {
+    "nx": ["nx", "siemens", "ugii", "splm"], "catia": ["catia", "dassault"], "solidworks": ["solidworks"],
+    "creo": ["creo", "ptc"], "ansa": ["ansa", "meta_post", "beta cae", "beta_cae"],
+    "altair": ["altair", "hyperworks", "hypermesh", "optistruct", "hw_rootdir"], "simlab": ["simlab"],
+    "simcenter3d": ["simcenter", "nastran"], "abaqus": ["abaqus", "simulia"], "ansys": ["ansys", "awp_root"],
+    "msc_nastran": ["msc.software", "msc software", "mscsoftware", "msc_nastran", "nastran", "hexagon"], "lsdyna": ["ls-dyna", "lsdyna", "lstc", "lsprepost", "ls-prepost"],
+    "starccm": ["star-ccm", "starccm"], "fluent": ["fluent"], "openfoam": [], "flotherm": ["flotherm"],
+    "celsius": ["celsius", "cadence"], "comsol": ["comsol"], "cst": ["cst"], "adams": ["adams"],
+    "recurdyn": ["recurdyn", "functionbay"], "motionsolve": ["motionsolve"], "moldflow": ["moldflow"],
+    "moldex3d": ["moldex3d", "coretech"], "amesim": ["amesim"], "ncode": ["ncode", "designlife", "hbk"],
+    "lighttools": ["lighttools", "synopsys", "optical research"], "inspire": ["inspire"], "physicsai": ["physicsai"],
+}
 
 
 def resolve(exe: str | None) -> str | None:
@@ -166,7 +184,9 @@ def _verify(cmd: list[str], paths: dict[str, str]) -> bool:
 
     try:
         args = [paths.get(c[1:-1], c) if c.startswith("{") and c.endswith("}") else c for c in cmd]
-        return subprocess.run(args, capture_output=True, timeout=20).returncode == 0
+        # 입력을 막는다: WSL이 없으면 wsl.exe가 콘솔에서 '아무 키나 누르면 설치'를 기다려 시간 초과까지 멈춘다
+        return subprocess.run(args, capture_output=True, stdin=subprocess.DEVNULL, timeout=20,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
 
@@ -192,5 +212,7 @@ def tool_status(paths: dict[str, str], verify: bool = True) -> list[dict]:
 
 
 def public_catalog() -> list[dict]:
-    """웹앱에 보낼 정적 목록(기본 경로 패턴 제외)."""
-    return [{k: v for k, v in t.items() if k not in ("guess", "verify")} for t in TOOLS]
+    """웹앱에 보낼 정적 목록(기본 경로 패턴 대신 실행 파일 이름만 — 직접 고를 때 안내용)."""
+    return [{**{k: v for k, v in t.items() if k not in ("guess", "verify")},
+             "files": {k: list(dict.fromkeys(p.split("\\")[-1] for p in t.get("guess", {}).get(k, []))) for k in t["paths"]}}
+            for t in TOOLS]

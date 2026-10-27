@@ -158,7 +158,7 @@ def main():
 
     solver = a.solver or os.environ.get("DDS_TOOL_RECURDYN_SOLVER") or os.environ.get("DDS_RECURDYN_SOLVER")
     if not solver:
-        raise RuntimeError("solver path not set (--solver or agent.toml [tools] recurdyn_solver)")
+        raise RuntimeError("solver path not set (--solver, or ask the user to pick the RecurDyn solver in the web app CAD/CAE tools page)")
     t0 = time.time()
     cmd = [solver] + [x.replace("{rmd}", rmd) for x in a.solver_args.split()]
     run(cmd, "recurdyn_solver_stdout.txt", timeout)

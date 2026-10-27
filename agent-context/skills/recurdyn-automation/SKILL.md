@@ -32,7 +32,7 @@ description: FunctionBay RecurDyn 다물체 동역학 배치 자동화. 솔버 �
                    "--plot", "Joint1_FM"]},
  "outputs": ["max_force", "z_end"], "timeout_sec": 7200}
 ```
-- 솔버 경로는 `--solver`를 생략하면 환경변수 `DDS_TOOL_RECURDYN_SOLVER`(agent.toml `[tools] recurdyn_solver`)를 쓴다.
+- 솔버 경로는 `--solver`를 생략하면 환경변수 `DDS_TOOL_RECURDYN_SOLVER`(PC Agent가 찾거나 사용자가 웹앱에서 고른 `recurdyn_solver` 경로)를 쓴다.
 - TODO(사내검증): **솔버 배치 명령행 형식**(실행파일 이름, .rmd 인자 앞에 옵션이 필요한지, 스레드 수 옵션)을 사내 설치본의 도움말로 확인하고 `--solver-args`에 반영한다. 템플릿 기본값 `{rmd}`는 확인되지 않은 가정이다.
 - 곡선 CSV를 솔버만으로 얻을 수 없으면 `--post-exe`/`--post-args`로 내보내기 단계(ProcessNet 매크로)를 붙인다. 6절 참고.
 

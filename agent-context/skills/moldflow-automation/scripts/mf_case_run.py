@@ -10,7 +10,7 @@
   python mf_case_run.py --sdy cover_study.sdy --no-com            # 변경 없이 배치 해석만
   python mf_case_run.py --sdy-pattern "cover_g{gate_id}.sdy" --no-com   # 미리 만든 게이트 후보 스터디 선택
   python mf_case_run.py --project proj/proj.mpi --study-name S1 --dump-prop 30011   # 필드 ID 조회만
-실행파일 경로: 환경변수 DDS_TOOL_MOLDFLOW_RUNSTUDY / DDS_TOOL_MOLDFLOW_STUDYRLT (플랫폼이 agent.toml [tools] 에서 넣어 줌)
+실행파일 경로: 환경변수 DDS_TOOL_MOLDFLOW_RUNSTUDY / DDS_TOOL_MOLDFLOW_STUDYRLT (PC Agent가 찾은 경로를 넣어 줌)
               또는 --runstudy / --studyrlt 인자.
 실패:  0 이 아닌 종료코드 (results.json 은 원래 쓰지 않음)
 """
@@ -86,7 +86,7 @@ def resolve_exe(cli_value, env_key, default):
         return exe
     w = shutil.which(exe)
     if not w:
-        raise RuntimeError("executable not found: %s (set agent.toml [tools] or --%s)" % (exe, default))
+        raise RuntimeError("executable not found: %s (pick it in the web app CAD/CAE tools page, or pass --%s)" % (exe, default))
     return w
 
 

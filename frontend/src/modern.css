@@ -315,6 +315,8 @@ details.install-block + .block { margin-top: 16px; }
 .tool-exes .ok { color: var(--ok); margin-top: 2px; flex: none; }
 .tool-exes .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink-4); margin: 5px 3px 0; flex: none; }
 .tool-exes .path { word-break: break-all; margin-top: 2px; }
+.tool-exe-acts { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.tool-exe-acts button { display: inline-flex; align-items: center; gap: 5px; }
 .drawer-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
 .drawer-foot code { margin-right: 4px; }
 

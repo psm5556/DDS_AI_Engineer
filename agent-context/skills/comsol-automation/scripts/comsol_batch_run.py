@@ -7,7 +7,7 @@ COMSOL batch 드라이버 (tool 키: python, 플랫폼 venv) — MPh 를 못 쓸
 
 순서: params.json -> comsol batch -inputfile m.mph -outputfile out.mph -pname ... -plist ... -batchlog batch.log
       -> 모델 안의 Table export(또는 -methodcall 메서드)가 쓴 표 파일 파싱 -> results.json
-- 실행 파일: --comsol, 없으면 환경변수 DDS_COMSOL(플랫폼이 agent.toml [tools].comsol 로 설정), 없으면 'comsol'.
+- 실행 파일: --comsol, 없으면 환경변수 DDS_COMSOL(PC Agent가 찾은 comsol 경로), 없으면 'comsol'.
   Windows 에서 'comsol' 이 batch 하위명령을 못 받으면 comsolbatch.exe 를 지정한다. TODO(사내검증)
 - 여러 파라미터를 한 번에 넘기는 -pname/-plist 형식은 버전 문서를 확인한다. TODO(사내검증)
   (불확실하면 MPh 템플릿 comsol_mph_run.py 를 쓴다.)

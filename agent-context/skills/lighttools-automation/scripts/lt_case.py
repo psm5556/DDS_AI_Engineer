@@ -97,7 +97,7 @@ def connect(attach):
             fail("attach=1 but no running LightTools. Open LightTools first.")
     exe = os.environ.get("DDS_LIGHTTOOLS") or os.environ.get("DDS_TOOL_LIGHTTOOLS")
     if not exe or not os.path.exists(exe):
-        fail("LightTools executable unknown. Set agent.toml [tools] lighttools = 'C:/.../lt.exe'")
+        fail("LightTools executable not found on this PC. Ask the user to pick lt.exe in the web app (CAD/CAE tools > LightTools)")
     log("starting LightTools: " + exe)
     subprocess.Popen([exe])
     t0 = time.time()

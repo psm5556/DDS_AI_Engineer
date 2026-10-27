@@ -290,9 +290,22 @@ def tools_catalog(user: models.User = Depends(get_current_user)):
 
 
 @router.get("/agent/diagnose")
-def agent_diagnose(user: models.User = Depends(get_current_user)):
-    """내 PC 진단: CAD/CAE 툴 경로·버전, 뷰어, 작업 폴더, AI CLI (PC Agent가 확인)."""
+def agent_diagnose(rescan: bool = False, user: models.User = Depends(get_current_user)):
+    """내 PC 진단: CAD/CAE 툴 경로·버전, 뷰어, 작업 폴더, AI CLI (PC Agent가 확인).
+    rescan=true면 PC Agent가 이 PC의 툴을 지금 다시 찾는다(설치된 앱 목록·시작 메뉴·환경변수·모든 드라이브)."""
     try:
-        return registry.runner(user.id).call("local.diagnose", {}, timeout=120)
+        return registry.runner(user.id).call("local.diagnose", {"rescan": rescan}, timeout=240 if rescan else 120)
     except AgentError as e:
         raise HTTPException(409, str(e))
+
+
+@router.post("/agent/tools/{key}/pick")
+def pick_tool(key: str, user: models.User = Depends(get_current_user)):
+    """내 PC에 파일 선택 창을 띄워 툴 실행 파일을 고르게 하고 PC Agent에 저장한다(자동으로 못 찾았을 때). 취소하면 빈 경로."""
+    return _agent_call(user, "tools.pick", {"key": key}, timeout=900)
+
+
+@router.put("/agent/tools/{key}")
+def set_tool(key: str, body: schemas.ToolPath, user: models.User = Depends(get_current_user)):
+    """툴 실행 파일 경로를 정한다. path가 비면 직접 고른 값을 지우고 자동으로 찾은 것을 쓴다."""
+    return _agent_call(user, "tools.set", {"key": key, "path": body.path})
