@@ -39,6 +39,8 @@
   --night-human-soft: #4A2D18;
   --night-ok: #6FD39C;
   --night-ok-soft: #173F2B;
+  --night-ai-line: #2E7480;
+  --night-human-line: #7A5130;
   /* 제품 그림 재료(두 테마 공통) */
   --prod-body: #F7FAFB;
   --prod-line: #5E717C;
@@ -119,19 +121,23 @@ svg.prod { display: block; overflow: visible; flex: none; }
 #s1 h1 em { font-style: normal; color: var(--night-ai); }
 #s1 .sub { margin-top: 16px; font-size: 21px; }
 .t-flow { display: grid; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr) 40px minmax(0, 1fr) 40px minmax(0, 1fr); align-items: stretch; }
-.t-node { background: var(--night-2); border: 1.5px solid var(--night-line); border-radius: 18px; padding: 18px 20px; display: grid; gap: 8px; align-content: start; animation: lift 8s ease-in-out infinite; }
+/* 흐름 위 막대: 첫 칸은 엔지니어(주황), 나머지 세 칸은 AI(청록)가 하는 일 */
+.t-who { font-size: 15px; font-weight: 700; letter-spacing: .04em; padding-top: 8px; margin-bottom: 12px; border-top: 3px solid; }
+.t-who.human { color: var(--night-human); border-color: var(--night-human); }
+.t-who.ai { grid-column: 3 / 8; color: var(--night-ai); border-color: var(--night-ai); }
+.t-node { --nb: var(--night-line); background: var(--night-2); border: 1.5px solid var(--nb); border-radius: 18px; padding: 18px 20px; display: grid; gap: 8px; align-content: start; animation: lift 8s ease-in-out infinite; }
+.t-node.human { --nb: var(--night-human-line); }
+.t-node.ai { --nb: var(--night-ai-line); }
 .t-node:nth-of-type(2) { animation-delay: 2s; }
 .t-node:nth-of-type(3) { animation-delay: 4s; }
 .t-node:nth-of-type(4) { animation-delay: 6s; }
 @keyframes lift {
   0%, 18% { transform: translateY(-6px); border-color: var(--night-muted); }
-  26%, 100% { transform: none; border-color: var(--night-line); }
+  26%, 100% { transform: none; border-color: var(--nb); }
 }
 .t-node .ico { width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; }
 .t-node.human .ico { background: var(--night-human-soft); color: var(--night-human); }
 .t-node.ai .ico { background: var(--night-ai-soft); color: var(--night-ai); }
-.t-node.tool .ico { background: var(--night); color: var(--night-ink); border: 1.5px solid var(--night-line); }
-.t-node.best .ico { background: var(--night-ok-soft); color: var(--night-ok); }
 .t-node b { font-size: 21px; }
 .t-node span:last-child { font-size: 16px; color: var(--night-muted); line-height: 1.45; }
 .t-arrow { display: grid; place-items: center; color: var(--night-muted); }
@@ -343,12 +349,20 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .ext svg.i { width: 32px; height: 32px; }
 .ext b { display: block; font-size: 16px; color: var(--ink); line-height: 1.3; }
 .ext span { font-size: 14px; }
-.vlink { position: relative; height: 92px; width: 240px; margin-left: 26px; }
+.vlink { position: relative; height: 64px; width: 240px; margin-left: 26px; }
 .vlink::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 2.5px dashed var(--muted); }
 .vlink .lbl { position: absolute; left: calc(50% + 18px); top: 50%; transform: translateY(-50%); font-size: 14.5px; color: var(--muted); font-weight: 600; white-space: nowrap; line-height: 1.4; }
 .vlink .dot { position: absolute; left: calc(50% - 5px); top: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--muted); animation: vdot 2.6s ease-in-out infinite alternate; }
 @keyframes vdot { from { top: 0; } to { top: calc(100% - 12px); } }
-.inside { position: relative; border: 2.5px dashed var(--ai); border-radius: 22px; padding: 30px 24px 24px; display: grid; grid-template-columns: 240px minmax(0, 1fr) 240px; align-items: center; }
+.inside { position: relative; border: 2.5px dashed var(--ai); border-radius: 22px; padding: 26px 24px 20px; display: grid; grid-template-columns: 240px minmax(0, 1fr) 240px; align-items: center; }
+/* PC ↔ HPC: 케이스를 HPC 스케줄러에 제출하고 결과를 PC로 가져온다 */
+.dlink { position: relative; height: 46px; width: 240px; }
+.dlink::before { content: ""; position: absolute; left: 50%; top: 2px; bottom: 2px; border-left: 2.5px solid var(--ai); }
+.dlink .lbl { position: absolute; left: calc(50% + 16px); top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--ai); font-weight: 700; white-space: nowrap; }
+.dlink .dot { position: absolute; left: calc(50% - 5px); top: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--ai); animation: vdot 1.8s ease-in-out infinite alternate; }
+.nd.hpc { grid-column: 1 / 3; grid-template-columns: 46px minmax(0, 1fr); column-gap: 14px; row-gap: 2px; align-items: center; padding: 12px 18px; }
+.nd.hpc .ico { grid-row: span 2; }
+.nd.hpc .d { font-size: 14.5px; color: var(--muted); line-height: 1.45; }
 .inside .tag { position: absolute; top: -15px; right: 24px; background: var(--surface); padding: 0 10px; font-weight: 700; color: var(--ai); font-size: 16px; }
 .nd { background: var(--surface); border: 1.5px solid var(--line); border-radius: 16px; padding: 16px 18px; display: grid; gap: 6px; justify-items: start; }
 .nd .ico { width: 46px; height: 46px; border-radius: 12px; background: var(--ai-soft); color: var(--ai); display: grid; place-items: center; }
@@ -448,6 +462,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.8-3.4 8-8 9-4.6-1-8-4.2-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
     <symbol id="i-server" viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="7" rx="2"/><rect x="4" y="13.5" width="16" height="7" rx="2"/><path d="M8 7h.01M8 17h.01"/></symbol>
+    <symbol id="i-hpc" viewBox="0 0 24 24"><rect x="3.5" y="3" width="7" height="18" rx="1.5"/><rect x="13.5" y="3" width="7" height="18" rx="1.5"/><path d="M6 7h2M6 11h2M6 15h2M16 7h2M16 11h2M16 15h2"/></symbol>
     <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2.5 19h19"/></symbol>
     <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18h10.5a4 4 0 0 0 .4-8 6 6 0 0 0-11.6 1.2A3.5 3.5 0 0 0 7 18z"/></symbol>
     <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15.5 14.3A4.8 4.8 0 0 1 21 19"/></symbol>
@@ -489,13 +504,15 @@ svg.prod { display: block; overflow: visible; flex: none; }
     <p class="sub">기존 DDS에서 메뉴로 하나하나 설정하던 해석 자동화·DOE·학습·Simulator 배포를 대화로</p>
   </div>
   <div class="t-flow">
+    <span class="t-who human">엔지니어가 하는 일</span>
+    <span class="t-who ai">AI가 하는 일</span>
     <div class="t-node human"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><b>엔지니어</b><span>“탈수 진동을 줄여 줘”</span></div>
     <span class="t-arrow"><svg class="i"><use href="#i-right"/></svg></span>
     <div class="t-node ai"><span class="ico"><svg class="i"><use href="#i-ai"/></svg></span><b>AI 어시스턴트</b><span>해석 계획과 스크립트를 만듭니다</span></div>
     <span class="t-arrow"><svg class="i"><use href="#i-right"/></svg></span>
-    <div class="t-node tool"><span class="ico"><svg class="i"><use href="#i-tool"/></svg></span><b>CAD·CAE 툴</b><span>PC에서 AI가 직접 실행합니다</span></div>
+    <div class="t-node ai"><span class="ico"><svg class="i"><use href="#i-tool"/></svg></span><b>CAD·CAE 툴</b><span>내 PC 또는 HPC에서 AI가 직접 실행합니다</span></div>
     <span class="t-arrow"><svg class="i"><use href="#i-right"/></svg></span>
-    <div class="t-node best"><span class="ico"><svg class="i"><use href="#i-star"/></svg></span><b>최적 설계</b><span>엔지니어가 확인하고 결정합니다</span></div>
+    <div class="t-node ai"><span class="ico"><svg class="i"><use href="#i-star"/></svg></span><b>최적 설계</b><span>AI가 최적점을 찾고 보고서로 정리합니다</span></div>
   </div>
   <div class="t-bottom">
     <span class="t-lbl">오늘의 데모</span>
@@ -568,7 +585,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       <ol class="steps" id="d1-steps">
         <li class="h"><span class="hd"><span class="chip human">엔지니어</span><b>말로 요청</b></span><p>“탈수 진동이 줄도록 스프링·댐퍼를 최적화해 줘 … 보고서까지 만들어 줘.”</p></li>
         <li><span class="hd"><span class="chip ai">AI</span><b>계획(Flow) 제안</b></span><p>모델 → DOE 60케이스 → 예측 모델 → 최적화 → Simulator → 보고서, 7단계를 대화와 캔버스에 올립니다</p></li>
-        <li class="h"><span class="hd"><span class="chip human">엔지니어</span><span class="chip ai">AI</span><b>승인하면 해석</b></span><p>계획 ‘승인’, PC 실행 ‘허용’ 두 번이면 해석 68건이 돌고, 결과가 나오는 대로 화면에 올라옵니다</p></li>
+        <li class="h"><span class="hd"><span class="chip human">엔지니어</span><span class="chip ai">AI</span><b>승인하면 해석</b></span><p>계획 ‘승인’, 실행 ‘허용’ 두 번이면 해석 68건이 내 PC나 HPC에서 돌고, 결과가 나오는 대로 화면에 올라옵니다</p></li>
         <li><span class="hd"><span class="chip ai">AI</span><b>결과·보고서</b></span><p>진동 <span class="n">4.2 → 2.6 mm (38% 감소)</span><br>스프링 +12%, 댐퍼 +26% · Word·HTML 보고서 · Simulator 배포</p></li>
       </ol>
       <p class="shot-note">실제 웹앱을 데모 모드로 촬영했습니다. 해석은 RecurDyn 대신 연습용 계산식으로 돌렸고, 숫자는 예시입니다.</p>
@@ -683,8 +700,8 @@ svg.prod { display: block; overflow: visible; flex: none; }
       <div class="kb-head"><span class="chip human">기존 DDS</span><h3>템플릿은 관리자에게,<br>스크립트는 개인 PC에</h3></div>
       <div class="pcs">
         <div class="pc"><span class="ico"><svg class="i"><use href="#i-server"/></svg></span><div><b>관리자 템플릿</b><span>정해진 해석만 자동화 · 새 문제는 요청 후 대기</span></div></div>
-        <div class="pc"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>A 책임 PC</b><span>탈수진동_스크립트_v7_최종.py</span></div></div>
-        <div class="pc gone"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>C 책임 PC</b><span>부서 이동 → 스크립트 위치 모름</span></div></div>
+        <div class="pc"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>A 프로 PC</b><span>탈수진동_스크립트_v7_최종.py</span></div></div>
+        <div class="pc gone"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><div><b>C 프로 PC</b><span>부서 이동 → 스크립트 위치 모름</span></div></div>
       </div>
       <p class="kb-say">담당자가 바뀌면 같은 준비를<br>처음부터 다시 합니다.</p>
     </div>
@@ -722,11 +739,13 @@ svg.prod { display: block; overflow: visible; flex: none; }
         <div class="nd"><span class="ico"><svg class="i"><use href="#i-laptop"/></svg></span><b>엔지니어 PC</b><ul><li>설계 원본·해석 파일</li><li>CAD·CAE 툴</li><li>AI 어시스턴트가 여기서 실행</li></ul></div>
         <div class="hlink"><span class="lbl">결과값·이미지</span><i class="dot"></i></div>
         <div class="nd"><span class="ico"><svg class="i"><use href="#i-server"/></svg></span><b>사내 서버</b><ul><li>해석 결과·예측 모델</li><li>보고서·대화 기록</li><li>팀원과 공유</li></ul></div>
+        <div class="dlink"><i class="dot"></i><span class="lbl">해석 제출 · 결과 회수</span></div>
+        <div class="nd hpc"><span class="ico"><svg class="i"><use href="#i-hpc"/></svg></span><b>사내 HPC 클러스터</b><span class="d">케이스가 많거나 무거운 해석은 AI가 HPC에 제출합니다 (Slurm·PBS·LSF)</span></div>
       </div>
     </div>
     <ul class="rules">
       <li class="h"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><div><b>해석 전에 엔지니어가 승인</b><p>AI가 세운 계획을 보고 ‘승인’을 눌러야 실행합니다.</p></div></li>
-      <li><span class="ico"><svg class="i"><use href="#i-shield"/></svg></span><div><b>원본 해석 파일은 PC에</b><p>odb·d3plot 같은 원본은 PC에 두고, 서버에는 결과값·이미지·보고서만 올라갑니다.</p></div></li>
+      <li><span class="ico"><svg class="i"><use href="#i-shield"/></svg></span><div><b>원본 해석 파일은 PC·HPC에</b><p>odb·d3plot 같은 원본은 PC·HPC에 두고, 서버에는 결과값·이미지·보고서만 올라갑니다.</p></div></li>
       <li><span class="ico"><svg class="i"><use href="#i-history"/></svg></span><div><b>프로젝트 멤버만, 기록은 모두 남김</b><p>멤버만 볼 수 있고, 누가 무엇을 요청했는지 남습니다.</p></div></li>
     </ul>
   </div>
@@ -739,7 +758,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
     <h2>실제 제품 하나로 시범 운영을 시작하겠습니다</h2>
   </header>
   <ol class="track">
-    <li class="done"><span class="dot"><svg class="i"><use href="#i-check"/></svg></span><b>개발</b><span>웹앱·AI 어시스턴트·PC Agent<br>연동 준비된 CAD/CAE 툴 29종</span></li>
+    <li class="done"><span class="dot"><svg class="i"><use href="#i-check"/></svg></span><b>개발</b><span>웹앱·AI 어시스턴트·PC Agent<br>연동 준비된 CAD/CAE 툴 29종<br>해석은 내 PC·HPC에서</span></li>
     <li class="now"><span class="dot">2</span><b>사내 서버 설치</b><span>준비 스크립트로 설치합니다</span></li>
     <li><span class="dot">3</span><b>시범 과제 1개</b><span>예: 드럼세탁기 탈수 진동</span></li>
     <li><span class="dot">4</span><b>부서로 확대</b><span>자주 쓰는 툴부터</span></li>
@@ -758,7 +777,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
   <header class="sh">
     <p class="eyebrow">참고 · 지원하는 CAD·CAE 툴</p>
     <h2>AI 어시스턴트가 직접 다루는 툴 29종</h2>
-    <p class="sub">툴마다 자동화 스킬(스크립트 규칙·예제)을 갖췄습니다. 파라미터·해석 조건 변경, 배치 실행, 결과 추출, 이미지 저장을 AI가 합니다.</p>
+    <p class="sub">툴마다 자동화 스킬을 갖췄습니다. 조건 변경·배치 실행·결과 추출을 AI가 하고, 해석은 내 PC 또는 HPC에서 돌립니다.</p>
   </header>
   <div class="tools">
     <section class="tg"><h4>CAD<span>4</span></h4><ul><li><b>Siemens NX</b><i>Siemens</i><em>Live Link</em></li><li><b>CATIA V5</b><i>Dassault Systèmes</i></li><li><b>SOLIDWORKS</b><i>Dassault Systèmes</i></li><li><b>Creo Parametric</b><i>PTC</i></li></ul></section>
