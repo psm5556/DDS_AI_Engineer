@@ -137,9 +137,10 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
 
   const send = useCallback(async (text: string, attachmentIds: number[] = []) => {
     const t = text.trim();
-    if (!t && !attachmentIds.length) return;
+    if (!t && !attachmentIds.length) return true;
+    const tempId = -Date.now();
+    let id = sid;
     try {
-      let id = sid;
       if (!id || readOnly) {
         const s = await post<ChatSession>(`/api/projects/${pid}/sessions`, { agent: chosen });
         qc.invalidateQueries({ queryKey: ["sessions", pid] });
@@ -148,11 +149,15 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
       }
       setBusy(true);
       qc.setQueryData<ChatMessage[]>(["messages", id], (xs) => [...(xs ?? []),
-        { id: -Date.now(), session_id: id!, role: "user", content: t || "첨부한 파일을 확인해 주세요.", meta: null, created_at: localIso() }]);
+        { id: tempId, session_id: id!, role: "user", content: t || "첨부한 파일을 확인해 주세요.", meta: null, created_at: localIso() }]);
       await post(`/api/sessions/${id}/prompt`, { text: t, attachment_ids: attachmentIds });
+      return true;
     } catch (e) {
+      // 보내지 못했으면 화면에 미리 붙인 내 메시지를 거두고, 입력창에 요청을 되돌린다(false)
       setBusy(false);
+      if (id) qc.setQueryData<ChatMessage[]>(["messages", id], (xs) => (xs ?? []).filter((m) => m.id !== tempId));
       toast((e as Error).message, true);
+      return false;
     }
   }, [pid, sid, readOnly, chosen, onSession, qc, toast]);
 

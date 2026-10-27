@@ -27,7 +27,7 @@ const fmtSize = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math
 export function Composer({
   projectId, suggestions, onSend, busy, onStop, disabled, placeholder, big, leftBar, autoFocus, hint, seed,
 }: {
-  projectId?: number; suggestions: string[]; onSend: (o: Outgoing) => void | Promise<void>; busy?: boolean; onStop?: () => void;
+  projectId?: number; suggestions: string[]; onSend: (o: Outgoing) => void | boolean | Promise<void | boolean>; busy?: boolean; onStop?: () => void;
   disabled?: boolean; placeholder: string; big?: boolean; leftBar?: ReactNode; autoFocus?: boolean; hint?: string;
   /** 밖에서 입력창을 채울 때(예: 시작 버튼) — n이 바뀔 때마다 text로 채운다 */
   seed?: { text: string; n: number };
@@ -91,9 +91,14 @@ export function Composer({
       text: t, attachmentIds: items.filter((i) => i.att).map((i) => i.att!.id),
       pendingFiles: projectId ? [] : items.map((i) => i.file),
     };
+    const keep = { text, items };
     setText("");
     setItems([]);
-    await onSend(out);
+    // 보내기가 실패했다고 알려 오면(false) 적은 요청과 첨부를 되돌린다 — 다시 적지 않아도 되게
+    if ((await onSend(out)) === false) {
+      setText(keep.text);
+      setItems(keep.items);
+    }
   };
 
   return (

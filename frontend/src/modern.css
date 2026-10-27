@@ -361,10 +361,6 @@ details.install-block + .block { margin-top: 16px; }
 td.empty-row { padding: 22px 14px !important; text-align: center; }
 
 /* ---------- 내 PC 작업 폴더 ---------- */
-.folder-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; max-width: 220px; padding: 0 10px; border: none; border-radius: 8px;
-  background: transparent; box-shadow: none; color: var(--ink-3); font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.folder-chip:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
-.folder-chip.on { color: var(--brand); background: var(--brand-soft); }
 .local-rootbar { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; min-width: 0; }
 .local-rootbar .local-root { flex: 1; min-width: 0; margin: 0; }
 .local-kind { flex: none; font-size: 11px; font-weight: 600; color: var(--ink-4); background: var(--panel-3); border-radius: 99px; padding: 1px 8px; }
@@ -386,3 +382,23 @@ td.empty-row { padding: 22px 14px !important; text-align: center; }
 .setup-check li .small { margin-top: 4px; color: var(--ink-3); line-height: 1.6; }
 .setup-check li .small button { margin-top: 2px; }
 .setup-check code { font-size: 12px; word-break: break-all; }
+
+/* ---------- 첫 화면: 새 프로젝트 ① 이름 → ② 작업 폴더 → ③ 요청 ---------- */
+.np-card { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.np-row { display: grid; grid-template-columns: 22px 116px minmax(0, 1fr); align-items: center; column-gap: 10px; }
+.np-row:has(.np-field) { align-items: start; }
+.np-row:has(.np-field) .np-n, .np-row:has(.np-field) .np-label { margin-top: 9px; }
+.np-n { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel-3); color: var(--ink-3); font-size: 11.5px; font-weight: 700; }
+.np-label { font-size: var(--fs-s); font-weight: 600; color: var(--ink-2); }
+.np-input { width: 100%; min-height: 38px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--panel);
+  font-size: var(--fs-m); color: var(--ink); }
+.np-input.mono { font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; font-size: 13px; }
+.np-input:disabled { background: var(--panel-2); color: var(--ink-4); }
+.np-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.np-folder { display: flex; gap: 8px; }
+.np-folder button { flex: none; min-height: 38px; border-radius: 10px; }
+.np-hint, .np-err { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink-4); }
+.np-err { color: var(--err); }
+.np-ask { margin-top: 6px; margin-bottom: -4px; }
+.np-input.mono::placeholder { font-family: var(--font); font-size: var(--fs-s); }

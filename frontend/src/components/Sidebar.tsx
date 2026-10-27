@@ -22,7 +22,7 @@ function StatusMark({ p }: { p: Project }) {
   return null;
 }
 
-/** 왼쪽 사이드바 (Claude·Codex 데스크톱 방식): 새 작업 · 툴 · 검색 · 프로젝트(한 줄 평면 목록) · 아래 PC Agent·사용자.
+/** 왼쪽 사이드바 (Claude·Codex 데스크톱 방식): 새 프로젝트 · 툴 · 검색 · 프로젝트(한 줄 평면 목록) · 아래 PC Agent·사용자.
  *  대화 전환은 프로젝트 화면 머리글에서 한다 — 사이드바는 한 단계만. */
 export function Sidebar({ layout }: { layout: PanelLayout }) {
   const { user, logout } = useAuth();
@@ -52,7 +52,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
     return (
       <aside className="sidebar rail" aria-label="사이드바 (접힘)">
         <button className="icon-btn rail-btn" onClick={layout.toggle} aria-label="사이드바 펼치기" title="사이드바 펼치기 (Ctrl+B)"><PanelLeftOpen size={18} /></button>
-        <Link className="icon-btn rail-btn" to="/" aria-label="새 작업" title="새 작업"><SquarePen size={18} /></Link>
+        <Link className="icon-btn rail-btn" to="/" aria-label="새 프로젝트" title="새 프로젝트"><SquarePen size={18} /></Link>
         <Link className="icon-btn rail-btn" to="/tools" aria-label="CAD·CAE 툴" title="CAD·CAE 툴"><Wrench size={18} /></Link>
         <span className="grow" />
         <AgentStatusRow compact />
@@ -97,7 +97,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         <button className="icon-btn" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? "메뉴 닫기" : "메뉴 열기"}>
           {open ? <X size={18} /> : <Menu size={18} />}</button>
         <b>{current ? current.name : "DDS AI Engineer"}</b>
-        <Link className="icon-btn" to="/" aria-label="새 작업"><SquarePen size={17} /></Link>
+        <Link className="icon-btn" to="/" aria-label="새 프로젝트"><SquarePen size={17} /></Link>
       </div>
       <div className="side-panel">
         <div className="side-brand-row">
@@ -105,7 +105,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
           <button className="icon-btn side-fold" onClick={layout.toggle} aria-label="사이드바 접기" title="사이드바 접기 (Ctrl+B)"><PanelLeftClose size={17} /></button>
         </div>
         <nav className="side-nav-list" aria-label="바로 가기">
-          <button className="side-nav" onClick={() => nav("/")}><SquarePen size={16} />새 작업</button>
+          <button className="side-nav" onClick={() => nav("/")}><SquarePen size={16} />새 프로젝트</button>
           <NavLink className="side-nav" to="/tools"><Wrench size={16} />CAD·CAE 툴</NavLink>
           <label className="side-nav side-find">
             <Search size={16} />
