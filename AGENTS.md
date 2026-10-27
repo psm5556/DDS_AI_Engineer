@@ -36,6 +36,7 @@
 python -m venv .venv; .venv\Scripts\pip install -r requirements-dev.txt     # Python 3.12
 cd frontend; npm ci; npm run build; cd ..                                    # Node 18+
 .venv\Scripts\python scripts\dev_live.py --agent demo                        # 서버 + PC Agent, http://127.0.0.1:7014  (admin / PIN 123456)
+scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블클릭하면 demo). AI 코딩 에이전트가 띄울 때는 이 방식을 쓴다
 ```
 - `--agent demo`는 AI 없이 정해진 시나리오로 전체 흐름을 재현한다(CAD→해석→DOE→학습→3D Simulator→보고서). UI·흐름 검증용이다.
   실제 AI는 `--agent claude|gemini|codex`이고, 각 CLI에 먼저 로그인해야 한다.

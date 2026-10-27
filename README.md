@@ -66,6 +66,7 @@ PIDO 툴처럼 스크립트를 직접 짜고 프로세스를 잇는 대신, 사�
 python -m venv .venv; .venv\Scripts\pip install -r requirements-dev.txt
 cd frontend; npm install; npm run build; cd ..
 .venv\Scripts\python scripts\dev_live.py --agent demo     # 서버 + PC Agent, http://127.0.0.1:7014 (admin / PIN 123456)
+scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블클릭하면 demo). AI 코딩 에이전트가 띄울 때는 이 방식을 쓴다
 #   --agent claude | gemini | codex : 실제 AI CLI 사용 (먼저 터미널에서 각 CLI 로그인)
 #   프론트 개발 중에는: cd frontend; npm run dev  → http://localhost:5173
 ```
