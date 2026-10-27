@@ -30,7 +30,7 @@ PIDO 툴처럼 스크립트를 직접 짜고 프로세스를 잇는 대신, 사�
   - 오른쪽 **캔버스**: 작업 흐름 · 결과(보고서 받기) · 데이터·모델(케이스·예측 모델·Simulator 열기) · 파일(내 PC 작업 폴더).
     에이전트가 만든 것으로 탭이 자동으로 바뀐다.
 - **Simulator**: 왼쪽 설계변수·예측 결과, 오른쪽 3D 형상·필드와 민감도. 공유 링크로 사내 누구에게나 줄 수 있다.
-- **CAD·CAE 툴**: 지원 23종을 분야별 앱 아이콘으로 한눈에(바로 쓸 수 있는 툴은 컬러, 없는 툴은 흐리게). 아이콘을 누르면 찾은 실행 파일·경로 설정 방법이 오른쪽에 열린다.
+- **CAD·CAE 툴**: 지원 29종을 분야별 앱 아이콘으로 한눈에(바로 쓸 수 있는 툴은 컬러, 없는 툴은 흐리게). 아이콘을 누르면 찾은 실행 파일·경로 설정 방법이 오른쪽에 열린다.
 - **설정**: 내 PC Agent 상태·설치, AI CLI 설치, 로그인 PIN, 토큰. **관리**: PC Agent 현황, 사용자 승인, Agent 배포(설치 준비 점검표).
 - **로컬 데이터 규칙**: 프로젝트·스터디·케이스별 폴더와 `cases.csv`(`docs/local-data.md`). 프로젝트마다 작업 폴더를 직접 정할 수 있다.
 - **3D 형상·필드 학습**: 케이스의 `fields/*.npz`로 '설계변수 → 3D 형상 + 응력 분포'를 학습한다(PCA + GP).
@@ -45,18 +45,20 @@ PIDO 툴처럼 스크립트를 직접 짜고 프로세스를 잇는 대신, 사�
 | `agent/` | PC Agent(`dds_agent/`: ACP 러너, 케이스 실행, 업데이트, 트레이), `launcher.py` |
 | `mcp_servers/` | 에이전트가 쓰는 MCP 툴: `dds_flow`, `dds_cae`, `dds_study`, `dds_live` |
 | `cae_adapters/` | 케이스 실행 어댑터(`mock`, `script`)와 툴 명령 테이블 |
-| `agent-context/` | 에이전트 작업 규칙(`INSTRUCTIONS.md`), 스킬 26종, Live Link 플러그인(`live/`) |
+| `agent-context/` | 에이전트 작업 규칙(`INSTRUCTIONS.md`), 스킬 32종, Live Link 플러그인(`live/`) |
 | `installer/` | `DDS-Agent-Setup.exe` 소스(WinForms, C#) |
 | `scripts/` | 개발 실행, 번들·런타임·설치 파일 빌드, E2E 테스트 |
 | `docs/skill-contract.md` | 툴 스크립트 입출력 규약(`params.json` → `results.json`, `images/`) |
 
 ### 스킬 (`agent-context/skills/`)
-- CAD/CAE 툴 23종: 웹앱 **CAD·CAE 툴** 화면에서 지원 목록과 내 PC 설치 상태를 본다(목록: `cae_adapters/catalog.py`).
+- CAD/CAE 툴 29종: 웹앱 **CAD·CAE 툴** 화면에서 지원 목록과 내 PC 설치 상태를 본다(목록: `cae_adapters/catalog.py`).
   - CAD: NX, CATIA V5, SOLIDWORKS, Creo
   - 전처리·후처리: ANSA·META, HyperMesh·OptiStruct·HyperView
   - 구조: Simcenter 3D, Abaqus, Ansys, MSC Nastran / 충돌: LS-DYNA
   - 유동·열: STAR-CCM+, Fluent, OpenFOAM, Flotherm / 다중물리: COMSOL
-  - 다물체: Adams, RecurDyn / 사출: Moldflow, Moldex3D / 1D: Amesim / 피로: nCode DesignLife / 광학: LightTools
+  - 전처리: + Altair SimLab / 유동·열: + Cadence Celsius / 전자기: CST Studio Suite
+  - 다물체: Adams, RecurDyn, Altair MotionSolve / 사출: Moldflow, Moldex3D / 1D: Amesim / 피로: nCode DesignLife
+  - 광학: LightTools / 설계 최적화: Altair Inspire / AI 예측: Altair PhysicsAI
   - PC Agent는 기본 설치 경로에서 툴을 자동으로 찾는다. 다른 위치면 `agent.toml [tools]`에 적는다.
 - 프로세스: `workflow-planning`, `doe-surrogate-optimization`, `live-modeling`
 - 툴 API 중 사내에서 확인이 필요한 부분은 각 스킬에 `TODO(사내검증)`로 표시돼 있다.

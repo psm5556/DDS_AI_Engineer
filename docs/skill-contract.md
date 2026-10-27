@@ -73,6 +73,12 @@
 | `solidworks_com` | `{python} {script}`(COM) |
 | `creo_trail` · `creo_python` | `{creo} -g:no_graphics -i:rpc_input {script}` · `{python} {script}`(Creoson) |
 | `lighttools_com` | `{python} {script}`(LightTools COM API, LTAPI4) |
+| `cst_python` · `cst_batch` | `{python} {script}`(CST 파이썬 라이브러리) · `{cst} -m -r {args}` |
+| `motionsolve` · `motionsolve_python` | `{motionsolve} {args}`(XML) · `{python} {script}` |
+| `simlab` | `{simlab} -auto {script}`(녹화 저널) |
+| `celsius` · `celsius_python` | `{celsius} {args}` · `{python} {script}` |
+| `inspire_script` | `{altair_inspire} -script {script}`(Inspire 파이썬) |
+| `physicsai_export` · `physicsai_hw` | `{python} {script}`(DDS 케이스→데이터셋) · `{altair_hw} -b -f {script}` |
 
 지원 툴 목록과 기본 설치 경로는 `cae_adapters/catalog.py` 한 곳에 있다. PC Agent는 `agent.toml`에 경로가 없으면 기본 설치 경로에서 툴을 자동으로 찾는다.
 | `python` | 플랫폼 venv 파이썬 |

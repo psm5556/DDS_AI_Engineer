@@ -12,10 +12,13 @@ from pathlib import Path
 
 PARAM, COND, RUN, RESULT, IMAGE, FIELD = "파라미터 변경", "해석 조건 변경", "배치 실행", "결과 추출", "이미지 저장", "3D 필드"
 EXPORT, MASS, LIVE, MESH = "형상 내보내기", "질량특성", "Live Link", "메쉬·전처리"
+TOPO, DATA, ML = "위상 최적화", "데이터셋 변환", "학습·예측"
 
-CATEGORIES = ["CAD", "전처리·후처리", "구조 해석", "충돌·비선형", "유동·열", "다중물리", "다물체 동역학", "사출 성형", "1D 시스템", "피로·내구", "광학"]
+CATEGORIES = ["CAD", "전처리·후처리", "구조 해석", "충돌·비선형", "유동·열", "다중물리", "전자기", "다물체 동역학", "사출 성형",
+              "1D 시스템", "피로·내구", "광학", "설계 최적화", "AI 예측"]
 
 PF = os.environ.get("ProgramFiles", r"C:\Program Files")
+PFX86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
 
 TOOLS: list[dict] = [
     # ---------- CAD ----------
@@ -41,6 +44,9 @@ TOOLS: list[dict] = [
      "guess": {"altair_hmbatch": [PF + r"\Altair\*\hwdesktop\hm\bin\win64\hmbatch.exe"],
                "altair_hw": [PF + r"\Altair\*\hwdesktop\hw\bin\win64\hw.exe"],
                "altair_optistruct": [PF + r"\Altair\*\hwsolvers\scripts\optistruct.bat"]}},
+    {"id": "simlab", "name": "Altair SimLab", "vendor": "Altair", "category": "전처리·후처리", "skill": "simlab-automation",
+     "paths": ["simlab"], "run": ["simlab"], "can": [MESH, PARAM, COND, RUN, RESULT, IMAGE],
+     "guess": {"simlab": [PF + r"\Altair\*\SimLab*\bin\win64\SimLab.bat", PF + r"\Altair\*\hwdesktop\SimLab*\bin\win64\SimLab.bat"]}},
     # ---------- 구조 해석 ----------
     {"id": "simcenter3d", "name": "Simcenter 3D · Nastran", "vendor": "Siemens", "category": "구조 해석",
      "skill": "simcenter3d-automation", "paths": ["nx_run_journal"], "run": ["simcenter", "simcenter_chain"],
@@ -78,10 +84,19 @@ TOOLS: list[dict] = [
     {"id": "flotherm", "name": "Simcenter Flotherm", "vendor": "Siemens", "category": "유동·열", "skill": "flotherm-automation",
      "paths": ["flotherm"], "run": ["flotherm"], "can": [PARAM, COND, RUN, RESULT, IMAGE],
      "guess": {"flotherm": [PF + r"\Siemens\SimcenterFlotherm\*\WinXP\bin\flotherm.bat"]}},
+    {"id": "celsius", "name": "Cadence Celsius", "vendor": "Cadence", "category": "유동·열", "skill": "celsius-automation",
+     "paths": ["celsius"], "run": ["celsius", "celsius_python"], "can": [PARAM, COND, RUN, RESULT, IMAGE],
+     # TODO(사내검증): 설치 폴더·실행 파일 이름(Celsius Thermal Solver / Celsius EC Solver)
+     "guess": {"celsius": [r"C:\Cadence\Celsius*\tools\bin\celsius*.exe", PF + r"\Cadence\Celsius*\bin\celsius*.exe"]}},
     # ---------- 다중물리 ----------
     {"id": "comsol", "name": "COMSOL Multiphysics", "vendor": "COMSOL", "category": "다중물리", "skill": "comsol-automation",
      "paths": ["comsol"], "run": ["comsol_batch", "comsol_python"], "can": [PARAM, COND, RUN, RESULT, IMAGE, FIELD],
      "guess": {"comsol": [PF + r"\COMSOL\COMSOL*\Multiphysics\bin\win64\comsol.exe"]}},
+    # ---------- 전자기 ----------
+    {"id": "cst", "name": "CST Studio Suite", "vendor": "Dassault Systèmes", "category": "전자기", "skill": "cst-automation",
+     "paths": ["cst"], "run": ["cst_python", "cst_batch"], "can": [PARAM, COND, RUN, RESULT, IMAGE],
+     "guess": {"cst": [PF + r"\CST Studio Suite *\CST DESIGN ENVIRONMENT.exe", PFX86 + r"\CST Studio Suite *\CST DESIGN ENVIRONMENT.exe",
+                       PF + r"\Dassault Systemes\CST Studio Suite *\CST DESIGN ENVIRONMENT.exe"]}},
     # ---------- 다물체 동역학 ----------
     {"id": "adams", "name": "Adams", "vendor": "Hexagon(MSC)", "category": "다물체 동역학", "skill": "adams-automation",
      "paths": ["adams"], "run": ["adams_view", "adams_solver", "adams_python", "adams_car"], "can": [PARAM, COND, RUN, RESULT, IMAGE],
@@ -89,6 +104,9 @@ TOOLS: list[dict] = [
     {"id": "recurdyn", "name": "RecurDyn", "vendor": "FunctionBay", "category": "다물체 동역학", "skill": "recurdyn-automation",
      "paths": ["recurdyn", "recurdyn_solver"], "optional": ["recurdyn_solver"], "run": ["recurdyn", "recurdyn_solver"],
      "can": [PARAM, COND, RUN, RESULT, IMAGE], "guess": {"recurdyn": [PF + r"\FunctionBay, Inc\RecurDyn*\Bin\RecurDyn.exe"]}},
+    {"id": "motionsolve", "name": "Altair MotionSolve", "vendor": "Altair", "category": "다물체 동역학", "skill": "motionsolve-automation",
+     "paths": ["motionsolve"], "run": ["motionsolve", "motionsolve_python"], "can": [PARAM, COND, RUN, RESULT, IMAGE],
+     "guess": {"motionsolve": [PF + r"\Altair\*\hwsolvers\scripts\motionsolve.bat"]}},
     # ---------- 사출 성형 ----------
     {"id": "moldflow", "name": "Moldflow Insight · Synergy", "vendor": "Autodesk", "category": "사출 성형",
      "skill": "moldflow-automation", "paths": ["moldflow_runstudy", "moldflow_studyrlt"], "run": ["moldflow_run", "moldflow_result", "moldflow_synergy"],
@@ -108,6 +126,15 @@ TOOLS: list[dict] = [
      "paths": ["lighttools"], "run": ["lighttools_com"], "can": [PARAM, COND, RUN, RESULT, IMAGE, FIELD, LIVE],
      # 버전마다 설치 폴더 이름이 다르다(예전 ORA, 현재 Synopsys) — TODO(사내검증) 실행 파일 이름
      "guess": {"lighttools": [PF + r"\Synopsys\LightTools*\bin\lt.exe", PF + r"\Optical Research Associates\LightTools*\bin\lt.exe"]}},
+    # ---------- 설계 최적화 ----------
+    {"id": "inspire", "name": "Altair Inspire", "vendor": "Altair", "category": "설계 최적화", "skill": "inspire-automation",
+     "paths": ["altair_inspire"], "run": ["inspire_script"], "can": [PARAM, COND, TOPO, RUN, RESULT, EXPORT, IMAGE],
+     "guess": {"altair_inspire": [PF + r"\Altair\*\Inspire*\Inspire.exe", PF + r"\Altair\*\Inspire*\bin\win64\Inspire.exe"]}},
+    # ---------- AI 예측 ----------
+    # HyperWorks(2023+)에 들어 있는 기하 딥러닝 예측. DDS 자체 예측 모델(GP·형상·필드)과 함께 쓰거나 비교한다
+    {"id": "physicsai", "name": "Altair PhysicsAI", "vendor": "Altair", "category": "AI 예측", "skill": "physicsai-automation",
+     "paths": ["altair_hw"], "run": ["physicsai_export", "physicsai_hw"], "can": [DATA, ML, FIELD],
+     "guess": {"altair_hw": [PF + r"\Altair\*\hwdesktop\hw\bin\win64\hw.exe"]}},
 ]
 
 

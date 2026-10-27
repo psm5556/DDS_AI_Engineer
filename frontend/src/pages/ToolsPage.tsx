@@ -92,7 +92,8 @@ export default function ToolsPage() {
         {cats.map((c) => {
           const list = shown.filter((t) => t.category === c);
           return (
-            <section key={c} className="tool-cat">
+            // 카드 너비 = 툴 수에 비례(줄마다 남는 폭은 툴 수 비율로 나눠 채움) — 한 화면에 들어오게
+            <section key={c} className="tool-cat" style={{ flex: `${list.length} 1 ${Math.max(150, list.length * 80 + 16)}px` }}>
               <h2>{c}<span className="cnt">{list.length}</span></h2>
               <div className="tool-apps">
                 {list.map((t) => {
@@ -101,7 +102,7 @@ export default function ToolsPage() {
                   return (
                     <button key={t.id} className={`tool-app ${open === t.id ? "on" : ""} ${st?.status ?? ""}`} onClick={() => setOpen(t.id)}
                       title={`${t.name} · ${t.vendor}${S ? ` — ${S.label}` : ""}`} aria-label={`${t.name}${S ? `, ${S.label}` : ""}`}>
-                      <ToolIcon id={t.id} name={t.name} status={st?.status} size={52} />
+                      <ToolIcon id={t.id} name={t.name} status={st?.status} size={48} />
                       <span className="tool-app-name">{toolLabel(t.id, t.name)}</span>
                     </button>
                   );

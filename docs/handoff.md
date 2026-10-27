@@ -13,7 +13,7 @@
 | DOE·학습 | LHS/Sobol DOE, GP 예측 모델(교차검증 R²), 베이지안 최적화(EI × 제약 만족 확률), 능동학습, 제약 반영 최적점 | pytest |
 | 3D 형상·필드 | 케이스별 `fields/*.npz` → PCA+GP 학습 → Simulator에서 3D 예측(불확실도, 리메쉬 자동 보간) | pytest(fieldmodel) |
 | Simulator | 설계변수 슬라이더 → 즉시 예측 ± 불확실도, 민감도, 3D. 공유 링크(로그인한 사내 사용자) | UI 점검 |
-| CAD·CAE 툴 | 지원 23종 목록(앱 아이콘 화면)·내 PC 설치 상태, 기본 설치 경로 자동 탐지, 툴별 스킬 26개 | pytest(목록 일관성) — **실제 툴 미검증** |
+| CAD·CAE 툴 | 지원 29종 목록(앱 아이콘 화면)·내 PC 설치 상태, 기본 설치 경로 자동 탐지, 툴별 스킬 32개 | pytest(목록 일관성) — **실제 툴 미검증** |
 | 내 PC 작업 폴더 | 프로젝트별 기본 폴더 규칙(`docs/local-data.md`), 사용자가 프로젝트마다 폴더 직접 지정(Windows 폴더 선택 창) | pytest, UI 점검 |
 | Live Link | 실행 중인 CAD/CAE GUI에 붙어 같이 모델링(NX·Abaqus·HyperMesh 플러그인, 연습용 CAD) | 연습용 CAD로만 |
 | HPC | Slurm·PBS·LSF 제출·폴링 | 가짜 스케줄러 테스트만 |

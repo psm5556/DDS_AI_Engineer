@@ -27,6 +27,12 @@ const ICON: Record<string, [string, string, string?]> = {
   amesim: ["Am", "#00796b"],
   ncode: ["nC", "#6a1b9a"],
   lighttools: ["LT", "#8e24aa"],
+  simlab: ["SL", "#43a047"],
+  celsius: ["Ce", "#ad1457"],
+  cst: ["CST", "#d84315"],
+  motionsolve: ["MS", "#0277bd"],
+  inspire: ["In", "#ef6c00"],
+  physicsai: ["AI", "#5e35b1"],
 };
 
 /** 아이콘 아래 짧은 이름(긴 정식 이름은 툴팁·자세히 패널에) */
@@ -34,6 +40,7 @@ const SHORT: Record<string, string> = {
   ansa: "ANSA · META", altair: "HyperWorks", simcenter3d: "Simcenter 3D", ansys: "Ansys Mechanical", msc_nastran: "MSC Nastran",
   lsdyna: "LS-DYNA", fluent: "Fluent", flotherm: "Flotherm", comsol: "COMSOL", moldflow: "Moldflow", amesim: "Amesim",
   ncode: "nCode DesignLife", creo: "Creo", nx: "NX", catia: "CATIA V5",
+  simlab: "SimLab", celsius: "Celsius", cst: "CST Studio", motionsolve: "MotionSolve", inspire: "Inspire", physicsai: "PhysicsAI",
 };
 export const toolLabel = (id: string, name: string) => SHORT[id] ?? name;
 

@@ -53,7 +53,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `server/app/report.py` | Word·HTML 보고서 |
 | `agent/dds_agent/` | PC Agent. `main.py`(서버 메시지 처리 `handle()`) · `acp_runner.py`(AI CLI) · `executor.py`(케이스 실행) · `workspace.py`(로컬 폴더 규칙·직접 지정 폴더) · `job_runner.py`(로컬/HPC) · `demo_agent.py` · `installer.py`·`updater.py`·`tray.py` |
 | `mcp_servers/` | AI CLI가 쓰는 MCP 툴: `dds_flow`(작업 흐름·결과 게시·보고서) · `dds_cae`(스크립트·툴 실행, `list_tools`) · `dds_study`(DOE·학습·BO·배포) · `dds_live`(실행 중인 CAD/CAE와 Live Link) |
-| `cae_adapters/` | `catalog.py`(지원 툴 23종 단일 목록·자동 탐지) · `tool_commands.py`(실행 명령 키) · `script.py`(케이스 스크립트 실행) · `mock.py`(연습용 솔버) |
+| `cae_adapters/` | `catalog.py`(지원 툴 29종 단일 목록·자동 탐지) · `tool_commands.py`(실행 명령 키) · `script.py`(케이스 스크립트 실행) · `mock.py`(연습용 솔버) |
 | `agent-context/` | AI CLI에게 주는 작업 규칙(`INSTRUCTIONS.md`)과 툴별 스킬(`skills/<툴>/SKILL.md`·`scripts/`). PC Agent가 프로젝트 폴더로 동기화한다 |
 | `frontend/src/` | React+TS. `pages/`(첫 화면·작업 공간·툴·Simulator·설정·관리) · `chat/`(대화·입력창) · `canvas/`(오른쪽 패널 탭) · `components/` · `modern.css`(최종 디자인 층) |
 | `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없으면 자동 빌드) |

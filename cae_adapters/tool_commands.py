@@ -60,6 +60,18 @@ DEFAULT_TOOL_COMMANDS: dict[str, list[str]] = {
     "creo_python": ["{python}", "{script}", "{args}"],  # Creoson(JSON) 또는 Creo Toolkit 래퍼
     # 광학
     "lighttools_com": ["{python}", "{script}", "{args}"],  # LightTools COM API(LTAPI4, pywin32)
+    # Altair 확장
+    "simlab": ["{simlab}", "-auto", "{script}"],  # SimLab 배치(파이썬 저널) TODO(사내검증): 인자
+    "motionsolve": ["{motionsolve}", "{args}"],  # motionsolve.bat model.xml
+    "motionsolve_python": ["{python}", "{script}", "{args}"],  # XML 파라미터 갱신 + 솔버 실행 + 결과 파싱
+    "inspire_script": ["{altair_inspire}", "-script", "{script}"],  # Inspire 파이썬 스크립트 실행 TODO(사내검증): 인자
+    "physicsai_export": ["{python}", "{script}", "{args}"],  # DDS 케이스 → PhysicsAI 데이터셋(VTK)
+    "physicsai_hw": ["{altair_hw}", "-b", "-f", "{script}"],  # HyperWorks 파이썬으로 PhysicsAI 학습·예측 TODO(사내검증)
+    # 전자기·전자 열
+    "cst_python": ["{python}", "{script}", "{args}"],  # CST 파이썬 라이브러리(cst.interface · cst.results)
+    "cst_batch": ["{cst}", "-m", "-r", "{args}"],  # 프로젝트 솔버 배치 실행
+    "celsius": ["{celsius}", "{args}"],  # Celsius 배치 TODO(사내검증)
+    "celsius_python": ["{python}", "{script}", "{args}"],  # 템플릿 렌더 + 배치 실행 + 결과 CSV 파싱
     "python": ["{python}", "{script}", "{args}"],
 }
 
@@ -93,6 +105,11 @@ DEFAULT_TOOL_PATHS: dict[str, str] = {
     "catia": "CNEXT",
     "creo": "parametric",
     "solidworks": "",  # COM 자동화라 명령에는 안 쓰고 설치 확인용(SLDWORKS.exe)
+    "simlab": "",  # 예: C:/Program Files/Altair/2024/SimLab2024/bin/win64/SimLab.bat
+    "motionsolve": "",  # 예: C:/Program Files/Altair/2024/hwsolvers/scripts/motionsolve.bat
+    "altair_inspire": "",  # 예: C:/Program Files/Altair/2024/Inspire2024/Inspire.exe
+    "cst": "",  # 예: C:/Program Files/CST Studio Suite 2024/CST DESIGN ENVIRONMENT.exe
+    "celsius": "",  # Cadence Celsius 배치 실행 파일
     "lighttools": "",  # COM 자동화. 설치 확인과 LightTools를 새로 띄울 때 사용(lt.exe)
 }
 

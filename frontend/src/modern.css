@@ -421,10 +421,10 @@ td.empty-row { padding: 22px 14px !important; text-align: center; }
 
 /* 분야 카드 격자: 23종이 한 화면에 */
 .app-main .page.tools-page { max-width: 1120px; }
-.tool-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 16px; align-items: stretch; }
-.tool-cat { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 12px 8px 6px; }
-.tool-cat h2 { display: flex; align-items: center; gap: 6px; margin: 0 8px 4px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); letter-spacing: 0.02em; }
+.tool-cats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; align-items: stretch; }
+.tool-cat { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 11px 6px 4px; }
+.tool-cat h2 { display: flex; align-items: center; gap: 6px; margin: 0 8px 2px; white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--ink-3); letter-spacing: 0.02em; }
 .tool-cat h2 .cnt { font-weight: 500; color: var(--ink-5); }
-.tool-cat .tool-apps { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
-.tool-cat .tool-app { padding: 10px 2px 8px; gap: 6px; border-radius: 12px; }
-.tool-cat .tool-app-name { font-size: 12px; }
+.tool-cat .tool-apps { grid-template-columns: repeat(auto-fill, 78px); gap: 0; }
+.tool-cat .tool-app { padding: 8px 0 6px; gap: 6px; border-radius: 12px; }
+.tool-cat .tool-app-name { font-size: 11.5px; }
