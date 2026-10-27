@@ -1,4 +1,4 @@
-<title>DDS AI Engineer 경영진 브리핑</title>
+<title>DDS AI Engineer 소개</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -39,6 +39,8 @@
   --prod-door: #DCE6EA;
   --glass: #1F2D36;
   --metal: #8F9EA7;
+  /* 촬영한 앱 화면 위 표시(앱은 밝은 테마로 찍었다 — 두 테마 공통) */
+  --shot-bg: #FAFAFA; --shot-ink: #1F2328; --shot-dim: rgb(15 37 48 / .3);
   /* 해석 결과 색(파랑 → 빨강 = 적음 → 많음): 이 분야에서 익숙한 컨투어 색 */
   --c1: #2F5BD3; --c2: #19A7C9; --c3: #3DBB6A; --c4: #F0C43A; --c5: #E5483B;
   --display: "Do Hyeon", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
@@ -180,92 +182,56 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .gain .now { color: var(--ai); font-weight: 700; }
 .ex-note { position: absolute; right: 60px; bottom: 14px; font-size: 13px; color: var(--muted); }
 
-/* ---------- 3. 데모: 드럼세탁기 (앱 화면) ---------- */
-#s3, #s4 { gap: 18px; }
+/* ---------- 3. 데모: 실제 웹앱 화면 ---------- */
+/* 실제 앱 화면(1440×900으로 촬영)을 870px 창에 담고, 장면마다 카메라처럼 확대·강조한다.
+   화면 위 표시(강조 틀·커서)는 촬영 화면 좌표(CSS px) 그대로 쓴다 */
+#s3 { padding: 30px 44px 26px; gap: 14px; }
 #s3 .sh, #s4 .sh { gap: 4px; }
-#s3 h2, #s4 h2 { font-size: 40px; }
-.win { flex: 1; min-height: 0; border: 1.5px solid var(--line); border-radius: 16px; overflow: hidden; display: grid; grid-template-rows: 38px minmax(0, 1fr); background: var(--surface); box-shadow: 0 10px 30px rgb(0 0 0 / .07); }
-.win-bar { display: flex; align-items: center; gap: 8px; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 14px; color: var(--muted); font-weight: 600; }
-.win-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
-.win-bar span { margin-left: 8px; }
-.win-body { display: grid; grid-template-columns: 380px minmax(0, 1fr); min-height: 0; }
-.chat { border-right: 1px solid var(--line); display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
-.msgs { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
-.msg { max-width: 94%; display: grid; gap: 4px; }
-.msg .who { font-size: 13px; font-weight: 700; }
-.msg.me { align-self: flex-end; }
-.msg.me .who { color: var(--human); text-align: right; }
-.msg.ai .who { color: var(--ai); }
-.msg p { padding: 9px 13px; border-radius: 14px; font-size: 15px; line-height: 1.5; }
-.msg.me p { background: var(--human-soft); border-bottom-right-radius: 4px; min-height: 2.5em; }
-.msg.ai p { background: var(--panel); border-bottom-left-radius: 4px; }
-.approve-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-.approve { font: 700 15px var(--body); background: var(--human); color: var(--surface); border: 0; border-radius: 10px; padding: 8px 16px; cursor: pointer; animation: pulse 1.4s ease-in-out infinite; }
-.approve:focus-visible { outline: 3px solid var(--human); outline-offset: 2px; }
-.approve.done { background: var(--ok-soft); color: var(--ok); animation: none; cursor: default; }
-.approve-row small { font-size: 13px; color: var(--muted); line-height: 1.4; }
-@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 var(--human-soft); } 50% { box-shadow: 0 0 0 7px var(--human-soft); } }
-.input { margin: 0 14px 14px; border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 14px; font-size: 15px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
-.input svg.i { width: 20px; height: 20px; }
-.panel { display: flex; flex-direction: column; gap: 12px; padding: 14px 20px 18px; min-height: 0; min-width: 0; background: var(--panel); }
-.tabs { display: flex; gap: 6px; }
-.tab { font-size: 14px; font-weight: 700; padding: 5px 14px; border-radius: 999px; color: var(--muted); transition: background .2s, color .2s; }
-.tab.on { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1.5px var(--line); }
-.flowg { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
-.flowg:not(.show) { display: none; }
-.flowg li { position: relative; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 9px 10px 10px; display: grid; gap: 1px; font-size: 12.5px; color: var(--muted); line-height: 1.35; transition: border-color .2s, background .2s; animation: rise .4s ease both; animation-delay: calc(var(--i) * .12s); }
-.flowg li b { font-size: 14.5px; color: var(--ink); }
-.flowg li::after { content: ""; position: absolute; left: 100%; top: 50%; width: 18px; height: 2px; background: var(--line); }
-.flowg li:last-child::after { display: none; }
-.flowg .st { width: 12px; height: 12px; border-radius: 50%; background: var(--line); margin-bottom: 4px; position: relative; }
-.flowg li.run { border-color: var(--ai); }
-.flowg li.run .st { background: var(--ai); animation: blink .8s infinite; }
-.flowg li.done { border-color: var(--ok); background: var(--ok-soft); }
-.flowg li.done .st { background: var(--ok); }
-.flowg li.done .st::after { content: ""; position: absolute; left: 4px; top: 1.5px; width: 3px; height: 6px; border: solid var(--surface); border-width: 0 2px 2px 0; transform: rotate(45deg); }
-.zone { flex: 1; min-height: 0; display: grid; }
-.zone > * { min-height: 0; }
-.empty, .wait { display: grid; place-content: center; justify-items: center; gap: 10px; border: 2px dashed var(--line); border-radius: 14px; color: var(--muted); font-size: 16px; font-weight: 600; text-align: center; padding: 20px; }
-.empty svg.i { width: 34px; height: 34px; }
-.wait { border-color: var(--human); color: var(--human); }
-.wait svg.i { width: 34px; height: 34px; }
-.card { background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 16px; min-width: 0; }
-.card h4 { margin: 0; font-size: 15px; font-weight: 700; }
-.runzone { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 14px; }
-.count-big { font-family: var(--display); font-size: 40px; line-height: 1.1; color: var(--ai); font-variant-numeric: tabular-nums; margin-top: 4px; }
-.count-big small { font-size: 22px; color: var(--muted); }
-.cases { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; margin: 10px 0 8px; }
-.cases i { aspect-ratio: 1; border-radius: 4px; border: 1.5px solid var(--line); background: var(--surface); }
-.cases i.run { border-color: var(--ai); animation: blink .6s infinite; }
-.cases i.done { background: var(--ai); border-color: var(--ai); }
-#d1-plot { display: block; width: 100%; height: auto; margin-top: 4px; }
-#d1-heat { opacity: 0; }
+#s3 h2 { font-size: 36px; }
+.demo { flex: 1; min-height: 0; display: grid; grid-template-columns: 870px minmax(0, 1fr); gap: 22px; align-items: start; }
+.screen { margin: 0; border: 1.5px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); box-shadow: 0 12px 34px rgb(0 0 0 / .1); }
+.sbar { height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); font-weight: 600; }
+.sbar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.sbar .ttl { margin-left: 6px; }
+.sbar .chip { margin-left: auto; font-size: 12px; padding: 1px 10px; }
+.sview { position: relative; width: 870px; height: 543.75px; overflow: hidden; background: var(--shot-bg); }
+.cam { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform-origin: 0 0; transform: scale(.604167); transition: transform 1s cubic-bezier(.45, 0, .2, 1); }
+.cam .fr { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; max-width: none; opacity: 0; transition: opacity .45s ease; }
+.cam .fr.top { z-index: 1; }
+.cam .fr.on { opacity: 1; }
+.typ { position: absolute; left: 492px; top: 387.69px; width: 720px; height: 140.69px; z-index: 2; }
+.typ img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
+#d1-ft { clip-path: inset(74px 0 0 0); }
+.typ .caret { position: absolute; width: 2px; height: 19px; background: var(--shot-ink); animation: blink 1s steps(1) infinite; }
+.spot { position: absolute; z-index: 3; left: 0; top: 0; width: 0; height: 0; border-radius: 16px; border: 5px solid var(--ai); box-shadow: 0 0 0 3000px var(--shot-dim); opacity: 0; pointer-events: none; transition: left .7s cubic-bezier(.45, 0, .2, 1), top .7s cubic-bezier(.45, 0, .2, 1), width .7s cubic-bezier(.45, 0, .2, 1), height .7s cubic-bezier(.45, 0, .2, 1), opacity .4s ease, border-color .3s; }
+.spot.on { opacity: 1; }
+.spot.h { border-color: var(--human); }
+.cur { position: absolute; z-index: 4; left: 0; top: 0; width: 30px; height: 30px; opacity: 0; pointer-events: none; transition: transform .8s cubic-bezier(.45, 0, .2, 1), opacity .3s; }
+.cur.on { opacity: 1; }
+.cur svg { display: block; width: 30px; height: 30px; overflow: visible; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .3)); }
+.cur path { fill: var(--shot-bg); stroke: var(--shot-ink); stroke-width: 1.6; stroke-linejoin: round; }
+.cur::after { content: ""; position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; border-radius: 50%; border: 4px solid var(--human); opacity: 0; }
+.cur.click::after { animation: ripple .55s ease-out; }
+@keyframes ripple { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.7); opacity: 0; } }
+.side { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.steps li { border: 1.5px solid var(--line); border-radius: 14px; padding: 11px 14px 12px; display: grid; gap: 5px; opacity: .45; transition: opacity .35s, border-color .35s, background .35s; }
+.steps li.done { opacity: .85; }
+.steps li.on { opacity: 1; border-color: var(--ai); background: var(--ai-soft); }
+.steps li.on.h { border-color: var(--human); background: var(--human-soft); }
+.steps .hd { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.steps .hd .chip { font-size: 12.5px; padding: 2px 9px; }
+.steps b { font-size: 18px; line-height: 1.3; margin-left: 2px; }
+.steps p { font-size: 14.5px; color: var(--muted); line-height: 1.45; }
+.steps .n { color: var(--ink); font-weight: 700; }
+.shot-note { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+/* 예측 지도 축(4장) */
 .ax { stroke: var(--line); stroke-width: 1.5; fill: none; }
 .axl { fill: var(--muted); font: 600 13px var(--body); }
-.pt { stroke: var(--surface); stroke-width: 1.5; opacity: 0; transition: opacity .25s; }
-.pt.on { opacity: 1; }
-.nowmark circle { fill: none; stroke: var(--human); stroke-width: 3; }
-.nowmark text, #d1-star text { font: 700 13px var(--body); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
-.nowmark text { fill: var(--human); }
-#d1-star { opacity: 0; transition: opacity .4s; }
-#d1-star.on { opacity: 1; }
-#d1-star path { fill: var(--c4); stroke: var(--ink); stroke-width: 1.5; }
-#d1-star text { fill: var(--ink); }
-.result { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; }
-.ba { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; height: 100%; align-content: center; }
-.ba figure { margin: 0; display: grid; gap: 6px; justify-items: center; text-align: center; }
-.ba svg.prod { width: 110px; height: 128px; margin-bottom: 6px; }
-.ba figcaption { font-size: 15px; font-weight: 700; color: var(--muted); }
-.ba .val { font-family: var(--display); font-size: 30px; line-height: 1.1; }
-.ba .before .val { color: var(--human); }
-.ba .after .val { color: var(--ai); }
-.sum { display: grid; align-content: start; gap: 10px; }
-.big-claim { font-family: var(--display); font-size: 38px; line-height: 1.1; color: var(--ai); }
-.recs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 15px; }
-.recs li { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-block: 4px; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ---------- 4. 데모: 드럼세탁기 3D Simulator ---------- */
+#s4 { gap: 18px; }
+#s4 h2 { font-size: 40px; }
 .ph-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 370px minmax(0, 1fr); gap: 20px; }
 .drop { background: var(--panel); border-radius: 18px; padding: 10px 16px 14px; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 4px; min-height: 0; }
 #wm-scene { width: 100%; height: 100%; min-height: 0; display: block; }
@@ -419,6 +385,23 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .closing .a { color: var(--night-ai); }
 .fine { font-size: 14px; color: var(--night-muted); }
 
+/* ---------- 8. 참고: 지원 툴 ---------- */
+#s8 { padding: 36px 56px 28px; gap: 14px; }
+#s8 .sh { gap: 6px; }
+#s8 h2 { font-size: 38px; }
+#s8 .sub { font-size: 17px; }
+.tools { flex: 1; min-height: 0; columns: 4; column-gap: 16px; }
+.tg { break-inside: avoid; margin: 0 0 12px; background: var(--panel); border-radius: 14px; padding: 10px 16px 12px; }
+.tg h4 { margin: 0 0 6px; display: flex; justify-content: space-between; font-size: 14.5px; font-weight: 700; letter-spacing: .04em; color: var(--ai); }
+.tg h4 span { color: var(--muted); font-weight: 600; }
+.tg ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.tg li { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; line-height: 1.3; }
+.tg li b { font-size: 16px; font-weight: 600; }
+.tg li i { font-style: normal; font-size: 13px; color: var(--muted); }
+.tg li em, .tools-note em { font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--ai); background: var(--ai-soft); border-radius: 999px; padding: 0 8px; white-space: nowrap; }
+.tools-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.tools-note .sep { color: var(--line); }
+
 /* ---------- 아래 조작 막대 ---------- */
 .bar-nav { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding-block: 10px 12px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: 600 14px var(--body); cursor: pointer; white-space: nowrap; }
@@ -493,7 +476,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
 <!-- 1. 표지 -->
 <section class="slide night" id="s1" data-title="표지" data-dur="9000" aria-label="1. 표지">
   <div>
-    <p class="eyebrow">DDS AI Engineer · 경영진 보고 · 2026년 10월</p>
+    <p class="eyebrow">DDS AI Engineer · 2026년 10월</p>
     <h1>말로 요청하면,<br><em>AI 어시스턴트</em>가 해석을 대신 합니다</h1>
     <p class="sub">기존 DDS에서 메뉴로 하나하나 설정하던 해석 자동화·DOE·학습·Simulator 배포를 대화로</p>
   </div>
@@ -555,76 +538,32 @@ svg.prod { display: block; overflow: visible; flex: none; }
   <p class="ex-note" data-step="3">숫자는 이해를 돕기 위한 예시입니다</p>
 </section>
 
-<!-- 3. 데모 ①: 드럼세탁기 -->
-<section class="slide" id="s3" data-title="데모: 해석 자동화·최적화" data-steps="4" data-labels="요청 입력|AI 계획 보기|승인하고 해석|결과 보기" data-dur="3000,4500,4500,8500,8000" aria-label="3. 데모 드럼세탁기 탈수 진동 최적화">
+<!-- 3. 데모 ①: 실제 웹앱 화면 -->
+<section class="slide" id="s3" data-title="데모: 해석 자동화·최적화" data-steps="4" data-labels="요청 입력|AI 계획 보기|승인하고 해석|결과 보기" data-dur="3500,5000,7000,9500,7500" aria-label="3. 데모 드럼세탁기 탈수 진동 최적화, 실제 웹앱 화면">
   <header class="sh">
-    <p class="eyebrow">데모 ① 드럼세탁기 탈수 진동 · 해석 자동화 → DOE → 최적화</p>
+    <p class="eyebrow">데모 ① 드럼세탁기 탈수 진동 · 실제 DDS AI Engineer 화면</p>
     <h2>요청 한 줄이 계획 → 해석 → 결과로 이어집니다</h2>
   </header>
-  <div class="win">
-    <div class="win-bar"><i></i><i></i><i></i><span>DDS AI Engineer · 드럼세탁기 탈수 진동 저감</span></div>
-    <div class="win-body">
-      <aside class="chat">
-        <div class="msgs">
-          <div class="msg me" data-step="1"><span class="who">엔지니어</span><p id="d1-typed"></p></div>
-          <div class="msg ai" data-step="2"><span class="who">AI 어시스턴트</span><p>이렇게 진행할게요. 오른쪽 계획(Flow)을 확인하고 승인해 주세요.</p>
-            <div class="approve-row"><button type="button" class="approve" id="d1-approve">계획 승인</button><small>승인해야<br>해석이 시작됩니다</small></div>
-          </div>
-          <div class="msg ai" data-step="3"><p>DOE 60케이스를 PC에서 해석하고 있어요. 끝나면 예측 모델(Surrogate)로 최적점을 찾을게요.</p></div>
-          <div class="msg ai" data-step="4"><p>최적점을 찾았어요. 진동이 38% 줄어듭니다. 보고서와 3D Simulator도 만들어 두었어요.</p></div>
-        </div>
-        <div class="input"><span>무엇을 도와드릴까요?</span><svg class="i"><use href="#i-send"/></svg></div>
-      </aside>
-      <div class="panel">
-        <div class="tabs"><span class="tab on" id="d1-tab1">작업 흐름</span><span class="tab" id="d1-tab2">결과</span></div>
-        <ol class="flowg" id="d1-flow">
-          <li style="--i:0"><i class="st"></i><b>모델 불러오기</b>RecurDyn 세탁기 모델</li>
-          <li style="--i:1"><i class="st"></i><b>설계 변수 정의</b>스프링·댐퍼 등 4개</li>
-          <li style="--i:2"><i class="st"></i><b>DOE 해석</b>60케이스 자동 실행</li>
-          <li style="--i:3"><i class="st"></i><b>예측 모델 학습</b>해석 결과로 학습</li>
-          <li style="--i:4"><i class="st"></i><b>최적화</b>진동 최소</li>
-          <li style="--i:5"><i class="st"></i><b>배포·보고서</b>Simulator·Word</li>
-        </ol>
-        <div class="zone">
-          <div class="empty" id="d1-empty"><svg class="i"><use href="#i-chat"/></svg><span>요청하면 AI가 세운 계획(Flow)이 여기에 그려집니다</span></div>
-          <div class="wait" id="d1-wait" hidden><svg class="i"><use href="#i-user"/></svg><span>엔지니어가 계획을 확인하고 <b>승인</b>하면<br>해석을 시작합니다</span></div>
-          <div class="runzone" id="d1-run" hidden>
-            <div class="card">
-              <h4>해석 진행</h4>
-              <div class="count-big"><span id="d1-n">0</span><small> / 60</small></div>
-              <div class="cases" id="d1-cases"></div>
-              <p class="meta" id="d1-say">준비 중</p>
-            </div>
-            <div class="card">
-              <h4>케이스별 진동 변위</h4>
-              <svg id="d1-plot" viewBox="0 0 420 230" role="img" aria-label="해석 케이스마다 진동 변위를 색으로 찍은 그림">
-                <g id="d1-heat"></g>
-                <path class="ax" d="M46 24V196H410"/>
-                <text class="axl" x="228" y="222" text-anchor="middle">스프링 강성 →</text>
-                <text class="axl" x="40" y="14">↑ 댐퍼 감쇠력</text>
-                <g id="d1-pts"></g>
-                <g class="nowmark"><circle cx="169.8" cy="137.5" r="11"/><text x="169.8" y="164" text-anchor="middle">현재 설계</text></g>
-                <g id="d1-star"><path id="d1-star-p" d=""/><text x="286" y="54" text-anchor="middle">최적점 (진동 최소)</text></g>
-              </svg>
-              <p class="meta">점 = 해석 케이스 · 배경 = 예측 모델 · 파랑 작음 → 빨강 큼</p>
-            </div>
-          </div>
-          <div class="result" id="d1-res" hidden>
-            <div class="card">
-              <div class="ba">
-                <figure class="before"><svg class="prod shake" style="--amp:7px" role="img" aria-label="현재 설계: 진동이 큼"><use href="#p-washer"/></svg><figcaption>현재 설계</figcaption><span class="val">진동 4.2 mm</span></figure>
-                <figure class="after"><svg class="prod shake" style="--amp:2px" role="img" aria-label="AI 추천 설계: 진동이 작음"><use href="#p-washer"/></svg><figcaption>AI 추천 설계</figcaption><span class="val">진동 2.6 mm</span></figure>
-              </div>
-            </div>
-            <div class="card sum">
-              <span class="big-claim">진동 38% 감소</span>
-              <ul class="recs"><li>스프링 강성 <b>+12%</b></li><li>댐퍼 감쇠력 <b>+25%</b></li><li>부품 크기·무게 <b>그대로</b></li></ul>
-              <div class="chips"><span class="chip ok">보고서 완성</span><span class="chip ai">3D Simulator 배포</span></div>
-              <div><span class="chip ex">예시 숫자</span></div>
-            </div>
-          </div>
+  <div class="demo">
+    <figure class="screen">
+      <div class="sbar" aria-hidden="true"><i></i><i></i><i></i><span class="ttl">DDS AI Engineer · 사내 웹앱</span><span class="chip ok">실제 화면</span></div>
+      <div class="sview" id="d1-view" role="img" aria-label="실제 웹앱 첫 화면">
+        <div class="cam" id="d1-cam">
+          <img class="fr" alt=""><img class="fr" alt="">
+          <div class="typ" id="d1-typ" hidden><img id="d1-ft" alt=""><img id="d1-l1" alt=""><img id="d1-l2" alt=""><i class="caret" id="d1-caret"></i></div>
+          <div class="spot" id="d1-spot"></div>
+          <div class="cur" id="d1-cur"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2.5l15.5 9-6.8 1.7-3.6 6.3z"/></svg></div>
         </div>
       </div>
+    </figure>
+    <div class="side">
+      <ol class="steps" id="d1-steps">
+        <li class="h"><span class="hd"><span class="chip human">엔지니어</span><b>말로 요청</b></span><p>“탈수 진동이 줄도록 스프링·댐퍼를 최적화해 줘 … 보고서까지 만들어 줘.”</p></li>
+        <li><span class="hd"><span class="chip ai">AI</span><b>계획(Flow) 제안</b></span><p>모델 → DOE 60케이스 → 예측 모델 → 최적화 → Simulator → 보고서, 7단계를 대화와 캔버스에 올립니다</p></li>
+        <li class="h"><span class="hd"><span class="chip human">엔지니어</span><span class="chip ai">AI</span><b>승인하면 해석</b></span><p>계획 ‘승인’, PC 실행 ‘허용’ 두 번이면 해석 68건이 돌고, 결과가 나오는 대로 화면에 올라옵니다</p></li>
+        <li><span class="hd"><span class="chip ai">AI</span><b>결과·보고서</b></span><p>진동 <span class="n">4.2 → 2.6 mm (38% 감소)</span><br>스프링 +12%, 댐퍼 +26% · Word·HTML 보고서 · Simulator 배포</p></li>
+      </ol>
+      <p class="shot-note">실제 웹앱을 데모 모드로 촬영했습니다. 해석은 RecurDyn 대신 연습용 계산식으로 돌렸고, 숫자는 예시입니다.</p>
     </div>
   </div>
 </section>
@@ -689,7 +628,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       <div class="sim" data-step="1">
         <div class="sim-head">
           <div class="ttl"><span class="chip ai">DDS AI Engineer</span><b>3D Simulator · 탈수 진동 예측</b></div>
-          <span class="meta">데모 ①의 해석 60케이스로 학습 · 정확도 R² 0.97</span>
+          <span class="meta">데모 ①의 해석 68건으로 학습한 예측 모델</span>
         </div>
         <div class="sim-body">
           <div class="corner">
@@ -710,7 +649,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
           <div class="ctl">
             <div class="rng"><label for="wm-rpm">탈수 회전수 <output id="wm-rpm-out" for="wm-rpm">1,200 rpm</output></label><input type="range" id="wm-rpm" min="1000" max="1400" step="10" value="1200"></div>
             <div class="rng"><label for="wm-k">스프링 강성 <output id="wm-k-out" for="wm-k">+12%</output></label><input type="range" id="wm-k" min="-10" max="30" step="1" value="12"><span class="rec" id="wm-k-rec">▲ AI 추천</span></div>
-            <div class="rng"><label for="wm-c">댐퍼 감쇠력 <output id="wm-c-out" for="wm-c">+25%</output></label><input type="range" id="wm-c" min="-10" max="50" step="1" value="25"><span class="rec" id="wm-c-rec">▲ AI 추천</span></div>
+            <div class="rng"><label for="wm-c">댐퍼 감쇠력 <output id="wm-c-out" for="wm-c">+26%</output></label><input type="range" id="wm-c" min="-10" max="50" step="1" value="26"><span class="rec" id="wm-c-rec">▲ AI 추천</span></div>
             <div class="readout"><span>예측 진동 변위</span><span><b class="num ok" id="wm-a">2.6</b> <span class="unit">mm ± 0.1</span></span></div>
             <div class="gauge" id="wm-gauge"><i class="g-fill" id="wm-gfill"></i><i class="g-line"></i><span class="g-lbl">기준 3.0 mm</span></div>
             <div class="verdict"><span class="chip ok" id="wm-v">기준 통과</span><span class="note" id="wm-note"></span></div>
@@ -746,8 +685,8 @@ svg.prod { display: block; overflow: visible; flex: none; }
       <div class="shelf">
         <article class="item"><span class="ico"><svg class="i"><use href="#i-chat"/></svg></span><b>대화·계획 (Flow)</b><span>누가 무엇을 왜 요청했는지</span></article>
         <article class="item"><span class="ico"><svg class="i"><use href="#i-code"/></svg></span><b>해석 스크립트</b><span>RecurDyn 자동화</span></article>
-        <article class="item"><span class="ico"><svg class="i"><use href="#i-grid"/></svg></span><b>해석 결과 60케이스</b><span>변수·결과값·이미지</span></article>
-        <article class="item"><span class="ico"><svg class="i"><use href="#i-chart"/></svg></span><b>예측 모델</b><span>정확도 R² 0.97</span></article>
+        <article class="item"><span class="ico"><svg class="i"><use href="#i-grid"/></svg></span><b>해석 결과 68건</b><span>DOE 60 + 최적화 8</span></article>
+        <article class="item"><span class="ico"><svg class="i"><use href="#i-chart"/></svg></span><b>예측 모델</b><span>해석 68건으로 학습</span></article>
         <article class="item"><span class="ico"><svg class="i"><use href="#i-cube"/></svg></span><b>3D Simulator</b><span>팀원 누구나 바로 예측</span></article>
         <article class="item"><span class="ico"><svg class="i"><use href="#i-doc"/></svg></span><b>보고서</b><span>Word·HTML</span></article>
       </div>
@@ -806,12 +745,38 @@ svg.prod { display: block; overflow: visible; flex: none; }
   <p class="fine">이 자료의 숫자는 이해를 돕기 위한 예시입니다. 실제 툴 연동과 효과는 시범 운영에서 검증합니다.</p>
 </section>
 
+<!-- 8. 참고: 지원 CAD·CAE 툴 -->
+<section class="slide" id="s8" data-title="참고: 지원 툴" data-dur="12000" aria-label="8. 참고, 지원하는 CAD·CAE 툴 29종">
+  <header class="sh">
+    <p class="eyebrow">참고 · 지원하는 CAD·CAE 툴</p>
+    <h2>AI 어시스턴트가 직접 다루는 툴 29종</h2>
+    <p class="sub">툴마다 자동화 스킬(스크립트 규칙·예제)을 갖췄습니다. 파라미터·해석 조건 변경, 배치 실행, 결과 추출, 이미지 저장을 AI가 합니다.</p>
+  </header>
+  <div class="tools">
+    <section class="tg"><h4>CAD<span>4</span></h4><ul><li><b>Siemens NX</b><i>Siemens</i><em>Live Link</em></li><li><b>CATIA V5</b><i>Dassault Systèmes</i></li><li><b>SOLIDWORKS</b><i>Dassault Systèmes</i></li><li><b>Creo Parametric</b><i>PTC</i></li></ul></section>
+    <section class="tg"><h4>전처리·후처리<span>3</span></h4><ul><li><b>ANSA · META</b><i>BETA CAE Systems</i></li><li><b>HyperMesh · OptiStruct · HyperView</b><i>Altair</i><em>Live Link</em></li><li><b>Altair SimLab</b><i>Altair</i></li></ul></section>
+    <section class="tg"><h4>구조 해석<span>4</span></h4><ul><li><b>Simcenter 3D · Nastran</b><i>Siemens</i><em>Live Link</em></li><li><b>Abaqus</b><i>Dassault Systèmes SIMULIA</i><em>Live Link</em></li><li><b>Ansys Mechanical · MAPDL · Workbench</b><i>Ansys</i></li><li><b>MSC Nastran</b><i>Hexagon</i></li></ul></section>
+    <section class="tg"><h4>충돌·비선형<span>1</span></h4><ul><li><b>LS-DYNA · LS-PrePost</b><i>Ansys(LST)</i></li></ul></section>
+    <section class="tg"><h4>유동·열<span>5</span></h4><ul><li><b>STAR-CCM+</b><i>Siemens</i></li><li><b>Ansys Fluent</b><i>Ansys</i></li><li><b>OpenFOAM</b><i>오픈소스(WSL)</i></li><li><b>Simcenter Flotherm</b><i>Siemens</i></li><li><b>Cadence Celsius</b><i>Cadence</i></li></ul></section>
+    <section class="tg"><h4>다중물리<span>1</span></h4><ul><li><b>COMSOL Multiphysics</b><i>COMSOL</i></li></ul></section>
+    <section class="tg"><h4>전자기<span>1</span></h4><ul><li><b>CST Studio Suite</b><i>Dassault Systèmes</i></li></ul></section>
+    <section class="tg"><h4>다물체 동역학<span>3</span></h4><ul><li><b>Adams</b><i>Hexagon(MSC)</i></li><li><b>RecurDyn</b><i>FunctionBay</i></li><li><b>Altair MotionSolve</b><i>Altair</i></li></ul></section>
+    <section class="tg"><h4>사출 성형<span>2</span></h4><ul><li><b>Moldflow Insight · Synergy</b><i>Autodesk</i></li><li><b>Moldex3D</b><i>CoreTech System</i></li></ul></section>
+    <section class="tg"><h4>1D 시스템<span>1</span></h4><ul><li><b>Simcenter Amesim</b><i>Siemens</i></li></ul></section>
+    <section class="tg"><h4>피로·내구<span>1</span></h4><ul><li><b>nCode DesignLife</b><i>HBK</i></li></ul></section>
+    <section class="tg"><h4>광학<span>1</span></h4><ul><li><b>LightTools</b><i>Synopsys</i><em>Live Link</em></li></ul></section>
+    <section class="tg"><h4>설계 최적화<span>1</span></h4><ul><li><b>Altair Inspire</b><i>Altair</i></li></ul></section>
+    <section class="tg"><h4>AI 예측<span>1</span></h4><ul><li><b>Altair PhysicsAI</b><i>Altair</i></li></ul></section>
+  </div>
+  <p class="tools-note"><em>Live Link</em><span>실행 중인 툴 화면에 붙어 엔지니어와 함께 모델링합니다.</span><span class="sep">·</span><span>실제 라이선스 환경 연동은 시범 운영에서 검증합니다.</span></p>
+</section>
+
 </div>
 </main>
 <nav class="bar-nav" aria-label="슬라이드 넘기기">
   <button type="button" class="btn icon" id="prev" aria-label="이전"><svg class="i"><use href="#i-left"/></svg></button>
   <div class="dots" id="dots"></div>
-  <span class="count" id="count" aria-live="polite">1 / 7</span>
+  <span class="count" id="count" aria-live="polite">1 / 8</span>
   <button type="button" class="btn primary" id="next"><span id="next-lbl">다음 장</span><svg class="i"><use href="#i-right"/></svg></button>
   <button type="button" class="btn" id="play" aria-pressed="false"><svg class="i"><use id="play-ico" href="#i-play"/></svg><span class="lbl-sm" id="play-lbl">자동 재생</span></button>
   <button type="button" class="btn" id="full"><svg class="i"><use href="#i-expand"/></svg><span class="lbl-sm">전체 화면</span></button>
@@ -819,6 +784,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
 </nav>
 </div>
 
+<script>/*@SHOTS@*/</script>
 <script>
 // 슬라이드 넘기기: → 한 번 = 장면 하나(PPT 애니메이션처럼), 장면을 다 보면 다음 장
 (() => {
@@ -941,77 +907,116 @@ svg.prod { display: block; overflow: visible; flex: none; }
     };
   })();
 
-  // ---------- 3. 데모: 드럼세탁기 ----------
+  // ---------- 3. 데모: 실제 웹앱 화면 ----------
+  // 좌표는 모두 촬영한 앱 화면(1440×900 CSS px) 기준. 사진은 SHOTS(파일 앞쪽 script)에 들어 있다
   (() => {
-    const TEXT = "탈수 진동이 줄도록 스프링·댐퍼를 최적화해 줘. 1,000~1,400 rpm 조건, 현재 부품 범위 안에서.";
-    const typed = $("#d1-typed"), flow = $("#d1-flow"), nodes = $$("li", flow);
-    const empty = $("#d1-empty"), wait = $("#d1-wait"), run = $("#d1-run"), res = $("#d1-res");
-    const approve = $("#d1-approve"), tab1 = $("#d1-tab1"), tab2 = $("#d1-tab2");
-    const cells = Array.from({ length: 60 }, () => $("#d1-cases").appendChild(document.createElement("i")));
-    // 진동 지도(예시): 스프링·댐퍼가 적당히 셀 때 가장 작다
-    const X0 = 46, X1 = 410, Y0 = 24, Y1 = 196;
-    const px = (x) => X0 + x * (X1 - X0), py = (y) => Y1 - y * (Y1 - Y0);
-    const vib = (x, y) => 2.5 + 4 * (2 * (x - .66) ** 2 + 1.6 * (y - .72) ** 2);
-    // 라틴 하이퍼큐브 60점(고정 시드) — 실제 DOE와 같은 고르게 퍼진 배치
-    let seed = 20261027;
-    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    const perm = (n) => { const a = [...Array(n).keys()]; for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-    const ix = perm(60), iy = perm(60);
-    const pts = ix.map((v, i) => [(v + rnd()) / 60, (iy[i] + rnd()) / 60]);
-    const heat = $("#d1-heat"), gp = $("#d1-pts");
-    const NX = 28, NY = 14;
-    for (let i = 0; i < NX; i++) for (let j = 0; j < NY; j++) {
-      mk("rect", { x: X0 + (i * (X1 - X0)) / NX, y: Y0 + ((NY - 1 - j) * (Y1 - Y0)) / NY, width: (X1 - X0) / NX + .6, height: (Y1 - Y0) / NY + .6, fill: cmap(vib((i + .5) / NX, (j + .5) / NY), 2.5, 6.5) }, heat);
-    }
-    const dots = pts.map(([x, y]) => mk("circle", { cx: px(x), cy: py(y), r: 5.5, fill: cmap(vib(x, y), 2.5, 6.5), class: "pt" }, gp));
-    // 별 모양(최적 값)
-    const sx = px(.66), sy = py(.72);
-    $("#d1-star-p").setAttribute("d", Array.from({ length: 10 }, (_, i) => {
-      const a = -Math.PI / 2 + (i * Math.PI) / 5, r = i % 2 ? 5.5 : 13;
-      return `${i ? "L" : "M"}${(sx + r * Math.cos(a)).toFixed(1)} ${(sy + r * Math.sin(a)).toFixed(1)}`;
-    }).join("") + "Z");
-    const star = $("#d1-star");
+    const SW = 870, SH = 543.75, S0 = SW / 1440;
+    const cam = $("#d1-cam"), view = $("#d1-view"), layers = $$(".fr", cam);
+    const typ = $("#d1-typ"), ft = $("#d1-ft"), l1 = $("#d1-l1"), l2 = $("#d1-l2"), caret = $("#d1-caret");
+    const spot = $("#d1-spot"), cur = $("#d1-cur"), items = $$("#d1-steps li");
+    [ft, l1, l2].forEach((im) => (im.src = SHOTS.typed));
+    const VIEW = { full: [720, 450, 1], composer: [852, 380, 1.65], plan: [572, 455, 1.5], perm: [572, 640, 1.5], sum: [572, 600, 1.55] };
+    const BOX = {
+      send: [1179, 497], plan: [289, 203, 566, 501], canvas: [896, 167, 526, 679], approve: [733, 661, 106, 30],
+      perm: [289, 533, 566, 214], allow: [796, 704, 43, 30], sum: [292, 563, 532, 50],
+    };
+    const LABEL = ["실제 웹앱 첫 화면", "요청을 입력하는 화면", "AI가 세운 계획과 승인 버튼", "해석이 진행되는 화면", "결과 요약과 완료된 작업 흐름"];
 
-    function clearRun() {
-      nodes.forEach((n) => (n.className = ""));
-      cells.forEach((c) => (c.className = ""));
-      dots.forEach((d) => d.classList.remove("on"));
-      $("#d1-n").textContent = "0";
-      heat.style.opacity = 0;
-      star.classList.remove("on");
-      $("#d1-say").textContent = "준비 중";
+    function camTo([cx, cy, z], ms = 1000) {
+      const s = S0 * z;
+      const tx = clamp(SW / 2 - cx * s, SW - 1440 * s, 0), ty = clamp(SH / 2 - cy * s, SH - 900 * s, 0);
+      cam.style.transitionDuration = `${reduced ? 0 : ms}ms`;
+      cam.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(4)})`;
     }
-    function runAt(p) {
-      const t = p * 7;
-      const st = (a, b) => (t < a ? "" : t < b ? "run" : "done");
-      [st(0, .5), st(.5, 1), st(1, 5), st(5, 5.8), st(5.8, 6.6), ""].forEach((s, i) => (nodes[i].className = s));
-      const n = clamp(Math.floor(((t - 1) / 4) * 60), 0, 60);
-      cells.forEach((c, i) => (c.className = i < n ? "done" : t >= 1 && t < 5 && i < n + 4 ? "run" : ""));
-      dots.forEach((d, i) => d.classList.toggle("on", i < n));
-      $("#d1-n").textContent = n;
-      heat.style.opacity = clamp((t - 5) / .8, 0, 1) * .5;
-      star.classList.toggle("on", t >= 6.6);
-      $("#d1-say").textContent = t < 1 ? "준비 중" : t < 5 ? "해석 중 · 동시에 4개" : t < 5.8 ? "예측 모델 학습 중" : t < 6.6 ? "최적점 찾는 중" : "완료 · 별 = 최적점";
+    // 사진 두 장을 번갈아 써서 겹쳐 바꾼다(다음 장은 다 읽은 뒤에 나타난다)
+    let topI = 0, shown = "";
+    function frame(name, instant) {
+      if (shown === name) return;
+      shown = name;
+      const nx = layers[1 - topI], pv = layers[topI];
+      topI = 1 - topI;
+      nx.style.transition = "none";
+      nx.classList.remove("on");
+      nx.classList.add("top");
+      pv.classList.remove("top");
+      nx.src = SHOTS[name];
+      const go = () => {
+        if (shown !== name) return;
+        void nx.offsetWidth;
+        nx.style.transition = instant || reduced ? "none" : "";
+        nx.classList.add("on");
+      };
+      if (nx.decode) nx.decode().then(go, go); else go();
     }
-    function base(k) {
-      typed.textContent = k >= 1 ? TEXT : "";
-      flow.classList.toggle("show", k >= 2);
-      empty.hidden = k >= 2; wait.hidden = k !== 2; run.hidden = k !== 3; res.hidden = k < 4;
-      approve.classList.toggle("done", k >= 3);
-      approve.textContent = k >= 3 ? "승인함" : "계획 승인";
-      approve.disabled = k >= 3;
-      tab1.classList.toggle("on", k < 4); tab2.classList.toggle("on", k >= 4);
-      if (k >= 3) runAt(1); else clearRun();
-      if (k >= 4) nodes[5].className = "done";
+    function spotOn(r, human) {
+      if (!r) { spot.classList.remove("on"); return; }
+      const p = 8;
+      Object.assign(spot.style, { left: `${r[0] - p}px`, top: `${r[1] - p}px`, width: `${r[2] + 2 * p}px`, height: `${r[3] + 2 * p}px` });
+      spot.classList.toggle("h", !!human);
+      spot.classList.add("on");
+    }
+    // 커서 끝이 버튼 오른쪽 아래에 오게(버튼 글자를 가리지 않게)
+    function curTo(r, show = true) {
+      const x = r.length > 2 ? r[0] + r[2] * .78 : r[0] + 6, y = r.length > 2 ? r[1] + r[3] * .7 : r[1] + 8;
+      cur.style.transform = `translate(${x - 5}px, ${y - 3}px)`;
+      cur.classList.toggle("on", show);
+    }
+    function click() { cur.classList.remove("click"); void cur.offsetWidth; cur.classList.add("click"); }
+    // 요청 입력: 입력창 안 두 줄을 왼쪽부터 드러낸다(입력창 기준 좌표)
+    const W = 720, H = 140.69, LN = [{ x: 21, y: 22, w: 678.9 }, { x: 21, y: 47.6, w: 35.7 }], LH = 19;
+    function typeAt(p) {
+      const w = p * (LN[0].w + LN[1].w), ws = [Math.min(w, LN[0].w), Math.max(0, w - LN[0].w)];
+      [l1, l2].forEach((im, i) => {
+        const L = LN[i];
+        im.style.clipPath = `inset(${L.y - 4}px ${(W - L.x - ws[i]).toFixed(1)}px ${(H - L.y - LH - 4).toFixed(1)}px ${L.x - 3}px)`;
+      });
+      ft.style.visibility = p > 0 ? "visible" : "hidden";
+      const i = w > LN[0].w ? 1 : 0;
+      caret.style.left = `${(LN[i].x + ws[i]).toFixed(1)}px`;
+      caret.style.top = `${LN[i].y}px`;
+      caret.hidden = p >= 1;
+    }
+    // 장면마다 끝난 모습(바로 넘어오거나 뒤로 갈 때)
+    function settle(k) {
+      typ.hidden = k !== 1;
+      if (k === 1) typeAt(1);
+      if (k === 0) { frame("home"); camTo(VIEW.full); spotOn(null); cur.classList.remove("on"); }
+      if (k === 1) { frame("home"); camTo(VIEW.composer); spotOn(null); curTo(BOX.send); }
+      if (k === 2) { frame("review"); camTo(VIEW.plan); spotOn(BOX.approve, true); curTo(BOX.approve); }
+      if (k === 3) { frame("run5"); camTo(VIEW.full); spotOn(null); cur.classList.remove("on"); }
+      if (k === 4) { frame("done"); camTo(VIEW.sum); spotOn(BOX.sum); cur.classList.remove("on"); }
     }
     hooks.s3 = (k, from) => {
-      base(k);
-      if (from !== k - 1) return;
-      if (k === 1) { typed.textContent = ""; tween(2400, (p) => (typed.textContent = TEXT.slice(0, Math.round(p * TEXT.length)))); }
-      if (k === 3) { clearRun(); tween(7000, runAt); }
+      items.forEach((li, i) => { li.classList.toggle("on", i === k - 1); li.classList.toggle("done", i < k - 1); });
+      view.setAttribute("aria-label", LABEL[k]);
+      if (from !== k - 1 || reduced) { settle(k); return; }
+      const at = (ms, fn) => later(ms, fn, "s3");
+      if (k === 0) settle(0);
+      if (k === 1) {
+        frame("home"); typ.hidden = false; typeAt(0); spotOn(null);
+        camTo(VIEW.composer, 900);
+        at(950, () => tween(2600, typeAt, () => curTo(BOX.send), "s3"));
+      }
+      if (k === 2) {
+        click();
+        at(450, () => { typ.hidden = true; cur.classList.remove("on"); frame("review"); camTo(VIEW.full, 700); spotOn(BOX.plan); });
+        at(2000, () => spotOn(BOX.canvas));
+        at(3500, () => { camTo(VIEW.plan); spotOn(BOX.plan); });
+        at(5000, () => { spotOn(BOX.approve, true); curTo(BOX.approve); });
+      }
+      if (k === 3) {
+        click();
+        at(450, () => { frame("perm"); camTo(VIEW.perm, 800); spotOn(null); });
+        at(1300, () => { spotOn(BOX.allow, true); curTo(BOX.allow); });
+        at(2500, click);
+        at(2900, () => { spotOn(null); cur.classList.remove("on"); camTo(VIEW.full); frame("run1"); });
+        ["run2", "run3", "run4", "run5"].forEach((f, i) => at(4300 + i * 1300, () => frame(f)));
+      }
+      if (k === 4) {
+        frame("done"); camTo(VIEW.full, 700); spotOn(BOX.canvas);
+        at(1800, () => { camTo(VIEW.sum); spotOn(BOX.sum); });
+      }
     };
-    // 데모 화면의 '계획 승인' 버튼을 눌러도 다음 장면으로 간다
-    approve.addEventListener("click", () => { if (slides[cur].id === "s3" && step === 2) next(); });
   })();
 
   // ---------- 4. 데모: 드럼세탁기 3D Simulator ----------
@@ -1023,7 +1028,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       const dx = (k - (12 + 6 * s)) / 37.5, dy = (c - (25 + 8 * s)) / 65.8;
       return 2.6 + .3 * s + 3.67 * (1 + .25 * s) * (2 * dx * dx + 1.6 * dy * dy);
     }
-    const OLD = { k: 12, c: 25 }, NEW = { k: 18, c: 33 };
+    const OLD = { k: 12, c: 26 }, NEW = { k: 18, c: 33 };
     const K = $("#wm-k"), Cc = $("#wm-c"), RPM = $("#wm-rpm");
     const outK = $("#wm-k-out"), outC = $("#wm-c-out"), outR = $("#wm-rpm-out");
     const aEl = $("#wm-a"), gauge = $("#wm-gauge"), gfill = $("#wm-gfill"), vEl = $("#wm-v"), note = $("#wm-note");

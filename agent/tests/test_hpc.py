@@ -69,6 +69,21 @@ def test_bracket_demo_mock_and_intent():
     assert not wants_e2e("3D 외팔보 응력 분포 Simulator")
 
 
+def test_washer_demo_mock_and_intent():
+    """세탁기 탈수 진동 데모: 현재 설계 4.2 mm, 최적(스프링 +12%, 댐퍼 +25%) 2.6 mm, 회전수가 오르면 진동도 오른다."""
+    from agent.dds_agent.demo_agent import pick_mode
+    from cae_adapters.mock import _washer
+
+    zero = {"spring_k": 0, "damper_c": 0, "balancer_m": 0, "spring_pos": 0}
+    best = {"spring_k": 12, "damper_c": 25, "balancer_m": 5, "spring_pos": 5}
+    assert round(_washer(zero)["vibration"], 1) == 4.2
+    assert _washer(best)["vibration"] == 2.6
+    assert _washer({**best, "rpm": 1400})["vibration"] > 3.0  # 1,400 rpm에서는 기준 3.0 mm를 넘는다
+    assert pick_mode("탈수 진동이 줄도록 스프링·댐퍼를 최적화해 줘") == "washer"
+    assert pick_mode("브래킷 CAD를 만들고 보고서까지") == "bracket"
+    assert pick_mode("3D 외팔보") == "beam3d" and pick_mode("최적화 해 줘") == "branin"
+
+
 def test_project_folder_identity(tmp_path):
     """서버 DB가 새로 만들어져 번호가 겹쳐도 다른 프로젝트의 폴더를 쓰지 않는다(uid로 확인)."""
     from agent.dds_agent.workspace import Workspace

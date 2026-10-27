@@ -123,6 +123,18 @@ def _bracket3d(p):
     return _bracket(p), {"stress": {"points": shown, "values": stress, "triangles": tris}}
 
 
+def _washer(p):
+    """드럼세탁기 탈수 진동(예시 식): 스프링 강성·댐퍼 감쇠력·밸런서 질량 변화 [%], 스프링 위치 [mm], 회전수 rpm(기본 1200).
+    현재 설계(모두 0)는 진동 4.2 mm, 최적(스프링 +12%, 댐퍼 +25%)은 2.6 mm. 회전수가 오르면 진동과 최적 값이 함께 오른다
+    — docs/briefing 슬라이드의 데모 숫자와 같은 식이다."""
+    s = (p.get("rpm", 1200.0) - 1200.0) / 200.0
+    dx = (p["spring_k"] - (12 + 6 * s)) / 37.5
+    dy = (p["damper_c"] - (25 + 8 * s)) / 65.8
+    db = (p.get("balancer_m", 5.0) - 5.0) / 25.0
+    dp = (p.get("spring_pos", 5.0) - 5.0) / 20.0
+    return {"vibration": 2.6 + 0.3 * s + 3.67 * (1 + 0.25 * s) * (2 * dx * dx + 1.6 * dy * dy) + 0.3 * db * db + 0.15 * dp * dp}
+
+
 FUNCTIONS = {
     "branin": (_branin, "2변수 x1∈[-5,10], x2∈[0,15], 출력 f (최소 0.398)"),
     "rosenbrock": (_rosenbrock, "n변수, 출력 f (최소 0 @ 모두 1)"),
@@ -130,6 +142,8 @@ FUNCTIONS = {
     "bracket": (_bracket, "브래킷(플레이트+리브) 변수 thickness 4~12, rib_height 5~30 [mm], 출력 mass[g], max_stress[MPa], deflection[mm]"),
     "bracket3d": (_bracket3d, "bracket과 같고 + 3D 표면 응력 필드(fields/stress.npz, 처짐 10배 확대) — 형상·필드 학습"),
     "beam3d": (_beam3d, "beam과 같고 + 3D 표면 메쉬 응력 필드(fields/stress.npz, 처짐 형상 포함) — 형상·필드 학습 연습"),
+    "washer": (_washer, "드럼세탁기 탈수 진동 변수 spring_k -10~30, damper_c -10~50, balancer_m -20~20 [%], spring_pos -20~20 [mm], "
+                        "rpm(선택, 기본 1200), 출력 vibration[mm]"),
 }
 
 

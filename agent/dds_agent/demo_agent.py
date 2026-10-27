@@ -1,6 +1,7 @@
 """데모 에이전트: Gemini CLI 없이 전체 경로(ACP → MCP 서버 → DDS 서버 → 웹앱)를 검증하기 위한 가짜 ACP 에이전트.
 Gemini처럼 session/new로 받은 MCP 서버를 실제로 띄워서 툴을 호출하며, 정해진 시나리오
-(Flow 제안 → 승인 대기 → 권한 요청 → Branin mock DOE → GP 학습 → BO → Simulator 배포)를 수행한다.
+(Flow 제안 → 승인 대기 → 권한 요청 → mock DOE → GP 학습 → BO → Simulator 배포)를 수행한다.
+시나리오는 요청에 따라 고른다(pick_mode): 세탁기 탈수 진동 · 브래킷 E2E · 3D 외팔보 · Branin.
 agent.toml 에 agent_mode = "demo" 로 사용한다.
 """
 from __future__ import annotations
@@ -30,6 +31,15 @@ def wants_e2e(body: str) -> bool:
     cad = "CAD" in b or "캐드" in body
     tail = any(k in body for k in ("보고서", "레포트", "리포트")) or "E2E" in b or "전체 과정" in body
     return cad and tail
+
+
+def pick_mode(body: str) -> str:
+    """요청에 맞는 시나리오: 세탁기 탈수 진동 · CAD~보고서 전체(브래킷) · 3D 형상(외팔보) · 기본(Branin)."""
+    if "세탁기" in body or "탈수" in body:
+        return "washer"
+    if wants_e2e(body):
+        return "bracket"
+    return "beam3d" if ("3D" in body or "형상" in body) else "branin"
 
 
 def send(msg: dict):
@@ -148,17 +158,31 @@ class DemoAgent:
         return outcome.get("outcome") == "selected" and outcome.get("optionId") == "allow"
 
     async def scenario(self, s: DemoSession, text: str):
-        """시나리오 3가지: CAD~보고서 전체(브래킷 E2E) · '3D'/'형상' 요청(Beam3D 형상·필드 학습) · 기본(Branin 최적화)."""
+        """시나리오 4가지: '세탁기'/'탈수' 요청(탈수 진동 최적화~보고서) · CAD~보고서 전체(브래킷 E2E) ·
+        '3D'/'형상' 요청(Beam3D 형상·필드 학습) · 기본(Branin 최적화)."""
         body = text.split("\n\n", 1)[-1]  # 앞의 [DDS 컨텍스트] 줄 제외
         if "[이전 대화 끝]" in body:  # 새 세션에 넘긴 지난 대화 요약도 제외(이번 요청만)
             body = body.split("[이전 대화 끝]", 1)[1].strip()
         if s.flow_id is None:
-            s.mode = "bracket" if wants_e2e(body) else "beam3d" if ("3D" in body or "형상" in body) else "branin"
+            s.mode = pick_mode(body)
             await s.say("요청을 분석하고 있습니다. 전체 작업 흐름을 먼저 제안할게요.", thought=True)
             if "[첨부 파일" in body:
                 files = [ln.strip("- ").split(" (")[0] for ln in body.splitlines() if ln.startswith("- inputs/")]
                 await s.say(f"첨부하신 파일을 작업 폴더에서 확인했습니다: {', '.join(files)}\n\n")
-            if s.mode == "bracket":
+            if s.mode == "washer":
+                title, desc = "드럼세탁기 탈수 진동 저감", "RecurDyn 탈수 모델 → DOE 60케이스 → 진동 예측 모델 → 최적화 → Simulator → 보고서"
+                nodes = [
+                    {"id": "model", "label": "탈수 해석 모델 불러오기", "type": "pre", "tool": "recurdyn",
+                     "detail": "드럼·통 · 스프링 2 · 댐퍼 2 · 1,200 rpm"},
+                    {"id": "doe", "label": "DOE 60케이스 (LHS)", "type": "doe", "detail": "스프링 강성·댐퍼 감쇠력·밸런서·스프링 위치"},
+                    {"id": "solve", "label": "케이스 해석 60건", "type": "solve", "tool": "recurdyn", "detail": "통 진동 변위 추출"},
+                    {"id": "train", "label": "진동 예측 모델", "type": "train", "detail": "GP"},
+                    {"id": "opt", "label": "최적화 8회", "type": "optimize", "detail": "진동 최소 · 베이지안"},
+                    {"id": "deploy", "label": "Simulator 배포", "type": "deploy"},
+                    {"id": "report", "label": "보고서 작성", "type": "post", "detail": "Word · HTML"},
+                ]
+                pairs = [("model", "doe"), ("doe", "solve"), ("solve", "train"), ("train", "opt"), ("opt", "deploy"), ("deploy", "report")]
+            elif s.mode == "bracket":
                 title, desc = "브래킷 E2E 설계", "CAD → 해석 모델 → DOE → 형상·응력 학습 → 3D Simulator → 보고서"
                 nodes = [
                     {"id": "cad", "label": "브래킷 CAD 생성", "type": "cad", "tool": "nx", "detail": "플레이트+리브, 두께·리브 높이 파라미터"},
@@ -203,19 +227,89 @@ class DemoAgent:
         if flow["status"] not in ("approved", "in_progress"):
             await s.say(f"현재 플로우 상태가 '{flow['status']}'입니다. 승인 후 다시 요청해 주세요.")
             return
-        n_cases = 16 if s.mode == "beam3d" else 20
-        title = "CAD·해석 모델 생성 후 케이스 해석 실행" if s.mode == "bracket" else "Mock 솔버로 케이스 실행"
+        n_cases = {"beam3d": 16, "washer": 60}.get(s.mode, 20)
+        title = {"bracket": "CAD·해석 모델 생성 후 케이스 해석 실행",
+                 "washer": "RecurDyn 탈수 해석 60케이스 실행"}.get(s.mode, "Mock 솔버로 케이스 실행")
         if not await self.ask_permission(s, title, {"study": s.mode, "cases": n_cases}):
             await s.say("실행 권한이 거부되어 중단했습니다.")
             return
         fid = s.flow_id
         node = lambda nid, st, d=None: s.tool("dds-flow", "update_node", {"flow_id": fid, "node_id": nid, "status": st, "detail": d})
-        if s.mode == "bracket":
+        if s.mode == "washer":
+            await self._washer(s, fid, node)
+        elif s.mode == "bracket":
             await self._bracket(s, fid, node)
         elif s.mode == "beam3d":
             await self._beam3d(s, fid, node)
         else:
             await self._branin(s, fid, node)
+
+    async def _washer(self, s, fid, node):
+        """드럼세탁기 탈수 진동: 해석 모델 → DOE 60·해석 → 진동 예측 모델 → 베이지안 최적화 → Simulator → 보고서."""
+        variables = [{"name": "spring_k", "lower": -10, "upper": 30}, {"name": "damper_c", "lower": -10, "upper": 50},
+                     {"name": "balancer_m", "lower": -20, "upper": 20}, {"name": "spring_pos", "lower": -20, "upper": 20}]
+        await node("model", "in_progress")
+        await s.say("RecurDyn 탈수 모델에서 바꿀 수 있는 부품 값을 설계 변수로 잡습니다.\n\n", thought=True)
+        await s.tool("dds-flow", "publish_artifact", {
+            "kind": "table", "title": "탈수 해석 모델과 설계 변수", "flow_id": fid, "node_id": "model",
+            "payload": {"columns": ["이름", "범위·값", "설명"], "rows": [
+                ["rpm", "1,200 rpm", "탈수 회전수 — 해석 조건"], ["unbalance", "0.5 kg", "세탁물 편심 — 해석 조건"],
+                ["spring_k", "-10 ~ +30 %", "스프링 강성 변화 — 설계 변수"], ["damper_c", "-10 ~ +50 %", "댐퍼 감쇠력 변화 — 설계 변수"],
+                ["balancer_m", "-20 ~ +20 %", "밸런서 질량 변화 — 설계 변수"], ["spring_pos", "-20 ~ +20 mm", "스프링 위치 — 설계 변수"],
+                ["vibration", "mm", "통 진동 변위 — 줄일 값"]]}})
+        await node("model", "complete", "설계 변수 4개 · 해석 조건 1,200 rpm")
+
+        await node("doe", "in_progress")
+        study = await s.tool("dds-study", "create_study", {
+            "name": "탈수 진동", "adapter": "mock", "adapter_config": {"function": "washer", "delay_sec": 0.05},
+            "variables": variables, "objectives": [{"name": "vibration", "goal": "min"}]})
+        sid = study["study_id"]
+        await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 60, "seed": 12, "flow_id": fid, "node_id": "doe"})
+        await node("doe", "complete")
+        await node("solve", "in_progress")
+        r = await s.tool("dds-study", "run_cases", {"study_id": sid})
+        await node("solve", "complete", f"완료 {r['counts'].get('complete', 0)}건")
+        await node("train", "in_progress")
+        m = await s.tool("dds-study", "train_surrogate", {"study_id": sid, "flow_id": fid, "node_id": "train"})
+        await node("train", "complete", f"R²={m['metrics']['vibration']['r2']:.3f}")
+        await node("opt", "in_progress")
+        o = await s.tool("dds-study", "optimize", {"study_id": sid, "iterations": 8, "flow_id": fid, "node_id": "opt"})
+        bp, br = o["best"]["params"], o["best"]["results"]
+        await node("opt", "complete", f"진동 {br['vibration']:.2f} mm")
+        await node("deploy", "in_progress")
+        d = await s.tool("dds-study", "deploy_model", {"model_id": o["model_id"]})
+        await node("deploy", "complete", f"모델 #{d['model_id']}")
+
+        # 보고서: 현재 설계(모두 0) 예측과 최적 설계를 비교해 결론을 쓰고 Word·HTML로 저장
+        await node("report", "in_progress")
+        pred = await s.tool("dds-study", "predict", {"model_id": o["model_id"], "params": {v["name"]: 0.0 for v in variables}})
+        now = pred.get("mean", pred).get("vibration", 0.0)
+        cut = (1 - br["vibration"] / now) * 100 if now else 0.0
+        await s.tool("dds-flow", "publish_artifact", {
+            "kind": "markdown", "title": "결론 및 권고", "flow_id": fid, "node_id": "report",
+            "payload": {"text": (
+                "## 탈수 진동 결론\n"
+                f"- 탈수 1,200 rpm, 편심 0.5 kg 조건에서 DOE 60건과 최적화 8건을 해석했습니다.\n"
+                f"- 현재 설계(모두 0) 예측 진동 **{now:.1f} mm** → 최적 설계 **{br['vibration']:.1f} mm** (**{cut:.0f}% 감소**)\n"
+                f"- 최적 설계: 스프링 강성 **{bp['spring_k']:+.0f}%**, 댐퍼 감쇠력 **{bp['damper_c']:+.0f}%**, "
+                f"밸런서 {bp['balancer_m']:+.0f}%, 스프링 위치 {bp['spring_pos']:+.0f} mm\n"
+                f"- 예측 모델 정확도(교차검증 R²): {m['metrics']['vibration']['r2']:.3f}\n"
+                "- 스프링 강성과 댐퍼 감쇠력이 진동을 가장 크게 좌우하고, 밸런서·스프링 위치의 영향은 작습니다.\n\n"
+                "### 권고\n"
+                "1. 최적 설계로 실제 해석을 1건 더 돌려 예측을 확인합니다.\n"
+                f"2. Simulator(모델 #{d['model_id']})로 회전수·부품 값을 바꿔 보며 설계팀과 함께 검토합니다.")}})
+        rep = await s.tool("dds-flow", "make_report", {"formats": ["docx", "html"], "flow_id": fid})
+        names = [Path(f).name for f in rep["files"]]
+        await node("report", "complete", " · ".join(names))
+        await s.say(
+            "탈수 진동 최적화를 마쳤습니다.\n\n"
+            f"- **진동**: 현재 설계 {now:.1f} mm → 최적 설계 {br['vibration']:.1f} mm (**{cut:.0f}% 감소**)\n"
+            f"- **최적 설계**: 스프링 강성 {bp['spring_k']:+.0f}%, 댐퍼 감쇠력 {bp['damper_c']:+.0f}% "
+            f"(밸런서 {bp['balancer_m']:+.0f}%, 스프링 위치 {bp['spring_pos']:+.0f} mm)\n"
+            f"- **해석**: DOE 60건 + 최적화 8건 · 예측 모델 R² {m['metrics']['vibration']['r2']:.3f}\n"
+            f"- **Simulator**: 모델 #{d['model_id']} — 부품 값을 바꾸면 진동을 바로 예측합니다\n"
+            f"- **보고서**: `reports/{names[0]}` 외 — '결과' 탭에서도 내려받을 수 있습니다\n\n"
+            "최적 설계로 검증 해석을 1건 더 돌려 볼까요?")
 
     async def _branin(self, s, fid, node):
         await node("doe", "in_progress")

@@ -1,9 +1,9 @@
-// DDS AI Engineer 경영진 보고 슬라이드 (13.33 x 7.5in). 사람이 하는 일 = 주황, AI 조수가 하는 일 = 청록 — 모든 장에서 같은 뜻
+// DDS AI Engineer 소개 슬라이드(이전 판, 13.33 x 7.5in). 사람이 하는 일 = 주황, AI 조수가 하는 일 = 청록 — 모든 장에서 같은 뜻
 const fs = require("fs");
 const path = require("path");
 const pptxgen = require("pptxgenjs");
 
-const OUT = process.argv[2] || path.join(__dirname, "..", "DDS_AI_Engineer_경영진보고.pptx");
+const OUT = process.argv[2] || path.join(__dirname, "..", "DDS_AI_Engineer_소개.pptx");
 const A = (f) => "image/png;base64," + fs.readFileSync(path.join(__dirname, "assets", f)).toString("base64");
 const icon = (name, color) => A(`${name}_${color}.png`);
 
@@ -17,7 +17,7 @@ const W = 13.333, M = 0.6, CW = W - 2 * M;
 
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE";
-pres.title = "DDS AI Engineer 경영진 보고";
+pres.title = "DDS AI Engineer 소개";
 pres.author = "DDS AI Engineer";
 
 // ---------- 공통 도구 ----------
@@ -64,7 +64,7 @@ function arrowRight(slide, x, y, color = C.faint) {
 {
   const s = pres.addSlide();
   s.background = { color: C.dark };
-  text(s, "DDS AI Engineer  ·  경영진 보고  ·  2026년 10월", { x: 0.7, y: 0.6, w: 11, h: 0.35, fontSize: 13, bold: true, color: "9DB0BA", charSpacing: 1 });
+  text(s, "DDS AI Engineer  ·  2026년 10월", { x: 0.7, y: 0.6, w: 11, h: 0.35, fontSize: 13, bold: true, color: "9DB0BA", charSpacing: 1 });
   text(s, [
     { text: "말로 부탁하면, ", options: { color: C.white } },
     { text: "AI 조수", options: { color: C.aiL } },
