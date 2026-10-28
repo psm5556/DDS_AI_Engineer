@@ -32,7 +32,7 @@ function Download($path, $dest, $sha) {
 }
 
 Write-Host '==============================================' -ForegroundColor DarkCyan
-Write-Host ' DDS AI Engineer — PC Agent 설치' -ForegroundColor White
+Write-Host ' DDS Conversa — PC Agent 설치' -ForegroundColor White
 Write-Host " 서버: $Server"
 Write-Host " 설치 위치: $Home_"
 Write-Host '==============================================' -ForegroundColor DarkCyan
@@ -195,7 +195,7 @@ if (-not $NoSystem) {
     $sc.TargetPath = $Pyw
     $sc.Arguments = "`"$Launcher`""
     $sc.WorkingDirectory = $Home_
-    $sc.Description = 'DDS AI Engineer PC Agent'
+    $sc.Description = 'DDS Conversa PC Agent'
     $sc.Save()
 }
 Start-Process -FilePath $Pyw -ArgumentList "`"$Launcher`"" -WorkingDirectory $Home_ -WindowStyle Hidden

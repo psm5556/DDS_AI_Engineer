@@ -103,7 +103,7 @@ h1{{font-size:26px;margin:0}} h2{{font-size:18px;margin:32px 0 10px;border-botto
 .meta{{color:#71717a;font-size:13px}} table{{border-collapse:collapse;width:100%;font-size:13px}} th,td{{border:1px solid #e4e4e7;padding:6px 10px}}
 th{{background:#f4f4f5;color:#52525b;text-align:left}} td.r{{text-align:right}} img{{max-width:100%;border:1px solid #ececef;border-radius:8px}}
 .flow li.complete{{color:#16a34a}} .flow li.failed{{color:#dc2626}}</style></head><body>
-<h1>{html.escape(project.name)}</h1><p class="meta">{html.escape(project.description or "")}<br>작성: {datetime.now():%Y-%m-%d %H:%M} · DDS AI Engineer</p>"""]
+<h1>{html.escape(project.name)}</h1><p class="meta">{html.escape(project.description or "")}<br>작성: {datetime.now():%Y-%m-%d %H:%M} · DDS Conversa</p>"""]
     if flow:
         parts.append(f"<h2>작업 흐름 — {html.escape(flow.title)}</h2><p class='meta'>{html.escape(flow.goal or '')}</p><ol class='flow'>")
         for n in flow.nodes:
@@ -139,7 +139,7 @@ def build_docx(project: models.Project, arts: list[models.Artifact], flow: model
     style.font.name = "Malgun Gothic"
     style.font.size = Pt(10)
     doc.add_heading(project.name, 0)
-    doc.add_paragraph(f"{project.description or ''}\n작성: {datetime.now():%Y-%m-%d %H:%M} · DDS AI Engineer")
+    doc.add_paragraph(f"{project.description or ''}\n작성: {datetime.now():%Y-%m-%d %H:%M} · DDS Conversa")
     if flow:
         doc.add_heading(f"작업 흐름 — {flow.title}", 1)
         if flow.goal:

@@ -1,4 +1,4 @@
-<title>DDS AI Engineer 소개</title>
+<title>DDS Conversa 소개</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -143,7 +143,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .t-case span { font-size: 15px; color: var(--night-muted); }
 .t-legend { margin-left: auto; display: flex; gap: 8px; }
 
-/* ---------- 2. 비교: 기존 DDS와 DDS AI Engineer ---------- */
+/* ---------- 2. 비교: 기존 DDS와 DDS Conversa ---------- */
 #s2 { gap: 20px; }
 .sh.row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; }
 .washer-mini { width: 84px; height: 98px; margin-right: 14px; }
@@ -485,7 +485,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
 #s10 h2 { font-size: 38px; }
 #s10 .sub { font-size: 17px; }
 .vcmp { flex: 1; min-height: 0; display: grid; grid-template-columns: 548px minmax(0, 1fr); gap: 28px; align-items: start; }
-/* 왼쪽 그림: 장면 1은 엔지니어가 툴마다 다른 AI를 따로 쓰는 모습, 장면 2부터 AI Engineer가 그 위에서 툴을 엮는 모습.
+/* 왼쪽 그림: 장면 1은 엔지니어가 툴마다 다른 AI를 따로 쓰는 모습, 장면 2부터 DDS Conversa가 그 위에서 툴을 엮는 모습.
    9장처럼 판 크기가 고정이라 상자 위치를 px로 둔다 */
 .vmap { position: relative; height: 472px; }
 .vmap > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
@@ -510,7 +510,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .vcmp.k2 .vd .vc:not(.na) { color: var(--bad); }
 .vd .vc.na { color: var(--muted); font-weight: 600; }
 .vfine { position: absolute; left: 0; top: 454px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
-/* 오른쪽 표: 장면 1은 상용 툴 AI 칸만, 장면 2에 AI Engineer 칸을 채우고, 장면 3은 비용 줄만 남겨 강조 */
+/* 오른쪽 표: 장면 1은 상용 툴 AI 칸만, 장면 2에 DDS Conversa 칸을 채우고, 장면 3은 비용 줄만 남겨 강조 */
 .vside { display: grid; gap: 10px; align-content: start; min-width: 0; }
 .vt { display: grid; gap: 6px; }
 .vr { display: grid; grid-template-columns: 82px minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; transition: opacity .35s; }
@@ -605,7 +605,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
 <!-- 1. 표지 -->
 <section class="slide night" id="s1" data-title="표지" data-dur="9000" aria-label="1. 표지">
   <div>
-    <p class="eyebrow">DDS AI Engineer · 2026년 10월</p>
+    <p class="eyebrow">DDS Conversa · 2026년 10월</p>
     <h1>말로 요청하면,<br><em>AI 어시스턴트</em>가 해석을 대신 합니다</h1>
     <p class="sub">기존 DDS에서 메뉴로 하나하나 설정하던 해석 자동화·DOE·학습·Simulator 배포를 대화로</p>
   </div>
@@ -627,8 +627,8 @@ svg.prod { display: block; overflow: visible; flex: none; }
   </div>
 </section>
 
-<!-- 2. 비교 ①: 기존 DDS와 DDS AI Engineer -->
-<section class="slide" id="s2" data-title="비교: 기존 DDS" data-steps="3" data-labels="기존 DDS로 진행|AI Engineer로 진행|달라지는 점" data-dur="5000,9500,7500,9000" aria-label="2. 기존 DDS와 DDS AI Engineer 비교">
+<!-- 2. 비교 ①: 기존 DDS와 DDS Conversa -->
+<section class="slide" id="s2" data-title="비교: 기존 DDS" data-steps="3" data-labels="기존 DDS로 진행|DDS Conversa로 진행|달라지는 점" data-dur="5000,9500,7500,9000" aria-label="2. 기존 DDS와 DDS Conversa 비교">
   <header class="sh row">
     <div class="sh">
       <p class="eyebrow">비교 ① 기존 DDS와 무엇이 다른가</p>
@@ -651,7 +651,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       <div class="met"><span>사람이 설정</span><b id="mA1">–</b><span>걸린 기간</span><b class="sm" id="mA2">–</b></div>
     </div>
     <div class="cmp-row new" id="cmpB">
-      <div class="who"><b>DDS AI Engineer</b><span class="hs"><i>말로 요청</i><i>계획 승인</i><i>결과 판단</i></span></div>
+      <div class="who"><b>DDS Conversa</b><span class="hs"><i>말로 요청</i><i>계획 승인</i><i>결과 판단</i></span></div>
       <div class="cell"><b>AI가 툴을 직접 실행해 모델 준비</b><span class="tag">RecurDyn 연동</span></div>
       <div class="cell"><b>문제에 맞는 스크립트를 AI가 작성</b><span class="tag">템플릿 불필요</span></div>
       <div class="cell"><b>변수·범위·케이스 수를 AI가 제안</b><span class="tag">60케이스</span></div>
@@ -672,12 +672,12 @@ svg.prod { display: block; overflow: visible; flex: none; }
 <!-- 3. 데모 ①: 실제 웹앱 화면 -->
 <section class="slide" id="s3" data-title="데모: 해석 자동화·최적화" data-steps="4" data-labels="요청 입력|AI 계획 보기|승인하고 해석|결과 보기" data-dur="3500,5000,7000,9500,7500" aria-label="3. 데모 드럼세탁기 탈수 진동 최적화, 실제 웹앱 화면">
   <header class="sh">
-    <p class="eyebrow">데모 ① 드럼세탁기 탈수 진동 · 실제 DDS AI Engineer 화면</p>
+    <p class="eyebrow">데모 ① 드럼세탁기 탈수 진동 · 실제 DDS Conversa 화면</p>
     <h2>요청 한 줄이 계획 → 해석 → 결과로 이어집니다</h2>
   </header>
   <div class="demo">
     <figure class="screen">
-      <div class="sbar" aria-hidden="true"><i></i><i></i><i></i><span class="ttl">DDS AI Engineer · 사내 웹앱</span><span class="chip ok">실제 화면</span></div>
+      <div class="sbar" aria-hidden="true"><i></i><i></i><i></i><span class="ttl">DDS Conversa · 사내 웹앱</span><span class="chip ok">실제 화면</span></div>
       <div class="sview" id="d1-view" role="img" aria-label="실제 웹앱 첫 화면">
         <div class="cam" id="d1-cam">
           <img class="fr" alt=""><img class="fr" alt="">
@@ -758,7 +758,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       </div>
       <div class="sim" data-step="1">
         <div class="sim-head">
-          <div class="ttl"><span class="chip ai">DDS AI Engineer</span><b>3D Simulator · 탈수 진동 예측</b></div>
+          <div class="ttl"><span class="chip ai">DDS Conversa</span><b>3D Simulator · 탈수 진동 예측</b></div>
           <span class="meta">데모 ①의 해석 68건으로 학습한 예측 모델</span>
         </div>
         <div class="sim-body">
@@ -796,7 +796,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
 </section>
 
 <!-- 5. 비교 ③: 일이 끝난 뒤 -->
-<section class="slide" id="s5" data-title="비교: 쌓이는 자산" data-steps="2" data-labels="DDS AI Engineer에서는|다음 과제로 잇기" data-dur="5000,6000,7500" aria-label="5. 한 번 한 해석이 팀의 자산으로">
+<section class="slide" id="s5" data-title="비교: 쌓이는 자산" data-steps="2" data-labels="DDS Conversa에서는|다음 과제로 잇기" data-dur="5000,6000,7500" aria-label="5. 한 번 한 해석이 팀의 자산으로">
   <header class="sh">
     <p class="eyebrow">비교 ③ 과제가 끝난 뒤</p>
     <h2>한 번 한 해석이 팀의 자산으로 쌓입니다</h2>
@@ -812,7 +812,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       <p class="kb-say">담당자가 바뀌면 같은 준비를<br>처음부터 다시 합니다.</p>
     </div>
     <div class="kb-col kb-new" data-step="1">
-      <div class="kb-head"><span class="chip ai">DDS AI Engineer</span><h3>프로젝트 한곳에 모두 남고, AI가 다시 씁니다</h3><span class="meta">드럼세탁기 탈수 진동 프로젝트에 남은 것</span></div>
+      <div class="kb-head"><span class="chip ai">DDS Conversa</span><h3>프로젝트 한곳에 모두 남고, AI가 다시 씁니다</h3><span class="meta">드럼세탁기 탈수 진동 프로젝트에 남은 것</span></div>
       <div class="shelf">
         <article class="item"><span class="ico"><svg class="i"><use href="#i-chat"/></svg></span><b>대화·계획 (Flow)</b><span>누가 무엇을 왜 요청했는지</span></article>
         <article class="item"><span class="ico"><svg class="i"><use href="#i-code"/></svg></span><b>해석 스크립트</b><span>RecurDyn 자동화</span></article>
@@ -961,10 +961,10 @@ svg.prod { display: block; overflow: visible; flex: none; }
 </section>
 
 <!-- 10. 참고: 상용 툴의 AI와 비교 (회사별 내용·가격은 2026년 10월 공개 자료 — 출처는 README) -->
-<section class="slide" id="s10" data-title="참고: 상용 툴 AI와 비교" data-steps="2" data-labels="AI Engineer로 보면|비용 비교" data-dur="8000,9000,9000" aria-label="10. 참고, 상용 CAD·CAE 툴의 AI와 무엇이 다른가">
+<section class="slide" id="s10" data-title="참고: 상용 툴 AI와 비교" data-steps="2" data-labels="DDS Conversa로 보면|비용 비교" data-dur="8000,9000,9000" aria-label="10. 참고, 상용 CAD·CAE 툴의 AI와 무엇이 다른가">
   <header class="sh">
     <p class="eyebrow">참고 · 상용 툴의 AI와 무엇이 다른가</p>
-    <h2>상용 툴 AI는 툴 하나를, AI Engineer는 과제 전체를</h2>
+    <h2>상용 툴 AI는 툴 하나를, DDS Conversa는 과제 전체를</h2>
     <p class="sub">CAD·CAE 회사들도 자기 툴용 MCP 서버·AI 어시스턴트를 내놓고 있습니다. 경쟁하지 않고, 그 위에서 여러 툴을 엮습니다.</p>
   </header>
   <div class="vcmp" id="vcmp">
@@ -976,7 +976,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       <div class="an row hb" style="left:164px;top:0;width:220px"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><b>엔지니어</b><span>말로 요청·승인</span></div>
       <p class="flbl">툴마다 AI 앱·계약·사용법이 따로</p>
       <div class="an dds" style="left:0;top:84px;width:548px;height:156px">
-        <div class="ah"><span class="ico"><svg class="i"><use href="#i-ai"/></svg></span><b>DDS AI Engineer</b><span class="tiny">회사 안에서 여러 회사의 툴을 엮어 과제를 끝내고, 결과를 남깁니다</span></div>
+        <div class="ah"><span class="ico"><svg class="i"><use href="#i-ai"/></svg></span><b>DDS Conversa</b><span class="tiny">회사 안에서 여러 회사의 툴을 엮어 과제를 끝내고, 결과를 남깁니다</span></div>
         <div class="vtags"><i>과제 Flow</i><i>팀 자산</i><i>사내 노하우</i><i>승인·기록</i><i>툴별 스킬 29종</i></div>
         <p class="vpart"><b>벤더 MCP는 경쟁 상대가 아니라</b> 아래에 연결할 부품입니다.</p>
       </div>
@@ -988,7 +988,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
     </div>
     <div class="vside">
       <div class="vt">
-        <div class="vr hd"><span></span><span>상용 툴의 AI (MCP·Copilot)</span><span>DDS AI Engineer</span></div>
+        <div class="vr hd"><span></span><span>상용 툴의 AI (MCP·Copilot)</span><span>DDS Conversa</span></div>
         <div class="vr"><b>툴 범위</b><p class="t">자기 회사 툴 안에서만</p><p class="u"><strong>29종을 한 흐름으로</strong><span>NX → Abaqus → LS-DYNA …</span></p></div>
         <div class="vr"><b>일의 단위</b><p class="t">툴 안의 작업 하나. DOE·최적화는 별도 PIDO 제품</p><p class="u"><strong>과제 하나를 끝까지</strong><span>모델링 → 해석 → DOE → 예측 모델 → 최적화 → 보고서</span></p></div>
         <div class="vr"><b>남는 것</b><p class="t">각자 PC·각 회사 플랫폼에 흩어짐</p><p class="u"><strong>팀 자산으로 쌓임</strong><span>결과·예측 모델·Simulator·보고서를 팀이 다시 씀</span></p></div>
@@ -1116,7 +1116,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       $("#mA1").textContent = p <= 0 ? "–" : `${n}개`;
       $("#mA2").textContent = p <= 0 ? "–" : `${Math.ceil(day - 1e-6)}일`;
     }
-    // AI Engineer: 사람은 요청·승인·판단만 하고, 다섯 단계는 AI가 밤새 이어서 한다
+    // DDS Conversa: 사람은 요청·승인·판단만 하고, 다섯 단계는 AI가 밤새 이어서 한다
     function setB(p) {
       hs[0].classList.toggle("on", p > 0);
       hs[1].classList.toggle("on", p >= .12);
@@ -1443,7 +1443,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
   })();
 
   // ---------- 10. 상용 툴의 AI와 비교 ----------
-  // 장면 2부터 AI Engineer 층과 오른쪽 칸을 채우고, 장면 3은 비용 줄만 남겨 강조한다
+  // 장면 2부터 DDS Conversa 층과 오른쪽 칸을 채우고, 장면 3은 비용 줄만 남겨 강조한다
   (() => {
     const vs = $("#vcmp");
     hooks.s10 = (k) => {

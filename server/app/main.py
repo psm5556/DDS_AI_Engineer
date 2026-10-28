@@ -1,4 +1,4 @@
-"""DDS AI Engineer 서버: REST API + 브라우저 WebSocket(/ws) + PC Agent WebSocket(/ws/agent) + 프론트엔드 정적 파일."""
+"""DDS Conversa 서버: REST API + 브라우저 WebSocket(/ws) + PC Agent WebSocket(/ws/agent) + 프론트엔드 정적 파일."""
 import asyncio
 import json
 import logging
@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="DDS AI Engineer", lifespan=lifespan)
+app = FastAPI(title="DDS Conversa", lifespan=lifespan)
 
 
 @app.middleware("http")

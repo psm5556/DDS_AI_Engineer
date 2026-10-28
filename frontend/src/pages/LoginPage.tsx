@@ -49,7 +49,7 @@ export default function LoginPage() {
         <div className="login-brand">
           <div className="logo">AI</div>
           <div>
-            <h1>DDS AI Engineer</h1>
+            <h1>DDS Conversa</h1>
             <p>말로 요청하면 CAD·CAE 자동화부터 예측 모델까지 에이전트가 함께 합니다</p>
           </div>
         </div>

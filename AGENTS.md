@@ -1,7 +1,8 @@
-# DDS AI Engineer — 개발 지침 (AI 코딩 에이전트·사람 공통)
+# DDS Conversa — 개발 지침 (AI 코딩 에이전트·사람 공통)
 
 > 이 문서는 **이 저장소를 개발하는** AI 코딩 에이전트(Claude Code · Gemini CLI · Codex)와 사람을 위한 것이다.
 > `CLAUDE.md`·`GEMINI.md`는 이 파일을 불러온다.
+> 앱 이름은 **DDS Conversa**다(이전 이름 DDS AI Engineer). 저장소 폴더·코드 이름(`DDS_AI_Engineer`, `dds_agent` 등)은 그대로 둔다.
 >
 > **예외:** 지금 작업 폴더가 DDS 프로젝트 작업 폴더라면(`DDS_Workspace\P0001_…`처럼 그 안에 `project.json`이 있는 곳) 이 문서는 무시한다.
 > 그 폴더에서 일하는 것은 웹앱의 CAD/CAE 에이전트이고, 그 폴더의 `AGENTS.md`/`CLAUDE.md`/`GEMINI.md` 지침을 따른다.

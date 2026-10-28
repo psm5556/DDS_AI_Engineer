@@ -1,4 +1,4 @@
-// DDS AI Engineer — PC Agent 설치 프로그램 (WinForms, .NET Framework 4 / C# 5)
+// DDS Conversa — PC Agent 설치 프로그램 (WinForms, .NET Framework 4 / C# 5)
 // 빌드: scripts\build_setup_exe.ps1  (Windows 기본 csc.exe 사용, 추가 설치 불필요)
 // 서버의 /api/agent/setup.exe 가 이 exe 끝에 "DDSCFG{...}" 형태로 서버 주소를 붙여서 내려준다.
 // 실제 설치는 서버의 install.ps1 을 받아 실행한다(포터블 Python/Node, Agent, CLI, 자동 실행 등록).
@@ -12,7 +12,7 @@ using System.Threading;
 using System.Windows.Forms;
 
 [assembly: System.Reflection.AssemblyTitle("DDS Agent Setup")]
-[assembly: System.Reflection.AssemblyProduct("DDS AI Engineer")]
+[assembly: System.Reflection.AssemblyProduct("DDS Conversa")]
 [assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
 
 namespace DdsAgentSetup
@@ -33,7 +33,7 @@ namespace DdsAgentSetup
 
         public SetupForm(string server)
         {
-            Text = "DDS AI Engineer — PC Agent 설치";
+            Text = "DDS Conversa — PC Agent 설치";
             Font = new Font("Malgun Gothic", 9.5f);
             BackColor = Paper;
             ClientSize = new Size(560, 600);

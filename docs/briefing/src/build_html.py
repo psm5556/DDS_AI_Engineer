@@ -1,4 +1,4 @@
-"""소개 슬라이드 HTML 만들기: briefing_body.html(본문) + shots/*.webp(3장의 실제 웹앱 화면) → ../DDS_AI_Engineer_소개.html.
+"""소개 슬라이드 HTML 만들기: briefing_body.html(본문) + shots/*.webp(3장의 실제 웹앱 화면) → ../DDS_Conversa_소개.html.
 사진은 data URI로 넣어 파일 하나만 있어도 브라우저에서 열린다.
   .venv\\Scripts\\python docs\\briefing\\src\\build_html.py
 """
@@ -20,6 +20,6 @@ html = ('<!doctype html>\n<html lang="ko">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
         "<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>\n"
         + head + "</head>\n<body>\n" + rest + "</body>\n</html>\n")
-out = HERE.parent / "DDS_AI_Engineer_소개.html"
+out = HERE.parent / "DDS_Conversa_소개.html"
 out.write_text(html, encoding="utf-8", newline="\n")
 print(out.name, len(html), "bytes,", len(shots), "shots")

@@ -1,4 +1,4 @@
-/* DDS AI Engineer 고유 화면 (작업 흐름 캔버스, 아티팩트, 에이전트 대화 등).
+/* DDS Conversa 고유 화면 (작업 흐름 캔버스, 아티팩트, 에이전트 대화 등).
    색·간격은 design/tokens.css 토큰만 쓴다 (DDS ReDO 디자인 시스템). */
 
 input[type="password"] {

@@ -96,12 +96,12 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
       <div className="side-mobilebar">
         <button className="icon-btn" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? "메뉴 닫기" : "메뉴 열기"}>
           {open ? <X size={18} /> : <Menu size={18} />}</button>
-        <b>{current ? current.name : "DDS AI Engineer"}</b>
+        <b>{current ? current.name : "DDS Conversa"}</b>
         <Link className="icon-btn" to="/" aria-label="새 프로젝트"><SquarePen size={17} /></Link>
       </div>
       <div className="side-panel">
         <div className="side-brand-row">
-          <Link to="/" className="side-brand" aria-label="DDS AI Engineer 홈"><span className="logo" aria-hidden="true">AI</span>DDS AI Engineer</Link>
+          <Link to="/" className="side-brand" aria-label="DDS Conversa 홈"><span className="logo" aria-hidden="true">AI</span>DDS Conversa</Link>
           <button className="icon-btn side-fold" onClick={layout.toggle} aria-label="사이드바 접기" title="사이드바 접기 (Ctrl+B)"><PanelLeftClose size={17} /></button>
         </div>
         <nav className="side-nav-list" aria-label="바로 가기">

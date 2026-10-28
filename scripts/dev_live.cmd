@@ -6,5 +6,5 @@ cd /d "%~dp0.."
 set PYTHONIOENCODING=utf-8
 set AGENT=%1
 if "%AGENT%"=="" set AGENT=demo
-title DDS AI Engineer - dev_live (%AGENT%) - close this window to stop
+title DDS Conversa - dev_live (%AGENT%) - close this window to stop
 .venv\Scripts\python scripts\dev_live.py --data data\dev --agent %AGENT%

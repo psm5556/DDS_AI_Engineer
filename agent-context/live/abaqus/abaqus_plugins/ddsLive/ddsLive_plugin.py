@@ -156,7 +156,7 @@ toolset.registerGuiMenuButton(
     kernelInitString="",
     applicableModules=ALL,
     version="1.0",
-    author="DDS AI Engineer",
+    author="DDS Conversa",
     description="웹앱 에이전트가 열려 있는 Abaqus/CAE 세션에서 함께 모델링합니다",
 )
 start_ddslive()  # 플러그인 로드 시 바로 시작
