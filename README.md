@@ -94,6 +94,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 1. Python 3.12(python.org 설치본)·Node 18+를 준비하고 `python -m venv .venv; .venv\Scripts\pip install -r requirements-server.txt`
 2. (선택) `server.toml`을 작성한다: `port`, `data_dir`, `secret_key`
 3. 실행: `.venv\Scripts\python -m uvicorn server.app.main:app --host 0.0.0.0 --port 7014` (서비스 등록: NSSM 또는 작업 스케줄러)
+   - **Linux 서버**도 된다. systemd 파일(`deploy/linux/`)로 실행하고, 설치 프로그램·런타임은 Windows PC에서 `prepare_onsite.py --pack`으로 만든 묶음을 `--import-pack`으로 넣는다(런북 L절).
 4. 첫 가입자가 관리자가 된다. 이후 가입은 관리자가 승인한다(관리 > 사용자).
 5. PC Agent 설치 파일 준비: `.venv\Scripts\python scripts\prepare_onsite.py --publish --server http://127.0.0.1:7014 --user <관리자> --pin <PIN>`
    - 웹 빌드 → `DDS-Agent-Setup.exe` → 포터블 런타임(이 서버의 Python·Node + 사내 pip 미러) → 서버 코드로 Agent 첫 버전 등록 → 점검

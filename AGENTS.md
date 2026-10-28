@@ -19,7 +19,7 @@
 - 3D Simulator 배포 → 보고서
 
 ```
-[브라우저] ──HTTP/WS──> [사내 서버: FastAPI + React 빌드본 + SQLite]  (포트 7014)
+[브라우저] ──HTTP/WS──> [사내 서버(Windows·Linux): FastAPI + React 빌드본 + SQLite]  (포트 7014)
                               │  학습·최적화·Simulator·보고서, 프로젝트·대화·결과 저장
                               │  WebSocket (/ws/agent, 사용자 토큰)
                               ▼
@@ -42,7 +42,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 - `--agent demo`는 AI 없이 정해진 시나리오로 전체 흐름을 재현한다(CAD→해석→DOE→학습→3D Simulator→보고서). UI·흐름 검증용이다.
   실제 AI는 `--agent claude|gemini|codex`이고, 각 CLI에 먼저 로그인해야 한다.
 - 프론트만 고칠 때: `cd frontend; npm run dev` → http://localhost:5173 (API는 7014로 프록시)
-- `dev_live.py`는 **개발용**(서버와 PC Agent를 한 컴퓨터에 같이 띄움)이다. 운영 서버는 `uvicorn server.app.main:app --host 0.0.0.0 --port 7014`만 실행한다.
+- `dev_live.py`는 **개발용**(서버와 PC Agent를 한 컴퓨터에 같이 띄움)이다. 운영 서버는 `uvicorn server.app.main:app --host 0.0.0.0 --port 7014`만 실행한다. Linux 서버는 `deploy/linux/`(systemd)와 `docs/onsite-ai-runbook.md` L절을 따른다.
 
 ## 3. 디렉터리 지도
 | 경로 | 내용 |
@@ -58,7 +58,8 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `agent-context/` | AI CLI에게 주는 작업 규칙(`INSTRUCTIONS.md`)과 툴별 스킬(`skills/<툴>/SKILL.md`·`scripts/`). PC Agent가 프로젝트 폴더로 동기화한다 |
 | `frontend/src/` | React+TS. `pages/`(첫 화면·작업 공간·툴·Simulator·설정·관리) · `chat/`(대화·입력창) · `canvas/`(오른쪽 패널 탭) · `components/` · `modern.css`(최종 디자인 층) |
 | `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없으면 자동 빌드) |
-| `scripts/` | `dev_live.py` · `prepare_onsite.py`(사내 서버 준비) · `fetch_runtimes.py` · `build_agent_bundle.py` · `install-agent.ps1` · `e2e_*.py` |
+| `deploy/linux/` | Linux 서버 systemd 서비스 파일 |
+| `scripts/` | `dev_live.py` · `prepare_onsite.py`(사내 서버 준비, Linux 서버용 설치 묶음 `--pack`·`--import-pack`) · `fetch_runtimes.py` · `build_agent_bundle.py` · `install-agent.ps1` · `e2e_*.py` |
 | `docs/` | `handoff.md` 인수인계 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 |
 | `data/`·`dist/`·`frontend/dist/` | **git에 없음**(.gitignore). DB·설치 파일·런타임·빌드 결과 |
 

@@ -22,7 +22,9 @@ KIND_ORDER = {"markdown": 0, "table": 1, "scatter": 2, "line": 2, "bar": 2, "par
 
 
 def _korean_font():
-    for name in ("Malgun Gothic", "NanumGothic", "AppleGothic", "Noto Sans CJK KR"):
+    # Linux 서버: fonts-nanum 또는 Noto CJK를 설치한다. Noto CJK 묶음 파일(ttc)은 이름이 JP로 읽혀도 한글이 들어 있다
+    for name in ("Malgun Gothic", "NanumGothic", "NanumBarunGothic", "AppleGothic", "Noto Sans CJK KR", "Noto Sans KR",
+                 "Noto Sans CJK JP"):
         if any(f.name == name for f in font_manager.fontManager.ttflist):
             plt.rcParams["font.family"] = name
             break

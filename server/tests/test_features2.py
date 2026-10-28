@@ -1,5 +1,6 @@
 """프로젝트·대화 관리, 첨부 파일, 형상·필드 학습(3D) 테스트."""
 import base64
+import os
 
 import numpy as np
 
@@ -81,6 +82,7 @@ def test_agent_setup_readiness(client):  # noqa: F811
     admin, _ = _auth(client, "admin")
     st = client.get("/api/agent/setup/status", headers=admin).json()
     assert st["runtime"] is False and st["ready"] is False and st["runtime_dir"]  # 테스트 데이터 폴더에는 런타임이 없다
+    assert st["server_windows"] is (os.name == "nt")  # Linux 서버면 화면이 Windows PC 묶음 안내를 보여 준다
     r = client.post("/api/agent/releases/from-server", headers=admin)
     assert r.status_code == 200, r.text
     ver = r.json()["version"]

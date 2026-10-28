@@ -5,7 +5,10 @@ import { get, post } from "../api";
 import { useAuth } from "../auth";
 import { useToast } from "../toast";
 
-export interface SetupStatus { setup_exe: boolean; runtime: boolean; release: string | null; ready: boolean; runtime_dir: string | null }
+export interface SetupStatus {
+  setup_exe: boolean; runtime: boolean; release: string | null; ready: boolean; runtime_dir: string | null
+  server_windows: boolean  // Linux 서버는 설치 프로그램·런타임을 Windows PC에서 만들어 넣는다
+}
 
 /** PC Agent 설치에 필요한 것이 서버에 준비됐는지 (설치 프로그램 · 포터블 런타임 · 배포된 Agent 버전) */
 export function useSetupStatus() {
@@ -42,18 +45,28 @@ export function SetupChecklist() {
       <div className="grow"><b>{title}</b>{!ok && children && <div className="small">{children}</div>}</div>
     </li>
   );
+  // Linux 서버: 설치 프로그램과 런타임은 사용자 PC(Windows)용이라 Windows PC에서 한 묶음으로 만들어 넣는다
+  const linuxHow = (
+    <>이 서버는 Linux라 직접 만들 수 없습니다(사용자 PC용 Windows 파일). Windows PC에서{" "}
+      <code>python scripts\prepare_onsite.py --pack agent_runtime_pack.zip</code>으로 묶음을 만들어 서버로 옮긴 뒤,
+      서버에서 <code>python3 scripts/prepare_onsite.py --import-pack agent_runtime_pack.zip</code>을 실행하세요.</>
+  );
   return (
     <section className="block setup-check">
       <div className="block-head"><h3>PC Agent 설치 준비</h3>
         <span className={`chip ${st.ready ? "ok" : "warn"}`}>{st.ready ? "사용자가 바로 설치할 수 있습니다" : "준비가 더 필요합니다"}</span></div>
       <ul>
         <Row ok={st.setup_exe} title="설치 프로그램 (DDS-Agent-Setup.exe)">
-          서버에서 자동으로 빌드하지 못했습니다(Windows의 .NET Framework csc 필요). 서버에서 <code>powershell -File scripts\build_setup_exe.ps1</code>을 실행하세요.
+          {st.server_windows
+            ? <>서버에서 자동으로 빌드하지 못했습니다(Windows의 .NET Framework csc 필요). 서버에서 <code>powershell -File scripts\build_setup_exe.ps1</code>을 실행하세요.</>
+            : linuxHow}
         </Row>
         <Row ok={st.runtime} title="포터블 런타임 (Python · Node · 패키지)">
-          저장소(git)에는 들어 있지 않습니다. 서버에서 <code>python scripts\prepare_onsite.py</code>를 실행하면 이 서버의 Python·Node와
-          사내 pip 미러로 <code>{st.runtime_dir ?? "data\\agent_runtime"}</code>에 만듭니다(인터넷 불필요, 수 분).
-          사내 AI에게 맡기려면 "docs/onsite-ai-runbook.md대로 서버를 준비해 줘"라고 요청하세요.
+          {st.server_windows
+            ? <>저장소(git)에는 들어 있지 않습니다. 서버에서 <code>python scripts\prepare_onsite.py</code>를 실행하면 이 서버의 Python·Node와
+              사내 pip 미러로 <code>{st.runtime_dir ?? "data\\agent_runtime"}</code>에 만듭니다(인터넷 불필요, 수 분).
+              사내 AI에게 맡기려면 "docs/onsite-ai-runbook.md대로 서버를 준비해 줘"라고 요청하세요.</>
+            : st.setup_exe ? linuxHow : "위 설치 프로그램과 같은 묶음에 들어 있습니다."}
         </Row>
         <Row ok={!!st.release} title={st.release ? `배포된 Agent 버전 ${st.release}` : "배포된 Agent 버전"}>
           <button className="small primary" disabled={publish.isPending} onClick={() => publish.mutate()}>

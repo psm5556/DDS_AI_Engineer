@@ -3,6 +3,15 @@
 목표: git으로 저장소만 받은 사내 서버에서 웹앱을 띄우고, 사용자들이 **설정 > 설치**에서 PC Agent를 내려받아 설치할 수 있게 만든다.
 인터넷은 쓰지 않는다. 사내 pip·npm 미러와 서버에 설치된 Python·Node만 쓴다.
 
+- 서버는 **Windows**와 **Linux** 모두 된다.
+  - Windows 서버는 아래 0~3단계를 따른다.
+  - Linux 서버는 **[L. Linux 서버](#l-linux-서버)** 절을 따른다.
+- 사용자 PC는 Windows다. PC Agent 설치 프로그램과 포터블 런타임은 Windows용이라 Windows에서만 만들 수 있다.
+  - Linux 서버는 이것을 Windows PC에서 묶음(zip) 하나로 만들어 옮긴다.
+- 스킬(`agent-context/`)은 Agent 버전에 들어 있다.
+  - 설치와 자동 업데이트 때 사용자 PC로 간다.
+  - 프로젝트를 열 때마다 작업 폴더(`.claude/skills` 등)로 복사된다. 따로 설치하지 않는다.
+
 > 사람이 할 일: AI에게 "docs/onsite-ai-runbook.md대로 서버를 준비해 줘. 관리자 아이디는 ○○, PIN은 ○○○○○○야"라고 요청한다.
 > AI는 각 단계의 **확인** 결과를 보고하고, 실패하면 아래 "문제 해결"을 보고 고친 뒤 다시 시도한다.
 
@@ -55,6 +64,72 @@ python -m venv .venv
 - 마지막 줄이 `READY`다.
 - 웹앱 **관리 > Agent 배포**의 "PC Agent 설치 준비" 세 항목이 모두 초록색이다.
 
+## L. Linux 서버
+0~3단계 대신 이 절을 따른다. 끝나면 4단계부터는 같다.
+
+### L-0. 확인
+```bash
+hostname; python3.12 --version; node --version; npm --version
+pip config list; npm config get registry
+fc-list :lang=ko | head -3
+```
+- Python 3.12(3.11 이상)가 있다.
+- Node 18 이상과 npm이 있다(웹 화면 빌드용).
+  - 없으면 Windows PC에서 `cd frontend; npm ci; npm run build`로 만든 `frontend/dist` 폴더를 서버의 같은 위치에 복사한다.
+- pip·npm이 사내 미러를 가리킨다.
+- 한글 글꼴이 하나 이상 나온다. 보고서 그림에 쓴다.
+  - 없으면 사내 패키지 미러에서 설치한다. Ubuntu·Debian은 `sudo apt install fonts-nanum`, RHEL 계열은 `sudo dnf install google-noto-sans-cjk-ttc-fonts`
+  - 설치한 뒤 `rm -rf ~/.cache/matplotlib`로 글꼴 목록을 다시 만들게 한다.
+
+### L-1. 코드와 의존성
+```bash
+git pull
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements-server.txt
+```
+- 데이터 폴더는 저장소 루트의 `server.toml`에 `data_dir = '/var/lib/dds-conversa'`처럼 쓴다. 서버와 `prepare_onsite.py`가 같은 값을 읽는다.
+- 서비스 계정이 그 폴더에 쓸 수 있어야 한다.
+
+### L-2. Windows PC에서 설치 묶음 만들기 (이 단계만 Windows)
+- 필요한 것: 저장소(서버와 같은 버전), python.org Python 3.12, Node, 사내 pip 미러가 있는 Windows PC 아무거나
+```powershell
+python scripts\prepare_onsite.py --pack agent_runtime_pack.zip
+```
+- 설치 프로그램(`DDS-Agent-Setup.exe`), 포터블 Python·Node, Agent 의존성 wheel을 zip 하나(약 200 MB)로 만든다.
+- 이 PC의 서버 데이터 폴더는 건드리지 않는다.
+- 만든 zip을 Linux 서버로 옮긴다(scp 등).
+
+### L-3. 서버 실행 (systemd)
+- `deploy/linux/dds-conversa.service`에서 경로(`/opt/dds-conversa`)와 사용자(`dds`)를 이 서버에 맞게 고친다. 그다음 등록한다.
+```bash
+sudo cp deploy/linux/dds-conversa.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now dds-conversa
+```
+- 방화벽에서 7014 포트를 연다. 사용자 브라우저와 PC Agent가 이 포트로 접속한다.
+- 로그: `journalctl -u dds-conversa -f`
+- 처음 가입한 계정이 관리자가 된다.
+
+### L-4. 설치 준비 마무리
+서버를 켜 둔 채로 실행한다.
+```bash
+.venv/bin/python scripts/prepare_onsite.py --import-pack agent_runtime_pack.zip --publish --server http://127.0.0.1:7014 --user <관리자 아이디> --pin <PIN>
+```
+이 스크립트가 하는 일:
+1. 묶음을 데이터 폴더의 `agent_runtime/`에 넣는다(sha256 확인, 예전 런타임 파일 정리).
+2. `frontend/dist`가 없으면 웹 화면을 빌드한다.
+3. 서버 코드로 Agent 첫 버전을 등록한다.
+4. 준비 상태를 점검한다.
+
+**확인**
+- 마지막 줄이 `READY`다.
+- 웹앱 **관리 > Agent 배포**의 "PC Agent 설치 준비" 세 항목이 모두 초록색이다.
+
+### Linux 서버 업데이트
+- 웹앱만 바뀐 경우
+  - `git pull` → `frontend`에서 `npm run build` → `sudo systemctl restart dds-conversa`
+  - 그다음 관리 > Agent 배포에서 "서버 코드로 첫 버전 배포"를 누른다(새 `__version__`일 때).
+- 설치 프로그램이나 런타임을 바꿔야 할 때(드묾): L-2와 L-4의 `--import-pack`을 다시 한다.
+
 ## 4. 사용자 PC 설치 안내 (사람에게 전달)
 1. 웹앱 **설정 > 설치**에서 `DDS-Agent-Setup.exe`를 받고 **토큰 발급**을 누른다.
 2. 설치 파일을 실행해 토큰을 붙여 넣고, 쓸 AI(Claude Code·Gemini·Codex)를 고른 뒤 [설치]를 누른다. 관리자 권한은 필요 없다.
@@ -74,6 +149,10 @@ python -m venv .venv
 | 관리자 로그인 실패 | 아이디·PIN 오류 또는 잠김(5회) | 사람에게 확인, 잠기면 10분 뒤 |
 | 사용자 PC 설치 중 Node 압축 해제 실패 | 경로가 너무 김(260자) | 기본 설치 위치(`%LOCALAPPDATA%\DDS-Agent`)를 쓴다 |
 | 런타임을 새로 만들고 싶다 | — | `prepare_onsite.py --force-runtime` |
+| `Linux 서버에서는 만들 수 없습니다` | Linux 서버에서 설치 프로그램·런타임을 만들려 함 | L-2(Windows PC에서 `--pack`) → L-4(`--import-pack`) |
+| `파일이 손상됐습니다(sha256 불일치)` | 묶음을 옮기다 깨짐 | zip을 다시 옮긴다(scp는 바이너리 그대로 옮긴다) |
+| 보고서 그림의 한글이 네모로 나옴 | Linux 서버에 한글 글꼴 없음 | L-0의 글꼴 설치 → `rm -rf ~/.cache/matplotlib` → 서버 재시작 |
+| 다른 PC에서 `http://<서버>:7014`가 안 열림 | 방화벽 | 7014 포트 열기(`firewall-cmd`·`ufw` 등 서버 관리 방식대로) |
 
 ## 하지 말 것
 - 외부 인터넷(GitHub·nodejs.org·PyPI)에서 내려받으려 하지 않는다.

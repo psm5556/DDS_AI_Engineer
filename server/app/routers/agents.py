@@ -211,7 +211,7 @@ def runtime_dir():
 def _manifest() -> dict:
     p = runtime_dir() / "manifest.json"
     if not p.exists():
-        raise HTTPException(404, "서버에 Agent 런타임이 준비되지 않았습니다 (scripts/fetch_runtimes.py 실행 필요)")
+        raise HTTPException(404, "서버에 Agent 런타임이 준비되지 않았습니다 (scripts/prepare_onsite.py 실행 — Linux 서버는 Windows PC에서 --pack으로 만든 묶음을 --import-pack으로 넣기)")
     return json.loads(p.read_text(encoding="utf-8"))
 
 
@@ -282,7 +282,8 @@ def setup_status(user=Depends(get_current_user), db: Session = Depends(get_db)):
     rel = latest_release(db)
     exe, runtime = _setup_exe() is not None, _runtime_ready()
     return {"setup_exe": exe, "runtime": runtime, "release": rel.version if rel else None, "ready": exe and runtime and bool(rel),
-            "runtime_dir": str(runtime_dir()) if user.is_admin else None}
+            "runtime_dir": str(runtime_dir()) if user.is_admin else None,
+            "server_windows": os.name == "nt"}  # Linux 서버는 설치 프로그램·런타임을 Windows PC에서 만들어 넣는다
 
 
 @router.get("/setup.exe")
@@ -290,7 +291,7 @@ def setup_exe(request: Request):
     """사용자용 설치 프로그램. exe 끝에 서버 주소를 붙여서 내려준다(설치 창에 미리 채워짐)."""
     exe = _setup_exe()
     if not exe:
-        raise HTTPException(404, "서버에 설치 프로그램이 없습니다 (scripts/build_setup_exe.ps1 실행 필요)")
+        raise HTTPException(404, "서버에 설치 프로그램이 없습니다 (scripts/prepare_onsite.py 실행 — Linux 서버는 Windows PC에서 --pack으로 만든 묶음을 --import-pack으로 넣기)")
     server = str(request.base_url).rstrip("/")
     data = exe.read_bytes() + ("DDSCFG" + json.dumps({"server": server})).encode("utf-8")
     return Response(data, media_type="application/octet-stream",

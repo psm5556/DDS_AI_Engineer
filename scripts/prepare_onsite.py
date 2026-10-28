@@ -9,15 +9,23 @@ git으로 저장소만 받은 사내 서버에서 실행한다. 인터넷은 필
 옵션: --skip-frontend · --force-runtime(런타임 다시 만들기) · --no-wheels
 결과는 서버 데이터 폴더(server.toml의 data_dir 또는 DDS_DATA_DIR, 기본 data\\)의 agent_runtime\\ 에 생긴다.
 마지막 줄에 READY 또는 NOT READY를 출력하고, 준비가 안 되면 종료 코드 1로 끝난다.
+
+Linux 서버: 설치 프로그램(.exe)과 포터블 런타임은 사용자 PC(Windows)용이라 Windows에서만 만들 수 있다.
+  1) 아무 Windows PC(저장소·Python 3.12·Node·사내 미러)에서:  python scripts\\prepare_onsite.py --pack agent_runtime_pack.zip
+  2) 그 zip을 Linux 서버로 옮겨서:                              python3 scripts/prepare_onsite.py --import-pack agent_runtime_pack.zip
+  3) 나머지(웹 빌드·첫 Agent 버전 등록·점검)는 Linux 서버에서 위와 같은 명령으로 한다.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,13 +75,22 @@ def build_frontend() -> bool:
     return True
 
 
+WINDOWS = os.name == "nt"
+PACK_HOW = ("Linux 서버에서는 만들 수 없습니다(사용자 PC용 Windows 파일). Windows PC에서 "
+            "'python scripts\\prepare_onsite.py --pack agent_runtime_pack.zip'으로 묶음을 만들어 이 서버로 옮긴 뒤 "
+            "'python3 scripts/prepare_onsite.py --import-pack agent_runtime_pack.zip'을 실행하세요")
+
+
 def build_setup_exe(rt: Path) -> bool:
     step("PC Agent 설치 프로그램 (DDS-Agent-Setup.exe)")
     out = rt / "DDS-Agent-Setup.exe"
     if out.exists():
         ok(f"이미 있습니다: {out}")
         return True
-    csc = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
+    if not WINDOWS:
+        bad(PACK_HOW)
+        return False
+    csc =Path(os.environ.get("WINDIR", r"C:\Windows")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
     if not csc.exists():
         bad(f"csc.exe가 없습니다({csc}). Windows의 .NET Framework 4.x가 필요합니다")
         return False
@@ -88,20 +105,98 @@ def build_setup_exe(rt: Path) -> bool:
     return True
 
 
+def _files(manifest: dict) -> dict[str, str]:
+    """manifest의 런타임 파일 이름 → sha256"""
+    return {v["file"]: v.get("sha256", "") for v in manifest.values() if isinstance(v, dict) and v.get("file")}
+
+
 def runtime_ready(rt: Path) -> bool:
     m = rt / "manifest.json"
     if not m.exists():
         return False
-    files = [v["file"] for v in json.loads(m.read_text(encoding="utf-8")).values() if isinstance(v, dict) and v.get("file")]
+    files = _files(json.loads(m.read_text(encoding="utf-8")))
     return bool(files) and all((rt / f).exists() for f in files)
+
+
+def _sha256(p: Path) -> str:
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+SETUP_EXE = "DDS-Agent-Setup.exe"
+
+
+def make_pack(dest: Path, wheels: bool) -> bool:
+    """Windows PC에서: 설치 프로그램과 포터블 런타임을 zip 하나로 묶는다(Linux 서버로 옮기는 용도).
+    이 PC의 서버 데이터 폴더는 건드리지 않고 임시 폴더에서 만든다."""
+    step(f"Linux 서버용 설치 묶음 → {dest}")
+    if not WINDOWS:
+        bad("--pack은 Windows PC에서 실행하세요(설치 프로그램과 런타임이 Windows용입니다)")
+        return False
+    with tempfile.TemporaryDirectory() as tmp:
+        rt = Path(tmp) / "agent_runtime"
+        if not (build_setup_exe(rt) and build_runtime(rt, True, wheels)):
+            return False
+        files = [SETUP_EXE, "manifest.json", *_files(json.loads((rt / "manifest.json").read_text(encoding="utf-8")))]
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_STORED) as z:  # 안의 런타임은 이미 압축돼 있다
+            for f in files:
+                z.write(rt / f, f)
+    ok(f"완료: {dest} ({dest.stat().st_size >> 20} MB) — Linux 서버로 옮겨 --import-pack으로 넣으세요")
+    return True
+
+
+def import_pack(src: Path, rt: Path) -> bool:
+    """서버에서: --pack으로 만든 묶음을 데이터 폴더의 agent_runtime에 넣는다(sha256 확인, 예전 런타임 파일 정리)."""
+    step(f"설치 묶음 넣기: {src} → {rt}")
+    if not src.is_file():
+        bad(f"파일이 없습니다: {src}")
+        return False
+    with zipfile.ZipFile(src) as z:
+        names = z.namelist()
+        if any(n != Path(n).name or n.startswith(".") for n in names):  # 폴더 경로가 든 이름은 받지 않는다(다른 곳에 풀리지 않게)
+            bad("묶음 안에 폴더 경로가 있습니다 — --pack으로 만든 묶음만 넣으세요")
+            return False
+        if "manifest.json" not in names or SETUP_EXE not in names:
+            bad(f"--pack으로 만든 묶음이 아닙니다(manifest.json·{SETUP_EXE} 없음)")
+            return False
+        files = _files(json.loads(z.read("manifest.json").decode("utf-8")))
+        missing = [f for f in files if f not in names]
+        if missing:
+            bad("묶음에 런타임 파일이 빠졌습니다: " + ", ".join(missing))
+            return False
+        rt.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=rt.parent) as tmp:  # 같은 디스크에 풀어야 바로 옮길 수 있다
+            z.extractall(tmp)
+            t = Path(tmp)
+            for f, digest in files.items():
+                if digest and _sha256(t / f) != digest:
+                    bad(f"파일이 손상됐습니다(sha256 불일치): {f} — 묶음을 다시 옮기세요")
+                    return False
+            old = rt / "manifest.json"
+            if old.exists():  # 새 묶음에 없는 예전 런타임 파일은 지운다(용량)
+                for f in _files(json.loads(old.read_text(encoding="utf-8"))):
+                    if f not in files:
+                        (rt / f).unlink(missing_ok=True)
+            for f in [*files, SETUP_EXE]:
+                os.replace(t / f, rt / f)
+            os.replace(t / "manifest.json", rt / "manifest.json")  # 마지막에 바꾼다 — 중간에 실패해도 예전 목록이 남는다
+    ok(f"완료: 설치 프로그램과 런타임 {len(files)}개 파일")
+    return True
 
 
 def build_runtime(rt: Path, force: bool, wheels: bool) -> bool:
     step("포터블 런타임 (이 서버의 Python·Node를 묶고, wheel은 사내 pip 미러에서)")
     if runtime_ready(rt) and not force:
-        ok(f"이미 있습니다: {rt}\\manifest.json (다시 만들기: --force-runtime)")
+        ok(f"이미 있습니다: {rt / 'manifest.json'} (다시 만들기: --force-runtime)")
         return True
-    cmd = [sys.executable, str(ROOT / "scripts" / "fetch_runtimes.py"), "--from-local", "--out", str(rt)]
+    if not WINDOWS:
+        bad(PACK_HOW)
+        return False
+    cmd =[sys.executable, str(ROOT / "scripts" / "fetch_runtimes.py"), "--from-local", "--out", str(rt)]
     if not wheels:
         cmd.append("--no-wheels")
     if subprocess.call(cmd, env={**os.environ, "PYTHONIOENCODING": "utf-8"}) != 0 or not runtime_ready(rt):
@@ -161,15 +256,19 @@ def main():
     ap.add_argument("--skip-frontend", action="store_true")
     ap.add_argument("--force-runtime", action="store_true")
     ap.add_argument("--no-wheels", action="store_true")
+    ap.add_argument("--pack", metavar="ZIP", help="Windows PC에서: Linux 서버로 옮길 설치 묶음(설치 프로그램+런타임)만 만든다")
+    ap.add_argument("--import-pack", metavar="ZIP", help="서버에서: --pack으로 만든 묶음을 넣은 뒤 나머지 준비를 이어서 한다")
     a = ap.parse_args()
-    if os.name != "nt":
-        raise SystemExit("Windows 서버에서 실행하세요 (설치 프로그램·런타임이 Windows용입니다)")
+    if a.pack:
+        sys.exit(0 if make_pack(Path(a.pack).resolve(), not a.no_wheels) else 1)
     if (a.publish or a.check and a.server) and not a.pin:
         raise SystemExit("--pin(또는 DDS_ADMIN_PIN)이 필요합니다")
 
     rt = data_dir() / "agent_runtime"
     print(f"서버 데이터 폴더: {rt.parent}\n런타임 폴더: {rt}")
     good = True
+    if a.import_pack:
+        good &= import_pack(Path(a.import_pack).resolve(), rt)
     if not a.check:
         if not a.skip_frontend:
             good &= build_frontend()

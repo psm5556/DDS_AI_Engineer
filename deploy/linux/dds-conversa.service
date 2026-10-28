@@ -1,0 +1,22 @@
+# DDS Conversa 웹앱 서버 (Linux systemd)
+# 설치: 경로·사용자를 이 서버에 맞게 고친 뒤
+#   sudo cp deploy/linux/dds-conversa.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now dds-conversa
+# 상태·로그: systemctl status dds-conversa / journalctl -u dds-conversa -f
+# 데이터 폴더는 저장소 루트 server.toml의 data_dir로 정한다(prepare_onsite.py도 같은 값을 읽는다).
+[Unit]
+Description=DDS Conversa 웹앱 서버
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dds
+WorkingDirectory=/opt/dds-conversa
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/dds-conversa/.venv/bin/python -m uvicorn server.app.main:app --host 0.0.0.0 --port 7014
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
