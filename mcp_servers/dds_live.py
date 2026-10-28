@@ -2,6 +2,7 @@
 프로토콜·플러그인: agent-context/live/PROTOCOL.md
 - 소켓 플러그인(practice, abaqus, hypermesh): 코드를 툴의 GUI 스레드에서 실행 → 화면이 바로 바뀐다
 - NX: 대기열 방식 — 저널을 큐에 넣고 사용자가 NX에서 'DDS 실행'(dds_live_nx.py)을 누르면 열린 세션에서 실행
+- 빠른 툴(live_set_params·live_view·live_undo): AI가 코드를 쓰지 않고 값만 넘긴다. NX는 세션 안 도우미(nx/ddslive_nx_ops.py)를 live_exec로 부른다
 - 캡처: 플러그인의 뷰포트 이미지, 안 되면 툴 창을 화면 캡처 → 웹앱 결과(이미지)로 게시
 """
 import base64
@@ -20,6 +21,8 @@ from _common import ROOT, api, resolve_pid, settings
 from mcp.server import MCPServer
 
 LIVE_DIR = ROOT / "agent-context" / "live"
+NX_OPS_DIR = LIVE_DIR / "nx"
+MAX_SIDE = 1600  # 게시할 캡처 이미지의 긴 변(px) — 원본(4K 창 등)을 그대로 올리면 느리다
 TOKEN_FILE = Path.home() / ".dds-agent" / "live.token"
 
 if os.name == "nt":  # 화면 배율(125%·150%)에서도 창 좌표와 실제 픽셀이 맞도록
@@ -40,7 +43,9 @@ mcp = MCPServer(
     "dds-live",
     instructions=(
         "사용자가 열어 둔 CAD/CAE 화면에서 함께 모델링할 때 쓴다(형상 만들기, 재료·하중·경계조건·메쉬 설정, 해석 모델 준비). "
-        "한 번에 작은 단계만 실행하고, 단계마다 live_capture로 화면을 게시해 사용자가 확인하게 한다. "
+        "치수·설계변수는 live_set_params, 화면은 live_view, 되돌리기는 live_undo로 한다(코드를 쓰지 않아 빠르다). "
+        "live_exec는 이것들로 안 되는 일만, 하나의 명령 묶음으로 실행한다. "
+        "사용자가 툴 화면을 보고 있으므로 캡처는 큰 단계가 끝났을 때와 요청할 때만 한다(capture=true로 같은 호출에서). "
         "해석 제출처럼 오래 걸리는 일은 Live Link가 아니라 dds-cae(배치)로 한다. 툴별 방법은 live-modeling 스킬을 읽는다."
     ),
 )
@@ -77,13 +82,22 @@ def _call(tool: str, op: str, timeout: float = 120, **fields) -> dict:
 def _nx_exec(code: str, wait_sec: int) -> dict:
     NX_QUEUE.mkdir(parents=True, exist_ok=True)
     name = f"job_{int(time.time() * 1000)}"
-    (NX_QUEUE / f"{name}.py").write_text(code, encoding="utf-8")
+    # 다 쓴 뒤 이름을 바꾼다 — 대기열을 자동으로 읽는 NX가 반쯤 쓴 코드를 실행하지 않도록
+    tmp = NX_QUEUE / f"{name}.tmp"
+    tmp.write_text(code, encoding="utf-8")
+    os.replace(tmp, NX_QUEUE / f"{name}.py")
     res_file = NX_QUEUE / f"{name}.result.json"
     t0 = time.time()
     while time.time() - t0 < wait_sec:
         if res_file.exists():
-            return json.loads(res_file.read_text(encoding="utf-8"))
-        time.sleep(1)
+            try:
+                res = json.loads(res_file.read_text(encoding="utf-8"))
+            except ValueError:  # NX가 아직 쓰는 중
+                time.sleep(0.05)
+                continue
+            res["wait_ms"] = int((time.time() - t0) * 1000)
+            return res
+        time.sleep(0.1)  # 1초 간격이면 단계마다 평균 0.5초씩 더 기다린다
     return {"ok": False, "pending": True, "job": name,
             "error": "NX에서 아직 실행하지 않았습니다. 사용자에게 NX의 'DDS 실행' 버튼(dds_live_nx.py)을 눌러 달라고 안내한 뒤 live_result로 확인하세요."}
 
@@ -152,6 +166,110 @@ def _capture_window(keyword: str, path: Path) -> str | None:
     return str(path)
 
 
+def _shrink(path: Path, max_side: int = MAX_SIDE) -> None:
+    """게시 전에 긴 변을 max_side로 줄인다(업로드·화면 표시가 빨라진다)."""
+    from PIL import Image
+    with Image.open(path) as img:
+        if max(img.size) <= max_side:
+            return
+        small = img.copy()  # 파일을 닫은 뒤 같은 경로에 저장한다(Windows 파일 잠금)
+    small.thumbnail((max_side, max_side), Image.LANCZOS)
+    small.save(path)
+
+
+def _grab(tool: str, path: Path) -> str | None:
+    """툴 화면을 path에 저장한다. 플러그인 뷰포트 → (NX) 도우미 뷰포트 → 창 캡처 순서."""
+    if TOOLS.get(tool, {}).get("port"):
+        try:
+            r = _call(tool, "screenshot", path=str(path))
+            if r.get("ok") and r.get("path") and Path(r["path"]).exists():
+                return r["path"]
+        except OSError:
+            pass
+    elif tool == "nx":
+        r = _nx_ops(f"ops.capture({str(path)!r})", 10)
+        if r.get("pending") and r.get("job"):  # NX가 바로 실행하지 않으면 창 캡처로 — 늦게 돌 작업은 지운다
+            (NX_QUEUE / f"{r['job']}.py").unlink(missing_ok=True)
+        if r.get("ok") and path.exists():
+            return str(path)
+    return _capture_window(TOOLS.get(tool, {}).get("window", tool), path)
+
+
+def _shot_path(pid: int, tool: str) -> Path:
+    shots = settings.project_dir(pid) / "live"
+    shots.mkdir(parents=True, exist_ok=True)
+    return shots / f"{tool}_{time.strftime('%Y%m%d_%H%M%S')}.png"
+
+
+def _publish_image(pid: int, tool: str, path: Path, title: str = "", caption: str = "",
+                   flow_id: int | None = None, node_id: str | None = None) -> int:
+    _shrink(path)
+    rel = api.upload_image(pid, path, "live")
+    a = api.post(f"/api/projects/{pid}/artifacts", {
+        "kind": "image", "title": title or f"{TOOLS.get(tool, {}).get('label', tool)} 화면 {time.strftime('%H:%M:%S')}",
+        "payload": {"path": rel, "caption": caption}, "flow_id": flow_id, "node_id": node_id})
+    return a["id"]
+
+
+# ---------- 빠른 툴: 값 → 도우미 호출 코드 ----------
+def _nx_code(call: str) -> str:
+    """NX 세션 안 도우미(ddslive_nx_ops)를 불러 call을 실행하는 짧은 코드. 결과(JSON 문자열)는 result에."""
+    return (f"import sys\n_d = {str(NX_OPS_DIR)!r}\n"
+            "if _d not in sys.path:\n    sys.path.insert(0, _d)\n"
+            "import json, ddslive_nx_ops as ops\nops = ops.fresh()\n"
+            f"result = {call}\n")
+
+
+def _parse(res: dict, t0: float | None = None) -> dict:
+    """live_exec 응답의 result(JSON 문자열)를 풀어 한 dict로. 대기 중·실행 오류는 그대로 돌려준다."""
+    if not res.get("ok") or res.get("pending"):
+        return res
+    if not res.get("result"):
+        return {**res, "ok": False, "error": "도우미 결과가 비어 있습니다. stdout을 확인하세요."}
+    try:
+        data = json.loads(res["result"])
+    except ValueError:
+        return res
+    if not isinstance(data, dict):
+        return res
+    out = {**data}
+    ms = dict(out.get("ms") or {})
+    if res.get("wait_ms") is not None:
+        ms["wait"] = res["wait_ms"]
+    if t0 is not None:
+        ms["round_trip"] = int((time.time() - t0) * 1000)
+    out["ms"] = ms
+    if res.get("stdout"):
+        out["stdout"] = res["stdout"][-2000:]
+    return out
+
+
+def _nx_ops(call: str, timeout_sec: int = 120) -> dict:
+    t0 = time.time()
+    return _parse(live_exec("nx", _nx_code(call), timeout_sec), t0)
+
+
+def _check_values(values: dict) -> str | None:
+    if not isinstance(values, dict) or not values:
+        return "values는 {\"이름\": 숫자} 형식이어야 합니다"
+    bad = [k for k, v in values.items() if not isinstance(v, (int, float)) or isinstance(v, bool)]
+    return f"숫자가 아닌 값: {', '.join(bad)}" if bad else None
+
+
+def _with_capture(out: dict, tool: str, shot: Path | None, pid: int | None, title: str, caption: str,
+                  flow_id: int | None, node_id: str | None) -> dict:
+    """같은 실행에서 남긴 화면(없으면 창 캡처)을 게시한다."""
+    if shot is None or not out.get("ok"):
+        return out
+    got = out.get("image") if out.get("image") and Path(out["image"]).exists() else _grab(tool, shot)
+    if got:
+        out["image"] = got
+        out["artifact_id"] = _publish_image(pid, tool, Path(got), title, caption, flow_id, node_id)
+    else:
+        out.setdefault("warnings", []).append("화면을 캡처하지 못했습니다")
+    return out
+
+
 # ---------- 툴 ----------
 @mcp.tool()
 def live_status() -> list[dict]:
@@ -197,18 +315,72 @@ def live_launch(tool: str, model_path: str | None = None) -> dict:
 
 
 @mcp.tool()
-def live_info(tool: str) -> dict:
-    """열려 있는 모델의 요약(파트·재료·스텝·하중·세트 등)."""
+def live_info(tool: str, all_expressions: bool = False) -> dict:
+    """열려 있는 모델의 요약(파트·재료·스텝·하중·세트 등). 시작할 때 한 번 읽고, 이름은 여기서 가져온다.
+    NX: 열린 파트(cad/idealized/fem/sim), 사용자가 이름 붙인 expression(값·단위·상수 여부), 피처, 바디.
+    자동 이름(p12 등) expression까지 보려면 all_expressions=true."""
     if tool == "nx":
-        return _nx_exec("p = work_part\nresult = {'part': p.Leaf if p else None, 'bodies': [b.JournalIdentifier for b in p.Bodies] if p else []}", 60)
+        return _nx_ops(f"ops.summary(all_expressions={bool(all_expressions)!r})", 60)
     return _call(tool, "info")
+
+
+@mcp.tool()
+def live_set_params(tool: str, values: dict, fem: bool = False, measure: bool = False, capture: bool = False,
+                    title: str = "", caption: str = "", flow_id: int | None = None, node_id: str | None = None,
+                    project_id: int | None = None, timeout_sec: int = 120) -> dict:
+    """설계변수(치수)를 한 번에 바꾼다 — 코드를 쓰지 않아 빠르다. 여러 개는 한 호출에 모은다.
+    tool: nx(expression 이름, 업데이트 1번, 실패하면 자동으로 되돌림, Undo 마크 1개) · practice(model 키)
+    values: {"이름": 숫자} (이름은 live_info에서) · fem: Simcenter에서 Idealized·FEM(재메쉬)까지 업데이트
+    measure: 질량특성(NX) · capture: 바뀐 화면을 같은 호출에서 게시. 결과의 ms로 어디서 시간이 드는지 볼 수 있다."""
+    err = _check_values(values)
+    if err:
+        return {"ok": False, "error": err}
+    pid = resolve_pid(project_id) if capture else None
+    shot = _shot_path(pid, tool) if capture else None
+    if tool == "nx":
+        out = _nx_ops(f"ops.set_params(json.loads({json.dumps(values)!r}), fem={bool(fem)!r}, measure={bool(measure)!r}, "
+                      f"capture={str(shot) if shot else None!r})", timeout_sec)
+    elif tool == "practice":
+        t0 = time.time()
+        code = (f"import json\nmodel.update(json.loads({json.dumps(values)!r}))\n"
+                f"result = json.dumps({{'ok': True, 'changed': {{k: model[k] for k in {sorted(values)!r}}}}})\n")
+        out = _parse(live_exec("practice", code, timeout_sec), t0)
+    else:
+        return {"ok": False, "error": f"{tool}은(는) live_exec로 값을 바꾸세요(빠른 툴은 nx·practice만)."}
+    return _with_capture(out, tool, shot, pid, title, caption, flow_id, node_id)
+
+
+@mcp.tool()
+def live_view(tool: str, orient: str | None = None, fit: bool = True, style: str | None = None,
+              show: list[str] | None = None, hide: list[str] | None = None, only: list[str] | None = None,
+              capture: bool = False, title: str = "", caption: str = "", flow_id: int | None = None,
+              node_id: str | None = None, project_id: int | None = None) -> dict:
+    """화면을 바꾼다(NX) — 코드를 쓰지 않아 빠르다.
+    orient: front·back·top·bottom·left·right·iso·trimetric · fit: 화면에 맞추기
+    style: shaded(음영)·edges(음영+모서리)·wire(와이어)·hidden(숨은선) · show/hide/only: 바디 이름 또는 피처 이름(예: EXTRUDE(3))
+    capture: 바뀐 화면을 같은 호출에서 게시"""
+    if tool != "nx":
+        return {"ok": False, "error": f"{tool}은(는) live_exec로 화면을 바꾸세요(live_view는 nx만)."}
+    pid = resolve_pid(project_id) if capture else None
+    shot = _shot_path(pid, tool) if capture else None
+    out = _nx_ops(f"ops.view(orient={orient!r}, fit={bool(fit)!r}, style={style!r}, show={show!r}, hide={hide!r}, "
+                  f"only={only!r}, capture={str(shot) if shot else None!r})", 60)
+    return _with_capture(out, tool, shot, pid, title, caption, flow_id, node_id)
+
+
+@mcp.tool()
+def live_undo(tool: str, steps: int = 1) -> dict:
+    """live_set_params로 바꾼 것을 최근 것부터 steps번 되돌린다(NX)."""
+    if tool != "nx":
+        return {"ok": False, "error": f"{tool}은(는) 툴의 Undo를 쓰세요(live_undo는 nx만)."}
+    return _nx_ops(f"ops.undo({int(steps)!r})", 60)
 
 
 @mcp.tool()
 def live_exec(tool: str, code: str, timeout_sec: int = 120) -> dict:
     """열려 있는 툴 세션에서 코드를 실행한다(사용자 화면이 바로 바뀐다). 결과로 돌려받을 값은 result 변수에 넣는다.
     tool: practice(python: model, redraw) · abaqus(python: mdb, session) · hypermesh(tcl) · nx(python: session, work_part — 대기열)
-    한 번에 작은 단계만 실행하고 결과·화면을 확인하며 진행한다."""
+    치수 바꾸기·화면 바꾸기·되돌리기는 live_set_params·live_view·live_undo가 빠르다. 그 밖의 일을 하나의 명령 묶음으로 실행한다."""
     if tool not in TOOLS:
         return {"ok": False, "error": f"지원하지 않는 툴: {tool}"}
     if tool == "nx":
@@ -229,30 +401,14 @@ def live_result(job: str) -> dict:
 @mcp.tool()
 def live_capture(tool: str, title: str = "", caption: str = "", publish: bool = True, flow_id: int | None = None,
                  node_id: str | None = None, project_id: int | None = None) -> dict:
-    """툴 화면(뷰포트)을 캡처해 웹앱 결과로 게시한다. 사용자가 바뀐 모델을 바로 확인하게 단계마다 쓴다."""
+    """툴 화면(뷰포트)을 캡처해 웹앱 결과로 게시한다. 사용자가 툴 화면을 보고 있으므로 큰 단계가 끝났을 때·요청할 때·보고서용으로 쓴다."""
     pid = resolve_pid(project_id)
-    shots = settings.project_dir(pid) / "live"
-    shots.mkdir(parents=True, exist_ok=True)
-    path = shots / f"{tool}_{time.strftime('%Y%m%d_%H%M%S')}.png"
-    got = None
-    if TOOLS.get(tool, {}).get("port"):
-        try:
-            r = _call(tool, "screenshot", path=str(path))
-            if r.get("ok") and r.get("path") and Path(r["path"]).exists():
-                got = r["path"]
-        except OSError:
-            pass
-    if not got:
-        got = _capture_window(TOOLS.get(tool, {}).get("window", tool), path)
+    got = _grab(tool, _shot_path(pid, tool))
     if not got:
         return {"ok": False, "error": "화면을 캡처하지 못했습니다(툴 창을 찾지 못함)."}
     out = {"ok": True, "path": got}
     if publish:
-        rel = api.upload_image(pid, Path(got), "live")
-        a = api.post(f"/api/projects/{pid}/artifacts", {
-            "kind": "image", "title": title or f"{TOOLS.get(tool, {}).get('label', tool)} 화면 {time.strftime('%H:%M:%S')}",
-            "payload": {"path": rel, "caption": caption}, "flow_id": flow_id, "node_id": node_id})
-        out["artifact_id"] = a["id"]
+        out["artifact_id"] = _publish_image(pid, tool, Path(got), title, caption, flow_id, node_id)
     return out
 
 

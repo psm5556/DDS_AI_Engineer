@@ -114,7 +114,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 - Live Link 플러그인
   - Abaqus: `agent-context/live/abaqus/abaqus_plugins/ddsLive`
   - HyperMesh: `agent-context/live/hypermesh/dds_live_hm.tcl`
-  - NX: `agent-context/live/nx/dds_live_nx.py`
+  - NX: `agent-context/live/nx/dds_live_nx.py`, 빠른 툴 도우미 `ddslive_nx_ops.py`(설계 수정·화면 조작, `docs/onsite-validation.md` 1-1절)
 - HPC 실행기: `agent/dds_agent/job_runner.py`의 `HpcRunner`. 사내 스케줄러(LSF/PBS/Slurm)에 맞춰 구현한다.
 - AI CLI의 사내 정책: 사용 가능한 계정·모델·프록시
 

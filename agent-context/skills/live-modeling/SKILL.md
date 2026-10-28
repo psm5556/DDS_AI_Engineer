@@ -11,8 +11,9 @@ description: 사용자가 열어 둔 CAD/CAE GUI(NX, Abaqus/CAE, HyperMesh, STAR
 1. `dds-live.live_status`로 붙을 수 있는 툴을 확인한다.
    - 연결이 안 돼 있으면 아래 툴별 '시작 방법'을 사용자에게 안내한다. 연습용이나 Abaqus는 `live_launch`로 직접 띄울 수 있다.
 2. `live_info`로 열린 모델 구조(파트·재료·스텝·세트)를 먼저 읽는다. 이름을 추측하지 않는다.
-3. **작은 단계씩** `live_exec`를 실행한다(예: 재료 하나 → 단면 → 할당 → 스텝 → 하중 → 경계조건 → 메쉬).
-   - 단계마다 `live_capture`로 화면을 게시하고 짧게 설명한다.
+3. **하나의 논리 단위씩** 실행한다(예: 재료·단면·할당 → 스텝·하중·경계조건 → 메쉬).
+   - 치수·설계변수 바꾸기, 화면 바꾸기, 되돌리기는 빠른 툴(`live_set_params`·`live_view`·`live_undo`)을 먼저 쓴다. 코드를 쓰지 않아 빠르고 틀릴 일이 적다(지금은 NX, `live_set_params`는 연습용 CAD도).
+   - 사용자는 툴 화면을 직접 보고 있다. 캡처는 큰 단계가 끝났을 때·사용자가 요청할 때·보고서용으로만 한다. 빠른 툴은 `capture=true`로 같은 호출에서 게시한다.
    - 사용자의 확인이나 수정 요청을 반영한다.
 4. 실패하면 오류를 읽고 고쳐서 다시 실행한다.
    - 툴의 Undo로 되돌릴 수 있게 한 단계는 되도록 하나의 명령 묶음으로 만든다.
@@ -57,6 +58,21 @@ description: 사용자가 열어 둔 CAD/CAE GUI(NX, Abaqus/CAE, HyperMesh, STAR
 - 코드에서 쓸 수 있는 것: `session`, `work_part`, `display_part`, `NXOpen`
   - 상세 API는 `nx-cad-automation`, `simcenter3d-automation` 스킬을 본다.
 
+#### NX를 빠르게 쓰는 법
+빠른 툴은 세션 안 도우미(`live/nx/ddslive_nx_ops.py`)를 부른다. 도우미는 사내에서 검증된 배치 스크립트 함수(`nx_param_update`·`sc_update_solve`)를 그대로 쓴다.
+1. 시작할 때 `live_info(tool="nx")`를 한 번 읽는다. expression·피처·바디 이름은 여기서만 가져온다(추측 금지).
+   - 사용자가 이름 붙인 expression만 나온다. p12 같은 자동 이름까지 필요하면 `all_expressions=true`.
+2. 치수·설계변수: `live_set_params(tool="nx", values={"thickness": 4, "rib_h": 12})`
+   - 여러 개는 **한 호출에** 모은다. 업데이트를 한 번만 하고 Undo 마크도 하나만 남는다.
+   - 업데이트가 실패하면 자동으로 바꾸기 전으로 되돌리고 오류를 돌려준다.
+   - Simcenter 3D에서 메쉬까지 바꿔야 할 때만 `fem=true`(Idealized·FEM 업데이트, 재메쉬라 느리다). 질량이 필요하면 `measure=true`.
+3. 화면: `live_view(tool="nx", orient="front", style="edges", hide=["EXTRUDE(3)"])`
+   - orient: front·back·top·bottom·left·right·iso·trimetric / style: shaded·edges·wire·hidden / show·hide·only: 바디 또는 피처 이름
+4. 되돌리기: `live_undo(tool="nx", steps=1)` — 빠른 툴로 바꾼 것을 최근 것부터 되돌린다.
+5. `live_exec`는 새 피처 만들기처럼 빠른 툴로 안 되는 일에만 쓴다. 하나의 명령 묶음으로 만든다.
+6. 결과의 `ms`에 걸린 시간이 있다(update: 형상 업데이트, fem: 재메쉬, capture: 화면 저장, wait: 실행까지 대기, round_trip: 전체).
+   - 느리다는 말이 나오면 이 값으로 어디서 걸리는지 사용자에게 알려 준다.
+
 ### STAR-CCM+ — 클라이언트-서버 공유 (TODO(사내검증))
 - 사용자가 `starccm+ -server -port 47827 model.sim`으로 서버를 띄우고 GUI 클라이언트로 접속한다.
 - 에이전트는 매크로를 `dds-cae.run_script(tool="starccm", args=["-host","localhost","-port","47827"])`로 같은 서버에 실행한다. 같은 sim이므로 사용자 화면에 반영된다.
@@ -66,5 +82,5 @@ description: 사용자가 열어 둔 CAD/CAE GUI(NX, Abaqus/CAE, HyperMesh, STAR
 - `dds-cae.run_script(tool="ansys_python")`로 `ansys.mechanical.core.connect_to_mechanical(port=10000)` 후 `run_python_script(...)`를 실행한다. 사용자가 보는 Mechanical 트리가 바로 바뀐다.
 
 ## 3. 사용자에게 보여 주는 방식
-- 단계마다 `live_capture(tool, title="2. 재료·단면 할당")` → 오른쪽 캔버스 '결과'에 화면이 쌓인다.
+- 큰 단계가 끝날 때 `live_capture(tool, title="2. 재료·단면 할당")` → 오른쪽 캔버스 '결과'에 화면이 쌓인다. 이미지는 긴 변 1600px로 줄여 올린다.
 - 큰 흐름은 `dds-flow.propose_flow`로 먼저 보여 준다(type: cad/pre). 각 단계를 `update_node`로 진행 표시한다.

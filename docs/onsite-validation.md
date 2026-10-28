@@ -24,6 +24,28 @@
 | STAR-CCM+ | "sim의 Global Parameter와 Report 목록을 보여 줘" | "입구 속도 3수준" | 서버 공유 모드(스킬 참고) |
 | Amesim | "모델 파라미터 목록을 보여 줘(probe_api)" | "스프링 강성 3수준으로 최대 변위" | — |
 
+### 1-1. NX Live Link 빠른 툴 (설계 수정·화면 조작)
+에이전트가 코드를 쓰지 않고 세션 안 도우미(`agent-context/live/nx/ddslive_nx_ops.py`)를 부르는 툴이다. 열린 NX에서 아래를 차례로 요청한다.
+| 요청 | 쓰이는 툴 | 확인할 것 |
+|---|---|---|
+| "열린 파트에서 바꿀 수 있는 치수를 보여 줘" | `live_info` | expression·피처·바디 이름이 맞게 나오는지 |
+| "두께를 4, 리브 높이를 12로 바꿔 줘" | `live_set_params` | 업데이트 1번, Edit > Undo 목록에 "DDS: …" 마크 1개 |
+| "정면에서 모서리까지 보이게 하고 커버는 숨겨 줘" | `live_view` | 방향·표시 방식·숨기기 |
+| "방금 것 되돌려 줘" | `live_undo` | 바꾸기 전 값으로 돌아오는지 |
+| "두께를 0으로 바꿔 줘"(형상이 깨지는 값) | `live_set_params` | 자동으로 되돌리고 오류를 알려 주는지 |
+| (Simcenter 3D sim을 연 상태) "두께를 4로 바꾸고 메쉬까지 업데이트해 줘" | `live_set_params(fem=true)` | Idealized·FEM 업데이트 후 원래 화면으로 돌아오는지 |
+| "지금 화면을 결과에 올려 줘" | `live_capture` | 뷰포트만 찍히는지, NX 창이 앞으로 튀어나오지 않는지 |
+
+- 결과의 `ms`(update·fem·capture·wait·round_trip)를 적어 둔다. 어디서 느린지 보는 기준이다.
+- 도우미의 `TODO(사내검증)` 항목은 다음과 같다. 안 되면 해당 동작을 Journal로 기록해 맞춘다.
+  - RenderingStyleType 이름
+  - DisplayManager.BlankObjects·UnblankObjects
+  - UndoToMark
+  - 대화형 세션의 ImageExportBuilder
+  - CAE 파트의 WorkView
+  - UpdateFemodel
+- 사내에서 바꾼 NX 실행 방식이 있으면 빠른 툴도 그 방식으로 돈다(모두 `live_exec(tool="nx")`를 거친다). 대기열 파일은 다 쓴 뒤 `job_*.py`로 이름을 바꾸므로, 대기열을 자동으로 읽어도 반쯤 쓴 코드를 실행하지 않는다.
+
 ## 2. 3D 형상·필드 학습
 - 케이스 스크립트가 `fields/<이름>.npz`(points, values, triangles)를 남기게 한다(`docs/skill-contract.md` 1-1절).
   - Abaqus: odb에서 표면 노드 좌표와 `S` Mises를 노드 평균으로 추출한다.
