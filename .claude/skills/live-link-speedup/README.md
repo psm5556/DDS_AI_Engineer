@@ -30,12 +30,18 @@
   git commit -m "Live Link 속도 개선 개발 스킬 추가"
   ```
 - 파일은 한 벌만 둔다. 링크라서 스킬을 고쳐도 두 AI가 같은 내용을 본다. git은 링크를 링크로 저장한다.
-- `AGENTS.md` 6절 표에 아래 줄을 추가한다.
-  ```text
-  | Live Link 속도 개선 | `.claude/skills/live-link-speedup/SKILL.md`부터 읽는다(개발용 스킬, Agent 배포에는 들어가지 않음) |
+- `AGENTS.md` **맨 끝에** 아래 절을 덧붙인다.
+  - 사내 AGENTS.md는 구조가 바뀌었을 수 있으므로 기존 표를 찾지 않고 끝에 붙이는 것이 가장 안전하다.
+  - "자주 하는 작업" 같은 표가 있으면 그 표에 한 줄로 넣어도 된다.
+  ```markdown
+  ## Live Link 속도 개선 (개발용 스킬)
+  - "Live Link가 느리다", "열린 CAD에서 설계 수정·화면 조작을 빠르게" 같은 작업은 `.claude/skills/live-link-speedup/SKILL.md`부터 읽고 그 절차를 따른다.
+  - 이 스킬은 개발용이다. `agent-context/skills/`(사용자 PC로 배포되는 웹앱 AI용 스킬)에 넣지 않는다.
   ```
-  - `CLAUDE.md`·`GEMINI.md`가 `AGENTS.md`를 불러오므로 두 AI 모두 이 줄을 본다.
-  - Gemini CLI가 스킬을 지원하지 않는 버전이어도 이 줄로 찾아간다.
+  - Gemini CLI가 스킬을 지원하지 않는 버전이어도 이 절로 찾아간다.
+- `CLAUDE.md`·`GEMINI.md`가 지금도 `AGENTS.md`를 불러오는지 확인한다: `grep -n "@AGENTS.md" CLAUDE.md GEMINI.md`
+  - 두 파일 모두에서 나오면 AGENTS.md에만 넣으면 된다.
+  - 안 나오는 파일이 있으면 그 파일 끝에도 같은 절을 붙인다. Claude Code는 `CLAUDE.md`, Gemini CLI는 `GEMINI.md`를 읽는다.
 - **확인**
   - Gemini CLI: 저장소에서 `gemini`를 실행하고 `/skills list`에 `live-link-speedup`이 나오는지 본다.
     - 처음 쓸 때 스킬을 켤지 묻는다. 허용한다.
