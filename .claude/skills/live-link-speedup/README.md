@@ -15,17 +15,33 @@
 | `references/com_worker.py` | CATIA·SOLIDWORKS·LightTools용 COM 연결 유지 초안 |
 | `references/runtime-agent-guide.md` | 웹앱 안 에이전트 지침에 넣을 문구 |
 
-## 2. 어디에 두나 (Linux 서버의 저장소)
+## 2. 어디에 두나 (Linux 서버의 저장소, Claude Code·Gemini CLI 공용)
 ```
 <서버 저장소>/
-├─ .claude/skills/live-link-speedup/   ← 이 폴더를 그대로 두고 git에 커밋한다
-└─ AGENTS.md                           ← 6절 "자주 하는 작업" 표에 한 줄 추가(아래)
+├─ .claude/skills/live-link-speedup/   ← 이 폴더를 그대로 둔다(실제 파일, Claude Code가 읽음)
+├─ .gemini/skills/live-link-speedup    ← 위 폴더를 가리키는 심볼릭 링크(Gemini CLI가 읽음)
+└─ AGENTS.md                           ← 6절 "자주 하는 작업" 표에 한 줄 추가(두 AI 공통 안내)
 ```
-- Claude Code는 이 저장소에서 열면 `.claude/skills/`를 자동으로 읽는다.
-- Gemini CLI·Codex도 찾을 수 있게 `AGENTS.md` 6절 표에 아래 줄을 추가한다. `CLAUDE.md`·`GEMINI.md`가 `AGENTS.md`를 불러온다.
-  ```text
-  | Live Link 속도 개선 | `.claude/skills/live-link-speedup/SKILL.md`부터 읽는다 |
+- 서버 저장소에서 한 번 실행한다.
+  ```bash
+  mkdir -p .gemini/skills
+  ln -s ../../.claude/skills/live-link-speedup .gemini/skills/live-link-speedup
+  git add .claude/skills/live-link-speedup .gemini/skills/live-link-speedup AGENTS.md
+  git commit -m "Live Link 속도 개선 개발 스킬 추가"
   ```
+- 파일은 한 벌만 둔다. 링크라서 스킬을 고쳐도 두 AI가 같은 내용을 본다. git은 링크를 링크로 저장한다.
+- `AGENTS.md` 6절 표에 아래 줄을 추가한다.
+  ```text
+  | Live Link 속도 개선 | `.claude/skills/live-link-speedup/SKILL.md`부터 읽는다(개발용 스킬, Agent 배포에는 들어가지 않음) |
+  ```
+  - `CLAUDE.md`·`GEMINI.md`가 `AGENTS.md`를 불러오므로 두 AI 모두 이 줄을 본다.
+  - Gemini CLI가 스킬을 지원하지 않는 버전이어도 이 줄로 찾아간다.
+- **확인**
+  - Gemini CLI: 저장소에서 `gemini`를 실행하고 `/skills list`에 `live-link-speedup`이 나오는지 본다.
+    - 처음 쓸 때 스킬을 켤지 묻는다. 허용한다.
+    - 링크를 만든 뒤 이미 열려 있던 세션이면 `/skills reload`를 한다.
+  - Claude Code: 저장소에서 `claude`를 실행하고 "쓸 수 있는 스킬 목록 보여 줘"라고 물어 `live-link-speedup`이 나오는지 본다.
+- 아래 4절 요청 문장은 SKILL.md 경로를 직접 적으므로, 스킬 자동 인식이 안 돼도 두 AI 모두 그대로 쓸 수 있다.
 - **사용자 PC에는 깔리지 않는다.** Agent 배포 zip에는 `agent/`·`mcp_servers/`·`cae_adapters/`·`agent-context/`만 들어간다. 이 스킬은 개발하는 AI만 쓰면 된다.
 - `agent-context/skills/`에는 **넣지 않는다.**
   - 그곳은 사용자 프로젝트 폴더로 복사되는 웹앱 AI용 스킬 자리다.
