@@ -479,6 +479,57 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .hsteps li.now .no { background: var(--ai); color: var(--surface); }
 .hsteps li.h.now .no { background: var(--human); }
 
+/* ---------- 10. 참고: 상용 툴의 AI와 비교 ---------- */
+#s10 { padding: 36px 56px 24px; gap: 16px; }
+#s10 .sh { gap: 6px; }
+#s10 h2 { font-size: 38px; }
+#s10 .sub { font-size: 17px; }
+.vcmp { flex: 1; min-height: 0; display: grid; grid-template-columns: 548px minmax(0, 1fr); gap: 28px; align-items: start; }
+/* 왼쪽 그림: 장면 1은 엔지니어가 툴마다 다른 AI를 따로 쓰는 모습, 장면 2부터 AI Engineer가 그 위에서 툴을 엮는 모습.
+   9장처럼 판 크기가 고정이라 상자 위치를 px로 둔다 */
+.vmap { position: relative; height: 472px; }
+.vmap > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.vmap .frag line { stroke: var(--muted); stroke-width: 2.5; stroke-dasharray: 2 7; stroke-linecap: round; }
+.vmap .via line { stroke: var(--ai); stroke-width: 3; stroke-dasharray: 7 6; animation: vflow 1.1s linear infinite; }
+@keyframes vflow { to { stroke-dashoffset: -13; } }
+.vmap .frag, .vmap .flbl { transition: opacity .45s; }
+.vmap .via, .vmap .dds { opacity: 0; transition: opacity .5s; }
+.vcmp.k1 .vmap .frag, .vcmp.k1 .vmap .flbl { opacity: 0; }
+.vcmp.k1 .vmap .via, .vcmp.k1 .vmap .dds { opacity: 1; }
+.flbl { position: absolute; left: 274px; top: 152px; transform: translateX(-50%); background: var(--surface); border: 1.5px dashed var(--line); border-radius: 999px; padding: 4px 14px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.an.dds { border: 2px solid var(--ai); padding: 14px 18px; gap: 10px; justify-items: stretch; }
+.vtags { display: flex; flex-wrap: wrap; gap: 6px; }
+.vtags i { font-style: normal; font-size: 13.5px; font-weight: 700; color: var(--ai); background: var(--ai-soft); border-radius: 999px; padding: 2px 11px; }
+.vpart { font-size: 13.5px; color: var(--muted); }
+.an .vpart b { font-size: inherit; line-height: inherit; color: var(--ink); }
+.nw { white-space: nowrap; }
+.vd { position: absolute; top: 292px; width: 128px; height: 156px; background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 11px; display: flex; flex-direction: column; gap: 4px; }
+.vd b { font-size: 14.5px; line-height: 1.25; }
+.vd > span { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.vd .vc { margin-top: auto; padding-top: 7px; border-top: 1.5px dashed var(--line); font-size: 12.5px; font-weight: 700; line-height: 1.35; transition: color .4s; }
+.vcmp.k2 .vd .vc:not(.na) { color: var(--bad); }
+.vd .vc.na { color: var(--muted); font-weight: 600; }
+.vfine { position: absolute; left: 0; top: 454px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+/* 오른쪽 표: 장면 1은 상용 툴 AI 칸만, 장면 2에 AI Engineer 칸을 채우고, 장면 3은 비용 줄만 남겨 강조 */
+.vside { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.vt { display: grid; gap: 6px; }
+.vr { display: grid; grid-template-columns: 82px minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; transition: opacity .35s; }
+.vr.hd span { font-size: 13.5px; font-weight: 700; color: var(--muted); padding: 0 12px; }
+.vr.hd span:last-child { color: var(--ai); }
+.vr > b { font-size: 14px; line-height: 1.35; align-self: center; }
+.vr .t, .vr .u { border-radius: 12px; padding: 7px 12px; font-size: 13px; line-height: 1.42; }
+.vr .t { background: var(--panel); color: var(--muted); transition: background .4s, color .4s; }
+.vr .u { border: 1.5px dashed var(--line); transition: border-color .4s, background .4s, box-shadow .4s; }
+.vr .u > * { opacity: 0; transition: opacity .4s; }
+.vr .u strong { display: block; font-size: 14px; color: var(--ai); }
+.vcmp.k1 .vr .u { border: 1.5px solid var(--ai-soft); background: var(--ai-soft); }
+.vcmp.k1 .vr .u > * { opacity: 1; }
+.vcmp.k2 .vr:not(.cost):not(.hd) { opacity: .4; }
+.vcmp.k2 .vr.cost .t { background: var(--bad-soft); color: var(--bad); }
+.vcmp.k2 .vr.cost .u { border-color: var(--ai); box-shadow: 0 0 0 3px var(--ai-soft); }
+.vnote { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14px; line-height: 1.5; padding: 9px 14px; border-radius: 12px; background: var(--panel); }
+.vnote svg.i { width: 22px; height: 22px; color: var(--ai); margin-top: 1px; }
+
 /* ---------- 아래 조작 막대 ---------- */
 .bar-nav { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding-block: 10px 12px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font: 600 14px var(--body); cursor: pointer; white-space: nowrap; }
@@ -909,12 +960,53 @@ svg.prod { display: block; overflow: visible; flex: none; }
   </div>
 </section>
 
+<!-- 10. 참고: 상용 툴의 AI와 비교 (회사별 내용·가격은 2026년 10월 공개 자료 — 출처는 README) -->
+<section class="slide" id="s10" data-title="참고: 상용 툴 AI와 비교" data-steps="2" data-labels="AI Engineer로 보면|비용 비교" data-dur="8000,9000,9000" aria-label="10. 참고, 상용 CAD·CAE 툴의 AI와 무엇이 다른가">
+  <header class="sh">
+    <p class="eyebrow">참고 · 상용 툴의 AI와 무엇이 다른가</p>
+    <h2>상용 툴 AI는 툴 하나를, AI Engineer는 과제 전체를</h2>
+    <p class="sub">CAD·CAE 회사들도 자기 툴용 MCP 서버·AI 어시스턴트를 내놓고 있습니다. 경쟁하지 않고, 그 위에서 여러 툴을 엮습니다.</p>
+  </header>
+  <div class="vcmp" id="vcmp">
+    <div class="vmap">
+      <svg viewBox="0 0 548 472" aria-hidden="true">
+        <g class="frag"><line x1="274" y1="56" x2="64" y2="292"/><line x1="274" y1="56" x2="204" y2="292"/><line x1="274" y1="56" x2="344" y2="292"/><line x1="274" y1="56" x2="484" y2="292"/></g>
+        <g class="via"><line x1="274" y1="56" x2="274" y2="84"/><line x1="64" y1="240" x2="64" y2="292"/><line x1="204" y1="240" x2="204" y2="292"/><line x1="344" y1="240" x2="344" y2="292"/><line x1="484" y1="240" x2="484" y2="292"/></g>
+      </svg>
+      <div class="an row hb" style="left:164px;top:0;width:220px"><span class="ico"><svg class="i"><use href="#i-user"/></svg></span><b>엔지니어</b><span>말로 요청·승인</span></div>
+      <p class="flbl">툴마다 AI 앱·계약·사용법이 따로</p>
+      <div class="an dds" style="left:0;top:84px;width:548px;height:156px">
+        <div class="ah"><span class="ico"><svg class="i"><use href="#i-ai"/></svg></span><b>DDS AI Engineer</b><span class="tiny">회사 안에서 여러 회사의 툴을 엮어 과제를 끝내고, 결과를 남깁니다</span></div>
+        <div class="vtags"><i>과제 Flow</i><i>팀 자산</i><i>사내 노하우</i><i>승인·기록</i><i>툴별 스킬 29종</i></div>
+        <p class="vpart"><b>벤더 MCP는 경쟁 상대가 아니라</b> 아래에 연결할 부품입니다.</p>
+      </div>
+      <article class="vd" style="left:0"><b>Siemens NX</b><span>공식 MCP 확인 안 됨, 커뮤니티 제작만</span><p class="vc na">AI 비용 공개 자료 없음</p></article>
+      <article class="vd" style="left:140px"><b>Ansys</b><span>Engineering Copilot, 공식 <span class="nw">CFX-MCP</span></span><p class="vc">AnsysGPT AI+ 라이선스 필요</p></article>
+      <article class="vd" style="left:280px"><b>Autodesk Fusion</b><span>공식 MCP 3종 (클라우드 실행은 베타)</span><p class="vc">Fusion 구독 필요, 정식 가격 미정</p></article>
+      <article class="vd" style="left:420px"><b>Dassault</b><span>AI 동료 AURA·LEO·MARIE</span><p class="vc">토큰 25,000개 연 $1,250, 쓸 때마다 차감</p></article>
+      <p class="vfine">상용 툴의 AI · 내용과 가격은 각 회사 공개 자료(2026년 10월) 기준이며 바뀔 수 있습니다.</p>
+    </div>
+    <div class="vside">
+      <div class="vt">
+        <div class="vr hd"><span></span><span>상용 툴의 AI (MCP·Copilot)</span><span>DDS AI Engineer</span></div>
+        <div class="vr"><b>툴 범위</b><p class="t">자기 회사 툴 안에서만</p><p class="u"><strong>29종을 한 흐름으로</strong><span>NX → Abaqus → LS-DYNA …</span></p></div>
+        <div class="vr"><b>일의 단위</b><p class="t">툴 안의 작업 하나. DOE·최적화는 별도 PIDO 제품</p><p class="u"><strong>과제 하나를 끝까지</strong><span>모델링 → 해석 → DOE → 예측 모델 → 최적화 → 보고서</span></p></div>
+        <div class="vr"><b>남는 것</b><p class="t">각자 PC·각 회사 플랫폼에 흩어짐</p><p class="u"><strong>팀 자산으로 쌓임</strong><span>결과·예측 모델·Simulator·보고서를 팀이 다시 씀</span></p></div>
+        <div class="vr"><b>회사 노하우</b><p class="t">우리 회사 해석 기준은 모름</p><p class="u"><strong>사내 기준을 담음</strong><span>해석 기준·보고서 양식을 스킬·템플릿으로</span></p></div>
+        <div class="vr"><b>AI·통제</b><p class="t">Copilot은 벤더 AI·클라우드, MCP는 엔지니어가 각자 설정</p><p class="u"><strong>회사가 허용한 AI로</strong><span>승인 후 실행 · 모두 기록 · 원본은 사내</span></p></div>
+        <div class="vr cost"><b>추가 비용</b><p class="t">툴 회사마다 AI 비용 (AI 전용 라이선스·사용량 토큰)</p><p class="u"><strong>회사 AI 서비스 하나로 29종</strong><span>DOE·예측 모델·최적화는 앱에 포함</span></p></div>
+      </div>
+      <p class="vnote" data-step="2"><svg class="i"><use href="#i-key"/></svg><span><b>CAD·CAE 툴 라이선스는 어느 쪽이든 필요합니다.</b> 차이는 그 위의 AI 비용입니다. 툴 회사마다 따로 내느냐, 회사가 쓰는 AI 서비스 하나로 끝내느냐.</span></p>
+    </div>
+  </div>
+</section>
+
 </div>
 </main>
 <nav class="bar-nav" aria-label="슬라이드 넘기기">
   <button type="button" class="btn icon" id="prev" aria-label="이전"><svg class="i"><use href="#i-left"/></svg></button>
   <div class="dots" id="dots"></div>
-  <span class="count" id="count" aria-live="polite">1 / 9</span>
+  <span class="count" id="count" aria-live="polite">1 / 10</span>
   <button type="button" class="btn primary" id="next"><span id="next-lbl">다음 장</span><svg class="i"><use href="#i-right"/></svg></button>
   <button type="button" class="btn" id="play" aria-pressed="false"><svg class="i"><use id="play-ico" href="#i-play"/></svg><span class="lbl-sm" id="play-lbl">자동 재생</span></button>
   <button type="button" class="btn" id="full"><svg class="i"><use href="#i-expand"/></svg><span class="lbl-sm">전체 화면</span></button>
@@ -1347,6 +1439,16 @@ svg.prod { display: block; overflow: visible; flex: none; }
       dot.setAttribute("opacity", "0");
       // 움직임 줄임에서는 점 없이 강조한 선·상자만 보여 준다
       if (k && !reduced) run(RUN[k], 0);
+    };
+  })();
+
+  // ---------- 10. 상용 툴의 AI와 비교 ----------
+  // 장면 2부터 AI Engineer 층과 오른쪽 칸을 채우고, 장면 3은 비용 줄만 남겨 강조한다
+  (() => {
+    const vs = $("#vcmp");
+    hooks.s10 = (k) => {
+      vs.classList.toggle("k1", k >= 1);
+      vs.classList.toggle("k2", k >= 2);
     };
   })();
 
