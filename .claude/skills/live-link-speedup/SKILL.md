@@ -43,6 +43,29 @@ description: DDS Conversa(이전 이름 DDS AI Engineer)의 Live Link(사용자�
   | 실행기 부가 작업(작업마다 창 열기, Undo 마크, 재생성, 다시 그리기) | 읽기만 하는 작업에도 비용이 든다 |
   | 툴 자체의 재생성·재메쉬·광선 추적 | 모델 크기에 비례한다. 줄이기 어려우니 필요할 때만 한다 |
 
+## 0-1. 개발은 Linux 서버, 실행은 사용자 PC(Windows)
+- 사내에서는 Linux 서버의 DDS Conversa 저장소에서 개발하고, 같은 서버에서 웹앱을 돌리고 Agent를 배포한다.
+- Live Link 코드는 대부분 **사용자 PC(Windows)**에서 돈다. Linux 서버에서는 고치고 테스트하고 배포만 한다.
+
+  | 무엇 | 어디서 도는가 | Linux 서버에서 할 수 있는 확인 |
+  |---|---|---|
+  | 웹앱 서버(`server/`) | Linux 서버 | 전부 |
+  | dds-live MCP(`mcp_servers/dds_live.py`) | 사용자 PC(PC Agent가 띄운 AI CLI 안) | 코드 생성·결과 해석·대기열 처리(가짜 실행기로) |
+  | 툴 안 도우미(`agent-context/live/<툴>/`) | 사용자 PC의 CAD/CAE 툴 안 | 논리만(가짜 툴 모듈로) |
+  | COM·창 캡처·실제 툴 | 사용자 PC | 안 됨 → 시험 PC에서 |
+  | 웹앱 AI 지침(`agent-context/skills/`) | 사용자 PC 프로젝트 폴더로 복사됨 | 문구 검토 |
+
+- **Windows 전용 import는 맨 위에 두지 않는다.**
+  - `ctypes.wintypes`, `ctypes.windll`, `win32com`, `pythoncom`, `NXOpen` 같은 것은 쓰는 함수 안이나 `if os.name == "nt":` 아래에서 불러온다.
+  - 그래야 Linux 서버에서 테스트가 import부터 실패하지 않는다.
+  - 집 저장소 `dds_live.py`도 이렇게 고쳤다.
+- **가짜 모듈로 테스트한다.**
+  - NX: 가짜 `NXOpen`(`references/nx/ref_test_live_nx_ops.py`)
+  - COM 툴: 가짜 `pythoncom`·`win32com.client`를 `sys.modules`에 넣는다.
+- **명령은 Linux 경로로 쓴다.** 예: `.venv/bin/python -m pytest server/tests agent/tests -q`
+  - AGENTS.md의 Windows 명령(`.venv\Scripts\...`)은 Linux 경로로 바꿔 실행한다.
+- **실제 툴 확인은 배포한 뒤 시험 PC에서 한다**(8절).
+
 ## 1. 현황 파악 (고치기 전에)
 - **읽을 곳.** 사내에서 이름이 바뀌었으면 비슷한 것을 찾는다.
   - `mcp_servers/dds_live.py`: `live_exec`·`live_info`·`live_capture`가 툴에 코드를 보내고 결과를 받는 방법
@@ -161,14 +184,20 @@ description: DDS Conversa(이전 이름 DDS AI Engineer)의 Live Link(사용자�
   - 가짜 실행기로 MCP가 만든 호출 코드가 실제로 실행되는지 확인한다.
     - 참고: `references/nx/ref_test_live_fast.py`
   - 두 테스트는 집 저장소의 `agent/tests/test_live_*.py`를 복사했다(실수로 실행되지 않게 이름 앞에 `ref_`). 경로는 `agent/tests/` 기준이다. 사내 구조에 맞게 옮기고 이름을 바꾼다.
-- **실제 툴 확인**
-  - `tools/<툴>.md`의 확인 요청을 대화창에 그대로 보낸다.
-  - 실패 케이스(형상이 깨지는 값)와 되돌리기를 포함한다.
-  - `ms` 기록 표를 고치기 전후로 비교한다.
-- **저장소 규칙**
-  - AGENTS.md 4절 검증을 통과한다.
-  - `agent/dds_agent/__init__.py`의 `__version__`을 올린다.
-  - 관리 > Agent 배포로 배포한다.
+- **배포**(Linux 서버)
+  1. AGENTS.md 4절 검증을 Linux 경로로 통과한다.
+  2. `agent/dds_agent/__init__.py`의 `__version__`을 올린다.
+  3. 관리 > Agent 배포에서 서버 코드로 배포한다. 배포는 그 순간 서버 저장소의 파일로 zip을 만든다.
+     - 웹앱 서버(`server/app`)를 고치지 않았다면 서버는 다시 시작하지 않아도 된다.
+  4. 배포한 버전은 모든 사용자 PC로 간다(시험 PC만 고르는 기능은 없다).
+     - 사용자가 적은 시간에 배포한다.
+     - 문제가 생기면 관리 > Agent 배포에서 이전 버전을 최신으로 되돌린다.
+- **실제 툴 확인**(시험 사용자 PC)
+  1. 트레이 아이콘 > "업데이트 확인"으로 새 버전을 바로 받는다(기다리면 쉬는 동안 자동으로 받는다).
+  2. 그 툴을 연 상태에서 웹앱 대화창에 `tools/<툴>.md` 7절의 확인 요청을 그대로 보낸다.
+     - 실패 케이스(형상이 깨지는 값)와 되돌리기를 포함한다.
+  3. 결과의 `ms`와 오류를 Linux 서버의 개발 AI에게 붙여 넣는다. 개발 AI는 고친 뒤 다시 1단계부터 한다.
+  4. `ms` 기록 표를 고치기 전후로 비교한다.
 - 사용자에게 고치기 전후 `ms` 표, 남은 `TODO(사내검증)`, 다음 병목을 보고한다.
 
 ## 9. 그다음 (선택)

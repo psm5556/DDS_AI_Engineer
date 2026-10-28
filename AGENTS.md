@@ -113,6 +113,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | DOE·학습·최적화 로직 | `server/app/study/*` + `server/tests` |
 | 보고서 양식 | `server/app/report.py` |
 | PC Agent 설치 과정 | `scripts/install-agent.ps1`(실제 설치) · `installer/DdsAgentSetup.cs`(설치 창) · `server/app/routers/agents.py`(배포·설치 파일) |
+| Live Link 속도 개선 | `.claude/skills/live-link-speedup/SKILL.md`부터 읽는다(개발용 스킬, Agent 배포에는 들어가지 않음) |
 
 ## 7. 사내 환경에서 주의할 점
 - 실제 CAD/CAE 툴 연동은 집 PC(라이선스 없음)에서 검증하지 못했다.

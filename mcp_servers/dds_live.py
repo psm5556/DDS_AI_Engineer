@@ -14,7 +14,6 @@ import socket
 import subprocess
 import sys
 import time
-from ctypes import wintypes
 from pathlib import Path
 
 from _common import ROOT, api, resolve_pid, settings
@@ -106,6 +105,7 @@ def _nx_exec(code: str, wait_sec: int) -> dict:
 def _find_window(keyword: str):
     if os.name != "nt":
         return None
+    from ctypes import wintypes  # Windows 전용 — 맨 위에서 불러오면 Linux 서버의 테스트가 import부터 실패한다
     user32 = ctypes.windll.user32
     found = []
 
@@ -129,6 +129,8 @@ def _capture_window(keyword: str, path: Path) -> str | None:
     hwnd = _find_window(keyword)
     if not hwnd:
         return None
+    from ctypes import wintypes
+
     from PIL import Image, ImageGrab
     user32, gdi32 = ctypes.windll.user32, ctypes.windll.gdi32
     r = wintypes.RECT()
