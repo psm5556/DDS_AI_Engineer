@@ -26,12 +26,13 @@ DDS Conversa(이전 이름 DDS AI Engineer)를 쉽게 설명하는 발표 자료
   | 4 | 데모 ② 3D Simulator 예측 | 세탁기 단면(탈수 중)과 Simulator. 1,400 rpm 예측 → AI가 해결안 탐색 → 검증 해석. 슬라이더 세 개를 발표 중에 직접 움직일 수 있다 |
   | 5 | 비교 ③ 과제가 끝난 뒤 | 관리자 템플릿·개인 PC 스크립트와 프로젝트에 쌓이는 자산. 다음 과제로 잇는 예시 |
   | 6 | 안심 | 회사 안 그림(엔지니어 PC·사내 HPC·사내 서버), 엔지니어 승인 |
-  | 7 | 다음 단계 | 현황과 요청 사항 |
-  | 8 | 참고: 지원 툴 | AI가 다루는 CAD·CAE 툴 29종을 분야별로(`cae_adapters/catalog.py`와 같은 목록) |
-  | 9 | 참고: 구조와 실행 흐름 | 회사 안 구성(엔지니어 브라우저·사내 서버·엔지니어 PC·사내 HPC)과 외부 AI 서비스. 요청 → AI 계획 → 승인 → 해석 실행(PC·HPC) → 결과 모으기·학습 → Simulator·보고서 6단계를 장면마다 해당 경로를 강조해 보여 준다 |
-  | 10 | 참고: 상용 툴 AI와 비교 | 상용 CAD·CAE 회사가 내놓는 MCP 서버·AI 어시스턴트(툴 하나 안에서 동작)와 DDS Conversa(여러 툴을 엮어 과제를 끝내고 자산으로 남김)를 6가지로 비교한다. 마지막 장면은 비용: 툴 라이선스는 어느 쪽이든 필요하고, 차이는 그 위의 AI 비용이다 |
+  | 7 | 참고: 지원 툴 | AI가 다루는 CAD·CAE 툴 29종을 분야별로(`cae_adapters/catalog.py`와 같은 목록) |
+  | 8 | 참고: 구조와 실행 흐름 | 회사 안 구성(엔지니어 브라우저·사내 서버·엔지니어 PC·사내 HPC)과 외부 AI 서비스. 요청 → AI 계획 → 승인 → 해석 실행(PC·HPC) → 결과 모으기·학습 → Simulator·보고서 6단계를 장면마다 해당 경로를 강조해 보여 준다 |
+  | 9 | 참고: 상용 툴 AI와 비교 | 상용 CAD·CAE 회사가 내놓는 MCP 서버·AI 어시스턴트(툴 하나 안에서 동작)와 DDS Conversa(여러 툴을 엮어 과제를 끝내고 자산으로 남김)를 6가지로 비교한다. 마지막 장면은 비용: 툴 라이선스는 어느 쪽이든 필요하고, 차이는 그 위의 AI 비용이다 |
+  | 10 | 출시 계획 | 지금까지 한 일, 2026년 11월~2027년 3월 일정표(① 툴 29종 연동 검증 ② 부서 과제에 직접 적용 ③ UI/UX 검증 ④ 출시 준비)와 주요 시점. 다음 장면에서 지원 요청(AI 사용량(토큰), 개발·검증 전담 인력, 툴·과제 담당 엔지니어 협조) |
 
-- 10장의 회사별 내용·가격은 2026년 10월 공개 자료 기준이다. 발표 전에 다시 확인한다.
+- 10장의 일정과 인원(전담 2명)은 계획안이다. 확정되면 본문 10장을 고친다.
+- 9장의 회사별 내용·가격은 2026년 10월 공개 자료 기준이다. 발표 전에 다시 확인한다.
   - Ansys Engineering Copilot: 쓰려면 AnsysGPT AI+ 라이선스가 필요하다([요구 사항](https://ansyshelp.ansys.com/public/Views/Secured/corp/v261/en/copilot_ug/copilot_ug_requirements.html)). 공식 MCP는 [CFX-MCP](https://glama.ai/mcp/servers/ansys/pycfx-mcp)
   - Autodesk Fusion: 공식 MCP 3종. Fusion Compute MCP는 공개 베타이고 Fusion 라이선스와 Fusion Team 허브가 필요하다. 정식 가격은 아직 없다([블로그](https://www.autodesk.com/products/fusion-360/blog/fusion-compute-mcp/), [engineering.com](https://www.engineering.com/autodesk-announces-fusion-mcp-servers-and-more-ai-updates/))
   - Dassault Systèmes: AI 동료(AURA·LEO·MARIE)는 Blue Token으로 과금한다. 25,000개 묶음이 연 $1,250이고 작업할 때마다 차감된다([SOLIDWORKS](https://www.solidworks.com/solution/ai-tokens), [engineering.com](https://www.engineering.com/solidworks-users-spend-blue-tokens-on-ai-drawings-insights-and-more/))

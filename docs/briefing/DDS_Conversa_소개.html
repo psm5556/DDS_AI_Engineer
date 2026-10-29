@@ -381,35 +381,11 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .rules b { display: block; font-size: 20px; line-height: 1.35; }
 .rules p { margin-top: 2px; font-size: 15.5px; color: var(--muted); line-height: 1.5; }
 
-/* ---------- 7. 다음 단계 ---------- */
-#s7 { padding: 52px 72px 40px; gap: 26px; }
-.track { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.track li { position: relative; display: grid; gap: 6px; justify-items: start; align-content: start; padding-right: 22px; }
-.track li::before { content: ""; position: absolute; top: 21px; left: 48px; right: 4px; height: 3px; background: var(--night-line); }
-.track li:last-child::before { display: none; }
-.track li.done::before { background: var(--night-ai); }
-.track .dot { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--night-line); display: grid; place-items: center; font-weight: 700; color: var(--night-muted); background: var(--night); position: relative; z-index: 1; margin-bottom: 6px; }
-.track li.done .dot { background: var(--night-ai); border-color: var(--night-ai); color: var(--night); }
-.track li.now .dot { border-color: var(--night-human); color: var(--night-human); box-shadow: 0 0 0 6px var(--night-human-soft); }
-.track .dot svg.i { width: 22px; height: 22px; stroke-width: 3; }
-.track b { font-size: 20px; }
-.track li.now b { color: var(--night-human); }
-.track span { font-size: 15px; color: var(--night-muted); line-height: 1.45; }
-.asks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.ask { background: var(--night-2); border: 1.5px solid var(--night-line); border-radius: 16px; padding: 18px 20px; display: grid; gap: 6px; align-content: start; }
-.ask svg.i { color: var(--night-human); width: 28px; height: 28px; }
-.ask b { font-size: 20px; }
-.ask p { font-size: 15.5px; color: var(--night-muted); line-height: 1.5; }
-.closing { font-family: var(--display); font-size: 42px; line-height: 1.2; margin-top: auto; }
-.closing .h { color: var(--night-human); }
-.closing .a { color: var(--night-ai); }
-.fine { font-size: 14px; color: var(--night-muted); }
-
-/* ---------- 8. 참고: 지원 툴 ---------- */
-#s8 { padding: 36px 56px 28px; gap: 14px; }
-#s8 .sh { gap: 6px; }
-#s8 h2 { font-size: 38px; }
-#s8 .sub { font-size: 17px; }
+/* ---------- 7. 참고: 지원 툴 ---------- */
+#s7 { padding: 36px 56px 28px; gap: 14px; }
+#s7 .sh { gap: 6px; }
+#s7 h2 { font-size: 38px; }
+#s7 .sub { font-size: 17px; }
 .tools { flex: 1; min-height: 0; columns: 4; column-gap: 16px; }
 .tg { break-inside: avoid; margin: 0 0 12px; background: var(--panel); border-radius: 14px; padding: 10px 16px 12px; }
 .tg h4 { margin: 0 0 6px; display: flex; justify-content: space-between; font-size: 14.5px; font-weight: 700; letter-spacing: .04em; color: var(--ai); }
@@ -422,11 +398,11 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .tools-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 .tools-note .sep { color: var(--line); }
 
-/* ---------- 9. 참고: 구조와 실행 흐름 ---------- */
-#s9 { padding: 36px 56px 28px; gap: 16px; }
-#s9 .sh { gap: 6px; }
-#s9 h2 { font-size: 38px; }
-#s9 .sub { font-size: 17px; }
+/* ---------- 8. 참고: 구조와 실행 흐름 ---------- */
+#s8 { padding: 36px 56px 28px; gap: 16px; }
+#s8 .sh { gap: 6px; }
+#s8 h2 { font-size: 38px; }
+#s8 .sub { font-size: 17px; }
 .how { flex: 1; min-height: 0; display: grid; grid-template-columns: 760px minmax(0, 1fr); gap: 28px; align-items: start; }
 /* 그림: 판 크기가 고정(1280×720)이라 상자 위치를 px로 둔다. 선은 상자 사이에 보이는 구간만 긋고,
    장면마다 그 단계의 선·상자만 강조하고 점이 지나가며 방향을 보여 준다(주황 = 엔지니어, 청록 = AI) */
@@ -485,14 +461,14 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .hsteps li.now .no { background: var(--ai); color: var(--surface); }
 .hsteps li.h.now .no { background: var(--human); }
 
-/* ---------- 10. 참고: 상용 툴의 AI와 비교 ---------- */
-#s10 { padding: 36px 56px 24px; gap: 16px; }
-#s10 .sh { gap: 6px; }
-#s10 h2 { font-size: 38px; }
-#s10 .sub { font-size: 17px; }
+/* ---------- 9. 참고: 상용 툴의 AI와 비교 ---------- */
+#s9 { padding: 36px 56px 24px; gap: 16px; }
+#s9 .sh { gap: 6px; }
+#s9 h2 { font-size: 38px; }
+#s9 .sub { font-size: 17px; }
 .vcmp { flex: 1; min-height: 0; display: grid; grid-template-columns: 548px minmax(0, 1fr); gap: 28px; align-items: start; }
 /* 왼쪽 그림: 장면 1은 엔지니어가 툴마다 다른 AI를 따로 쓰는 모습, 장면 2부터 DDS Conversa가 그 위에서 툴을 엮는 모습.
-   9장처럼 판 크기가 고정이라 상자 위치를 px로 둔다 */
+   8장처럼 판 크기가 고정이라 상자 위치를 px로 둔다 */
 .vmap { position: relative; height: 472px; }
 .vmap > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .vmap .frag line { stroke: var(--muted); stroke-width: 2.5; stroke-dasharray: 2 7; stroke-linecap: round; }
@@ -535,6 +511,39 @@ svg.prod { display: block; overflow: visible; flex: none; }
 .vcmp.k2 .vr.cost .u { border-color: var(--ai); box-shadow: 0 0 0 3px var(--ai-soft); }
 .vnote { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14px; line-height: 1.5; padding: 9px 14px; border-radius: 12px; background: var(--panel); }
 .vnote svg.i { width: 22px; height: 22px; color: var(--ai); margin-top: 1px; }
+
+/* ---------- 10. 출시 계획과 지원 요청 ---------- */
+#s10 { padding: 38px 60px 30px; gap: 16px; }
+#s10 .sh { gap: 6px; }
+#s10 h2 { font-size: 40px; }
+.sofar { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sofar .lbl { font-size: 14px; font-weight: 700; color: var(--night-muted); margin-right: 4px; }
+.sofar li:not(.lbl) { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; padding: 4px 12px 4px 9px; border-radius: 999px; background: var(--night-ok-soft); color: var(--night-ok); }
+.sofar svg.i { width: 16px; height: 16px; stroke-width: 3; }
+/* 일정표: 판 폭이 고정(1280)이라 칸 폭을 px로 둔다. 이름 칸 240 + 달 5칸 × 184 = 1160 */
+.gantt { --lw: 240px; --mw: 184px; position: relative; display: grid; grid-template-columns: var(--lw) repeat(5, var(--mw)); grid-template-rows: 30px repeat(4, 56px) auto; row-gap: 6px;
+  background: repeating-linear-gradient(to right, var(--night-line) 0 1px, transparent 1px var(--mw)) var(--lw) 0 / calc(100% - var(--lw)) 100% no-repeat; }
+.gm { grid-row: 1; align-self: center; text-align: center; font-size: 14px; font-weight: 700; color: var(--night-muted); }
+.gl { grid-column: 1; display: grid; align-content: center; gap: 1px; padding-right: 14px; }
+.gl b { font-size: 18px; line-height: 1.3; }
+.gl span { font-size: 13px; color: var(--night-muted); line-height: 1.35; }
+.gb { align-self: center; height: 42px; margin-inline: 4px; display: flex; align-items: center; padding: 0 12px; border-radius: 10px; background: var(--night-2); border: 1.5px solid var(--night-line); font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+/* 지금(2026년 10월 말) 위치: 11월 칸 왼쪽 끝 */
+.gnow { position: absolute; left: var(--lw); top: 24px; bottom: 0; border-left: 2px dashed var(--night-human); }
+.gnow span { position: absolute; top: -24px; left: 0; transform: translateX(-50%); font-style: normal; font-size: 12.5px; font-weight: 700; color: var(--night-human); background: var(--night-human-soft); border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+.ms-h, .ms { grid-row: 6; border-top: 1.5px solid var(--night-line); padding-top: 9px; }
+.ms-h { grid-column: 1; font-size: 14px; font-weight: 700; color: var(--night-muted); }
+.ms { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 8px; align-items: start; padding-inline: 12px 8px; font-size: 13.5px; line-height: 1.4; }
+.ms::before { content: ""; width: 9px; height: 9px; margin-top: 5px; transform: rotate(45deg); border: 2px solid var(--night-muted); }
+.ms.go { color: var(--night-ai); font-weight: 700; font-size: 15px; }
+.ms.go::before { background: var(--night-ai); border-color: var(--night-ai); }
+.asks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; margin-top: auto; }
+.asks-h { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; font-family: var(--display); font-size: 26px; line-height: 1.2; color: var(--night-human); }
+.asks-h span { font-family: var(--body); font-size: 14px; color: var(--night-muted); }
+.ask { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; row-gap: 4px; align-content: start; padding: 14px 18px; border-radius: 14px; background: var(--night-2); border: 1.5px solid var(--night-line); }
+.ask svg.i { grid-row: span 2; width: 28px; height: 28px; color: var(--night-human); }
+.ask b { font-size: 18px; line-height: 1.35; }
+.ask p { font-size: 14.5px; color: var(--night-muted); line-height: 1.5; }
 
 /* ---------- 아래 조작 막대 ---------- */
 .bar-nav { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding-block: 10px 12px; }
@@ -865,29 +874,8 @@ svg.prod { display: block; overflow: visible; flex: none; }
   </div>
 </section>
 
-<!-- 7. 다음 단계 -->
-<section class="slide night" id="s7" data-title="다음 단계" data-dur="10000" aria-label="7. 다음 단계와 요청 사항">
-  <header class="sh">
-    <p class="eyebrow">다음 단계</p>
-    <h2>실제 제품 하나로 시범 운영을 시작하겠습니다</h2>
-  </header>
-  <ol class="track">
-    <li class="done"><span class="dot"><svg class="i"><use href="#i-check"/></svg></span><b>개발</b><span>웹앱·AI 어시스턴트·PC Agent<br>연동 준비된 CAD/CAE 툴 29종<br>해석은 내 PC·HPC에서</span></li>
-    <li class="now"><span class="dot">2</span><b>사내 서버 설치</b><span>준비 스크립트로 설치합니다</span></li>
-    <li><span class="dot">3</span><b>시범 과제 1개</b><span>예: 드럼세탁기 탈수 진동</span></li>
-    <li><span class="dot">4</span><b>부서로 확대</b><span>자주 쓰는 툴부터</span></li>
-  </ol>
-  <div class="asks">
-    <div class="ask"><svg class="i"><use href="#i-team"/></svg><b>시범 팀 1~2곳</b><p>반복 해석이 많은 팀의 실제 과제로 먼저 검증합니다.</p></div>
-    <div class="ask"><svg class="i"><use href="#i-key"/></svg><b>라이선스 있는 PC</b><p>실제 툴이 설치된 PC에서 연동을 검증하고 보완합니다.</p></div>
-    <div class="ask"><svg class="i"><use href="#i-server"/></svg><b>사내 서버 1대</b><p>웹앱과 해석 결과를 보관합니다.</p></div>
-  </div>
-  <p class="closing">말로 요청하면 <span class="a">해석은 AI가</span>, <span class="h">판단은 엔지니어가</span>.</p>
-  <p class="fine">이 자료의 숫자는 이해를 돕기 위한 예시입니다. 실제 툴 연동과 효과는 시범 운영에서 검증합니다.</p>
-</section>
-
-<!-- 8. 참고: 지원 CAD·CAE 툴 -->
-<section class="slide" id="s8" data-title="참고: 지원 툴" data-dur="12000" aria-label="8. 참고, 지원하는 CAD·CAE 툴 29종">
+<!-- 7. 참고: 지원 CAD·CAE 툴 -->
+<section class="slide" id="s7" data-title="참고: 지원 툴" data-dur="12000" aria-label="7. 참고, 지원하는 CAD·CAE 툴 29종">
   <header class="sh">
     <p class="eyebrow">참고 · 지원하는 CAD·CAE 툴</p>
     <h2>AI 어시스턴트가 직접 다루는 툴 29종</h2>
@@ -912,8 +900,8 @@ svg.prod { display: block; overflow: visible; flex: none; }
   <p class="tools-note"><em>Live Link</em><span>실행 중인 툴 화면에 붙어 엔지니어와 함께 모델링합니다.</span><span class="sep">·</span><span>실제 라이선스 환경 연동은 시범 운영에서 검증합니다.</span></p>
 </section>
 
-<!-- 9. 참고: 구조와 실행 흐름 -->
-<section class="slide" id="s9" data-title="참고: 구조와 실행 흐름" data-steps="6" data-labels="① 말로 요청|② AI가 계획|③ 엔지니어 승인|④ 해석 실행|⑤ 결과 모으기·학습|⑥ Simulator·보고서" data-dur="7000,6500,7500,6000,6000,7000,8000" aria-label="9. 참고, 구조와 실행 흐름">
+<!-- 8. 참고: 구조와 실행 흐름 -->
+<section class="slide" id="s8" data-title="참고: 구조와 실행 흐름" data-steps="6" data-labels="① 말로 요청|② AI가 계획|③ 엔지니어 승인|④ 해석 실행|⑤ 결과 모으기·학습|⑥ Simulator·보고서" data-dur="7000,6500,7500,6000,6000,7000,8000" aria-label="8. 참고, 구조와 실행 흐름">
   <header class="sh">
     <p class="eyebrow">참고 · 구조와 실행 흐름</p>
     <h2>요청 하나가 이렇게 실행됩니다</h2>
@@ -968,8 +956,8 @@ svg.prod { display: block; overflow: visible; flex: none; }
   </div>
 </section>
 
-<!-- 10. 참고: 상용 툴의 AI와 비교 (회사별 내용·가격은 2026년 10월 공개 자료 — 출처는 README) -->
-<section class="slide" id="s10" data-title="참고: 상용 툴 AI와 비교" data-steps="2" data-labels="DDS Conversa로 보면|비용 비교" data-dur="8000,9000,9000" aria-label="10. 참고, 상용 CAD·CAE 툴의 AI와 무엇이 다른가">
+<!-- 9. 참고: 상용 툴의 AI와 비교 (회사별 내용·가격은 2026년 10월 공개 자료 — 출처는 README) -->
+<section class="slide" id="s9" data-title="참고: 상용 툴 AI와 비교" data-steps="2" data-labels="DDS Conversa로 보면|비용 비교" data-dur="8000,9000,9000" aria-label="9. 참고, 상용 CAD·CAE 툴의 AI와 무엇이 다른가">
   <header class="sh">
     <p class="eyebrow">참고 · 상용 툴의 AI와 무엇이 다른가</p>
     <h2>상용 툴 AI는 툴 하나를, DDS Conversa는 과제 전체를</h2>
@@ -1006,6 +994,53 @@ svg.prod { display: block; overflow: visible; flex: none; }
       </div>
       <p class="vnote" data-step="2"><svg class="i"><use href="#i-key"/></svg><span><b>CAD·CAE 툴 라이선스는 어느 쪽이든 필요합니다.</b> 차이는 그 위의 AI 비용입니다. 툴 회사마다 따로 내느냐, 회사가 쓰는 AI 서비스 하나로 끝내느냐.</span></p>
     </div>
+  </div>
+</section>
+
+<!-- 10. 출시 계획과 지원 요청 (일정·인원은 계획안) -->
+<section class="slide night" id="s10" data-title="출시 계획" data-steps="1" data-labels="지원 요청" data-dur="12000,11000" aria-label="10. 출시 계획과 지원 요청">
+  <header class="sh">
+    <p class="eyebrow">출시 계획 · 2027년 3월 완료 목표</p>
+    <h2>실제 툴과 부서 과제로 검증해 2027년 3월에 출시합니다</h2>
+  </header>
+  <ul class="sofar">
+    <li class="lbl">지금까지</li>
+    <li><svg class="i"><use href="#i-check"/></svg>웹앱·PC Agent·툴 29종 스킬 개발</li>
+    <li><svg class="i"><use href="#i-check"/></svg>사내 서버(Linux) 설치, PC Agent 배포</li>
+    <li><svg class="i"><use href="#i-check"/></svg>NX·Simcenter 3D 자동화 사내 검증</li>
+  </ul>
+  <div class="gantt">
+    <span class="gm" style="grid-column:2">2026년 11월</span>
+    <span class="gm" style="grid-column:3">12월</span>
+    <span class="gm" style="grid-column:4">2027년 1월</span>
+    <span class="gm" style="grid-column:5">2월</span>
+    <span class="gm" style="grid-column:6">3월</span>
+    <i class="gnow" aria-hidden="true"><span>지금</span></i>
+    <div class="gl" style="grid-row:2"><b>① 툴 29종 연동 검증</b><span>결과: 툴별 검증 결과표</span></div>
+    <span class="gb" style="grid-row:2;grid-column:2/4">주력 툴: NX·Simcenter·Abaqus 등</span>
+    <span class="gb" style="grid-row:2;grid-column:4/6">나머지 툴: 라이선스 있는 툴 전부</span>
+    <div class="gl" style="grid-row:3"><b>② 부서 과제에 직접 적용</b><span>결과: 기간·해석 횟수 전후 비교</span></div>
+    <span class="gb" style="grid-row:3;grid-column:3/5">시범 과제 1~2개 (예: 드럼세탁기)</span>
+    <span class="gb" style="grid-row:3;grid-column:5/7">부서 과제로 넓히기</span>
+    <div class="gl" style="grid-row:4"><b>③ UI/UX 검증</b><span>결과: 설명 없이 쓰는 화면</span></div>
+    <span class="gb" style="grid-row:4;grid-column:3/4">엔지니어 사용 시험</span>
+    <span class="gb" style="grid-row:4;grid-column:4/5">불편한 곳 고치기</span>
+    <span class="gb" style="grid-row:4;grid-column:5/6">다시 시험·마무리</span>
+    <div class="gl" style="grid-row:5"><b>④ 출시 준비</b><span>결과: 안내서·교육·운영 체계</span></div>
+    <span class="gb" style="grid-row:5;grid-column:5/6">안내서·교육 자료</span>
+    <span class="gb" style="grid-row:5;grid-column:6/7">교육·정식 출시</span>
+    <p class="ms-h">주요 시점</p>
+    <p class="ms" style="grid-column:2">검증 환경·계획 확정</p>
+    <p class="ms" style="grid-column:3">주력 툴 검증 완료<br>시범 과제 시작</p>
+    <p class="ms" style="grid-column:4">시범 과제 1차 결과</p>
+    <p class="ms" style="grid-column:5">29종 검증 결과표<br>기능 확정</p>
+    <p class="ms go" style="grid-column:6">정식 출시</p>
+  </div>
+  <div class="asks" data-step="1">
+    <p class="asks-h">지원 요청<span>2027년 3월 출시까지 필요한 것</span></p>
+    <div class="ask"><svg class="i"><use href="#i-ai"/></svg><b>AI 사용량(토큰)</b><p>개발 AI가 툴 29종 스킬을 고치고 반복 시험하는 데, 시범 과제에서 엔지니어가 쓰는 AI에 필요합니다.</p></div>
+    <div class="ask"><svg class="i"><use href="#i-code"/></svg><b>개발·검증 전담 인력 2명</b><p>2027년 3월까지 실제 툴 연동을 고치고 결과를 확인하며, 화면 개선과 배포를 맡습니다.</p></div>
+    <div class="ask"><svg class="i"><use href="#i-team"/></svg><b>툴·과제 담당 엔지니어 협조</b><p>툴을 잘 아는 엔지니어가 실제 모델로 시험하고, 시범 과제 팀이 업무에 직접 써 봅니다.</p></div>
   </div>
 </section>
 
@@ -1413,7 +1448,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
     sim(OLD.k, OLD.c, 1200, NOTE_TRY);
   })();
 
-  // ---------- 9. 구조와 실행 흐름 ----------
+  // ---------- 8. 구조와 실행 흐름 ----------
   (() => {
     const arch = $("#arch"), list = $("#hsteps"), items = $$("#hsteps li"), dot = $("#arch-dot");
     const lit = $$("[data-on]", arch);
@@ -1438,7 +1473,7 @@ svg.prod { display: block; overflow: visible; flex: none; }
       dot.setAttribute("opacity", "1");
       tween(650, (p) => place(path[i][0], path[i][1], ease(p)), () => later(120, () => run(path, i + 1), "arch"), "arch");
     }
-    hooks.s9 = (k) => {
+    hooks.s8 = (k) => {
       arch.classList.toggle("focus", k > 0);
       arch.classList.toggle("h", k === 1 || k === 3);
       lit.forEach((el) => el.classList.toggle("hot", el.dataset.on.split(" ").includes(String(k))));
@@ -1450,11 +1485,11 @@ svg.prod { display: block; overflow: visible; flex: none; }
     };
   })();
 
-  // ---------- 10. 상용 툴의 AI와 비교 ----------
+  // ---------- 9. 상용 툴의 AI와 비교 ----------
   // 장면 2부터 DDS Conversa 층과 오른쪽 칸을 채우고, 장면 3은 비용 줄만 남겨 강조한다
   (() => {
     const vs = $("#vcmp");
-    hooks.s10 = (k) => {
+    hooks.s9 = (k) => {
       vs.classList.toggle("k1", k >= 1);
       vs.classList.toggle("k2", k >= 2);
     };
