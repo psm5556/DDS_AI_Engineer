@@ -61,7 +61,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없으면 자동 빌드) |
 | `deploy/linux/` | Linux 서버 systemd 서비스 파일 |
 | `scripts/` | `dev_live.py` · `prepare_onsite.py`(사내 서버 준비, Linux 서버용 설치 묶음 `--pack`·`--import-pack`) · `fetch_runtimes.py` · `build_agent_bundle.py` · `install-agent.ps1` · `e2e_*.py` |
-| `docs/` | `handoff.md` 인수인계 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 · `cae-data-hdf5.md` 해석 데이터(case.h5) · `product-spec.md` 디자인·기능 명세서 · `inhouse-ai-guide.md` 사내 AI 지침(기능·디자인 요구사항, 다음 일감) |
+| `docs/` | `handoff.md` 인수인계 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 · `cae-data-hdf5.md` 해석 데이터(case.h5) · `shape-learning-plan.md` 형상 학습 계획(train.h5·GPU 서버·PhysicsNeMo) · `product-spec.md` 디자인·기능 명세서 · `inhouse-ai-guide.md` 사내 AI 지침(기능·디자인 요구사항, 다음 일감) |
 | `data/`·`dist/`·`frontend/dist/` | **git에 없음**(.gitignore). DB·설치 파일·런타임·빌드 결과 |
 
 ## 4. 변경 후 반드시 검증
