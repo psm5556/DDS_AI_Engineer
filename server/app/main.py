@@ -14,7 +14,7 @@ from .agent.link import AgentConnection, registry
 from .config import ROOT
 from .database import Base, SessionLocal, engine, ensure_columns
 from .deps import user_from_token
-from .routers import agents, auth, flows, projects, reports, sessions, studies, training
+from .routers import agents, auth, devtest, flows, projects, reports, sessions, studies, training
 from .study import dataset, service
 from .ws import manager
 
@@ -90,7 +90,7 @@ async def json_charset(request, call_next):
     if resp.headers.get("content-type") == "application/json":
         resp.headers["content-type"] = "application/json; charset=utf-8"
     return resp
-for r in (auth.router, projects.router, sessions.router, flows.router, reports.router, studies.router, training.router, agents.router):
+for r in (auth.router, projects.router, sessions.router, flows.router, reports.router, studies.router, training.router, agents.router, devtest.router):
     app.include_router(r)
 
 

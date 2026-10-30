@@ -432,6 +432,28 @@ class AgentSettings(BaseModel):
     auto_update: bool
 
 
+class DevTestAllow(BaseModel):
+    allow: bool
+
+
+class DevTestPermission(BaseModel):
+    allow: bool
+    until: datetime | None = None
+
+
+class DevTestRun(BaseModel):
+    op: Literal["info", "python", "tool", "logs", "fetch"]
+    user_id: int | None = None  # 시험할 PC의 계정. 허용한 PC가 하나면 비워도 된다
+    script: str | None = None
+    filename: str | None = None
+    tool: str | None = None
+    args: list[str] | None = None
+    files: dict[str, str] | None = None  # 시험 폴더에 넣을 파일 {이름: base64}
+    path: str | None = None
+    lines: int | None = None
+    timeout_sec: int = Field(600, ge=1, le=7200)
+
+
 class ShareCreate(BaseModel):
     note: str = ""
     expires_days: int | None = Field(None, ge=1, le=3650)

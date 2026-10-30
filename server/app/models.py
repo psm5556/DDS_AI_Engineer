@@ -27,6 +27,7 @@ class User(TimestampMixin, Base):
     failed_logins = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime)  # PIN 연속 실패 시 잠금
     agent_auto_update = Column(Boolean, default=True)  # PC Agent 자동 업데이트. 이 컬럼 이전 계정은 NULL이고 켜짐으로 본다
+    remote_test_until = Column(DateTime)  # 개발 AI의 원격 시험을 이때까지 허용(관리자 계정만, routers/devtest.py)
 
 
 class ApiToken(Base):
@@ -213,6 +214,22 @@ class AgentInstance(Base):
     connected = Column(Boolean, default=False, nullable=False)
     last_seen = Column(DateTime, default=_now, nullable=False)
     connected_at = Column(DateTime)
+
+
+class DevTestRecord(Base):
+    """개발 AI가 PC에서 실행한 원격 시험 내역. PC 주인이 설정 화면에서 본다."""
+    __tablename__ = "devtest_records"
+    id = Column(Integer, primary_key=True)
+    by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    target_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    hostname = Column(String(200))
+    op = Column(String(30), nullable=False)
+    tool = Column(String(100))
+    ok = Column(Boolean)
+    returncode = Column(Integer)
+    seconds = Column(Float)
+    note = Column(String(300))
+    created_at = Column(DateTime, default=_now, nullable=False)
 
 
 class ShareLink(Base):

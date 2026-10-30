@@ -43,6 +43,13 @@ export default function SettingsPage() {
   });
   const revoke = useMutation({ mutationFn: (id: number) => del(`/api/tokens/${id}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ["tokens"] }); toast("토큰을 폐기했습니다"); }, onError: err });
   const update = useMutation({ mutationFn: () => post(`/api/agent/instances/${user!.id}/update`), onSuccess: () => toast("업데이트를 요청했습니다. 잠시 후 다시 연결됩니다"), onError: err });
+  const { data: remote } = useQuery({ queryKey: ["devtest", "permission"], queryFn: () => get<{ allow: boolean; until: string | null }>("/api/devtest/permission"), enabled: !!user?.is_admin });
+  const { data: remoteRuns } = useQuery({ queryKey: ["devtest", "history"], queryFn: () => get<{ id: number; op: string; tool: string | null; ok: boolean | null; created_at: string }[]>("/api/devtest/history"), enabled: !!remote?.allow, refetchInterval: 15000 });
+  const setRemote = useMutation({
+    mutationFn: (allow: boolean) => put<{ allow: boolean; until: string | null }>("/api/devtest/permission", { allow }),
+    onSuccess: (r) => { qc.setQueryData(["devtest", "permission"], r); toast(r.allow ? "원격 시험을 허용했습니다. 7일 뒤 자동으로 꺼집니다" : "원격 시험을 껐습니다"); },
+    onError: err,
+  });
   const setAuto = useMutation({
     mutationFn: (auto_update: boolean) => put<{ auto_update: boolean }>("/api/agent/settings", { auto_update }),
     onSuccess: (r) => { qc.setQueryData(["agent", "settings"], r); toast(r.auto_update ? "자동 업데이트를 켰습니다" : "자동 업데이트를 껐습니다"); },
@@ -87,6 +94,15 @@ export default function SettingsPage() {
             <span><b>새 버전이 나오면 자동으로 업데이트</b>
               <small>대화·해석이 없을 때 뒤에서 설치하고 PC Agent를 다시 시작합니다. 진행 중인 작업은 끊지 않습니다.</small></span>
           </label>
+          {user?.is_admin && (
+            <label className="auto-update">
+              <input type="checkbox" checked={remote?.allow ?? false} disabled={!remote || setRemote.isPending} onChange={(e) => setRemote.mutate(e.target.checked)} />
+              <span><b>개발 AI가 이 PC에서 CAD·CAE 연동을 시험하도록 허용</b>
+                <small>서버에서 개발하는 AI가 이 PC에서 시험 스크립트를 실행하고 결과를 받아 갑니다. 7일 뒤 자동으로 꺼집니다.
+                  {remote?.until && ` 지금 허용 중: ${when(remote.until)}까지.`}
+                  {remoteRuns?.[0] && ` 최근 시험: ${when(remoteRuns[0].created_at)} ${remoteRuns[0].tool ?? remoteRuns[0].op} ${remoteRuns[0].ok ? "통과" : "실패"}.`}</small></span>
+            </label>
+          )}
         </section>
 
         {/* 연결돼 있으면 설치 안내는 접어 둔다 */}

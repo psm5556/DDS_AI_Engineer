@@ -21,7 +21,7 @@ from pathlib import Path
 
 import websockets
 
-from . import __version__, installer, toolscan, updater
+from . import __version__, devtest, installer, toolscan, updater
 from .acp_runner import AcpRunner
 from .config import REPO_ROOT, load_settings
 from .context import sync_project_context
@@ -65,6 +65,9 @@ class Agent:
         self.api = ServerApi(self.s)
         self.active_prompts = 0
         self.installing = 0  # AI CLI 설치 중인 수 (설치 도중 다시 시작하면 반쯤 깔린 채로 남는다)
+        self.devtests = 0  # 개발 AI의 원격 시험이 도는 수
+        self.remote_test_until = 0.0  # 이 시각까지 원격 시험 허용. 서버 설정을 따르고 기본은 꺼짐
+        self._devtest_noticed = 0.0
         self.auto_update = self.s.auto_update  # 연결되면 서버의 설정(웹앱 > 설정)을 따른다
         self.update_state = "idle"  # idle | pending:<ver> | installing:<ver> | restarting:<ver> | failed: ...
         self._update_task: asyncio.Task | None = None
@@ -294,7 +297,7 @@ class Agent:
                 "sessions": len(self.session_runner)}
 
     def busy(self) -> bool:
-        return bool(self.active_prompts or self.installing or self.executor.running or self.executor.queued)
+        return bool(self.active_prompts or self.installing or self.devtests or self.executor.running or self.executor.queued)
 
     def touch(self, msg_type: str | None):
         """사람이 일을 시킨 메시지면 시각을 남긴다. 화면을 열어 두면 계속 오는 조회(local.*)는 일로 치지 않는다."""
@@ -417,6 +420,19 @@ class Agent:
         self.send_threadsafe(self.hello())  # 설치 상태 갱신
         return res
 
+    def _devtest(self, msg: dict) -> dict:
+        """개발 AI의 원격 시험. 서버가 확인하지만 이 PC의 설정으로 한 번 더 막는다."""
+        if time.time() > self.remote_test_until:
+            raise RuntimeError("이 PC는 원격 시험을 허용하지 않았습니다 → 웹앱 설정에서 허용하세요")
+        if self.tray and time.time() - self._devtest_noticed > 3600:  # 무엇이 돌고 있는지 PC 주인이 알게 한다
+            self._devtest_noticed = time.time()
+            self.tray.notify("개발 AI가 이 PC에서 CAD·CAE 연동을 시험하고 있습니다. 끄려면 웹앱 설정에서 해제하세요")
+        self.devtests += 1
+        try:
+            return devtest.run(self.s, self.env, msg)
+        finally:
+            self.devtests -= 1
+
     async def handle(self, msg: dict):
         t, rid = msg.get("type"), msg.get("rid")
         self.touch(t)
@@ -452,6 +468,8 @@ class Agent:
             asyncio.create_task(self._respond(rid, self._pick_folder, msg.get("initial"), msg.get("title")))
         elif t == "agent.install":
             asyncio.create_task(self._respond(rid, self._install, msg["agent"]))
+        elif t == "devtest.run":
+            asyncio.create_task(self._respond(rid, self._devtest, msg))
         elif t == "session.cancel":
             try:
                 await asyncio.to_thread(self.runner_of(msg["session_id"]).cancel, msg["session_id"])
@@ -471,6 +489,7 @@ class Agent:
                 self.schedule_update(msg["version"], msg.get("sha256"), bool(msg.get("force")))
         elif t == "agent.settings":  # 연결할 때마다, 사용자가 설정을 바꿀 때마다 온다
             self.auto_update = bool(msg.get("auto_update", True))
+            self.remote_test_until = float(msg.get("remote_test_until") or 0)
             if self.auto_update:
                 asyncio.create_task(self._check_latest())
             else:

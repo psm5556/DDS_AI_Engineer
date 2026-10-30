@@ -175,6 +175,13 @@ def _auto_update_on(user: models.User) -> bool:
     return user.agent_auto_update is not False
 
 
+def settings_message(user: models.User) -> dict:
+    """PC Agent가 따르는 설정. 연결할 때마다, 사용자가 바꿀 때마다 보낸다."""
+    until = user.remote_test_until
+    return {"type": "agent.settings", "auto_update": _auto_update_on(user),
+            "remote_test_until": until.timestamp() if until and user.is_admin else 0}
+
+
 @router.get("/settings", response_model=schemas.AgentSettings)
 def get_agent_settings(user=Depends(get_current_user)):
     return {"auto_update": _auto_update_on(user)}
@@ -183,11 +190,12 @@ def get_agent_settings(user=Depends(get_current_user)):
 @router.put("/settings", response_model=schemas.AgentSettings)
 def set_agent_settings(body: schemas.AgentSettings, user=Depends(get_current_user), db: Session = Depends(get_db)):
     """저장은 서버에 한다: PC가 꺼져 있어도 바꿀 수 있고, 연결할 때 다시 알린다."""
-    db.get(models.User, user.id).agent_auto_update = body.auto_update
+    me = db.get(models.User, user.id)
+    me.agent_auto_update = body.auto_update
     db.commit()
     conn = registry.get(user.id)
     if conn:
-        conn.send({"type": "agent.settings", "auto_update": body.auto_update})
+        conn.send(settings_message(me))
     return body
 
 
@@ -210,7 +218,7 @@ def record_instance(conn: AgentConnection, msg: dict, connected: bool = True):
         inst.connected, inst.last_seen = connected, now
         db.commit()
         if msg.get("type") == "hello":
-            conn.send({"type": "agent.settings", "auto_update": _auto_update_on(db.get(models.User, conn.user_id))})
+            conn.send(settings_message(db.get(models.User, conn.user_id)))
     manager.publish({"type": "agent_status", "user_id": conn.user_id, "connected": connected})
 
 

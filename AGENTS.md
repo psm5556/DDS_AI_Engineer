@@ -73,6 +73,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | ACP·MCP 실제 프로세스 | `.venv\Scripts\python scripts\e2e_demo.py` | 시나리오 완료 |
 | 설치·자동 업데이트 | `.venv\Scripts\python scripts\e2e_install.py` | 설치→연결→새 버전→업데이트 |
 | 스킬 스크립트 | `python -m py_compile <파일>` · 툴 목록 일관성은 pytest의 `test_tool_catalog_consistent` | — |
+| 실제 CAD/CAE 연동(서버에 툴 없음) | `scripts/pc_verify.py`로 사용자 PC에서 직접 시험(`deploy` → `suite --tool <툴>`·`chat "요청"`). [docs/pc-verification.md](docs/pc-verification.md) | 사람에게 눌러 보라고 하지 않고 결과를 받아 판단 |
 
 화면을 바꿨다면 스크린샷을 눈으로 확인한다(겹침·잘림·빈 화면). 테스트가 실패하면 원인을 고치고, 실패를 숨기지 않는다.
 
@@ -110,7 +111,8 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 하고 싶은 일 | 손댈 곳 |
 |---|---|
 | CAD/CAE 툴 추가 | `cae_adapters/catalog.py`(목록·기본 설치 경로 `guess`·설치 흔적 단어 `FIND`) → `tool_commands.py`(실행 키) → `agent-context/skills/<툴>-automation/SKILL.md`+`scripts/` → `agent-context/INSTRUCTIONS.md` 목록 → pytest |
-| 실제 툴에서 스킬 고치기 | `docs/onsite-validation.md` 순서대로. 고친 곳의 `TODO(사내검증)` 표시를 지운다 |
+| 실제 툴에서 스킬 고치기 | `docs/onsite-validation.md`의 요청을 `docs/pc-verification.md`의 도구로 사용자 PC에서 직접 시험한다. 고친 곳의 `TODO(사내검증)` 표시를 지운다 |
+| Live Link | **사용자에게 리본 버튼·저널·스크립트·플러그인 실행을 부탁하지 않는다.** 연결은 `mcp_servers/dds_live.py`가 스스로 하고, 못 붙으면 에이전트가 배치로 진행한다(`test_live_autoconnect.py`가 문구를 막는다) |
 | MCP 툴 추가 | `mcp_servers/dds_*.py`(FastMCP 데코레이터) → 서버 API(필요 시) → `agent-context/INSTRUCTIONS.md`에 사용법 |
 | 대화 흐름(승인·권한·결과 카드) | `frontend/src/chat/ChatView.tsx` · 서버 `server/app/agent/hub.py` |
 | 오른쪽 패널 탭 | `frontend/src/canvas/CanvasPanel.tsx` · `views.tsx`(작업 흐름: 흐름도 고정 + 'N단계' 결과 스크롤 · 데이터: 입력/출력·학습 데이터·케이스) · `ReportView.tsx`(보고서) · `SimulatorTab.tsx`(Simulator·모델 버전) · 단계 번호 `frontend/src/flow/order.ts` |
@@ -126,7 +128,8 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 ## 7. 사내 환경에서 주의할 점
 - 실제 CAD/CAE 툴 연동은 집 PC(라이선스 없음)에서 검증하지 못했다.
   - 스킬에 `TODO(사내검증)` 표시가 약 560곳 있다.
-  - 첫 실행은 반드시 작은 모델로 하고, 결과를 사람이 확인한다.
+  - 첫 실행은 반드시 작은 모델로 한다.
+- 사내에서는 Linux 서버에서 개발·배포하고 툴은 사용자 PC에만 있다. 개발 AI는 `docs/pc-verification.md`의 원격 검증으로 그 PC에서 직접 시험하고 고친다.
 - 외부 인터넷에서 무언가를 받으려 하지 않는다(설치·런타임은 `prepare_onsite.py`가 사내 자원만으로 만든다).
 - 글꼴 `@fontsource-variable/geist-mono`가 사내 npm 미러에 없으면 `npm ci`가 실패한다. 그때는 `frontend/package.json`과 `main.tsx`에서 빼면 된다. 고정폭은 Consolas로 대체된다.
 - 사용자 PC의 작업 폴더는 사람마다·PC마다 다르다. 서버에는 저장하지 않고 PC의 `index.json`에 저장한다(`docs/local-data.md`).
