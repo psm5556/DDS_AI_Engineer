@@ -7,6 +7,8 @@ import { AuthProvider } from "./auth";
 import { ToastProvider } from "./toast";
 // 한글 Pretendard(OFL, 앱에 포함 — 외부 CDN 없음)
 import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+// 머리말·숫자·경로용 고정폭 Geist Mono(OFL, 앱에 포함)
+import "@fontsource-variable/geist-mono/wght.css";
 import "./design/tokens.css";
 import "./styles.css";
 import "./layout.css";

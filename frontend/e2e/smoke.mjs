@@ -4,7 +4,8 @@
 //   cd frontend
 //   npm run smoke                        # 화면 둘러보기 (로그인 → 첫 화면 → 툴 → 프로젝트 탭들 → Simulator → 설정 → 관리)
 //   npm run smoke -- --demo              # + 데모 에이전트로 전체 과정(CAD→보고서)을 실제로 돌려 승인·실행·완료까지 확인 (3~5분)
-//   환경변수: DDS_URL(기본 http://127.0.0.1:7014) · DDS_USER(admin) · DDS_PIN(123456) · DDS_SHOTS(스크린샷 폴더, 기본 e2e/shots)
+//   npm run smoke -- --reduced           # '움직임 줄이기' 설정으로 점검(애니메이션 0개여야 통과)
+//   환경변수: DDS_URL(기본 http://127.0.0.1:7014) · DDS_USER(admin) · DDS_PIN(123456) · DDS_SHOTS(스크린샷 폴더, 기본 e2e/shots) · DDS_THEME(light|dark)
 //   Edge가 없으면 DDS_BROWSER=chrome
 import { chromium } from "playwright-core";
 import fs from "node:fs";
@@ -15,18 +16,27 @@ const USER = process.env.DDS_USER ?? "admin";
 const PIN = process.env.DDS_PIN ?? "123456";
 const OUT = process.env.DDS_SHOTS ?? path.join(import.meta.dirname, "shots");
 const DEMO = process.argv.includes("--demo");
+const REDUCED = process.argv.includes("--reduced"); // '움직임 줄이기'로 점검: 도는 애니메이션이 하나도 없어야 한다
+const THEME = process.env.DDS_THEME === "dark" ? "dark" : "light";
 fs.mkdirSync(OUT, { recursive: true });
 
 const browser = await chromium.launch({ channel: process.env.DDS_BROWSER === "chrome" ? "chrome" : "msedge", headless: !process.argv.includes("--headed") });
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "ko-KR" });
-await ctx.addInitScript(() => { try { localStorage.setItem("dds.theme", "light"); } catch { /* 무시 */ } });
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "ko-KR", reducedMotion: REDUCED ? "reduce" : "no-preference" });
+await ctx.addInitScript((t) => { try { localStorage.setItem("dds.theme", t); } catch { /* 무시 */ } }, THEME);
 const page = await ctx.newPage();
 const errors = [];
 // 404(아직 없는 데이터)·409(PC Agent 미연결 등 안내용 응답)는 화면 오류가 아니다
 page.on("console", (m) => { if (m.type() === "error" && !/\b(404|409)\b/.test(m.text())) errors.push(`[console] ${m.text()}`); });
 page.on("pageerror", (e) => errors.push(`[page] ${e}`));
 let n = 0;
-const shot = async (name) => { await page.waitForTimeout(600); const f = path.join(OUT, `${String(++n).padStart(2, "0")}-${name}.png`); await page.screenshot({ path: f }); console.log("  shot", path.basename(f)); };
+const shot = async (name) => {
+  await page.waitForTimeout(600);
+  const f = path.join(OUT, `${String(++n).padStart(2, "0")}-${name}.png`);
+  const running = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === "running").length);
+  await page.screenshot({ path: f, animations: "disabled" });
+  console.log("  shot", path.basename(f), `(도는 애니메이션 ${running})`);
+  if (REDUCED && running) errors.push(`[reduced] ${name}: 움직임 줄이기인데 애니메이션 ${running}개가 돈다`);
+};
 const step = async (label, fn) => {
   try { await fn(); } catch (e) { errors.push(`[step] ${label}: ${String(e).split("\n")[0]}`); console.log("  ! 실패:", label); }
 };

@@ -19,7 +19,7 @@
 
 .side-group h4 { display: flex; align-items: center; gap: 6px; font-size: var(--fs-11); color: var(--ink-4); font-weight: 600; margin: 10px 8px 4px; letter-spacing: 0.04em; }
 .side-group h4 .count { font-weight: 500; color: var(--ink-4); }
-.side-item { border-radius: var(--radius-s); padding: 2px 0 4px; transition: background-color .1s; }
+.side-item { border-radius: var(--radius-s); padding: 2px 0 4px; transition: background-color var(--dur-fast); }
 .side-item + .side-item { margin-top: 1px; }
 
 .side-name {
@@ -70,7 +70,7 @@
 details.more { margin-top: 4px; border-top: 1px solid var(--line-2); padding-top: 4px; }
 details.more > summary { cursor: pointer; color: var(--ink-2); font-weight: 600; font-size: var(--fs-s); padding: 10px 2px; list-style: none; display: flex; align-items: center; gap: 8px; }
 details.more > summary::-webkit-details-marker { display: none; }
-details.more > summary::before { content: "›"; display: inline-block; width: 12px; color: var(--ink-4); font-size: var(--fs-16); line-height: 1; transition: transform .15s; }
+details.more > summary::before { content: "›"; display: inline-block; width: 12px; color: var(--ink-4); font-size: var(--fs-16); line-height: 1; transition: transform var(--dur-fast); }
 details[open].more > summary::before { transform: rotate(90deg); }
 
 /* ---------- DOE 메뉴(⋯ / 우클릭) ---------- */
@@ -142,7 +142,7 @@ tr.best-row td { background: var(--brand-soft); }
 .side-fold { opacity: 0.55; }
 .side-fold:hover { opacity: 1; }
 .side-resizer { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 25; touch-action: none; }
-.side-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .15s; }
+.side-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background var(--dur-fast); }
 .side-resizer:hover::after, .side-resizer:focus-visible::after, body.resizing .side-resizer::after { background: var(--brand-400); }
 .side-resizer:focus-visible { outline: none; }
 body.resizing { cursor: col-resize; user-select: none; }
@@ -167,7 +167,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 
 .bubble.thinking { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3) !important; }
-.spin { animation: spin 0.9s linear infinite; }
+.spin { animation: spin var(--dur-spin) linear infinite; }
 
 .code-block { margin: 0 0 8px; padding: 12px 14px; border-radius: var(--radius-m); background: var(--panel-3); color: var(--ink-2); font-size: var(--fs-12); line-height: 1.5; overflow-x: auto; white-space: pre; }
 

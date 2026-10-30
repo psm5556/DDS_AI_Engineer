@@ -1,10 +1,11 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Box, ChevronDown, ChevronRight, Cpu, FolderSearch, Loader2, Rocket, SlidersHorizontal, Target, Workflow, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowRight, Box, ChevronDown, ChevronRight, Cpu, FolderSearch, Loader2, Rocket, SlidersHorizontal, Target, Workflow, Wrench } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { get, post, put, uploadFile } from "../api";
 import { useAuth } from "../auth";
 import { Composer, type Outgoing } from "../chat/Composer";
+import { AgentGlyph } from "../components/AgentGlyph";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
 import { folderName } from "../components/FolderModal";
 import { FLOW_STATUS, when } from "../format";
@@ -84,8 +85,9 @@ export default function DashboardPage() {
   return (
     <div className="home">
       <div className="home-hero">
-        <h1>{user?.display_name}님, 새 프로젝트를 시작해 볼까요?</h1>
-        <p className="muted">말로 요청하면 에이전트가 CAD·CAE 툴로 모델링부터 해석, 데이터, 예측 모델, 보고서까지 이어서 합니다.</p>
+        <AgentGlyph size={36} />
+        <h1><span className="line"><span>{user?.display_name}님,</span></span> <span className="line"><span>무엇을 맡길까요?</span></span></h1>
+        <p className="muted">모델링부터 해석, 예측 모델, 보고서까지 말로 요청하면 이어서 합니다.</p>
         {agent && !connected && (
           <div className="notice warn" style={{ textAlign: "left" }}><AlertTriangle size={16} />
             <span className="grow">에이전트와 CAD/CAE 툴은 내 PC에서 실행됩니다. 먼저 <b>PC Agent</b>를 설치해 주세요.</span>
@@ -93,7 +95,7 @@ export default function DashboardPage() {
         )}
 
         <div className="np-card">
-          <Composer big autoFocus suggestions={STARTERS.map((x) => x.p)} seed={seed} busy={start.isPending}
+          <Composer big autoFocus typing suggestions={STARTERS.map((x) => x.p)} seed={seed} busy={start.isPending}
             onSend={(o) => start.mutateAsync(o).then(() => true, () => false)}
             leftBar={<AgentPicker value={resolveAgent(agent, preferred)} onChange={setPreferred} disabled={!connected} />}
             placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘" />
@@ -135,7 +137,7 @@ export default function DashboardPage() {
         </div>
         <div className="starters">
           {STARTERS.map(({ icon: Icon, t, p }) => (
-            <button key={t} className="starter" onClick={() => setSeed({ text: p, n: Date.now() })} title={p}><Icon size={15} />{t}</button>
+            <button key={t} className="starter" onClick={() => setSeed({ text: p, n: Date.now() })} title={p}><Icon size={16} /><span>{t}</span></button>
           ))}
         </div>
         <ToolsHint connected={connected} />
@@ -153,6 +155,7 @@ export default function DashboardPage() {
                   <b>{p.name}</b>
                   {st && <span className={`chip ${st.chip}`}>{run && <Loader2 size={11} className="spin" />}{st.label}</span>}
                   <span className="small muted">{when(p.updated_at)}</span>
+                  <ArrowRight size={14} className="go" aria-hidden="true" />
                 </Link>
               );
             })}

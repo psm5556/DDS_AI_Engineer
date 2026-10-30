@@ -20,7 +20,7 @@ def test_no_hex_colors_outside_tokens():
 
 def test_font_sizes_use_scale():
     bad = [f"{n}: {m}" for n, css in _css() for m in re.findall(r"font-size:\s*[0-9.]+(?:px|rem|em)", css)]
-    assert not bad, "글자 크기는 7단계 토큰(--fs-11·12·13·14·16·20·28)만 쓴다: " + ", ".join(bad[:10])
+    assert not bad, "글자 크기는 토큰(--fs-11·12·13·14·16·20·28, 무대 전용 --fs-40·64)만 쓴다: " + ", ".join(bad[:10])
 
 
 def test_radii_use_scale():
@@ -29,7 +29,17 @@ def test_radii_use_scale():
         for prop, val in re.findall(r"(border(?:-[a-z]+)*-radius)\s*:([^;}]*)", css):
             if re.search(r"\b[1-9][0-9.]*px", val):
                 bad.append(f"{n}: {prop}:{val.strip()}")
-    assert not bad, "둥글기는 5단계 토큰(--r-xs·s·m·l·pill)만 쓴다(원은 50%): " + ", ".join(bad[:10])
+    assert not bad, "둥글기는 토큰(--r-xs·s·m·l·pill)만 쓴다(원은 50%): " + ", ".join(bad[:10])
+
+
+def test_motion_uses_tokens():
+    """움직임 시간은 토큰(--dur-*)으로만 쓴다. 시간을 바꿀 때 한 곳만 고치면 되게."""
+    bad = []
+    for n, css in _css():
+        for prop, val in re.findall(r"\b((?:transition|animation)(?:-[a-z]+)?)\s*:([^;}]*)", css):
+            if re.search(r"(?<![\w.-])\d*\.?\d+m?s\b", val):
+                bad.append(f"{n}: {prop}:{val.strip()}")
+    assert not bad, "움직임 시간은 --dur-* 토큰만 쓴다: " + ", ".join(bad[:10])
 
 
 def test_tokens_defined_for_both_themes():
@@ -81,7 +91,8 @@ def _over(top, base):
 def test_text_contrast_both_themes():
     """본문·보조 글자와 상태 태그 글자는 두 테마 모두 대비 4.5:1 이상(WCAG AA)."""
     pairs = [("--ink", "--paper"), ("--ink", "--panel"), ("--ink-2", "--panel"), ("--ink-3", "--panel"), ("--ink-3", "--paper"),
-             ("--ink-3", "--panel-2"), ("--on-solid", "--brand-solid"),
+             ("--ink-3", "--panel-2"), ("--on-brand", "--brand-solid"), ("--brand", "--paper"), ("--brand", "--panel"),
+             ("--err", "--panel"), ("--warn", "--panel"), ("--info", "--panel"), ("--ok", "--panel"),
              ("--ok-ink", "--ok-soft"), ("--warn-ink", "--warn-soft"), ("--err-ink", "--err-soft"), ("--info-ink", "--info-soft"),
              ("--mean-ink", "--mean-soft")]
     low = []

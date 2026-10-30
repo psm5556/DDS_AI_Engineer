@@ -5,12 +5,12 @@ import { token } from "../design/token";
 
 export const Plot = createPlotlyComponent(Plotly);
 
-/** 그래프 색: 격자·글자·강조·계열(파랑 → 청록 → 보라 → 주황 → 빨강 → 회청) */
+/** 그래프 색: 격자·글자·강조·계열(주홍 → 청록 → 보라 → 호박 → 회청 → 빨강) */
 export function chartColors() {
   return {
-    grid: token("--line"), text: token("--ink-3"), muted: token("--ink-4"), brand: token("--brand"), err: token("--err"),
+    grid: token("--line"), text: token("--ink-3"), muted: token("--ink-4"), brand: token("--brand"), err: token("--err"), mean: token("--mean"),
     warn: token("--warn-solid"), bg: token("--panel-2"), ink: token("--ink"),
-    series: ["--brand", "--mean", "--sigma", "--warn-solid", "--err", "--epi"].map(token),
+    series: ["--brand", "--mean", "--sigma", "--warn-solid", "--epi", "--err"].map(token),
   };
 }
 

@@ -34,7 +34,7 @@ function Chart({ a, height = 300 }: { a: Artifact; height?: number }) {
       return {
         data: [{
           type: "parcoords",
-          line: { color: rows.map((r) => r[r.length - 1]), colorscale: [[0, t.brand], [1, t.warn]] },
+          line: { color: rows.map((r) => r[r.length - 1]), colorscale: [[0, t.mean], [1, t.brand]] },
           dimensions: dims.map((d, i) => ({ label: d, values: rows.map((r) => r[i]) })),
         }],
         layout: { margin: { l: 60, r: 40, t: 30, b: 20 } },

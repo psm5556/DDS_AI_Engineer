@@ -26,7 +26,7 @@
 .chat-suggest { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 6px; }
 .chat-suggest button { justify-content: flex-start; white-space: normal; text-align: left; min-height: 42px; padding: 8px 14px; border-radius: var(--r-m); font-size: var(--fs-14); }
 .chat-composer { padding: 10px 24px 18px; }
-.composer { border: 1px solid var(--line); border-radius: var(--r-l); background: var(--panel); box-shadow: var(--shadow-card-md); padding: 10px 12px 8px; transition: border-color .15s, box-shadow .15s; }
+.composer { border: 1px solid var(--line); border-radius: var(--r-l); background: var(--panel); box-shadow: var(--shadow-card-md); padding: 10px 12px 8px; transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
 .composer:focus-within { border-color: var(--brand-200); box-shadow: 0 0 0 4px var(--brand-soft), var(--shadow-card-md); }
 .composer textarea { border: none; box-shadow: none !important; background: transparent; resize: none; min-height: 46px; max-height: 240px;
   padding: 4px 6px; font-size: var(--fs-14); line-height: 1.6; field-sizing: content; }
@@ -74,7 +74,7 @@
 .canvas .flow-bar .primary.big { min-height: 36px; font-size: var(--fs-s); }
 .canvas .empty-hero { padding: 40px 16px; }
 
-.art-card.flash { animation: art-flash 1.8s ease-out; }
+.art-card.flash { animation: art-flash var(--dur-flash) ease-out; }
 @keyframes art-flash { 0% { box-shadow: 0 0 0 4px var(--brand-200); border-color: var(--brand-500); } 100% { box-shadow: none; } }
 
 /* ---------- 첫 화면: 큰 입력창 ---------- */
@@ -182,7 +182,7 @@ td.nowrap { white-space: nowrap; }
 .flow-steps .fs-detail { font-size: var(--fs-xs); color: var(--ink-3); }
 .flow-steps .fs-tag { flex: none; font-size: var(--fs-11); color: var(--ink-3); background: var(--panel-3); border-radius: var(--r-s); padding: 2px 7px; margin-top: 1px; }
 .flow-progress { height: 4px; border-radius: var(--r-xs); background: var(--panel-3); overflow: hidden; margin: 6px 0 2px; }
-.flow-progress > div { height: 100%; background: var(--brand); transition: width .4s ease; }
+.flow-progress > div { height: 100%; background: var(--brand); transition: width var(--dur-slow) ease; }
 .flow-card.st-complete .flow-progress > div { background: var(--ok); }
 
 /* 실행 확인 카드 */

@@ -2,6 +2,7 @@ import { ArrowUp, FileUp, Loader2, Plus, Square, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { uploadFile } from "../api";
 import { useToast } from "../toast";
+import { reducedMotion } from "../motion";
 import type { Attachment } from "../types";
 
 /** 보낼 때 넘기는 첨부: 이미 올린 것(id)과, 프로젝트가 아직 없어 나중에 올릴 파일 */
@@ -25,12 +26,14 @@ const fmtSize = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math
 /** 입력창: → 키로 추천 프롬프트 받기(회색 글자로 미리 보임) · 파일 첨부(버튼·끌어 놓기·붙여넣기) · Enter 보내기
  *  projectId가 있으면 첨부를 바로 올리고, 없으면(첫 화면) 보낼 때 pendingFiles로 넘긴다. */
 export function Composer({
-  projectId, suggestions, onSend, busy, onStop, disabled, placeholder, big, leftBar, autoFocus, hint, seed,
+  projectId, suggestions, onSend, busy, onStop, disabled, placeholder, big, leftBar, autoFocus, hint, seed, typing,
 }: {
   projectId?: number; suggestions: string[]; onSend: (o: Outgoing) => void | boolean | Promise<void | boolean>; busy?: boolean; onStop?: () => void;
   disabled?: boolean; placeholder: string; big?: boolean; leftBar?: ReactNode; autoFocus?: boolean; hint?: string;
   /** 밖에서 입력창을 채울 때(예: 시작 버튼) — n이 바뀔 때마다 text로 채운다 */
   seed?: { text: string; n: number };
+  /** 비어 있을 때 추천을 타이핑하듯 보이고 다음 추천으로 넘어간다(첫 화면). → 키는 그대로 전체를 받는다 */
+  typing?: boolean;
 }) {
   const toast = useToast();
   const [text, setText] = useState("");
@@ -56,6 +59,26 @@ export function Composer({
     const hit = pool.find((s) => s.toLowerCase().startsWith(low) && s.length > text.length);
     return hit ? text + hit.slice(text.length) : "";
   }, [text, suggestions, pick, disabled]);
+
+  // 타이핑 효과: 보이는 글자 수만 늘린다. 입력을 시작하면 바로 멈춘다
+  const animate = !!typing && !text && !disabled && !!ghost && !reducedMotion();
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    if (!animate) return;
+    setShown(0);
+    let n = 0;
+    let hold: ReturnType<typeof setTimeout> | undefined;
+    const tick = setInterval(() => {
+      n += 1;
+      setShown(n);
+      if (n >= ghost.length) {
+        clearInterval(tick);
+        hold = setTimeout(() => setPick((p) => p + 1), 3200);
+      }
+    }, 26);
+    return () => { clearInterval(tick); if (hold) clearTimeout(hold); };
+  }, [animate, ghost]);
+  const ghostShown = animate ? ghost.slice(0, shown) : ghost.slice(text.length);
 
   const accept = () => {
     if (!ghost) return false;
@@ -121,7 +144,7 @@ export function Composer({
       )}
       <div className="composer-input">
         {/* 회색 추천 글자: 입력한 글자 뒤에 이어서 보인다 (→ 또는 Tab으로 받기) */}
-        <div className="composer-ghost" aria-hidden="true"><span className="typed">{text}</span>{ghost.slice(text.length)}</div>
+        <div className="composer-ghost" aria-hidden="true"><span className="typed">{text}</span>{ghostShown}{animate && <i className="type-caret" />}</div>
         <textarea ref={ta} value={text} rows={big ? 3 : 1} disabled={disabled} placeholder={ghost ? "" : placeholder}
           aria-label="에이전트에게 요청" onChange={(e) => setText(e.target.value)}
           onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}

@@ -15,7 +15,6 @@ h3 { font-size: var(--fs-l); }
 h4 { font-size: var(--fs-m); }
 p { margin: 0; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 ::-webkit-scrollbar { width: 7.5px; height: 7.5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: var(--r-pill); }
@@ -62,7 +61,7 @@ button, .btn {
   font: inherit; font-size: var(--fs-s); font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 36px; padding: 0 14px; border-radius: var(--radius-s); border: 1px solid var(--line);
   background: var(--panel); color: var(--ink-2); cursor: pointer; white-space: nowrap;
-  box-shadow: none; transition: background-color .12s, border-color .12s, color .12s, box-shadow .12s;
+  box-shadow: none; transition: background-color var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast), box-shadow var(--dur-fast);
 }
 button:hover:not(:disabled), .btn:hover { background: var(--panel-3); color: var(--ink); text-decoration: none; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -84,7 +83,7 @@ label.field > span.lbl { font-weight: 500; font-size: var(--fs-xs); color: var(-
 input[type="text"], input[type="number"], input[type="search"], input[type="datetime-local"], select, textarea {
   font: inherit; font-size: var(--fs-s); min-height: 38px; padding: 7px 12px; border: 1px solid var(--line);
   border-radius: var(--radius-s); background: var(--panel); color: var(--ink); width: 100%;
-  transition: border-color .12s, box-shadow .12s;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
 input::placeholder, textarea::placeholder { color: var(--ink-4); }
 textarea { min-height: 72px; resize: vertical; }
@@ -174,7 +173,7 @@ tbody tr:hover td { background-color: var(--row-hover); }
 
 /* ---------- 빈 상태 / 로딩 ---------- */
 
-.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--brand); border-radius: 50%; animation: spin var(--dur-spin) linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .busy { display: flex; align-items: center; gap: 10px; color: var(--ink-3); padding: 16px 0; }
 

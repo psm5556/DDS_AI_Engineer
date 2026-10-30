@@ -117,7 +117,7 @@ function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
         <div className="sim-main">
           <Field3DPanel listUrl={fieldList(spec)} baseUrl={fieldBase} params={x} />
           <section className="block">
-            <div className="block-head"><h3>민감도</h3><span className="small muted">한 변수만 바꿀 때의 변화 · 빨간 점이 지금 설계</span><span className="grow" />
+            <div className="block-head"><h3>민감도</h3><span className="small muted">한 변수만 바꿀 때의 변화 · 주홍 점이 지금 설계</span><span className="grow" />
               {spec.variables.length > 1 && <span className="seg">{spec.variables.map((q) => <button key={q.name} className={sweepVar === q.name ? "on" : ""} onClick={() => setSweepVar(q.name)}>{q.name}</button>)}</span>}</div>
             <div className="sim-plots">
               {sweep && v && outs.map((o) => {
@@ -128,8 +128,8 @@ function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
                     data={[
                       { x: [...xs, ...xs.slice().reverse()], y: [...m.map((a, i) => a + 2 * s[i]), ...m.map((a, i) => a - 2 * s[i]).reverse()],
                         fill: "toself", fillcolor: "rgba(100,116,139,0.15)", line: { width: 0 }, hoverinfo: "skip", showlegend: false, type: "scatter" },
-                      { x: xs, y: m, type: "scatter", mode: "lines", line: { color: c.brand, width: 2 }, name: o },
-                      { x: [x[v.name]], y: [pred?.mean[o]], type: "scatter", mode: "markers", marker: { color: c.err, size: 9 }, name: "현재" },
+                      { x: xs, y: m, type: "scatter", mode: "lines", line: { color: c.mean, width: 2 }, name: o },
+                      { x: [x[v.name]], y: [pred?.mean[o]], type: "scatter", mode: "markers", marker: { color: c.brand, size: 9 }, name: "현재" },
                     ]}
                     layout={{ ...baseLayout, height: 220, autosize: true, showlegend: false, font: { ...baseLayout.font, color: txt },
                       xaxis: { title: { text: v.name }, gridcolor: grid, color: txt }, yaxis: { title: { text: o }, gridcolor: grid, color: txt } }} />

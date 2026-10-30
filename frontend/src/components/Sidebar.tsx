@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Wordmark } from "./AgentGlyph";
 import { get } from "../api";
 import { useAuth } from "../auth";
 import { FLOW_STATUS } from "../format";
@@ -101,7 +102,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
       </div>
       <div className="side-panel">
         <div className="side-brand-row">
-          <Link to="/" className="side-brand" aria-label="DDS Conversa 홈"><span className="logo" aria-hidden="true">AI</span>DDS Conversa</Link>
+          <Link to="/" className="side-brand" aria-label="DDS Conversa 홈"><Wordmark /></Link>
           <button className="icon-btn side-fold" onClick={layout.toggle} aria-label="사이드바 접기" title="사이드바 접기 (Ctrl+B)"><PanelLeftClose size={17} /></button>
         </div>
         <nav className="side-nav-list" aria-label="바로 가기">
