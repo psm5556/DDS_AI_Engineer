@@ -5,9 +5,8 @@ import { Link, useParams } from "react-router-dom";
 import { del, get, post } from "../api";
 import { Field3DPanel } from "../components/Field3DPanel";
 import { Modal } from "../components/Modal";
-import { baseLayout, Plot, plotConfig } from "../components/Plot";
+import { baseLayout, chartColors, Plot, plotConfig } from "../components/Plot";
 import { copyText, fmt, when } from "../format";
-import { useTheme } from "../theme";
 import { useToast } from "../toast";
 import type { Objective, SurrogateModel, Variable } from "../types";
 
@@ -38,7 +37,6 @@ export function SharedSimulatorPage() {
 function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
   base: string; specPath: string; modelId?: number; fieldList: (s: Spec) => string; fieldBase: (id: number) => string;
 }) {
-  const { theme } = useTheme();
   const [sharing, setSharing] = useState(false);
   const { data: spec, error } = useQuery({ queryKey: ["sim-spec", specPath], queryFn: () => get<Spec>(specPath) });
   const mid0 = useMemo(() => Object.fromEntries((spec?.variables ?? []).map((v) => [v.name, (v.lower + v.upper) / 2])), [spec]);
@@ -66,8 +64,8 @@ function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
   if (!spec) return <div className="page"><div className="busy"><span className="spinner" /> 불러오는 중</div></div>;
   const outs = spec.model.outputs;
   const v = spec.variables.find((q) => q.name === sweepVar);
-  const grid = theme === "dark" ? "#2a2a30" : "#ececef";
-  const txt = theme === "dark" ? "#a1a1aa" : "#71717a";
+  const c = chartColors(); // 디자인 토큰 색(테마가 바뀌면 다시 그릴 때 새 값)
+  const grid = c.grid, txt = c.text;
 
   return (
     <div className="page sim-page">
@@ -130,8 +128,8 @@ function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
                     data={[
                       { x: [...xs, ...xs.slice().reverse()], y: [...m.map((a, i) => a + 2 * s[i]), ...m.map((a, i) => a - 2 * s[i]).reverse()],
                         fill: "toself", fillcolor: "rgba(100,116,139,0.15)", line: { width: 0 }, hoverinfo: "skip", showlegend: false, type: "scatter" },
-                      { x: xs, y: m, type: "scatter", mode: "lines", line: { color: "#2563eb", width: 2 }, name: o },
-                      { x: [x[v.name]], y: [pred?.mean[o]], type: "scatter", mode: "markers", marker: { color: "#dc2626", size: 9 }, name: "현재" },
+                      { x: xs, y: m, type: "scatter", mode: "lines", line: { color: c.brand, width: 2 }, name: o },
+                      { x: [x[v.name]], y: [pred?.mean[o]], type: "scatter", mode: "markers", marker: { color: c.err, size: 9 }, name: "현재" },
                     ]}
                     layout={{ ...baseLayout, height: 220, autosize: true, showlegend: false, font: { ...baseLayout.font, color: txt },
                       xaxis: { title: { text: v.name }, gridcolor: grid, color: txt }, yaxis: { title: { text: o }, gridcolor: grid, color: txt } }} />

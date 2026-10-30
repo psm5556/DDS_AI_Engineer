@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { token } from "../design/token";
 
 /** turbo 컬러맵 (0~1 → RGB). 해석 결과에 흔히 쓰는 무지개 계열이지만 명도 변화가 고르다. */
 export function turbo(t: number): [number, number, number] {
@@ -91,7 +92,8 @@ export function FieldViewer3D({ points, triangles, values, vmin, vmax, wireframe
   }, [points, triangles, values, vmin, vmax]);
 
   useEffect(() => { if (st.current) st.current.edges.visible = !!wireframe; }, [wireframe]);
-  useEffect(() => { if (st.current) st.current.scene.background = new THREE.Color(dark ? 0x17171a : 0xffffff); }, [dark]);
+  // 뷰 바탕은 디자인 토큰 --panel-2(테마에 따라 바뀜)
+  useEffect(() => { if (st.current) st.current.scene.background = new THREE.Color(token("--panel-2") || (dark ? "#1d1d1c" : "#f7f7f5")); }, [dark]);
   useEffect(() => { if (st.current && resetKey) fit(st.current); }, [resetKey]);
 
   return <div ref={box} className="viewer3d" aria-label="3D 형상·필드 보기 (끌어서 회전, 휠로 확대, 오른쪽 버튼으로 이동)" />;

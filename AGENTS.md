@@ -84,7 +84,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
   - 같은 기능의 버튼을 두 곳에 만들지 않는다.
   - 상태는 한 곳에서 보여 준다(예: PC Agent 상태는 사이드바 아래).
   - 아이콘만 있는 버튼은 뜻이 분명할 때만 쓰고, 아니면 글자를 붙인다.
-- 색·간격은 `frontend/src/design/tokens.css`와 `modern.css`의 토큰만 쓴다. 새 스타일은 `modern.css` 끝에 덧붙인다(마지막에 불러오는 층).
+- 색·글자 크기·둥글기·그림자는 `frontend/src/design/tokens.css`의 토큰만 쓴다(`server/tests/test_design_tokens.py`가 hex 색·px 글자 크기·px 둥글기를 막고, 두 테마의 글자 대비를 검사한다). 새 스타일은 `modern.css` 끝에 덧붙인다(마지막에 불러오는 층). 규칙은 `docs/product-spec.md` 2절.
 - 데스크톱(1440 폭) 기준이다. 모바일은 깨지지 않는 정도만 유지한다.
 - 오류는 원인과 할 일을 함께 보여 준다. 예: "서버에 설치 파일이 없습니다 → 관리 > Agent 배포에서 준비".
 

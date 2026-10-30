@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 /** 사이드바(왼쪽 프로젝트 목록, 오른쪽 에이전트 채팅)의 너비(드래그로 조절)와 접힘 상태.
  *  사람마다 편한 너비가 달라 브라우저에 기억해 둔다(실패해도 기본값으로 동작). */
 export interface PanelSpec { key: string; min: number; max: number; width: number; collapsed: boolean; shortcut: string }
-export const LEFT: PanelSpec = { key: "dds.sidebar", min: 200, max: 480, width: 264, collapsed: false, shortcut: "b" };
+export const LEFT: PanelSpec = { key: "dds.sidebar", min: 200, max: 480, width: 256, collapsed: false, shortcut: "b" };
 export const RIGHT: PanelSpec = { key: "dds.canvas.layout", min: 360, max: 1100, width: 560, collapsed: false, shortcut: "j" };
 // 예전 이름 (왼쪽 사이드바)
 export const SIDE_MIN = LEFT.min;

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Box, ChevronRight, Cpu, FolderSearch, Loader2, Rocket, Target, Workflow, Wrench } from "lucide-react";
+import { AlertTriangle, Box, ChevronDown, ChevronRight, Cpu, FolderSearch, Loader2, Rocket, SlidersHorizontal, Target, Workflow, Wrench } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { get, post, put, uploadFile } from "../api";
@@ -21,7 +21,8 @@ const STARTERS = [
 
 class FolderError extends Error {}
 
-/** 첫 화면 = 새 프로젝트 시작: ① 이름 → ② 내 PC 작업 폴더 → ③ 요청.
+/** 첫 화면 = 새 프로젝트 시작: 요청 입력창이 가운데. 프로젝트 이름·내 PC 작업 폴더는 '옵션' 한 줄에 접어 둔다
+ *  (비워 두면 이름은 요청 내용으로, 폴더는 기본 위치로 정해진다 — 단계를 줄이기 위해).
  *  보내면 프로젝트를 만들고, 작업 폴더를 정한 뒤(에이전트가 첫 세션을 열기 전에) 대화로 넘어간다. */
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -32,6 +33,8 @@ export default function DashboardPage() {
   const [folder, setFolder] = useState("");
   const [folderErr, setFolderErr] = useState("");
   const [picking, setPicking] = useState(false);
+  const [opts, setOpts] = useState(false);
+  const showOpts = opts || !!folderErr; // 폴더 오류가 나면 펼쳐서 보여 준다
   const folderRef = useRef<HTMLInputElement>(null);
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
   const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status") });
@@ -73,7 +76,7 @@ export default function DashboardPage() {
     // ③ 요청을 들고 대화로
     onSuccess: ({ p, ids, text }) => nav(`/projects/${p.id}/new`, { state: { prompt: text, attachmentIds: ids } }),
     onError: (e: Error) => {
-      if (e instanceof FolderError) { setFolderErr(e.message); folderRef.current?.focus(); }
+      if (e instanceof FolderError) { setFolderErr(e.message); setTimeout(() => folderRef.current?.focus(), 0); }
       else toast(e.message ?? "시작하지 못했습니다", true);
     },
   });
@@ -90,39 +93,45 @@ export default function DashboardPage() {
         )}
 
         <div className="np-card">
-          <div className="np-row">
-            <span className="np-n">1</span>
-            <label className="np-label" htmlFor="np-name">프로젝트 이름</label>
-            <input id="np-name" type="text" className="np-input" value={name} maxLength={200} autoFocus
-              placeholder="비워 두면 요청 내용으로 정합니다" onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); folderRef.current?.focus(); } }} />
-          </div>
-          <div className="np-row">
-            <span className="np-n">2</span>
-            <label className="np-label" htmlFor="np-folder">내 PC 작업 폴더</label>
-            <div className="np-field">
-              <div className="np-folder">
-                <input id="np-folder" ref={folderRef} type="text" className="np-input mono" value={folder} disabled={!connected}
-                  placeholder={connected ? "비워 두면 기본 위치에 새로 만듭니다" : "PC Agent가 연결되면 정할 수 있습니다"}
-                  onChange={(e) => { setFolder(e.target.value); setFolderErr(""); }}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); focusComposer(); } }} />
-                <button type="button" onClick={() => void browse()} disabled={!connected || picking} title="내 PC에 폴더 선택 창을 띄웁니다">
-                  <FolderSearch size={14} />{picking ? "PC에서 고르는 중…" : "찾아보기…"}</button>
-              </div>
-              {folderErr ? <p className="np-err">{folderErr}</p>
-                : <p className="np-hint">
-                  {folder.trim() ? "이 폴더에 에이전트 설정 파일과 작업 하위 폴더(inputs·runs·studies·reports)를 만듭니다. 기존 파일은 건드리지 않습니다."
-                    : `기본 위치: ${agent?.info?.workspace ?? "내 PC의 DDS_Workspace"} 아래에 프로젝트 폴더를 만듭니다.`}</p>}
-            </div>
-          </div>
-          <div className="np-row np-ask">
-            <span className="np-n">3</span>
-            <span className="np-label">무엇을 할까요?</span>
-          </div>
-          <Composer big suggestions={STARTERS.map((x) => x.p)} seed={seed} busy={start.isPending}
+          <Composer big autoFocus suggestions={STARTERS.map((x) => x.p)} seed={seed} busy={start.isPending}
             onSend={(o) => start.mutateAsync(o).then(() => true, () => false)}
             leftBar={<AgentPicker value={resolveAgent(agent, preferred)} onChange={setPreferred} disabled={!connected} />}
             placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘" />
+          <div className={`np-opts ${showOpts ? "open" : ""}`}>
+            <button type="button" className="np-opts-toggle" aria-expanded={showOpts} onClick={() => setOpts(!showOpts)}
+              title="프로젝트 이름과 내 PC 작업 폴더 — 비워 두면 자동으로 정합니다">
+              <SlidersHorizontal size={13} />옵션
+              <span className="np-opts-sum">{name.trim() ? `이름 '${name.trim()}'` : "이름 자동"} · {folder.trim() ? folderName(folder.trim()) : "기본 작업 폴더"}</span>
+              <ChevronDown size={13} className="np-opts-chev" />
+            </button>
+            {showOpts && (
+              <div className="np-opts-body">
+                <label className="np-row">
+                  <span className="np-label">프로젝트 이름</span>
+                  <input id="np-name" type="text" className="np-input" value={name} maxLength={200}
+                    placeholder="비워 두면 요청 내용으로 정합니다" onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); folderRef.current?.focus(); } }} />
+                </label>
+                <div className="np-row">
+                  <label className="np-label" htmlFor="np-folder">내 PC 작업 폴더</label>
+                  <div className="np-field">
+                    <div className="np-folder">
+                      <input id="np-folder" ref={folderRef} type="text" className="np-input mono" value={folder} disabled={!connected}
+                        placeholder={connected ? "비워 두면 기본 위치에 새로 만듭니다" : "PC Agent가 연결되면 정할 수 있습니다"}
+                        onChange={(e) => { setFolder(e.target.value); setFolderErr(""); }}
+                        onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); focusComposer(); } }} />
+                      <button type="button" onClick={() => void browse()} disabled={!connected || picking} title="내 PC에 폴더 선택 창을 띄웁니다">
+                        <FolderSearch size={14} />{picking ? "PC에서 고르는 중…" : "찾아보기…"}</button>
+                    </div>
+                    {folderErr ? <p className="np-err">{folderErr}</p>
+                      : <p className="np-hint">
+                        {folder.trim() ? "이 폴더에 에이전트 설정 파일과 작업 하위 폴더(inputs·runs·studies·reports)를 만듭니다. 기존 파일은 건드리지 않습니다."
+                          : `기본 위치: ${agent?.info?.workspace ?? "내 PC의 DDS_Workspace"} 아래에 프로젝트 폴더를 만듭니다.`}</p>}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div className="starters">
           {STARTERS.map(({ icon: Icon, t, p }) => (

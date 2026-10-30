@@ -7,52 +7,51 @@
 .workspace.canvas-collapsed { grid-template-columns: minmax(0, 1fr) 52px; }
 .ws-main { display: flex; flex-direction: column; min-width: 0; height: 100vh; }
 .ws-head { display: flex; align-items: center; gap: 10px; padding: 12px 20px 12px 24px; border-bottom: 1px solid var(--line); background: var(--paper); }
-.ws-head h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ws-sub { font-size: 12px; color: var(--ink-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.ws-head h1 { font-size: var(--fs-16); font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- 대화 ---------- */
 .chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .chat-body { flex: 1; min-height: 0; overflow-y: auto; padding: 28px 24px 8px; }
 .chat-col { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
 .chat-msg { display: flex; flex-direction: column; max-width: 100%; }
-.chat-msg .bubble { font-size: 14.5px; line-height: 1.7; word-break: break-word; }
+.chat-msg .bubble { font-size: var(--fs-14); line-height: 1.7; word-break: break-word; }
 .chat-msg.user { align-self: flex-end; max-width: 80%; }
-.chat-msg.user .bubble { background: #2563eb; color: #fff; padding: 10px 14px; border-radius: 16px; border-bottom-right-radius: 4px; white-space: pre-wrap; }
+.chat-msg.user .bubble { background: var(--brand-solid); color: var(--on-solid); padding: 10px 14px; border-radius: var(--r-l); border-bottom-right-radius: var(--r-xs); white-space: pre-wrap; }
 .chat-msg.agent .bubble { color: var(--ink); padding: 2px; }
-.chat-msg.agent.err .bubble { background: var(--err-soft); border: 1px solid var(--err-ring); color: var(--err); padding: 10px 14px; border-radius: 12px; }
-.chat-msg .bubble.thinking { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: 13px; }
+.chat-msg.agent.err .bubble { background: var(--err-soft); border: 1px solid var(--err-ring); color: var(--err); padding: 10px 14px; border-radius: var(--r-m); }
+.chat-msg .bubble.thinking { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: var(--fs-13); }
 .chat-empty { margin: 8vh auto 0; max-width: 620px; text-align: center; color: var(--ink-3); display: flex; flex-direction: column; align-items: center; gap: 12px; font-size: var(--fs-s); }
 .chat-empty > svg { color: var(--brand); }
-.chat-empty b { color: var(--ink); font-size: 18px; }
+.chat-empty b { color: var(--ink); font-size: var(--fs-20); }
 .chat-suggest { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 6px; }
-.chat-suggest button { justify-content: flex-start; white-space: normal; text-align: left; min-height: 42px; padding: 8px 14px; border-radius: 12px; font-size: 13.5px; }
+.chat-suggest button { justify-content: flex-start; white-space: normal; text-align: left; min-height: 42px; padding: 8px 14px; border-radius: var(--r-m); font-size: var(--fs-14); }
 .chat-composer { padding: 10px 24px 18px; }
-.composer { border: 1px solid var(--line); border-radius: 18px; background: var(--panel); box-shadow: var(--shadow-card-md); padding: 10px 12px 8px; transition: border-color .15s, box-shadow .15s; }
+.composer { border: 1px solid var(--line); border-radius: var(--r-l); background: var(--panel); box-shadow: var(--shadow-card-md); padding: 10px 12px 8px; transition: border-color .15s, box-shadow .15s; }
 .composer:focus-within { border-color: var(--brand-200); box-shadow: 0 0 0 4px var(--brand-soft), var(--shadow-card-md); }
 .composer textarea { border: none; box-shadow: none !important; background: transparent; resize: none; min-height: 46px; max-height: 240px;
-  padding: 4px 6px; font-size: 14.5px; line-height: 1.6; field-sizing: content; }
+  padding: 4px 6px; font-size: var(--fs-14); line-height: 1.6; field-sizing: content; }
 .composer textarea:focus { border: none; }
 .composer-bar { display: flex; align-items: center; gap: 8px; padding-top: 4px; }
-.composer-bar .seg button { min-height: 26px; font-size: 12px; padding: 0 10px; }
-.composer-bar .hint { font-size: 11.5px; }
-.composer .send { width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 11px; }
+.composer-bar .seg button { min-height: 26px; font-size: var(--fs-12); padding: 0 10px; }
+.composer-bar .hint { font-size: var(--fs-12); }
+.composer .send { width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: var(--r-m); }
 @media (max-width: 1100px) { .composer-bar .hint { display: none; } }
 
 /* 대화 속 카드: 작업 흐름 제안 · 실행 확인 · 결과 미리보기 */
-.chat-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.chat-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); padding: 14px 16px; }
 .chat-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.chat-card-head b { font-size: 14.5px; }
+.chat-card-head b { font-size: var(--fs-14); }
 .chat-card-foot { margin-top: 10px; gap: 6px; }
 .flow-card.st-review { border-color: var(--warn-ring); box-shadow: 0 0 0 3px var(--warn-soft); }
 .flow-card .small.muted { margin-top: 4px; }
-.flow-mini { height: 220px; margin-top: 10px; border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; background: var(--panel-2); cursor: pointer; }
+
 .flow-canvas.mini { height: 100%; border: none; border-radius: 0; background: transparent; }
 .flow-canvas.mini .flow-node { cursor: pointer; }
 .perm-card { border-color: var(--brand-200); box-shadow: 0 0 0 3px var(--brand-soft); }
 .perm-card .chat-card-head svg { color: var(--brand); }
 .perm-card > p { margin-top: 6px; }
 .chat-col .art-card.compact { padding: 14px 16px; }
-.chat-col .art-card.compact .panel-head h3 { font-size: 13.5px; }
+.chat-col .art-card.compact .panel-head h3 { font-size: var(--fs-14); }
 .chat-col .art-card.compact .art-table { max-height: 240px; }
 .chat-col .art-card.compact .art-image img { max-height: 320px; object-fit: contain; }
 .chat-col .cv-tool, .chat-col .cv-toolgroup, .chat-col .cv-thought { max-width: 100%; }
@@ -63,51 +62,33 @@
 .canvas-head { display: flex; align-items: center; gap: 2px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--line); background: var(--panel); min-height: 57px; }
 .canvas-tabs { flex: 1; display: flex; gap: 18px; overflow-x: auto; align-self: stretch; }
 .canvas-tabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 0; padding: 0; margin-bottom: -1px; border: none; border-bottom: 2px solid transparent;
-  border-radius: 0; background: none; color: var(--ink-3); font-size: 13.5px; font-weight: 500; white-space: nowrap; }
+  border-radius: 0; background: none; color: var(--ink-3); font-size: var(--fs-14); font-weight: 500; white-space: nowrap; }
 .canvas-tabs button:hover:not(:disabled) { background: none; color: var(--ink); }
 .canvas-tabs button.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
-.canvas-tabs small { font-size: 11px; font-weight: 600; color: var(--ink-4); }
-.canvas-tabs small.badge { color: #fff; background: var(--warn); border-radius: 99px; padding: 0 6px; }
+.canvas-tabs small { font-size: var(--fs-11); font-weight: 600; color: var(--ink-4); }
+.canvas-tabs small.badge { color: var(--on-solid); background: var(--warn); border-radius: var(--r-pill); padding: 0 6px; }
 .icon-btn.follow.on { color: var(--ok); }
 .canvas-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
 .canvas .art-grid { grid-template-columns: 1fr; }
 .canvas .flow-canvas { height: 460px; }
 .canvas .flow-bar .primary.big { min-height: 36px; font-size: var(--fs-s); }
 .canvas .empty-hero { padding: 40px 16px; }
-.canvas .hero { grid-template-columns: 1fr; }
-.canvas .doe-cards { grid-template-columns: 1fr; }
+
 .art-card.flash { animation: art-flash 1.8s ease-out; }
 @keyframes art-flash { 0% { box-shadow: 0 0 0 4px var(--brand-200); border-color: var(--brand-500); } 100% { box-shadow: none; } }
-
-/* ---------- 사이드바: 프로젝트별 대화 ---------- */
-.side-sessions { list-style: none; margin: 2px 0 6px 30px; padding: 0; display: flex; flex-direction: column; gap: 1px; }
-.side-session { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; color: var(--ink-3); font-size: 12.5px; }
-.side-session:hover { background: var(--hover); color: var(--ink); text-decoration: none; }
-.side-session.here, .side-session.active { background: var(--active); color: var(--ink); font-weight: 600; }
-.side-session svg { flex: none; color: var(--ink-4); }
-.side-session .t { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.side-session .m { font-size: 10.5px; color: var(--ink-4); flex: none; font-weight: 400; }
-.side-session.new { color: var(--brand); }
-.side-session.new svg { color: var(--brand); }
 
 /* ---------- 첫 화면: 큰 입력창 ---------- */
 .home { position: relative; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 14vh 24px 60px; }
 .home-hero { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 16px; text-align: center; }
-.home-hero h1 { font-size: 28px; letter-spacing: -0.02em; }
+.home-hero h1 { font-size: var(--fs-28); letter-spacing: -0.02em; }
 .home-hero > p { font-size: var(--fs-m); }
-.composer.big { text-align: left; padding: 14px 16px 10px; border-radius: 20px; }
-.composer.big textarea { min-height: 84px; font-size: 15.5px; }
+.composer.big { text-align: left; padding: 14px 16px 10px; border-radius: var(--r-l); }
+.composer.big textarea { min-height: 84px; font-size: var(--fs-16); }
 .starters { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-.starter { border-radius: 99px; color: var(--ink-2); }
+.starter { border-radius: var(--r-pill); color: var(--ink-2); }
 .starter svg { color: var(--brand); }
 .home-recent { width: 100%; max-width: 760px; margin-top: 48px; }
 .home-recent .home-sec { margin: 0 2px; }
-.recent-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
-.recent { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); min-width: 0; }
-.recent b { font-size: 14px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.recent .small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.recent:hover { border-color: var(--line-strong); box-shadow: var(--shadow-card-md); text-decoration: none; }
-.recent.todo { border-color: var(--brand-200); }
 
 @media (max-width: 900px) {
   .workspace, .workspace.canvas-collapsed { grid-template-columns: 1fr; height: auto; }
@@ -116,39 +97,29 @@
 }
 
 /* 대화 속 결과 칩 */
-.chat-arts { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 6px; }
-.chat-arts-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 4px; font-size: 12px; color: var(--ink-4); font-weight: 500; }
+.chat-arts { border: 1px solid var(--line); border-radius: var(--r-l); background: var(--panel); padding: 6px; }
+.chat-arts-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 4px; font-size: var(--fs-12); color: var(--ink-4); font-weight: 500; }
 .chat-arts-head svg { color: var(--brand); }
-.chat-art + .chat-art { border-top: 1px solid var(--line-2); }
+
 .chat-art-row { display: flex; align-items: center; gap: 6px; padding: 2px 4px; }
 .chat-art-row .kind { color: var(--ink-4); flex: none; }
-.chat-art-toggle { width: 22px; min-height: 26px; padding: 0; border: none; background: none; color: var(--ink-4); }
-.chat-art-title { flex: 1; min-width: 0; justify-content: flex-start; border: none; background: none; min-height: 32px; padding: 0 4px;
-  color: var(--ink); font-size: 13.5px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.chat-art-title:hover:not(:disabled) { background: none; color: var(--brand); text-decoration: underline; }
-.chat-art .art-card { margin: 4px 4px 8px; }
 
-/* 대화 목록: 이름 바꾸기·삭제 (마우스를 올렸을 때) */
-.side-session-row { position: relative; }
-.side-session-acts { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); display: none; gap: 0; background: var(--hover); border-radius: 6px; }
-.side-session-row:hover .side-session-acts, .side-session-acts:focus-within { display: flex; }
-.side-session-row:hover .side-session .m { visibility: hidden; }
-.side-session-acts .icon-btn { width: 24px; height: 24px; min-height: 24px; }
-@media (hover: none) { .side-session-acts { display: flex; position: static; transform: none; background: none; } }
-.side-more-sessions { font-size: 11.5px; margin: 2px 0 0 8px; }
+.chat-art-title { flex: 1; min-width: 0; justify-content: flex-start; border: none; background: none; min-height: 32px; padding: 0 4px;
+  color: var(--ink); font-size: var(--fs-14); font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chat-art-title:hover:not(:disabled) { background: none; color: var(--brand); text-decoration: underline; }
 
 /* 입력창: 회색 추천 글자 · 첨부 */
 .composer { position: relative; }
 .composer-input { position: relative; }
-.composer-ghost { position: absolute; inset: 0; padding: 4px 6px; font-size: 14.5px; line-height: 1.6; color: var(--ink-4); white-space: pre-wrap;
+.composer-ghost { position: absolute; inset: 0; padding: 4px 6px; font-size: var(--fs-14); line-height: 1.6; color: var(--ink-4); white-space: pre-wrap;
   word-break: break-word; pointer-events: none; overflow: hidden; }
-.composer.big .composer-ghost { font-size: 15.5px; }
+.composer.big .composer-ghost { font-size: var(--fs-16); }
 .composer-ghost .typed { color: transparent; }
 .composer-input textarea { position: relative; z-index: 1; }
 .composer-files, .msg-files { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 8px; }
 .msg-files { justify-content: flex-end; padding: 6px 0 0; }
-.file-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; padding: 4px 6px 4px 10px; border-radius: 10px;
-  background: var(--panel-3); font-size: 12px; color: var(--ink-2); }
+.file-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; padding: 4px 6px 4px 10px; border-radius: var(--r-m);
+  background: var(--panel-3); font-size: var(--fs-12); color: var(--ink-2); }
 .file-chip svg { color: var(--brand); flex: none; }
 .file-chip .n { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
 .file-chip .s { color: var(--ink-4); flex: none; }
@@ -156,42 +127,39 @@
 .file-chip.err { background: var(--err-soft); color: var(--err); }
 .composer.drag { border-color: var(--brand-500); box-shadow: 0 0 0 4px var(--brand-soft); }
 .composer-drop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px;
-  border-radius: inherit; background: var(--glass); color: var(--brand); font-weight: 600; font-size: 13px; z-index: 3; pointer-events: none; }
+  border-radius: inherit; background: var(--glass); color: var(--brand); font-weight: 600; font-size: var(--fs-13); z-index: 3; pointer-events: none; }
 
 /* 캔버스 '내 PC 파일' */
 .local-head { gap: 6px; margin-bottom: 4px; }
-.local-crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-size: 13px; }
+.local-crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-size: var(--fs-13); }
 .local-crumb span { display: inline-flex; align-items: center; gap: 2px; color: var(--ink-4); }
-.local-root { margin-bottom: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; }
+.local-root { margin-bottom: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: ui-monospace, Consolas, monospace; font-size: var(--fs-12); }
 .local-table td { padding: 6px 10px; }
 .local-table svg { vertical-align: -2px; color: var(--ink-4); }
-.local-table svg.dir { color: #d97706; }
+.local-table svg.dir { color: var(--folder); }
 td.nowrap { white-space: nowrap; }
 
 /* Simulator 3D */
 .field3d .block-head h3 { gap: 6px; }
 .field3d .icon-btn.on { color: var(--brand); background: var(--brand-soft); }
-.field3d-body { position: relative; height: 460px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+.field3d-body { position: relative; height: 460px; border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; background: var(--panel); }
 .viewer3d { position: absolute; inset: 0; }
 .viewer3d canvas { display: block; }
 .colorbar { position: absolute; right: 12px; top: 12px; bottom: 12px; width: 70px; display: flex; flex-direction: column; align-items: center; gap: 4px;
-  font-size: 11px; color: var(--ink-2); pointer-events: none; }
-.colorbar i { flex: 1; width: 14px; border-radius: 4px; border: 1px solid var(--line); }
+  font-size: var(--fs-11); color: var(--ink-2); pointer-events: none; }
+.colorbar i { flex: 1; width: 14px; border-radius: var(--r-xs); border: 1px solid var(--line); }
 .colorbar .t { font-weight: 600; text-align: center; }
 .colorbar .v { font-variant-numeric: tabular-nums; }
 
-.sim-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.sim-left .field3d-body { height: 420px; }
-
 /* 입력창 아래 AI 에이전트 선택 */
 .agent-pick { position: relative; }
-.agent-pick-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 9px; font-size: 12px; font-weight: 500;
-  border-radius: 8px; background: var(--panel-3); border: 1px solid transparent; box-shadow: none; color: var(--ink-2); }
+.agent-pick-btn { display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 9px; font-size: var(--fs-12); font-weight: 500;
+  border-radius: var(--r-s); background: var(--panel-3); border: 1px solid transparent; box-shadow: none; color: var(--ink-2); }
 .agent-pick-btn:hover:not(:disabled) { border-color: var(--line); color: var(--ink); }
 .agent-pick-menu { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 50; min-width: 190px; padding: 4px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-pop, 0 8px 24px rgba(0,0,0,.14)); }
-.agent-pick-menu button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 0 8px; font-size: 13px;
-  border: none; box-shadow: none; background: transparent; color: var(--ink); text-align: left; border-radius: 6px; }
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-pop, 0 8px 24px rgba(0,0,0,.14)); }
+.agent-pick-menu button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 0 8px; font-size: var(--fs-13);
+  border: none; box-shadow: none; background: transparent; color: var(--ink); text-align: left; border-radius: var(--r-s); }
 .agent-pick-menu button:hover:not(:disabled) { background: var(--panel-3); }
 .agent-pick-menu button:disabled { color: var(--ink-3); }
 .agent-pick-menu .check { width: 14px; color: var(--brand); display: inline-flex; }
@@ -203,7 +171,7 @@ td.nowrap { white-space: nowrap; }
 .flow-steps li { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; border-top: 1px solid var(--vline); }
 .flow-steps li:first-child { border-top: none; }
 .flow-steps .fs-ico { flex: none; width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 600; background: var(--panel-3); color: var(--ink-3); margin-top: 1px; }
+  font-size: var(--fs-11); font-weight: 600; background: var(--panel-3); color: var(--ink-3); margin-top: 1px; }
 .flow-steps .fs-complete .fs-ico { background: var(--ok-soft); color: var(--ok); }
 .flow-steps .fs-in_progress .fs-ico { background: var(--info-soft); color: var(--info); }
 .flow-steps .fs-failed .fs-ico { background: var(--err-soft); color: var(--err); }
@@ -212,8 +180,8 @@ td.nowrap { white-space: nowrap; }
 .flow-steps .fs-pending .fs-label { color: var(--ink-2); }
 .flow-steps .fs-in_progress .fs-label { color: var(--info); font-weight: 600; }
 .flow-steps .fs-detail { font-size: var(--fs-xs); color: var(--ink-3); }
-.flow-steps .fs-tag { flex: none; font-size: 11px; color: var(--ink-3); background: var(--panel-3); border-radius: 6px; padding: 2px 7px; margin-top: 1px; }
-.flow-progress { height: 4px; border-radius: 4px; background: var(--panel-3); overflow: hidden; margin: 6px 0 2px; }
+.flow-steps .fs-tag { flex: none; font-size: var(--fs-11); color: var(--ink-3); background: var(--panel-3); border-radius: var(--r-s); padding: 2px 7px; margin-top: 1px; }
+.flow-progress { height: 4px; border-radius: var(--r-xs); background: var(--panel-3); overflow: hidden; margin: 6px 0 2px; }
 .flow-progress > div { height: 100%; background: var(--brand); transition: width .4s ease; }
 .flow-card.st-complete .flow-progress > div { background: var(--ok); }
 
@@ -224,22 +192,22 @@ td.nowrap { white-space: nowrap; }
 .perm-args > div { display: contents; }
 .perm-args dt { color: var(--ink-3); }
 .perm-args dd { margin: 0; color: var(--ink); word-break: break-all; }
-.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 11px; }
+.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: var(--fs-11); }
 
 /* 사이드바 아래 사용자 메뉴 */
-.side-me { position: relative; gap: 4px; padding: 10px 10px; }
+
 .side-me-btn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: none; box-shadow: none;
   background: transparent; border-radius: var(--radius-s); text-align: left; color: var(--ink); min-height: 44px; }
 .side-me-btn:hover:not(:disabled) { background: var(--hover); }
 .side-me-menu { position: absolute; left: 10px; right: 10px; bottom: calc(100% + 4px); z-index: 60; padding: 4px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-card-md); }
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-card-md); }
 .side-me-menu a, .side-me-menu button { display: flex; align-items: center; justify-content: flex-start; text-align: left; gap: 8px; width: 100%; min-height: 34px; padding: 0 10px;
-  font-size: var(--fs-s); color: var(--ink); text-decoration: none; border: none; box-shadow: none; background: transparent; border-radius: 6px; font-weight: 400; }
+  font-size: var(--fs-s); color: var(--ink); text-decoration: none; border: none; box-shadow: none; background: transparent; border-radius: var(--r-s); font-weight: 400; }
 .side-me-menu a:hover, .side-me-menu button:hover:not(:disabled) { background: var(--hover); }
 .side-me-menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 0; }
 
 /* 대화 속 결과 한 줄 = 버튼 하나(캔버스에서 열기) */
-.chat-art-open { width: 100%; min-height: 34px; border: none; box-shadow: none; background: none; border-radius: 6px; text-align: left;
+.chat-art-open { width: 100%; min-height: 34px; border: none; box-shadow: none; background: none; border-radius: var(--r-s); text-align: left;
   color: var(--ink); font-weight: 400; cursor: pointer; }
 .chat-art-open + .chat-art-open { border-top: 1px solid var(--line-2); border-radius: 0; }
 .chat-art-open .chat-art-title { flex: 1; min-width: 0; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -258,27 +226,5 @@ td.nowrap { white-space: nowrap; }
 .tools-hint { display: inline-flex; align-items: center; gap: 6px; margin: 10px auto 0; font-size: var(--fs-s); color: var(--ink-3); text-decoration: none; }
 .tools-hint:hover { color: var(--brand); }
 
-/* CAD·CAE 툴 화면 */
-.tools-summary { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
-.tools-summary .big-num { font-size: 26px; font-weight: 700; color: var(--brand); }
-.tools-cats { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; }
-.chip-btn { min-height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500; background: var(--panel); border: 1px solid var(--line);
-  color: var(--ink-2); box-shadow: none; }
-.chip-btn.on { background: var(--brand-soft); border-color: var(--info-ring); color: var(--brand); font-weight: 600; }
-.tools-sec h2 { font-size: var(--fs-m); font-weight: 600; color: var(--ink-2); margin: 24px 0 10px; }
-.tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
-.tool-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
-.tool-card.ready { border-color: var(--ok-ring); }
-.tool-head { display: flex; align-items: flex-start; gap: 8px; }
-.tool-head b { font-size: var(--fs-m); }
-.tool-head .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; }
-.tool-can { display: flex; flex-wrap: wrap; gap: 4px; }
-.tool-can span { font-size: 11px; color: var(--ink-3); background: var(--panel-3); border-radius: 6px; padding: 2px 7px; }
-.tool-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 2px; }
-.tool-detail { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid var(--vline); }
-.tool-exe { display: flex; flex-direction: column; gap: 1px; word-break: break-all; }
-.tool-exe code, .tool-detail code { font-size: 11px; }
-.tool-howto { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.tools-grid { align-items: start; }
 /* 한글 글꼴은 \ 를 ₩ 로 그린다 — 경로·코드는 라틴 고정폭 글꼴로 */
 code, .mono, pre { font-family: "Cascadia Mono", Consolas, "Courier New", ui-monospace, monospace; }

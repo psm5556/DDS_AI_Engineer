@@ -1,125 +1,192 @@
 /* ============================================================================
-   DDS ReDO 디자인 토큰 — 이 앱의 모든 색·글꼴·둥글기·그림자의 단일 원본.
-   다른 프로젝트에서 같은 디자인을 쓰려면 이 파일 + kit.css 를 복사하세요 (DESIGN.md 참고).
-   - 밝은 테마: :root,  어두운 테마: :root[data-theme="dark"]
-   - 주 버튼 색(#2563eb)은 두 테마에서 같게 유지한다 (kit.css의 button.primary 보정).
+   DDS Conversa 디자인 토큰 — 이 앱의 모든 색·글꼴·크기·둥글기·그림자·움직임의 단일 원본.
+   - 밝은 테마: :root,  어두운 테마: :root[data-theme="dark"]  (토큰 이름은 같고 값만 바뀐다)
+   - CSS 파일(styles·layout·app·agentic·modern)에는 색 값(hex)을 직접 쓰지 않는다 → server/tests/test_design_tokens.py
+   - 근거와 규칙: docs/design-renewal-plan.md
+   원칙: 따뜻한 무채색 바탕 + 강조색 파랑 하나(주 동작·선택·링크·진행에만). 주황 = 엔지니어가 확인할 일.
+   데이터 의미 색: 평균(μ) 청록 --mean · 산포(σ) 보라 --sigma · 모델 불확실성 회청 --epi.
+   색만으로 뜻을 전하지 않는다 — 기호(μ, σ, ±)와 글자를 함께 쓴다.
    ============================================================================ */
-/* DDS ReDO — 디자인 토큰 (미니멀: 회색 바탕 + 흰 카드 + 선으로 구분, 포인트 색은 기존 앱의 파랑 하나)
-   UI 색상: --brand (주요 버튼·선택·링크)
-   데이터 의미 색상(앱 전체 공통, CLAUDE.md 7.5):
-   - 평균(μ): 청록  --mean
-   - 산포(σ, 공정 고유 변동): 보라  --sigma
-   - 모델 불확실성(데이터 부족): 회청색 + 점선  --epi
-   색만으로 의미를 전달하지 않도록 항상 기호(μ, σ, ±)와 문구를 함께 쓴다. */
 :root {
-  /* 무채색 (zinc) */
-  --ink: #18181b;
-  --ink-2: #52525b;
-  --ink-3: #71717a;
-  --ink-4: #a1a1aa;
-  --paper: #f7f7f8;
-  --panel: #ffffff;
-  --panel-2: #fafafa;
-  --panel-3: #f4f4f5;
-  --line: #ececef;
-  --line-2: #f3f3f5;
-  /* 포인트 = 기존 앱 버튼 색 (blue) */
+  color-scheme: light;
+  /* ---------- 글꼴 ---------- */
+  --font: "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, "D2Coding", ui-monospace, monospace;
+  /* 글자 크기 7단계(쓰는 곳: 11 그래프 눈금·보조 캡션 · 12 메타·칩·표 머리 · 13 사이드바·표·캔버스 본문 · 14 대화·입력·보고서 본문
+     · 16 구획·카드 제목 · 20 화면 제목 · 28 첫 화면 한 줄·핵심 수치) */
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-28: 28px;
+  --fs-xs: var(--fs-12);
+  --fs-s: var(--fs-13);
+  --fs-m: var(--fs-14);
+  --fs-l: var(--fs-16);
+  --fs-xl: var(--fs-20);
+  --fs-xxl: var(--fs-28);
+  --track-tight: -0.01em;   /* 16px 제목 */
+  --track-title: -0.02em;   /* 20px 화면 제목 */
+  --track-display: -0.03em; /* 28px */
+  --track-label: 0.02em;    /* 작은 머리말 */
+  /* ---------- 여백 (4px 단위) ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  /* ---------- 둥글기 5단계 ---------- */
+  --r-xs: 4px;    /* 체크박스, 인라인 코드 */
+  --r-s: 6px;     /* 버튼, 입력칸, 작은 칩 */
+  --r-m: 10px;    /* 카드, 결과, 흐름도 단계 */
+  --r-l: 14px;    /* 대화 입력창, 모달, 문서 */
+  --r-pill: 999px; /* 상태 태그, 단계 번호 */
+  --radius-s: var(--r-s);
+  --radius-m: var(--r-m);
+  --radius-l: var(--r-l);
+  /* ---------- 움직임 ---------- */
+  --dur-fast: 120ms; /* 마우스 올림, 누름 */
+  --dur: 180ms;      /* 펼침, 탭 전환 */
+  --dur-slow: 240ms; /* 패널 열고 닫기 */
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  /* ---------- 크기 ---------- */
+  --side-w: 256px;
+  --ctl-s: 28px;  /* 작은 버튼 */
+  --ctl: 32px;    /* 기본 버튼·입력칸 */
+  --ctl-l: 40px;  /* 첫 화면 큰 버튼 */
+  --row-h: 34px;  /* 표 한 줄 */
+
+  /* ---------- 무채색 (따뜻한 회색) ---------- */
+  --paper: #fbfbfa;       /* 앱 바탕 */
+  --side-bg: #f5f5f3;     /* 사이드바 */
+  --panel: #ffffff;       /* 카드, 입력창, 캔버스 */
+  --panel-2: #f7f7f5;     /* 표 머리, 보조 면, 코드 */
+  --panel-3: #efefec;     /* 눌림·선택 면 */
+  --line: #e7e6e2;        /* 기본 선(아주 옅게) */
+  --line-2: #f0efec;      /* 표 안 가로선 */
+  --line-strong: #d5d4cf; /* 입력창 테두리, 표 바깥선 */
+  --ink: #1a1a19;         /* 본문 글자 */
+  --ink-2: #4a4a46;       /* 보조 글자 */
+  --ink-3: #6f6e69;       /* 메타 정보 */
+  --ink-4: #9c9b95;       /* 자리 표시, 비활성 */
+  --ink-5: #c4c3bd;
+  --hover: #ededea;
+  --active: #e6e5e1;
+  --row-hover: #f9f9f7;
+  --vline: #f0efec;
+  --bubble: #f0efeb;      /* 내 메시지 말풍선 */
+  --dot: #d5d4cf;
+  --track: #ebeae6;       /* 진행 막대 바탕 */
+  --scroll: #d5d4cf;
+  --glass: rgb(255 255 255 / 0.92);
+  --toast-bg: #1a1a19;
+  --overlay: rgb(20 20 19 / 0.32); /* 모달 뒤 가림막 */
+  --on-solid: #ffffff;    /* 진한 색 바탕 위 글자(주 버튼·번호 원·토스트) */
+  --image-bg: #ffffff;    /* 결과 이미지 바탕(투명 PNG가 어두운 테마에서도 읽히게) */
+  --sel: #dbeafe;
+  --sel-head: #bfdbfe;
+  --err-row: #fffafa;
+
+  /* ---------- 강조색 ---------- */
   --brand: #2563eb;
   --brand-hover: #1d4ed8;
   --brand-500: #3b82f6;
   --brand-400: #60a5fa;
-  --brand-soft: #eff6ff;
+  --brand-soft: #eef3fe;
   --brand-100: #dbeafe;
   --brand-200: #bfdbfe;
-  /* 데이터 의미 색상 */
-  --mean: #0d9488;
-  --mean-soft: #f0fdfa;
-  --mean-ring: #99f6e4;
-  --sigma: #7c3aed;
-  --sigma-soft: #f5f3ff;
-  --sigma-ring: #ddd6fe;
-  --epi: #64748b;
-  /* 상태 */
-  --ok: #16a34a;   --ok-soft: #f0fdf4;   --ok-ring: #bbf7d0;
-  --warn: #b45309; --warn-soft: #fffbeb; --warn-ring: #fde68a;
-  --err: #dc2626;  --err-soft: #fef2f2;  --err-ring: #fecaca;
-  --info: #1d4ed8; --info-soft: #eff6ff; --info-ring: #bfdbfe;
+  --brand-solid: #2563eb;       /* 주 버튼 바탕 — 두 테마 같게 */
+  --brand-solid-hover: #1d4ed8;
   --focus: #3b82f6;
-  --radius-s: 8px;
-  --radius-m: 10px;
-  --radius-l: 14px;
+  --focus-ring: 0 0 0 3px rgb(59 130 246 / 0.18);
+
+  /* ---------- 데이터 의미 색 ---------- */
+  --mean: #0d9488;  --mean-soft: #f0fdfa;  --mean-ring: #99f6e4;  --mean-ink: #0f766e;
+  --sigma: #7c3aed; --sigma-soft: #f5f3ff; --sigma-ring: #ddd6fe; --sigma-ink: #6d28d9;
+  --epi: #64748b;
+
+  /* ---------- 상태 (글자는 -ink, 점·막대 같은 진한 면은 -solid) ---------- */
+  --ok: #16a34a;   --ok-soft: #f0fdf4;   --ok-ring: #bbf7d0;   --ok-ink: #047857;   --ok-solid: #22c55e;
+  --warn: #b45309; --warn-soft: #fffbeb; --warn-ring: #fde68a; --warn-ink: #92400e; --warn-solid: #f59e0b;
+  --err: #dc2626;  --err-soft: #fef2f2;  --err-ring: #fecaca;  --err-ink: #b91c1c;  --err-solid-hover: #b91c1c;
+  --info: #1d4ed8; --info-soft: #eff6ff; --info-ring: #bfdbfe; --info-ink: #1e40af;
+  --toast-ok: #4ade80;  /* 토스트는 두 테마 모두 어두운 바탕 */
+  --toast-err: #f87171;
+  --switch-off: #cbd5e1;
+  --star: #f59e0b;      /* 즐겨찾기 */
+  --folder: #d97706;    /* 폴더 아이콘 */
+
+  /* ---------- 그림자: 떠 있는 것에만 ---------- */
   --shadow-card: none;
-  --shadow-card-md: 0 4px 16px rgb(24 24 27 / 0.06);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.06); /* 메뉴·팝오버·알림 */
+  --shadow-card-md: var(--shadow-pop);
   --shadow-modal: 0 24px 64px -16px rgb(24 24 27 / 0.28);
-  --font: "Pretendard Variable", Pretendard, Inter, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --fs-xs: 12px;
-  --fs-s: 13px;
-  --fs-m: 14px;
-  --fs-l: 16px;
-  --fs-xl: 20px;
-  --fs-xxl: 26px;
-  --side-w: 264px;
-  /* 표면·선 보조 토큰 (다크 모드에서 함께 바뀜) */
-  --ink-5: #c4c4cc;
-  --side-bg: #fbfbfc;
-  --hover: #f1f1f4;
-  --active: #ebebf0;
-  --dot: #d4d4d8;
-  --line-strong: #d4d4d8;
-  --vline: #f3f3f6;
-  --row-hover: #fcfcfd;
-  --err-row: #fffafa;
-  --sel: #dbeafe;
-  --sel-head: #bfdbfe;
-  --track: #ececf3;
-  --glass: rgb(255 255 255 / 0.92);
-  --toast-bg: #18181b;
-  --scroll: #d4d4d8;
-  color-scheme: light;
+
+  /* ---------- 인쇄(보고서 인쇄본) — 종이에 찍히는 고정 색 ---------- */
+  --print-bg: #ffffff;
+  --print-ink: #000000;
+  --print-line: #999999;
 }
 
-/* ---------- 다크 모드 (html[data-theme="dark"]). 주 버튼은 밝은 테마와 같은 파랑을 유지 ---------- */
+/* ---------- 어두운 테마: 같은 이름, 값만 ---------- */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ink: #f4f4f5;
-  --ink-2: #d4d4d8;
-  --ink-3: #a1a1aa;
-  --ink-4: #7c7c86;
-  --ink-5: #52525b;
-  --paper: #0e0e10;
-  --panel: #17171a;
-  --panel-2: #1b1b1f;
-  --panel-3: #26262b;
-  --line: #2a2a30;
-  --line-2: #222227;
-  --line-strong: #3f3f46;
-  --side-bg: #121214;
-  --hover: #202024;
-  --active: #26262c;
-  --dot: #3f3f46;
-  --vline: #202025;
-  --row-hover: #1c1c20;
-  --err-row: rgb(239 68 68 / 0.07);
+  --paper: #191918;
+  --side-bg: #141413;
+  --panel: #212120;
+  --panel-2: #1d1d1c;
+  --panel-3: #2a2a28;
+  --line: #2e2e2b;
+  --line-2: #282826;
+  --line-strong: #3d3d39;
+  --ink: #f2f2f0;
+  --ink-2: #cfcfca;
+  --ink-3: #a3a29c;
+  --ink-4: #77766f;
+  --ink-5: #55544f;
+  --hover: #262624;
+  --active: #2f2f2c;
+  --row-hover: #242422;
+  --vline: #282826;
+  --bubble: #2d2d2b;
+  --dot: #3d3d39;
+  --track: #2e2e2b;
+  --scroll: #3d3d39;
+  --glass: rgb(33 33 32 / 0.9);
+  --toast-bg: #2e2e2b;
+  --overlay: rgb(0 0 0 / 0.55);
   --sel: rgb(37 99 235 / 0.28);
   --sel-head: rgb(37 99 235 / 0.4);
-  --track: #2a2a31;
-  --glass: rgb(23 23 26 / 0.9);
-  --toast-bg: #2a2a30;
-  --scroll: #3f3f46;
+  --err-row: rgb(239 68 68 / 0.07);
+
   --brand: #3b82f6;          /* 글자·링크·선택 표시는 어두운 바탕에서 읽히도록 조금 밝게 */
   --brand-hover: #2563eb;
   --brand-500: #3b82f6;
   --brand-400: #60a5fa;
-  --brand-soft: rgb(37 99 235 / 0.14);
+  --brand-soft: rgb(59 130 246 / 0.14);
   --brand-100: rgb(37 99 235 / 0.24);
   --brand-200: rgb(59 130 246 / 0.38);
-  --mean: #2dd4bf;   --mean-soft: rgb(45 212 191 / 0.1);  --mean-ring: rgb(45 212 191 / 0.3);
-  --sigma: #a78bfa;  --sigma-soft: rgb(167 139 250 / 0.12); --sigma-ring: rgb(167 139 250 / 0.3);
+  --focus-ring: 0 0 0 3px rgb(59 130 246 / 0.3);
+
+  --mean: #2dd4bf;  --mean-soft: rgb(45 212 191 / 0.1);   --mean-ring: rgb(45 212 191 / 0.3);   --mean-ink: #5eead4;
+  --sigma: #a78bfa; --sigma-soft: rgb(167 139 250 / 0.12); --sigma-ring: rgb(167 139 250 / 0.3); --sigma-ink: #c4b5fd;
   --epi: #94a3b8;
-  --ok: #4ade80;   --ok-soft: rgb(34 197 94 / 0.13);  --ok-ring: rgb(34 197 94 / 0.3);
-  --warn: #fbbf24; --warn-soft: rgb(245 158 11 / 0.12); --warn-ring: rgb(245 158 11 / 0.3);
-  --err: #f87171;  --err-soft: rgb(239 68 68 / 0.12);  --err-ring: rgb(239 68 68 / 0.32);
-  --info: #93c5fd; --info-soft: rgb(37 99 235 / 0.14); --info-ring: rgb(59 130 246 / 0.32);
-  --shadow-card-md: 0 4px 16px rgb(0 0 0 / 0.35);
+  --ok: #4ade80;   --ok-soft: rgb(34 197 94 / 0.13);  --ok-ring: rgb(34 197 94 / 0.3);   --ok-ink: #86efac;
+  --warn: #fbbf24; --warn-soft: rgb(245 158 11 / 0.12); --warn-ring: rgb(245 158 11 / 0.3); --warn-ink: #fcd34d;
+  --err: #f87171;  --err-soft: rgb(239 68 68 / 0.12);  --err-ring: rgb(239 68 68 / 0.32);  --err-ink: #fca5a5;
+  --info: #93c5fd; --info-soft: rgb(37 99 235 / 0.14); --info-ring: rgb(59 130 246 / 0.32); --info-ink: #93c5fd;
+  --switch-off: #55544f;
+
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.24), 0 1px 2px rgb(0 0 0 / 0.18);
   --shadow-modal: 0 24px 64px -16px rgb(0 0 0 / 0.7);
+}
+
+/* '움직임 줄이기' 설정을 지킨다 */
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; --dur-slow: 0ms; }
+  *, *::before, *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }
 }

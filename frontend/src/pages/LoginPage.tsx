@@ -4,6 +4,9 @@ import { post } from "../api";
 import { useAuth } from "../auth";
 import { PinInput } from "../components/PinInput";
 
+/** 로그인 왼쪽: 일하는 흐름 한 줄(주황 = 엔지니어가 하는 일, 청록 = AI가 하는 일 — 소개 슬라이드와 같은 뜻) */
+const FLOW: [string, "human" | "ai"][] = [["요청", "human"], ["AI 계획", "ai"], ["승인", "human"], ["실행", "ai"], ["보고서", "ai"]];
+
 /** 로그인(아이디 + PIN 6자리) · 가입 신청 (첫 가입자는 관리자, 이후 가입은 관리자 승인 후 사용) */
 export default function LoginPage() {
   const [params] = useSearchParams();
@@ -44,15 +47,20 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-wrap">
-      <div className="login-box">
+    <div className="login-wrap split">
+      <section className="login-intro" aria-label="DDS Conversa 소개">
         <div className="login-brand">
           <div className="logo">AI</div>
-          <div>
-            <h1>DDS Conversa</h1>
-            <p>말로 요청하면 CAD·CAE 자동화부터 예측 모델까지 에이전트가 함께 합니다</p>
-          </div>
+          <b>DDS Conversa</b>
         </div>
+        <h1>말로 요청하면,<br />AI가 CAD·CAE를 돌립니다</h1>
+        <p>모델링부터 해석, DOE·예측 모델, 3D Simulator, 보고서까지 이어서 합니다. 엔지니어는 승인과 판단만 합니다.</p>
+        <ol className="login-flow" aria-label="일하는 흐름">
+          {FLOW.map(([t, who], i) => <li key={t} className={who}><span className="n">{i + 1}</span>{t}</li>)}
+        </ol>
+        <p className="login-legend"><i className="human" />엔지니어 <i className="ai" />AI</p>
+      </section>
+      <div className="login-box">
         <form className="login-card stack" onSubmit={(e) => { e.preventDefault(); void (mode === "login" ? doLogin() : doRegister()); }}>
           <span className="seg" style={{ alignSelf: "flex-start" }}>
             <button type="button" className={mode === "login" ? "on" : ""} onClick={() => switchMode("login")}>로그인</button>

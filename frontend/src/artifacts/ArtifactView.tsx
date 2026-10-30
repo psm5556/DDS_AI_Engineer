@@ -2,7 +2,7 @@ import { Copy, Download, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { blobUrl } from "../api";
 import { Markdown } from "../components/Markdown";
-import { baseLayout, Plot, plotConfig } from "../components/Plot";
+import { baseLayout, chartColors, Plot, plotConfig } from "../components/Plot";
 import { copyText, fmt, when } from "../format";
 import { useTheme } from "../theme";
 import { useToast } from "../toast";
@@ -10,11 +10,10 @@ import type { Artifact } from "../types";
 
 type Pt = { x: number; y: number };
 type Series = { name: string; points?: Pt[]; values?: number[] };
-const PALETTE = ["#2563eb", "#0d9488", "#7c3aed", "#d97706", "#dc2626", "#64748b"];
-
+/** 그래프 색은 디자인 토큰에서(테마가 바뀌면 다시 읽는다) */
 function usePlotTheme() {
   const { theme } = useTheme();
-  return theme === "dark" ? { grid: "#2a2a30", text: "#a1a1aa" } : { grid: "#ececef", text: "#71717a" };
+  return useMemo(() => chartColors(), [theme]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 function Chart({ a, height = 300 }: { a: Artifact; height?: number }) {
@@ -25,7 +24,7 @@ function Chart({ a, height = 300 }: { a: Artifact; height?: number }) {
     const series = p.series ?? [];
     if (a.kind === "bar") {
       return {
-        data: series.map((s, i) => ({ type: "bar", name: s.name, x: p.categories, y: s.values, marker: { color: PALETTE[i % PALETTE.length] } })),
+        data: series.map((s, i) => ({ type: "bar", name: s.name, x: p.categories, y: s.values, marker: { color: t.series[i % t.series.length] } })),
         layout: { barmode: "group", xaxis: axis(), yaxis: axis() },
       };
     }
@@ -35,7 +34,7 @@ function Chart({ a, height = 300 }: { a: Artifact; height?: number }) {
       return {
         data: [{
           type: "parcoords",
-          line: { color: rows.map((r) => r[r.length - 1]), colorscale: [[0, "#2563eb"], [1, "#f59e0b"]] },
+          line: { color: rows.map((r) => r[r.length - 1]), colorscale: [[0, t.brand], [1, t.warn]] },
           dimensions: dims.map((d, i) => ({ label: d, values: rows.map((r) => r[i]) })),
         }],
         layout: { margin: { l: 60, r: 40, t: 30, b: 20 } },
@@ -44,13 +43,13 @@ function Chart({ a, height = 300 }: { a: Artifact; height?: number }) {
     const data: Record<string, unknown>[] = series.map((s, i) => ({
       type: "scatter", mode: a.kind === "line" ? "lines+markers" : "markers", name: s.name,
       x: (s.points ?? []).map((q) => q.x), y: (s.points ?? []).map((q) => q.y),
-      marker: { color: PALETTE[i % PALETTE.length], size: a.kind === "line" ? 5 : 8, opacity: 0.85 },
-      line: { color: PALETTE[i % PALETTE.length], width: 2 },
+      marker: { color: t.series[i % t.series.length], size: a.kind === "line" ? 5 : 8, opacity: 0.85 },
+      line: { color: t.series[i % t.series.length], width: 2 },
     }));
     if (p.diagonal) {
       const all = series.flatMap((s) => (s.points ?? []).flatMap((q) => [q.x, q.y]));
       const lo = Math.min(...all), hi = Math.max(...all);
-      data.push({ type: "scatter", mode: "lines", name: "y = x", x: [lo, hi], y: [lo, hi], line: { color: "#a1a1aa", dash: "dash", width: 1 }, hoverinfo: "skip" });
+      data.push({ type: "scatter", mode: "lines", name: "y = x", x: [lo, hi], y: [lo, hi], line: { color: t.muted, dash: "dash", width: 1 }, hoverinfo: "skip" });
     }
     return { data, layout: { xaxis: axis(p.x), yaxis: axis(p.y), showlegend: data.length > 1, legend: { orientation: "h", y: -0.25 } } };
     // eslint-disable-next-line react-hooks/exhaustive-deps

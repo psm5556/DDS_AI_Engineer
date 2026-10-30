@@ -80,7 +80,7 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
     <div className="report-view">
       <div className="report-bar">
         <div className="grow report-meta">
-          <span className="small muted">작성 {when(rep.created_at)}</span>
+          <span className="small muted">작성 {when(rep.created_at)} · 결과 {parts.filter((p) => "id" in p).length}개 반영</span>
           {(list?.length ?? 0) > 1 && (
             <select value={rid ?? ""} onChange={(e) => setRid(e.target.value ? Number(e.target.value) : null)} aria-label="보고서 판 고르기">
               {list!.map((r, i) => <option key={r.id} value={i === 0 ? "" : r.id}>{i === 0 ? "최신 판" : `이전 판 ${list!.length - i}`} · {when(r.created_at)}</option>)}

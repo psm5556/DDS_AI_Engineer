@@ -41,7 +41,7 @@ export default function SettingsPage() {
   const copy = async (text: string, what: string) => toast((await copyText(text)) ? `${what}을(를) 복사했습니다` : "복사하지 못했습니다", false);
 
   return (
-    <div className="page">
+    <div className="page settings-page">
       <div className="proj-head"><div className="grow"><h1>설정</h1><div className="proj-sub">내 PC Agent · AI 에이전트 · 토큰</div></div></div>
 
       <div className="stack" style={{ marginTop: 22 }}>
