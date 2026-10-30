@@ -26,6 +26,7 @@ class User(TimestampMixin, Base):
     is_active = Column(Boolean, default=False, nullable=False)  # 관리자 승인 후 True
     failed_logins = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime)  # PIN 연속 실패 시 잠금
+    agent_auto_update = Column(Boolean, default=True)  # PC Agent 자동 업데이트. 이 컬럼 이전 계정은 NULL이고 켜짐으로 본다
 
 
 class ApiToken(Base):

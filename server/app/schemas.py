@@ -428,6 +428,10 @@ class AgentInstanceResponse(ORM):
     outdated: bool = False
 
 
+class AgentSettings(BaseModel):
+    auto_update: bool
+
+
 class ShareCreate(BaseModel):
     note: str = ""
     expires_days: int | None = Field(None, ge=1, le=3650)

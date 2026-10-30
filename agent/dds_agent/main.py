@@ -44,6 +44,9 @@ def file_sha256(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 UPDATE_CHECK_SEC = 3600
+IDLE_SEC = 300  # 일이 끝나고 이만큼 조용해야 자동 업데이트를 시작한다
+IDLE_POLL_SEC = 10
+WORK_MSGS = ("session.", "case.", "permission.", "agent.install", "tools.set", "tools.pick")  # 사람이 일을 시킨 메시지
 MCP_SERVERS = ("dds_flow", "dds_cae", "dds_study", "dds_live")
 
 
@@ -61,8 +64,13 @@ class Agent:
         self.executor = CaseExecutor(self.s, self.send_threadsafe)
         self.api = ServerApi(self.s)
         self.active_prompts = 0
+        self.installing = 0  # AI CLI 설치 중인 수 (설치 도중 다시 시작하면 반쯤 깔린 채로 남는다)
+        self.auto_update = self.s.auto_update  # 연결되면 서버의 설정(웹앱 > 설정)을 따른다
         self.update_state = "idle"  # idle | pending:<ver> | installing:<ver> | restarting:<ver> | failed: ...
         self._update_task: asyncio.Task | None = None
+        self._update_version: str | None = None
+        self._update_firm = False  # 취소하지 않는 업데이트(사람이 지시했거나 전환을 시작함)
+        self._last_work = time.monotonic()
         self.restart = False
         self.quit = False
         self.tray: Tray | None = None
@@ -286,48 +294,80 @@ class Agent:
                 "sessions": len(self.session_runner)}
 
     def busy(self) -> bool:
-        return bool(self.active_prompts or self.executor.running or self.executor.queued)
+        return bool(self.active_prompts or self.installing or self.executor.running or self.executor.queued)
+
+    def touch(self, msg_type: str | None):
+        """사람이 일을 시킨 메시지면 시각을 남긴다. 화면을 열어 두면 계속 오는 조회(local.*)는 일로 치지 않는다."""
+        if msg_type and msg_type.startswith(WORK_MSGS):
+            self._last_work = time.monotonic()
+
+    async def _wait_idle(self):
+        """일이 없고, 마지막 일에서 IDLE_SEC가 지날 때까지 기다린다(대화를 주고받는 사이에 끼어들지 않게)."""
+        while True:
+            if self.busy():
+                self._last_work = time.monotonic()
+            elif time.monotonic() - self._last_work >= IDLE_SEC:
+                return
+            await asyncio.sleep(IDLE_POLL_SEC)
 
     def schedule_update(self, version: str, sha256: str | None, force: bool = False):
         if not updater.is_newer(version) and not force:
             return
-        if self._update_task and not self._update_task.done():
-            return
-        self._update_task = asyncio.create_task(self._update(version, sha256, force))
-
-    async def _update(self, version: str, sha256: str | None, force: bool):
         if updater.install_home() is None:
             self.update_state = f"dev-mode (최신 {version})"
             return
+        task = self._update_task
+        if task and not task.done():
+            if self._update_firm or (version == self._update_version and not force):
+                return
+            task.cancel()  # 기다리던 자동 업데이트를 '지금 업데이트'나 더 새 버전으로 바꾼다
+        self._update_version, self._update_firm = version, force
         self.update_state = f"pending:{version}"
-        while self.busy() and not force:  # 작업 중이면 끝날 때까지 기다린다
-            await asyncio.sleep(10)
+        self._update_task = asyncio.create_task(self._update(version, sha256, force))
+
+    def _cancel_update(self):
+        task = self._update_task
+        if task and not task.done() and not self._update_firm:
+            task.cancel()
+            self.update_state = "idle"
+
+    async def _update(self, version: str, sha256: str | None, force: bool):
+        if not force:
+            await self._wait_idle()
         self.update_state = f"installing:{version}"
         if self.tray:
             self.tray.set("updating", version)
         try:
-            ok = await asyncio.to_thread(updater.apply_update, self.api, version, sha256)
+            await asyncio.to_thread(updater.prepare_update, self.api, version, sha256)
+            if not force:
+                await self._wait_idle()  # 설치하는 사이에 시작한 일을 끊지 않는다
+            self._update_firm = True  # 여기부터는 되돌리지 않는다
+            updater.activate(version)
         except Exception as e:
             log.exception("업데이트 실패")
             self.update_state = f"failed: {e}"[:300]
             return
-        if ok:
-            self.update_state = f"restarting:{version}"
+        finally:
             if self.tray:
-                self.tray.notify(f"새 버전 {version}(으)로 다시 시작합니다")
-            await self._send_heartbeat()
-            self.restart = True
-            if self.ws:
-                await self.ws.close()
+                self.tray.set("connected" if self.ws else "connecting", self.s.server_url)
+        self.update_state = f"restarting:{version}"
+        if force and self.tray:  # 자동 업데이트는 뒤에서 조용히 한다
+            self.tray.notify(f"새 버전 {version}(으)로 다시 시작합니다")
+        self.restart = True
+        await self._send_heartbeat()
+        if self.ws:
+            await self.ws.close()
 
     async def _check_latest(self, manual: bool = False):
-        if not (self.s.auto_update or manual):
+        if not (self.auto_update or manual):
             return
         try:
             latest = await asyncio.to_thread(self.api.get, "/api/agent/releases/latest")
-            if manual and self.tray and not updater.is_newer(latest["version"]):
-                self.tray.notify(f"최신 버전입니다 ({__version__})")
-            self.schedule_update(latest["version"], latest["sha256"])
+            if manual and self.tray:
+                self.tray.notify(f"새 버전 {latest['version']}이 있습니다. 작업이 없을 때 설치합니다"
+                                 if updater.is_newer(latest["version"]) else f"최신 버전입니다 ({__version__})")
+            if self.auto_update or manual:  # 묻는 사이에 꺼졌을 수 있다
+                self.schedule_update(latest["version"], latest["sha256"])
         except Exception as e:
             log.debug("최신 버전 확인 실패: %s", e)
             if manual and self.tray:
@@ -369,12 +409,17 @@ class Agent:
                 await self._check_latest()
 
     def _install(self, name: str) -> dict:
-        res = installer.install(self.s, name)
+        self.installing += 1
+        try:
+            res = installer.install(self.s, name)
+        finally:
+            self.installing -= 1
         self.send_threadsafe(self.hello())  # 설치 상태 갱신
         return res
 
     async def handle(self, msg: dict):
         t, rid = msg.get("type"), msg.get("rid")
+        self.touch(t)
         if t == "session.new":
             asyncio.create_task(self._respond(rid, self._new_session, msg["project_id"], msg.get("agent"), msg.get("project_name"),
                                               msg.get("project_uid")))
@@ -422,8 +467,14 @@ class Agent:
         elif t in ("case.run", "case.extract", "case.train_sample"):
             self.executor.submit(msg)
         elif t in ("agent.release", "agent.update"):
-            if self.s.auto_update or msg.get("force"):
+            if self.auto_update or msg.get("force"):
                 self.schedule_update(msg["version"], msg.get("sha256"), bool(msg.get("force")))
+        elif t == "agent.settings":  # 연결할 때마다, 사용자가 설정을 바꿀 때마다 온다
+            self.auto_update = bool(msg.get("auto_update", True))
+            if self.auto_update:
+                asyncio.create_task(self._check_latest())
+            else:
+                self._cancel_update()
         else:
             log.warning("알 수 없는 메시지: %s", t)
 
@@ -448,8 +499,7 @@ class Agent:
                             self.tray.notify("웹앱에 연결되었습니다")
                         self.tray.set("connected", self.s.server_url)
                     await ws.send(json.dumps(self.hello(), ensure_ascii=False))
-                    await self._send_heartbeat()
-                    asyncio.create_task(self._check_latest())
+                    await self._send_heartbeat()  # 최신 버전 확인은 서버가 hello에 답하는 agent.settings를 받고 한다
                     async for raw in ws:
                         await self.handle(json.loads(raw))
             except (OSError, websockets.WebSocketException) as e:

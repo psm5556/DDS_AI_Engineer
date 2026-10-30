@@ -171,6 +171,26 @@ def request_update(user_id: int, user=Depends(get_current_user), db: Session = D
     return {"ok": True, "version": r.version}
 
 
+def _auto_update_on(user: models.User) -> bool:
+    return user.agent_auto_update is not False
+
+
+@router.get("/settings", response_model=schemas.AgentSettings)
+def get_agent_settings(user=Depends(get_current_user)):
+    return {"auto_update": _auto_update_on(user)}
+
+
+@router.put("/settings", response_model=schemas.AgentSettings)
+def set_agent_settings(body: schemas.AgentSettings, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """저장은 서버에 한다: PC가 꺼져 있어도 바꿀 수 있고, 연결할 때 다시 알린다."""
+    db.get(models.User, user.id).agent_auto_update = body.auto_update
+    db.commit()
+    conn = registry.get(user.id)
+    if conn:
+        conn.send({"type": "agent.settings", "auto_update": body.auto_update})
+    return body
+
+
 # ---------- Agent 메시지 핸들러 (main.py에서 등록) ----------
 def record_instance(conn: AgentConnection, msg: dict, connected: bool = True):
     with SessionLocal() as db:
@@ -189,6 +209,8 @@ def record_instance(conn: AgentConnection, msg: dict, connected: bool = True):
             inst.status = msg["status"]
         inst.connected, inst.last_seen = connected, now
         db.commit()
+        if msg.get("type") == "hello":
+            conn.send({"type": "agent.settings", "auto_update": _auto_update_on(db.get(models.User, conn.user_id))})
     manager.publish({"type": "agent_status", "user_id": conn.user_id, "connected": connected})
 
 
@@ -236,33 +258,49 @@ def install_script(request: Request):
     return text.replace("__DDS_SERVER_URL__", server)
 
 
+def _setup_sources() -> list[Path]:
+    src = ROOT / "installer" / "DdsAgentSetup.cs"
+    return [src, src.with_name("dds-agent.ico"), ROOT / "frontend" / "public" / "brand" / "dds-logo.png"]
+
+
+def _setup_stale(exe: Path) -> bool:
+    """소스가 exe보다 새로우면 낡은 것이다. 소스가 없는 서버(묶음으로 설치)에서는 있는 exe를 그대로 쓴다."""
+    srcs = [p.stat().st_mtime for p in _setup_sources() if p.exists()]
+    return bool(srcs) and exe.stat().st_mtime < max(srcs)
+
+
 def _setup_exe() -> Path | None:
     for cand in (runtime_dir() / "DDS-Agent-Setup.exe", ROOT / "dist" / "DDS-Agent-Setup.exe"):
         if cand.exists():
-            return cand
+            # 코드를 받아도 예전 설치 프로그램을 계속 내려주지 않게 다시 빌드한다. 빌드할 수 없으면 있는 것을 쓴다
+            return (_build_setup_exe() or cand) if _setup_stale(cand) else cand
     return _build_setup_exe()
 
 
 def _build_setup_exe() -> Path | None:
-    """설치 프로그램이 없으면(저장소에는 빌드 결과가 없다) 서버에서 바로 빌드한다.
+    """설치 프로그램이 없거나 낡았으면(저장소에는 빌드 결과가 없다) 서버에서 바로 빌드한다.
     Windows 기본 .NET Framework의 csc.exe를 쓰므로 추가 설치가 필요 없다(scripts/build_setup_exe.ps1과 같은 명령)."""
-    src = ROOT / "installer" / "DdsAgentSetup.cs"
+    src, ico, logo = _setup_sources()
     csc = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
     if not (src.exists() and csc.exists()):
         return None
     out = runtime_dir() / "DDS-Agent-Setup.exe"
     with _build_lock:
-        if out.exists():
+        if out.exists() and not _setup_stale(out):
             return out
         out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_suffix(".tmp.exe")  # 실패해도 쓰던 exe를 망가뜨리지 않는다
         try:
-            r = subprocess.run([str(csc), "/nologo", "/target:winexe", "/codepage:65001", "/optimize+", f"/out:{out}",
-                                f"/win32icon:{src.with_name('dds-agent.ico')}",
+            r = subprocess.run([str(csc), "/nologo", "/target:winexe", "/codepage:65001", "/optimize+", f"/out:{tmp}",
+                                f"/win32icon:{ico}", f"/resource:{logo},dds-logo.png",
                                 "/r:System.dll", "/r:System.Drawing.dll", "/r:System.Windows.Forms.dll", str(src)],
                                capture_output=True, timeout=180)
         except (OSError, subprocess.TimeoutExpired):
             return None
-        return out if r.returncode == 0 and out.exists() else None
+        if r.returncode != 0 or not tmp.exists():
+            return None
+        tmp.replace(out)
+        return out
 
 
 def _runtime_ready() -> bool:

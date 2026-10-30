@@ -8,6 +8,7 @@ New-Item -ItemType Directory -Force (Join-Path $root 'dist') | Out-Null
 $out = Join-Path $root 'dist\DDS-Agent-Setup.exe'
 & $csc /nologo /target:winexe /codepage:65001 /optimize+ "/out:$out" `
     "/win32icon:$(Join-Path $root 'installer\dds-agent.ico')" `
+    "/resource:$(Join-Path $root 'frontend\public\brand\dds-logo.png'),dds-logo.png" `
     /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `
     (Join-Path $root 'installer\DdsAgentSetup.cs')
 if ($LASTEXITCODE -ne 0) { throw 'csc 빌드 실패' }

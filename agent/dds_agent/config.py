@@ -40,7 +40,7 @@ class AgentSettings:
     headless_extra_args: list[str] = field(default_factory=lambda: ["--approval-mode", "auto_edit"])
     runner: str = "local"  # local | hpc  (스터디별로 adapter_config.runner 로도 지정)
     hpc: dict = field(default_factory=dict)  # [hpc] scheduler·ssh·path_map·exe_map·ncpu·header·poll_sec — job_runner.HpcRunner 참고
-    auto_update: bool = True  # 서버에 새 버전이 배포되면 유휴 시 자동 업데이트
+    auto_update: bool = True  # 연결 전 기본값. 연결되면 웹앱 > 설정의 값(agent.settings)을 따른다
     tray: bool = True  # Windows 트레이 아이콘으로 연결 상태 표시
     max_parallel_cases: int = 1
     # 케이스 해석 데이터 저장(case.h5, HDF5 압축) — executor.ARCHIVE_DEFAULTS를 덮어쓴다. 예) [archive] upload_max_mb = 1000

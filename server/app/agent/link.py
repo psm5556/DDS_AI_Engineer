@@ -15,6 +15,9 @@
                   (Output 추가 — 해석 없이 추출 단계만 실행, case.status {extract: true, results: 새 값만}로 답한다)
   case.train_sample {dataset_id, case_id, study_id, project_id, run_dir, spec, spec_hash}
                   (학습 샘플을 만들어 POST /api/cases/{id}/train_sample로 올리고 case.train_sample {ok, error}로 답한다)
+  agent.release   {version, sha256}                    (새 버전 배포. 자동 업데이트가 켜져 있으면 유휴 시 설치)
+  agent.update    {version, sha256, force}             (지금 업데이트)
+  agent.settings  {auto_update}                        (hello에 대한 답, 그리고 사용자가 설정을 바꿀 때)
 Agent → 서버 알림
   hello           {hostname, version, agents:[{name,label,installed,login}], default_agent, tools}
   agent.event     {session_id, update}                 (ACP session/update)

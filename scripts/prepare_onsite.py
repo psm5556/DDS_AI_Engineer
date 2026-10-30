@@ -96,7 +96,8 @@ def build_setup_exe(rt: Path) -> bool:
         return False
     rt.mkdir(parents=True, exist_ok=True)
     r = subprocess.run([str(csc), "/nologo", "/target:winexe", "/codepage:65001", "/optimize+", f"/out:{out}",
-                        f"/win32icon:{ROOT / 'installer' / 'dds-agent.ico'}", "/r:System.dll", "/r:System.Drawing.dll", "/r:System.Windows.Forms.dll",
+                        f"/win32icon:{ROOT / 'installer' / 'dds-agent.ico'}", f"/resource:{ROOT / 'frontend' / 'public' / 'brand' / 'dds-logo.png'},dds-logo.png",
+                        "/r:System.dll", "/r:System.Drawing.dll", "/r:System.Windows.Forms.dll",
                         str(ROOT / "installer" / "DdsAgentSetup.cs")], capture_output=True, text=True, errors="replace")
     if r.returncode != 0 or not out.exists():
         bad("빌드 실패:\n" + (r.stdout or "") + (r.stderr or ""))

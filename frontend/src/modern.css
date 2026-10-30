@@ -1040,3 +1040,10 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .sim-ver-toggle { border: 1px solid var(--line-strong); background: var(--panel); }
 .sim-nav { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
 .sim-nav .btn { display: inline-flex; align-items: center; gap: var(--sp-1); }
+
+/* ---------- 설정: PC Agent 자동 업데이트 ---------- */
+.auto-update { display: flex; align-items: flex-start; gap: var(--sp-2); margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line-2); cursor: pointer; }
+.auto-update input { flex: none; margin-top: 2px; }
+.auto-update span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.auto-update b { font-size: var(--fs-13); font-weight: 600; color: var(--ink); }
+.auto-update small { font-size: var(--fs-12); color: var(--ink-3); }

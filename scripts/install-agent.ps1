@@ -17,12 +17,24 @@ $NoSystem = ($env:DDS_INSTALL_NO_SYSTEM -eq '1')   # 테스트용: 사용자 PAT
 
 function Step($msg) { Write-Host "`n▶ $msg" -ForegroundColor Cyan }
 function Ok($msg) { Write-Host "  ✓ $msg" -ForegroundColor Green }
-function Fail($msg) { Write-Host "  ✗ $msg" -ForegroundColor Red; throw $msg }
+function Fail($msg) {
+    Write-Host "  ✗ $msg" -ForegroundColor Red
+    if ($env:DDS_UTF8_OUTPUT -eq '1') { exit 1 }   # 설치 창에서는 원인이 기록 맨 끝에 남게 한다. irm | iex에서 exit하면 터미널이 닫혀 throw한다
+    throw $msg
+}
 
 if (-not $Token) { $Token = Read-Host 'PC Agent 토큰을 입력하세요 (웹앱 > 설정 > PC Agent)' }
 $H = @{ Authorization = "Bearer $Token" }
 
-function Api($path) { Invoke-RestMethod -Uri "$Server$path" -Headers $H -UseBasicParsing }
+function Api($path) {
+    try { Invoke-RestMethod -Uri "$Server$path" -Headers $H -UseBasicParsing }
+    catch {
+        $detail = $null
+        try { $detail = ($_.ErrorDetails.Message | ConvertFrom-Json).detail } catch { }
+        if ($detail) { Fail $detail }   # 서버가 알려 준 원인과 할 일을 그대로 보인다
+        throw
+    }
+}
 function Download($path, $dest, $sha) {
     Invoke-WebRequest -Uri "$Server$path" -Headers $H -OutFile $dest -UseBasicParsing
     if ($sha -and ((Get-FileHash $dest -Algorithm SHA256).Hash.ToLower() -ne $sha.ToLower())) {
@@ -175,12 +187,19 @@ $pkgs = @{
     'claude' = @('@anthropic-ai/claude-code', '@agentclientprotocol/claude-agent-acp');
     'codex'  = @('@openai/codex', '@agentclientprotocol/codex-acp')
 }
+$bins = @{   # 패키지가 설치하는 명령. 이미 있으면 다시 설치하지 않는다(사용자가 따로 설치한 것을 덮어쓰지 않게)
+    '@google/gemini-cli' = 'gemini';
+    '@anthropic-ai/claude-code' = 'claude'; '@agentclientprotocol/claude-agent-acp' = 'claude-agent-acp';
+    '@openai/codex' = 'codex'; '@agentclientprotocol/codex-acp' = 'codex-acp'
+}
 $login = @{ 'gemini' = 'gemini'; 'claude' = 'claude  (실행 후 /login)'; 'codex' = 'codex login' }
 $chosen = @($Agents -split '[,; ]' | Where-Object { $_ })
 foreach ($a in $chosen) {
     if (-not $pkgs.ContainsKey($a)) { Write-Host "  알 수 없는 에이전트: $a (gemini, claude, codex 중 선택)"; continue }
     Step "에이전트 CLI 설치: $a"
-    & (Join-Path $NodeDir 'npm.cmd') install -g --silent @($pkgs[$a])
+    $need = @($pkgs[$a] | Where-Object { -not (Get-Command $bins[$_] -ErrorAction SilentlyContinue) })
+    if ($need.Count -eq 0) { Ok "$a 이미 설치됨"; continue }
+    & (Join-Path $NodeDir 'npm.cmd') install -g --silent @($need)
     if ($LASTEXITCODE -ne 0) { Write-Host "  ✗ $a 설치 실패 (사내 npm 미러 설정 확인: npm config get registry)" -ForegroundColor Yellow }
     else { Ok "$a 설치 완료" }
 }
@@ -206,5 +225,6 @@ Write-Host ' 설치가 끝났습니다. 웹앱에서 "PC Agent 연결됨"을 확
 if ($chosen.Count -gt 0) {
     Write-Host ' 처음 한 번은 새 터미널을 열고 로그인하세요:' -ForegroundColor Yellow
     foreach ($a in $chosen) { if ($login.ContainsKey($a)) { Write-Host "   $($login[$a])" } }
+    Write-Host ' 사내 보안 환경에서는 로그인이 몇 분 걸릴 수 있습니다. 멈춘 것처럼 보여도 터미널을 닫지 마세요.' -ForegroundColor Yellow
 }
 Write-Host '==============================================' -ForegroundColor DarkCyan

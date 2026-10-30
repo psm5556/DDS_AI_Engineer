@@ -2,13 +2,25 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy, Download, KeyRound, Laptop, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, del, get, post } from "../api";
+import { api, del, get, post, put } from "../api";
 import { useAuth } from "../auth";
 import { PinInput } from "../components/PinInput";
 import { SetupNotice, useSetupStatus } from "../components/SetupReadiness";
 import { copyText, when } from "../format";
 import { useToast } from "../toast";
 import type { AgentInstance, AgentRelease, AgentStatus, ApiToken } from "../types";
+
+/** PC Agent가 보내는 업데이트 상태를 쉬운 말로 */
+function updateText(state: string, auto: boolean) {
+  const at = state.indexOf(":");
+  const kind = at < 0 ? state : state.slice(0, at), v = at < 0 ? "" : state.slice(at + 1).trim();
+  if (kind === "pending") return `작업이 없을 때 ${v}(으)로 업데이트합니다`;
+  if (kind === "installing") return `${v}을(를) 뒤에서 설치하는 중입니다. 계속 일해도 됩니다`;
+  if (kind === "restarting") return `${v}(으)로 다시 시작하는 중입니다`;
+  if (kind === "failed") return `업데이트하지 못했습니다: ${v} → ${auto ? "1시간 뒤 다시 시도합니다" : "'지금 업데이트'로 다시 시도하세요"}`;
+  if (kind.startsWith("dev-mode")) return "개발용 실행이라 업데이트하지 않습니다";
+  return state;
+}
 
 /** 설정: 내 PC Agent 설치·상태·업데이트, AI 에이전트 CLI 설치, 토큰 */
 export default function SettingsPage() {
@@ -19,6 +31,7 @@ export default function SettingsPage() {
   const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status"), refetchInterval: 15000 });
   const { data: mine } = useQuery({ queryKey: ["agent", "mine"], queryFn: () => get<AgentInstance[]>("/api/agent/instances/mine"), refetchInterval: 15000 });
   const { data: latest } = useQuery({ queryKey: ["agent", "latest"], queryFn: () => get<AgentRelease>("/api/agent/releases/latest"), retry: false });
+  const { data: prefs } = useQuery({ queryKey: ["agent", "settings"], queryFn: () => get<{ auto_update: boolean }>("/api/agent/settings") });
   const { data: tokens } = useQuery({ queryKey: ["tokens"], queryFn: () => get<ApiToken[]>("/api/tokens") });
   const { data: setup } = useSetupStatus();
   const err = (e: Error) => toast(e.message ?? "처리하지 못했습니다", true);
@@ -30,6 +43,11 @@ export default function SettingsPage() {
   });
   const revoke = useMutation({ mutationFn: (id: number) => del(`/api/tokens/${id}`), onSuccess: () => { qc.invalidateQueries({ queryKey: ["tokens"] }); toast("토큰을 폐기했습니다"); }, onError: err });
   const update = useMutation({ mutationFn: () => post(`/api/agent/instances/${user!.id}/update`), onSuccess: () => toast("업데이트를 요청했습니다. 잠시 후 다시 연결됩니다"), onError: err });
+  const setAuto = useMutation({
+    mutationFn: (auto_update: boolean) => put<{ auto_update: boolean }>("/api/agent/settings", { auto_update }),
+    onSuccess: (r) => { qc.setQueryData(["agent", "settings"], r); toast(r.auto_update ? "자동 업데이트를 켰습니다" : "자동 업데이트를 껐습니다"); },
+    onError: err,
+  });
   const install = useMutation({
     mutationFn: (name: string) => post<{ login: string }>("/api/agent/install", { agent: name }),
     onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["agent"] }); toast(`설치했습니다. 처음 한 번 로그인하세요: ${r.login}`); },
@@ -37,6 +55,7 @@ export default function SettingsPage() {
   });
 
   const inst = mine?.find((i) => i.connected) ?? mine?.[0];
+  const working = !!(inst?.status?.running_cases || inst?.status?.queued_cases || inst?.status?.active_prompts);
   const oneLiner = issued?.token ? `$env:DDS_TOKEN='${issued.token}'; $env:DDS_AGENTS='gemini'; irm ${location.origin}/api/agent/install.ps1 | iex` : "";
   const copy = async (text: string, what: string) => toast((await copyText(text)) ? `${what}을(를) 복사했습니다` : "복사하지 못했습니다", false);
 
@@ -50,7 +69,8 @@ export default function SettingsPage() {
             {agent?.connected ? <span className="chip ok"><CheckCircle2 size={12} />연결됨</span> : <span className="chip err"><XCircle size={12} />연결 안 됨</span>}
             <span className="grow" />
             {inst && latest && inst.outdated && agent?.connected && (
-              <button className="small" onClick={() => update.mutate()} disabled={update.isPending}><RefreshCw size={13} />지금 {latest.version}(으)로 업데이트</button>
+              <button className="small" onClick={() => update.mutate()} disabled={update.isPending} title={working ? "진행 중인 대화·해석이 끊깁니다. 기다리면 끝난 뒤에 업데이트합니다" : undefined}>
+                <RefreshCw size={13} />지금 {latest.version}(으)로 업데이트{working && " (진행 중인 작업이 끊깁니다)"}</button>
             )}
           </div>
           {inst ? (
@@ -59,14 +79,19 @@ export default function SettingsPage() {
               <span>버전</span><b>{inst.version ?? "-"} {latest && (inst.outdated ? <span className="chip warn">최신 {latest.version}</span> : <span className="chip ok">최신</span>)}</b>
               <span>마지막 연결</span><b>{when(inst.last_seen)}</b>
               <span>작업</span><b>실행 중 케이스 {inst.status?.running_cases ?? 0} · 대기 {inst.status?.queued_cases ?? 0} · 진행 중 대화 {inst.status?.active_prompts ?? 0}</b>
-              {inst.status?.update_state && inst.status.update_state !== "idle" && <><span>업데이트</span><b>{inst.status.update_state}</b></>}
+              {inst.status?.update_state && inst.status.update_state !== "idle" && <><span>업데이트</span><b>{updateText(String(inst.status.update_state), prefs?.auto_update ?? true)}</b></>}
             </div>
           ) : <p className="small muted">아직 이 계정으로 연결된 PC가 없습니다. 아래 순서로 설치하세요.</p>}
+          <label className="auto-update">
+            <input type="checkbox" checked={prefs?.auto_update ?? true} disabled={!prefs || setAuto.isPending} onChange={(e) => setAuto.mutate(e.target.checked)} />
+            <span><b>새 버전이 나오면 자동으로 업데이트</b>
+              <small>대화·해석이 없을 때 뒤에서 설치하고 PC Agent를 다시 시작합니다. 진행 중인 작업은 끊지 않습니다.</small></span>
+          </label>
         </section>
 
-        {/* 연결돼 있으면 설치 안내는 접어 둔다 (다른 PC에 설치할 때만 펼침) */}
+        {/* 연결돼 있으면 설치 안내는 접어 둔다 */}
         <details className="block install-block" open={!agent?.connected}>
-          <summary className="block-head"><h3><Download size={16} />{agent?.connected ? "다른 PC에 설치하기" : "설치 (처음 한 번)"}</h3>
+          <summary className="block-head"><h3><Download size={16} />{agent?.connected ? "PC Agent 다시 설치" : "PC Agent 설치 (처음 한 번)"}</h3>
             <span className="small muted">Python·Node 등 필요한 것은 모두 자동으로 설치됩니다. 관리자 권한도 필요 없습니다.</span></summary>
           {setup && <SetupNotice st={setup} />}
           <ol className="install-steps">
@@ -74,21 +99,18 @@ export default function SettingsPage() {
               {setup && !setup.setup_exe
                 ? <button className="primary" disabled title="서버에 설치 프로그램이 없습니다"><Download size={14} />DDS-Agent-Setup.exe</button>
                 : <a className="btn primary" href="/api/agent/setup.exe" download><Download size={14} />DDS-Agent-Setup.exe</a>}</li>
-            <li><b>토큰 발급</b>
-              {issued?.token ? (
-                <span className="token-box"><code>{issued.token}</code>
-                  <button className="icon-btn" title="토큰 복사" aria-label="토큰 복사" onClick={() => void copy(issued.token!, "토큰")}><Copy size={14} /></button></span>
-              ) : <button onClick={() => issue.mutate()} disabled={issue.isPending}><KeyRound size={14} />토큰 발급</button>}
-              {issued?.token && <span className="small muted">이 토큰은 지금만 보입니다. 설치 창에 붙여 넣으세요.</span>}
-            </li>
-            <li><b>설치 파일 실행</b><span className="small muted">토큰을 붙여 넣고, 사용할 AI 에이전트(Gemini·Claude·Codex)를 고른 뒤 [설치]. 끝나면 이 화면에 "연결됨"이 표시됩니다.</span></li>
+            <li><b>설치 파일 실행</b><span className="small muted">웹앱 아이디·PIN을 입력하면 토큰을 자동으로 발급합니다. 이 PC에 없는 AI 에이전트만 골라 설치합니다.</span></li>
+            <li><b>AI 에이전트 로그인</b><span className="small muted">설치가 끝나면 설치 창에서 [로그인]을 누릅니다. 나중에 로그인할 때는 설치 파일을 다시 실행하면 됩니다.</span></li>
           </ol>
-          {oneLiner && (
-            <details className="more"><summary>설치 파일 대신 PowerShell 명령 한 줄로 설치</summary>
-              <div className="row"><code className="code-block grow" style={{ whiteSpace: "pre-wrap" }}>{oneLiner}</code>
-                <button className="icon-btn" title="명령 복사" aria-label="명령 복사" onClick={() => void copy(oneLiner, "명령")}><Copy size={14} /></button></div>
-            </details>
-          )}
+          <details className="more"><summary>설치 파일 대신 PowerShell 명령 한 줄로 설치</summary>
+            {issued?.token ? (
+              <>
+                <div className="row"><code className="code-block grow" style={{ whiteSpace: "pre-wrap" }}>{oneLiner}</code>
+                  <button className="icon-btn" title="명령 복사" aria-label="명령 복사" onClick={() => void copy(oneLiner, "명령")}><Copy size={14} /></button></div>
+                <span className="small muted">이 명령의 토큰은 지금만 보입니다.</span>
+              </>
+            ) : <button onClick={() => issue.mutate()} disabled={issue.isPending}><KeyRound size={14} />토큰 발급하고 명령 보기</button>}
+          </details>
         </details>
 
         <section className="block">
