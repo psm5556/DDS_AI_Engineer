@@ -32,11 +32,36 @@ def _backfill_project_uids():
         db.commit()
 
 
+def _backfill_model_versions():
+    """버전이 생기기 전의 모델: 스터디마다 번호를 매기고, 여러 개 배포되어 있으면 가장 최근 것만 현재 버전으로 둔다."""
+    with SessionLocal() as db:
+        by_study: dict[int, list] = {}
+        for m in db.query(models.SurrogateModel).order_by(models.SurrogateModel.id):
+            by_study.setdefault(m.study_id, []).append(m)
+        for study_id, rows in by_study.items():
+            used = max((m.version or 0 for m in rows), default=0)
+            live = next((m for m in reversed(rows) if m.deployed), None)
+            study = db.get(models.Study, study_id)
+            project = db.get(models.Project, study.project_id) if study else None
+            for m in rows:
+                if m.version is None:
+                    used += 1
+                    m.version = used
+                if m.created_by is None and project is not None:
+                    m.created_by = project.owner_id
+                if m.deployed and m is not live:
+                    m.deployed = False
+            if live is not None and live.deployed_at is None:
+                live.deployed_at = live.created_at
+        db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     ensure_columns()
     _backfill_project_uids()
+    _backfill_model_versions()
     loop = asyncio.get_running_loop()
     manager.bind_loop(loop)
 

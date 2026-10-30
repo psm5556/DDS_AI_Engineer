@@ -98,7 +98,7 @@ case.h5
   - `GET /api/cases/{id}/archive/file`: 파일 받기
 - AI: `dds-study.case_data(case_id)`로 무엇이 담겼는지 본다. Output 추가 때 원본이 없으면 case.h5에서 뽑는 추출 스크립트를 쓴다.
 - 형상·필드 학습(`train_field_model`): `fields/*.npz`가 서버에 없으면 서버의 case.h5에서 그 필드의 마지막 프레임을 읽는다(노드 필드).
-- 웹 '데이터·모델' 탭: 케이스 표의 'HDF5' 열에 크기·위치를 보이고, 서버에 있으면 내려받는다.
+- 웹 '데이터' 탭: 케이스 표의 'HDF5' 열에 크기·위치를 보이고, 서버에 있으면 내려받는다.
 
 ## 6. 설정
 PC Agent `agent.toml`:

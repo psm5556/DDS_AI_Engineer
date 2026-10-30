@@ -109,7 +109,7 @@ def add_outputs(study_id: int, body: schemas.OutputAddRequest, user=Depends(get_
 def train(study_id: int, body: schemas.TrainRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
     s = _study(study_id, user, db)
     try:
-        return service.train(db, s, body.outputs, body.flow_id, body.node_id)
+        return service.train(db, s, body.outputs, body.flow_id, body.node_id, created_by=user.id)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -143,16 +143,19 @@ def model_spec(model_id: int, user=Depends(get_current_user), db: Session = Depe
     m = _model(model_id, user, db)
     study = db.get(models.Study, m.study_id)
     project = db.get(models.Project, study.project_id)
+    live = service.current_model(db, study.id)
+    versions = db.query(models.SurrogateModel).filter_by(study_id=study.id).order_by(models.SurrogateModel.id.desc()).all()
     return {"model": schemas.ModelResponse.model_validate(m), "variables": study.variables,
             "objectives": study.objectives, "study_name": study.name,
-            "project_id": study.project_id, "project_name": project.name if project else ""}
+            "project_id": study.project_id, "project_name": project.name if project else "",
+            "current_model_id": live.id if live else None,
+            "versions": [schemas.ModelResponse.model_validate(x) for x in versions]}
 
 
 @router.post("/models/{model_id}/deploy", response_model=schemas.ModelResponse)
 def deploy(model_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    m = _model(model_id, user, db)
-    m.deployed = True
-    db.commit()
+    """이 버전을 Simulator의 현재 버전으로 둔다. 옛 버전을 고르면 되돌리기다. 공유 링크는 그대로 현재 버전을 따라간다."""
+    m = service.deploy_version(db, _model(model_id, user, db))
     study = db.get(models.Study, m.study_id)
     manager.publish({"type": "model_updated", "project_id": study.project_id, "data": {"id": m.id}})
     return m
@@ -193,11 +196,17 @@ def _share(token: str, db: Session) -> models.ShareLink:
     return sh
 
 
+def _share_model(sh: models.ShareLink, db: Session) -> models.SurrogateModel:
+    """링크는 만들 때의 모델이 아니라 그 Simulator의 현재 버전을 보여 준다. 재학습·되돌리기를 해도 링크를 다시 보낼 필요가 없다."""
+    m = db.get(models.SurrogateModel, sh.model_id)
+    return service.current_model(db, m.study_id) or m
+
+
 @router.post("/models/{model_id}/shares", response_model=schemas.ShareResponse)
 def create_share(model_id: int, body: schemas.ShareCreate, user=Depends(get_current_user), db: Session = Depends(get_db)):
     m = _model(model_id, user, db)
     if not m.deployed:
-        raise HTTPException(400, "배포된 Simulator만 공유할 수 있습니다")
+        raise HTTPException(400, "배포된 현재 버전의 Simulator만 공유할 수 있습니다")
     sh = models.ShareLink(token=secrets.token_urlsafe(16), model_id=m.id, created_by=user.id, note=body.note,
                           expires_at=datetime.now() + timedelta(days=body.expires_days) if body.expires_days else None)
     db.add(sh)
@@ -207,8 +216,9 @@ def create_share(model_id: int, body: schemas.ShareCreate, user=Depends(get_curr
 
 @router.get("/models/{model_id}/shares", response_model=list[schemas.ShareResponse])
 def list_shares(model_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    _model(model_id, user, db)
-    return db.query(models.ShareLink).filter_by(model_id=model_id).order_by(models.ShareLink.id.desc()).all()
+    m = _model(model_id, user, db)  # 어느 버전에서 만든 링크든 같은 Simulator의 링크다
+    ids = db.query(models.SurrogateModel.id).filter_by(study_id=m.study_id)
+    return db.query(models.ShareLink).filter(models.ShareLink.model_id.in_(ids)).order_by(models.ShareLink.id.desc()).all()
 
 
 @router.delete("/shares/{token}")
@@ -224,10 +234,17 @@ def stop_share(token: str, user=Depends(get_current_user), db: Session = Depends
 
 @router.get("/shares/{token}")
 def share_spec(token: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """공유받은 사람(로그인한 사내 사용자)이 보는 Simulator 정보."""
+    """공유받은 사람(로그인한 사내 사용자)이 보는 Simulator 정보. 처음 열면 그 사람의 '공유받은 Simulator' 목록에 들어간다."""
     sh = _share(token, db)
-    m = db.get(models.SurrogateModel, sh.model_id)
+    m = _share_model(sh, db)
     study = db.get(models.Study, m.study_id)
+    if user.id != sh.created_by:
+        seen = db.get(models.ShareAccess, (sh.id, user.id))
+        if seen is None:
+            db.add(models.ShareAccess(share_id=sh.id, user_id=user.id))
+        else:
+            seen.hidden, seen.last_opened = False, datetime.now()
+        db.commit()
     owner = db.get(models.User, sh.created_by)
     return {"model": schemas.ModelResponse.model_validate(m), "variables": study.variables, "objectives": study.objectives,
             "study_name": study.name, "shared_by": owner.display_name if owner else "", "note": sh.note}
@@ -238,7 +255,7 @@ def share_predict(token: str, body: schemas.PredictRequest, user=Depends(get_cur
     sh = _share(token, db)
     sh.uses += 1
     db.commit()
-    sur = service.load_surrogate(db.get(models.SurrogateModel, sh.model_id))
+    sur = service.load_surrogate(_share_model(sh, db))
     missing = [v for v in sur.variables if v not in body.params]
     if missing:
         raise HTTPException(400, f"입력값이 없습니다: {', '.join(missing)}")
@@ -249,13 +266,66 @@ def share_predict(token: str, body: schemas.PredictRequest, user=Depends(get_cur
 @router.post("/shares/{token}/predict_batch", response_model=schemas.PredictBatchResponse)
 def share_predict_batch(token: str, body: schemas.PredictBatchRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
     sh = _share(token, db)
-    sur = service.load_surrogate(db.get(models.SurrogateModel, sh.model_id))
+    sur = service.load_surrogate(_share_model(sh, db))
     try:
         X = np.array([[p[v] for v in sur.variables] for p in body.points])
     except KeyError as e:
         raise HTTPException(400, f"입력값이 없습니다: {e}")
     mean, std = sur.predict(X)
     return {"mean": {k: v.tolist() for k, v in mean.items()}, "std": {k: v.tolist() for k, v in std.items()}}
+
+
+# ---------- 내 Simulator · 공유받은 Simulator ----------
+def _sim_item(m: models.SurrogateModel, study: models.Study, **kw) -> dict:
+    return {"study_id": study.id, "study_name": study.name, "model_id": m.id, "version": m.version, "outputs": m.outputs or [],
+            "n_train": m.n_train or 0, "updated_at": m.deployed_at or m.created_at, **kw}
+
+
+@router.get("/simulators", response_model=schemas.SimulatorList)
+def my_simulators(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """프로젝트에 들어가지 않고 바로 여는 목록. 내가 만든 것, 같은 프로젝트 멤버가 만든 것, 링크로 받아 연 것.
+    같은 Simulator는 한 번만 보인다(내 것 > 같은 프로젝트 > 링크)."""
+    mine, shared, seen = [], [], set()
+    rows = (db.query(models.SurrogateModel, models.Study, models.Project)
+            .join(models.Study, models.SurrogateModel.study_id == models.Study.id)
+            .join(models.Project, models.Study.project_id == models.Project.id)
+            .join(models.ProjectMember, models.ProjectMember.project_id == models.Project.id)
+            .filter(models.ProjectMember.user_id == user.id, models.SurrogateModel.deployed.is_(True))
+            .order_by(models.SurrogateModel.deployed_at.desc()).all())
+    for m, study, project in rows:
+        if study.id in seen:
+            continue
+        seen.add(study.id)
+        own = m.created_by == user.id
+        owner = None if own else db.get(models.User, m.created_by) if m.created_by else None
+        (mine if own else shared).append(_sim_item(m, study, url=f"/simulator/{m.id}", source="mine" if own else "project", project_id=project.id,
+                                                   project_name=project.name, shared_by=owner.display_name if owner else None))
+    now = datetime.now()
+    access = (db.query(models.ShareAccess, models.ShareLink).join(models.ShareLink, models.ShareAccess.share_id == models.ShareLink.id)
+              .filter(models.ShareAccess.user_id == user.id, models.ShareAccess.hidden.is_(False))
+              .order_by(models.ShareAccess.last_opened.desc()).all())
+    for _, sh in access:
+        m = _share_model(sh, db)
+        study = db.get(models.Study, m.study_id)
+        if study.id in seen:
+            continue
+        seen.add(study.id)
+        owner = db.get(models.User, sh.created_by)
+        status = "stopped" if not sh.enabled else "expired" if sh.expires_at and sh.expires_at < now else "active"
+        shared.append(_sim_item(m, study, url=f"/s/{sh.token}", source="link", status=status, share_id=sh.id, note=sh.note or "",
+                                shared_by=owner.display_name if owner else None))  # 링크로 받은 사람에게 프로젝트 정보는 보이지 않는다
+    return {"mine": mine, "shared": shared}
+
+
+@router.delete("/simulators/shared/{share_id}")
+def hide_shared(share_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """공유받은 목록에서 뺀다. 내 목록에서만 빠지고, 링크를 다시 열면 돌아온다."""
+    row = db.get(models.ShareAccess, (share_id, user.id))
+    if row is None:
+        raise HTTPException(404, "목록에 없습니다")
+    row.hidden = True
+    db.commit()
+    return {"ok": True}
 
 
 # ---------- 형상·필드 데이터와 모델 ----------
@@ -360,8 +430,12 @@ def train_field(study_id: int, body: schemas.TrainFieldRequest, user=Depends(get
 
 
 @router.get("/studies/{study_id}/field-models", response_model=list[schemas.FieldModelResponse])
-def list_field_models(study_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def list_field_models(study_id: int, model_id: int | None = None, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """model_id를 주면 그 버전이 쓰는 3D 모델(필드마다 하나)만, 없으면 학습한 것 전부."""
     _study(study_id, user, db)
+    if model_id is not None:
+        m = db.get(models.SurrogateModel, model_id)
+        return service.field_models_for(db, study_id, m if m and m.study_id == study_id else None)
     return db.query(models.FieldModel).filter_by(study_id=study_id).order_by(models.FieldModel.id.desc()).all()
 
 
@@ -425,8 +499,8 @@ def _fm_shared(token: str, field_model_id: int, db) -> models.FieldModel:
 
 @router.get("/shares/{token}/field-models", response_model=list[schemas.FieldModelResponse])
 def shared_field_models(token: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    m = db.get(models.SurrogateModel, _share(token, db).model_id)
-    return db.query(models.FieldModel).filter_by(study_id=m.study_id).order_by(models.FieldModel.id.desc()).all()
+    m = _share_model(_share(token, db), db)
+    return service.field_models_for(db, m.study_id, m)
 
 
 @router.get("/shares/{token}/field-models/{field_model_id}/mesh")

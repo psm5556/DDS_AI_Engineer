@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Database, FolderOpen, Loader2, Play, Plus, Trash2 } from "lucide-react";
+import { Database, FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { del, download, get, put } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
 import { useAuth } from "../auth";
@@ -15,9 +14,9 @@ import { flash, scrollMode } from "../motion";
 import { useCanvas } from "./CanvasContext";
 import { relFromRunDir, useOpenLocal } from "./LocalFiles";
 import { useToast } from "../toast";
-import type { Artifact, Case, Flow, Project, StudyStatus, Study, SurrogateModel, TrainingDataset, User } from "../types";
+import type { Artifact, Case, Flow, Project, StudyStatus, Study, TrainingDataset, User } from "../types";
 
-/** 캔버스에 들어가는 화면들: 작업 흐름(단계별 결과) · 데이터·모델(입력·출력, 예측 모델·Simulator) · 멤버. 보고서는 ReportView.
+/** 캔버스에 들어가는 화면들: 작업 흐름(단계별 결과) · 데이터(입력·출력, 학습 데이터, 케이스) · 멤버. 보고서는 ReportView, Simulator는 SimulatorTab.
  *  대화(가운데)에서 에이전트가 일하면 해당 화면이 실시간으로 갱신된다. */
 
 /* ---------- 작업 흐름 ---------- */
@@ -149,21 +148,21 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
   );
 }
 
-/* ---------- 데이터·모델 ---------- */
+/* ---------- 데이터 ---------- */
 export function StudiesView({ pid }: { pid: number }) {
+  const c = useCanvas();
   const { data: studies } = useQuery({ queryKey: ["studies", pid], queryFn: () => get<Study[]>(`/api/projects/${pid}/studies`) });
-  const [sid, setSid] = useState<number | null>(null);
-  const cur = sid ?? studies?.[0]?.id ?? null;
+  const cur = studies?.find((s) => s.id === c.studyId)?.id ?? studies?.[0]?.id ?? null;
   if (!studies) return <Skeleton rows={5} />;
   if (!studies.length) {
     return <div className="empty-hero"><AgentGlyph size={32} /><b>아직 스터디가 없습니다</b>
-      <p>에이전트가 DOE를 시작하면 케이스 데이터·예측 모델이 여기에 쌓입니다.</p></div>;
+      <p>에이전트가 DOE를 시작하면 케이스 데이터가 여기에 쌓입니다.</p></div>;
   }
   return (
     <>
       {studies.length > 1 && (
         <div className="row" style={{ marginBottom: 16 }}>
-          <span className="seg">{studies.map((s) => <button key={s.id} className={cur === s.id ? "on" : ""} onClick={() => setSid(s.id)}>{s.name}</button>)}</span>
+          <span className="seg">{studies.map((s) => <button key={s.id} className={cur === s.id ? "on" : ""} onClick={() => c.setStudyId(s.id)}>{s.name}</button>)}</span>
         </div>
       )}
       {cur && <StudyDetail pid={pid} id={cur} />}
@@ -277,7 +276,6 @@ function DatasetsBlock({ s, done }: { s: Study; done: number }) {
 function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const { data: st } = useQuery({ queryKey: ["study", id], queryFn: () => get<StudyStatus>(`/api/studies/${id}`) });
   const { data: cases } = useQuery({ queryKey: ["study", id, "cases"], queryFn: () => get<Case[]>(`/api/studies/${id}/cases`) });
-  const { data: models } = useQuery({ queryKey: ["models", pid], queryFn: () => get<SurrogateModel[]>(`/api/projects/${pid}/models`) });
   // 최적값이 바뀌었을 때만 잠깐 강조한다(화면을 처음 열 때는 그대로)
   const bestBox = useRef<HTMLDivElement>(null);
   const bestId = st?.best?.id;
@@ -357,31 +355,6 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
             );
           })}{!outs.length && <li className="muted small">완료된 케이스가 생기면 결과 항목이 여기에 보입니다</li>}</ul>
         </div>
-      </section>
-
-      <section className="block">
-        <div className="block-head"><h3>예측 모델 · Simulator</h3><span className="cnt">{models?.filter((m) => m.study_id === id).length ?? 0}개</span></div>
-        {!(models ?? []).some((m) => m.study_id === id) ? (
-          <div className="row"><span className="small muted grow">아직 예측 모델이 없습니다. 케이스가 쌓이면 학습할 수 있습니다.</span>
-            <button className="small" onClick={() => sendToAgent(`스터디 '${s.name}'(#${s.id})의 완료된 케이스로 예측 모델을 학습해 줘`)}>학습 요청</button></div>
-        ) : (
-          <div className="model-list">{(models ?? []).filter((m) => m.study_id === id).filter((m, i) => i < 3 || m.deployed).map((m) => (
-            <div key={m.id} className="model-row">
-              <div className="grow">
-                <b>{m.name}</b>
-                <div className="model-r2">{Object.entries(m.metrics).map(([k, v]) => <span key={k} className={`chip ${v.r2 >= 0.9 ? "ok" : v.r2 >= 0.7 ? "warn" : "err"}`}>{k} R² {v.r2.toFixed(3)}</span>)}
-                  <span className="small muted">학습 {m.n_train}건</span></div>
-              </div>
-              {m.deployed ? <Link className="btn small primary" to={`/simulator/${m.id}`}><Play size={13} />Simulator 열기</Link>
-                : <button className="small" onClick={() => sendToAgent(`예측 모델 '${m.name}'(#${m.id})을 Simulator로 배포해 줘`)}>배포 요청</button>}
-            </div>))}
-            {(() => {
-              const mine = (models ?? []).filter((m) => m.study_id === id);
-              const hidden = mine.filter((m, i) => !(i < 3 || m.deployed)).length;
-              return hidden > 0 && <p className="small muted">이전에 학습한 모델 {hidden}개는 숨겼습니다(최근 3개와 배포한 모델만 보입니다)</p>;
-            })()}
-          </div>
-        )}
       </section>
 
       <DatasetsBlock s={s} done={done.length} />

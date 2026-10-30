@@ -352,7 +352,35 @@ class ModelResponse(ORM):
     metrics: dict[str, Any]
     n_train: int
     deployed: bool
+    version: int | None = None
+    created_by: int | None = None
+    deployed_at: datetime | None = None
+    field_models: dict[str, int] | None = None
     created_at: datetime
+
+
+class SimulatorItem(BaseModel):
+    """내 Simulator·공유받은 Simulator 목록의 한 줄. 링크로 받은 것은 프로젝트 정보를 보이지 않는다."""
+    study_id: int
+    study_name: str
+    model_id: int
+    version: int | None
+    outputs: list[str]
+    n_train: int
+    url: str
+    source: str  # mine | project | link
+    status: str = "active"  # active | stopped | expired
+    project_id: int | None = None
+    project_name: str | None = None
+    shared_by: str | None = None
+    note: str = ""
+    share_id: int | None = None
+    updated_at: datetime | None = None
+
+
+class SimulatorList(BaseModel):
+    mine: list[SimulatorItem]
+    shared: list[SimulatorItem]
 
 
 class PredictRequest(BaseModel):

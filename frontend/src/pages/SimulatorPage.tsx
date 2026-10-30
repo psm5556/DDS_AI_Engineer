@@ -14,18 +14,21 @@ import type { Objective, SurrogateModel, Variable } from "../types";
 
 interface Spec {
   model: SurrogateModel; variables: Variable[]; objectives: Objective[]; study_name: string;
-  project_id?: number; project_name?: string; shared_by?: string; note?: string;
+  project_id?: number; project_name?: string; shared_by?: string; note?: string; current_model_id?: number | null;
 }
 interface Pred { mean: Record<string, number>; std: Record<string, number> }
 interface Batch { mean: Record<string, number[]>; std: Record<string, number[]> }
 interface Share { id: number; token: string; note: string; enabled: boolean; uses: number; expires_at: string | null; created_at: string }
 const SWEEP_N = 41;
 
-/** 배포된 예측 모델 화면 (프로젝트 멤버용) */
+/** 이 버전이 쓰는 3D 모델 목록(되돌리면 3D도 그때 것으로 돌아간다) */
+export const memberFieldList = (modelId: number) => (s: Spec) => `/api/studies/${s.model.study_id}/field-models?model_id=${modelId}`;
+
+/** 넓은 화면의 Simulator (프로젝트 멤버용). 평소에는 프로젝트의 Simulator 탭에서 대화와 함께 쓴다 */
 export default function SimulatorPage() {
   const mid = Number(useParams().mid);
   return <SimulatorView base={`/api/models/${mid}`} specPath={`/api/models/${mid}/spec`} modelId={mid}
-    fieldList={(s) => `/api/studies/${s.model.study_id}/field-models`} fieldBase={(id) => `/api/field-models/${id}`} />;
+    fieldList={memberFieldList(mid)} fieldBase={(id) => `/api/field-models/${id}`} />;
 }
 
 /** 공유 링크로 연 Simulator (프로젝트 멤버가 아니어도 로그인한 사내 사용자면 사용) */
@@ -35,9 +38,9 @@ export function SharedSimulatorPage() {
     fieldList={() => `/api/shares/${token}/field-models`} fieldBase={(id) => `/api/shares/${token}/field-models/${id}`} />;
 }
 
-/** 해석 없이 설계변수를 바꿔 결과를 실시간 예측 (± 불확실도) + 민감도 곡선 */
-function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
-  base: string; specPath: string; modelId?: number; fieldList: (s: Spec) => string; fieldBase: (id: number) => string;
+/** 해석 없이 설계변수를 바꿔 결과를 실시간 예측 (± 불확실도) + 민감도 곡선. embedded면 캔버스 탭 안에 넣는다(제목·버전은 탭이 보여 준다) */
+export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, embedded }: {
+  base: string; specPath: string; modelId?: number; fieldList: (s: Spec) => string; fieldBase: (id: number) => string; embedded?: boolean;
 }) {
   const [sharing, setSharing] = useState(false);
   const { data: spec, error } = useQuery({ queryKey: ["sim-spec", specPath], queryFn: () => get<Spec>(specPath) });
@@ -69,25 +72,31 @@ function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
     return () => clearTimeout(t);
   }, [x, spec, base, sweepVar]);
 
-  if (error) return <div className="page"><div className="notice err">{(error as Error).message}</div></div>;
-  if (!spec) return <Skeleton page rows={5} />;
+  if (error) {
+    const msg = <div className="notice err">{(error as Error).message}</div>;
+    return embedded ? msg : <div className="page">{msg}<p className="small" style={{ marginTop: 12 }}><Link to="/simulators">내 Simulator 목록으로</Link></p></div>;
+  }
+  if (!spec) return <Skeleton page={!embedded} rows={5} />;
   const outs = spec.model.outputs;
   const v = spec.variables.find((q) => q.name === sweepVar);
   const c = chartColors(); // 디자인 토큰 색(테마가 바뀌면 다시 그릴 때 새 값)
   const grid = c.grid, txt = c.text;
 
   return (
-    <div className="page sim-page">
-      <div className="crumb">
-        {spec.project_id ? <Link to={`/projects/${spec.project_id}`}>{spec.project_name || "프로젝트"}</Link> : <span>공유받은 Simulator</span>}
-        <span> / Simulator</span>
-      </div>
-      <div className="sim-head">
-        <div className="grow"><h1>{spec.study_name} Simulator</h1>
-          <p className="page-sub">{spec.shared_by ? `${spec.shared_by}님이 공유${spec.note ? ` · ${spec.note}` : ""} · ` : ""}
-            해석 없이 설계변수를 바꿔 바로 예측합니다 · {spec.model.name} · 학습 {spec.model.n_train}건</p></div>
-        {modelId && <button onClick={() => setSharing(true)}><Share2 size={14} />공유</button>}
-      </div>
+    <div className={embedded ? "sim-page sim-embed" : "page sim-page"}>
+      {!embedded && <>
+        <div className="crumb">
+          <Link to="/simulators">Simulator</Link><span> / </span>
+          {spec.project_id ? <Link to={`/projects/${spec.project_id}`}>{spec.project_name || "프로젝트"}</Link> : <span>공유받은 Simulator</span>}
+        </div>
+        <div className="sim-head">
+          <div className="grow"><h1>{spec.study_name} Simulator</h1>
+            <p className="page-sub">{spec.shared_by ? `${spec.shared_by}님이 공유${spec.note ? ` · ${spec.note}` : ""} · ` : ""}
+              해석 없이 설계변수를 바꿔 바로 예측합니다 · v{spec.model.version} · 학습 {spec.model.n_train}건
+              {spec.current_model_id && spec.current_model_id !== spec.model.id ? " · 현재 배포된 버전이 아닙니다" : ""}</p></div>
+          {modelId && spec.current_model_id && <button onClick={() => setSharing(true)}><Share2 size={14} />공유</button>}
+        </div>
+      </>}
 
       {/* 왼쪽: 입력(설계변수)과 출력(예측값)을 붙여 둔다 · 오른쪽: 3D 형상·필드와 민감도 */}
       <div className="sim2">
@@ -148,13 +157,13 @@ function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
           </section>
         </div>
       </div>
-      {sharing && modelId && <ShareModal modelId={modelId} onClose={() => setSharing(false)} />}
+      {sharing && spec.current_model_id && <ShareModal modelId={spec.current_model_id} onClose={() => setSharing(false)} />}
     </div>
   );
 }
 
 /** 공유 링크 만들기·복사·중지 */
-function ShareModal({ modelId, onClose }: { modelId: number; onClose: () => void }) {
+export function ShareModal({ modelId, onClose }: { modelId: number; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [note, setNote] = useState("");
@@ -174,7 +183,7 @@ function ShareModal({ modelId, onClose }: { modelId: number; onClose: () => void
   });
   return (
     <Modal title="Simulator 공유" wide onClose={onClose}>
-      <p className="small muted" style={{ marginBottom: 12 }}>링크를 받은 사내 사용자는 로그인만 하면 프로젝트 멤버가 아니어도 이 Simulator로 예측할 수 있습니다. 프로젝트의 대화·데이터·모델 파일은 보이지 않습니다.</p>
+      <p className="small muted" style={{ marginBottom: 12 }}>링크를 받은 사내 사용자는 로그인만 하면 프로젝트 멤버가 아니어도 이 Simulator로 예측할 수 있습니다. 처음 열면 그 사람의 Simulator 목록에 들어옵니다. 링크는 항상 현재 버전을 보여 주고, 프로젝트의 대화·데이터·모델 파일은 보이지 않습니다.</p>
       <div className="row" style={{ marginBottom: 16 }}>
         <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="메모 (예: 설계팀 공유)" style={{ flex: 1 }} aria-label="공유 메모" />
         <select value={days} onChange={(e) => setDays(e.target.value)} style={{ width: "auto" }} aria-label="공유 기간">

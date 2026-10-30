@@ -252,9 +252,7 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
    | 출력 · Output | 청록 표시 | 이름 · 역할(목적·최소/최대, 제약 ≤ 값) · 설명(단위) · 값이 있는 완료 케이스 수(n/전체, 모자라면 주황) |
 
    - **[+ Output 추가]**는 입력창을 "'스터디' 스터디에 Output 추가: "로 채운다. 사용자가 이름을 적어 보낸다.
-3. **예측 모델 · Simulator**
-   - 최근 3개와 배포한 모델만 보인다. 모델마다 출력별 R² 칩(0.9 이상 초록, 0.7 이상 주황, 그 밖 빨강)과 학습 수를 둔다.
-   - 배포된 모델은 [Simulator 열기], 아니면 [배포 요청]이다.
+3. **학습 데이터**: 4-9-1절. 완료 케이스가 4건 이상일 때 보인다.
 4. **케이스 표**
    - 머리글은 두 줄이다(입력 묶음 주홍 / 출력 묶음 청록 + 항목 이름). 둘 다 고정된다.
    - 열: ID · 출처(DOE·최적화·능동학습·직접) · 상태 · 입력들 · 출력들 · HDF5 · 폴더 열기
@@ -262,14 +260,36 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
    - HDF5 칸: 서버에 있으면 크기 칩(눌러서 받기), PC에만 있으면 "PC · 크기"(위치는 툴팁), 오류면 빨강
    - 최적 행은 강조한다. 오류가 있으면 툴팁으로 보인다.
 
-### 3-7. Simulator (`/simulator/:mid`, 공유 `/s/:token`)
-- 설계변수 슬라이더로 예측 결과를 바로 본다(평균 ± 표준편차). [가운데로]는 모든 변수를 범위 가운데로 돌린다.
-- 예측값은 크게(`--fs-40`, 고정폭) 보인다. 값이 오래됐을 때만 흐려지고(`--dur-wait` 뒤), 늦게 온 옛 응답은 버린다.
-- 민감도: 한 변수만 바꿀 때의 변화 곡선. 주홍 점이
-- 형상·필드 모델이 있으면 3D 분포와 불확실도를 보인다.
-- 공유
-  - 링크를 만들 때 기간과 메모를 정한다. 복사와 중지가 있다.
-  - 공유받은 사람은 예측만 할 수 있다.
+### 3-7. Simulator
+**구조: Simulator는 스터디 하나이고, 모델은 그 버전이다.** 학습할 때마다 새 버전(v1, v2…)이 생기고, 현재 버전은 스터디마다 하나다.
+
+| 어디서 | 주소 | 누구를 위한 것 |
+|---|---|---|
+| **Simulator 탭**(캔버스) | 프로젝트 안 | 작업하는 사람. 대화와 결과를 그대로 둔 채 예측하고 버전을 관리한다 |
+| **Simulator 목록** | `/simulators`(사이드바) | 프로젝트에 들어가지 않고 바로 여는 사람. 내 것과 공유받은 것만 모은다 |
+| **넓은 화면** | `/simulator/:mid`, 공유 `/s/:token` | 패널 없이 크게 보거나, 프로젝트 멤버가 아닌 사람이 볼 때 |
+
+세 곳 모두 같은 화면(`SimulatorView`)을 쓴다.
+
+- **예측**
+  - 설계변수 슬라이더로 예측 결과를 바로 본다(평균 ± 표준편차). [가운데로]는 모든 변수를 범위 가운데로 돌린다.
+  - 예측값은 크게(`--fs-40`, 고정폭, 탭 안에서는 `--fs-28`) 보인다. 값이 오래됐을 때만 흐려지고(`--dur-wait` 뒤), 늦게 온 옛 응답은 버린다.
+  - 민감도: 한 변수만 바꿀 때의 변화 곡선. 주홍 점이 지금 설계다.
+  - 형상·필드 모델이 있으면 3D 분포와 불확실도를 보인다.
+  - 탭 안에서는 패널 폭이 820px보다 좁으면 한 줄로 쌓인다. 패널을 끌어 넓히면 두 줄이 된다.
+- **버전(탭의 'vN · 버전 N개'를 눌러 편다)**
+  - 표: 버전 · 출력별 R² 칩(0.9 이상 초록, 0.7 이상 주황, 그 밖 빨강) · 학습 수 · 만든 날.
+  - 줄을 누르면 그 버전을 미리 본다. 미리 보는 동안 위에 안내와 [현재 버전으로](옛 버전이면 [이 버전으로 되돌리기])가 나온다. 이 버튼은 이 한 곳에만 있다.
+  - 누르면 바로 적용된다. 다시 되돌릴 수 있는 일이라 확인을 묻지 않는다.
+  - 현재 버전에 묶인 3D 모델: 배포할 때의 3D를 버전에 묶고, 배포 중에 다시 학습한 3D는 현재 버전에 붙는다. 되돌리면 3D도 그때 것으로 돌아간다.
+- **공유**
+  - 링크를 만들 때 기간과 메모를 정한다. 복사와 중지가 있다. 어느 버전에서 만든 링크든 같은 Simulator의 링크로 함께 관리한다.
+  - **링크는 항상 현재 버전을 보여 준다.** 재학습·되돌리기를 해도 다시 보내지 않는다.
+  - 공유받은 사람은 예측만 할 수 있고, 프로젝트 이름·대화·데이터는 보이지 않는다.
+- **목록(`/simulators`)**
+  - **내 Simulator:** 내가 학습한 모델의 Simulator.
+  - **공유받은 Simulator:** 같은 프로젝트 멤버가 만든 것(프로젝트 이름과 함께), 링크로 받아 한 번 연 것(공유한 사람·메모와 함께). 같은 Simulator는 한 번만 보인다.
+  - 공유가 중지되거나 기간이 끝나면 지우지 않고 흐리게 이유를 보인다. 왜 사라졌는지 알 수 있게 한다. [X]로 내 목록에서만 뺀다. 링크를 다시 열면 돌아온다.
 
 ### 3-8. CAD·CAE 툴 (`/tools`)
 - 툴 29종을 분야별 앱 아이콘으로 보인다. 상태는 셋이다: 바로 사용 · 일부만 찾음 · 찾지 못함(흐리게).
@@ -439,7 +459,8 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 | **reports** | title, body(markdown + artifact embed), flow_id, created_by | 판이 쌓인다 |
 | studies | variables, objectives, constraints, **outputs**, adapter, adapter_config | |
 | cases | params, results, status, source, run_dir, run_by, images, fields, **archive**, error | archive는 case.h5 정보 |
-| surrogate_models · field_models | outputs, metrics, n_train, deployed / field, n_nodes, shape_varies | |
+| surrogate_models · field_models | outputs, metrics, n_train, deployed(현재 버전, 스터디마다 하나), version, created_by, deployed_at, field_models / field, n_nodes, shape_varies | |
+| share_access | share_id, user_id, hidden, last_opened | 링크를 연 사람의 공유받은 목록 |
 | training_datasets | spec, status, pending, excluded, n_samples, splits, targets, inputs, inputs_dropped, units_known, same_mesh, manifest_path | 샘플 정보는 `cases.train_samples` |
 | share_links | token, model_id, expires_at, enabled, uses | |
 | agent_releases · agent_instances | 버전·파일 / 연결 PC·버전·상태 | |
@@ -460,7 +481,7 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 | 스터디 | `GET·POST /api/projects/{p}/studies` · `GET /api/studies/{s}`(counts·best·running·extracting) · `…/cases` · `…/doe` · `…/run` · `…/train` · `…/suggest` · `…/outputs` · `…/train_field` · `…/field-models` |
 | 케이스 데이터 | `POST /api/cases/{c}/fields` · `POST·GET /api/cases/{c}/archive` · `GET …/archive/file` · `POST /api/cases/{c}/train_sample?spec_hash=` |
 | 학습 데이터 | `POST·GET /api/studies/{s}/datasets` · `GET /api/datasets/{d}` · `GET /api/datasets/{d}/manifest` |
-| 모델·Simulator | `GET /api/projects/{p}/models` · `GET /api/models/{m}/spec` · `POST …/deploy·predict·predict_batch` · 공유 `/api/models/{m}/shares`, `/api/shares/{t}/…` · 필드 `/api/field-models/{f}/mesh·predict` |
+| 모델·Simulator | `GET /api/projects/{p}/models` · `GET /api/models/{m}/spec`(versions·current_model_id) · `POST …/deploy`(현재 버전 지정·되돌리기) · `…/predict·predict_batch` · 공유 `/api/models/{m}/shares`, `/api/shares/{t}/…` · 필드 `/api/field-models/{f}/mesh·predict`, `GET /api/studies/{s}/field-models?model_id=` · 목록 `GET /api/simulators`, `DELETE /api/simulators/shared/{share}` |
 | PC Agent | `/api/agent/status·diagnose·install·tools…` · `/api/projects/{p}/local/folder·tree·open` · 배포 `/api/releases…` · `/api/instances…` · `/api/setup.exe`·`/api/install.ps1` |
 
 실시간 이벤트(브라우저 `/ws`)

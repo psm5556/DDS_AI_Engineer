@@ -979,3 +979,37 @@ td.r { font-family: var(--font-mono); font-size: var(--fs-12); }
 .status-cell .st.pulse i { animation: dot-breathe var(--dur-pulse) ease-in-out infinite; }
 @keyframes dot-breathe { 50% { opacity: .3; } }
 .report-cover + .md > h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+/* ---------- Simulator 탭: 패널 안에서 바로 예측한다. 패널 폭에 맞춰 한 줄/두 줄로 바뀐다 ---------- */
+.sim-tab { display: flex; flex-direction: column; gap: var(--sp-3); }
+.sim-tab-head { display: flex; align-items: center; gap: var(--sp-2); }
+.sim-ver-toggle { display: inline-flex; align-items: center; gap: var(--sp-2); height: var(--ctl-s); padding: 0 var(--sp-2) 0 var(--sp-1); border: none; background: transparent; }
+.sim-ver-toggle:hover { background: var(--hover); }
+.sim-ver-toggle b { font-family: var(--font-mono); font-size: var(--fs-14); font-weight: 600; }
+.sim-versions tbody tr { cursor: pointer; }
+.sim-versions tbody tr.on td { background: var(--brand-soft); }
+.sim-versions td .chip { margin-left: var(--sp-1); }
+.sim-versions td b { font-family: var(--font-mono); font-weight: 600; }
+.sim-versions .model-r2 { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.sim-preview { display: flex; align-items: center; gap: var(--sp-3); }
+.sim-embed { max-width: none; }
+.sim-embed .sim2 { margin-top: 0; }
+.sim-embed .sim-out b { font-size: var(--fs-28); }
+@container (max-width: 820px) {
+  .sim-embed .sim2 { grid-template-columns: minmax(0, 1fr); }
+  .sim-embed .sim-side { position: static; }
+  .sim-embed .sim-main .field3d-body { height: 360px; }
+  .sim-embed .sim-plots { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------- Simulator 목록 ---------- */
+.sims-page .sims-sec { margin-top: var(--sp-6); }
+.sims-page .home-sec { margin-bottom: var(--sp-2); }
+.sim-row { display: flex; align-items: center; gap: var(--sp-2); }
+.sim-row > .recent-row { flex: 1; min-width: 0; padding-block: var(--sp-2); }
+.sim-row > .recent-row .small { word-spacing: normal; }
+.sim-row.off .recent-row b { color: var(--ink-3); }
+.sim-row .recent-row b small.sim-row-meta { display: block; margin-top: 2px; font-size: var(--fs-12); font-weight: 400; color: var(--ink-3); }
+.recent-row .small.sim-row-out { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font); }
+a.side-nav { color: inherit; text-decoration: none; }
+a.side-nav.active { background: var(--active); color: var(--ink); }

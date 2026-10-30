@@ -4,9 +4,11 @@ from __future__ import annotations
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from cae_adapters import get_adapter
@@ -411,6 +413,9 @@ def train_field(db: Session, study: models.Study, field: str, flow_id=None, node
     path = settings.data_dir / "models" / f"field_{fm.id}.joblib"
     rom.save(path)
     fm.path = str(path)
+    live = current_model(db, study.id)
+    if live is not None:  # 배포 중에 다시 학습한 3D는 현재 버전에 붙인다
+        live.field_models = {**(live.field_models or {}), field: fm.id}
     db.commit()
     i = rom.info
     publish_artifact(db, study.project_id, "markdown", f"[{study.name}] {field} 형상·필드 모델",
@@ -448,7 +453,8 @@ def _model_path(model_id: int) -> Path:
     return settings.data_dir / "models" / f"model_{model_id}.joblib"
 
 
-def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=None, node_id=None) -> models.SurrogateModel:
+def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=None, node_id=None,
+          created_by: int | None = None) -> models.SurrogateModel:
     _remember(study.id, flow_id, node_id)
     outputs = outputs or [o["name"] for o in study.objectives]
     done = [c for c in _complete_cases(study) if all(o in c.results for o in outputs)]
@@ -463,8 +469,9 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
     sur.bounds = ([v["lower"] for v in study.variables], [v["upper"] for v in study.variables])
     cv = sur.fit(X, Y)
 
-    m = models.SurrogateModel(study_id=study.id, name=f"{study.name} GP #{len(done)}", algo="gp",
-                              outputs=outputs, n_train=len(done), path="")
+    last = db.query(func.max(models.SurrogateModel.version)).filter_by(study_id=study.id).scalar() or 0
+    m = models.SurrogateModel(study_id=study.id, name=f"{study.name} GP #{len(done)}", algo="gp", outputs=outputs,
+                              n_train=len(done), path="", version=last + 1, created_by=created_by)
     db.add(m)
     db.flush()
     path = _model_path(m.id)
@@ -488,6 +495,40 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
 
 def load_surrogate(m: models.SurrogateModel) -> Surrogate:
     return Surrogate.load(m.path)
+
+
+# ---------- Simulator 버전 ----------
+# Simulator는 스터디 하나이고, 모델은 그 버전이다. 현재 버전은 스터디마다 하나(deployed)이며 공유 링크는 현재 버전을 따라간다.
+def current_model(db: Session, study_id: int) -> models.SurrogateModel | None:
+    return (db.query(models.SurrogateModel).filter_by(study_id=study_id, deployed=True)
+            .order_by(models.SurrogateModel.id.desc()).first())
+
+
+def _latest_field_models(db: Session, study_id: int) -> dict[str, models.FieldModel]:
+    latest: dict[str, models.FieldModel] = {}
+    for fm in db.query(models.FieldModel).filter_by(study_id=study_id).order_by(models.FieldModel.id.desc()):
+        latest.setdefault(fm.field, fm)
+    return latest
+
+
+def field_models_for(db: Session, study_id: int, model: models.SurrogateModel | None) -> list[models.FieldModel]:
+    """이 버전이 쓰는 3D 모델(필드마다 하나). 버전에 묶인 것이 없는 필드는 최신을 쓴다."""
+    out = _latest_field_models(db, study_id)
+    for field, fid in ((model.field_models if model else None) or {}).items():
+        fm = db.get(models.FieldModel, fid)
+        if fm is not None and fm.study_id == study_id:
+            out[field] = fm
+    return sorted(out.values(), key=lambda f: f.id, reverse=True)
+
+
+def deploy_version(db: Session, m: models.SurrogateModel) -> models.SurrogateModel:
+    """이 버전을 현재 버전으로 둔다. 처음 배포할 때 그때의 3D 모델을 묶어, 되돌려도 예측값과 3D가 어긋나지 않게 한다."""
+    db.query(models.SurrogateModel).filter(models.SurrogateModel.study_id == m.study_id, models.SurrogateModel.id != m.id).update({"deployed": False})
+    m.deployed = True
+    m.deployed_at = datetime.now()
+    m.field_models = {**{f: fm.id for f, fm in _latest_field_models(db, m.study_id).items()}, **(m.field_models or {})}
+    db.commit()
+    return m
 
 
 # ---------- 제안 (BO / 능동학습) ----------

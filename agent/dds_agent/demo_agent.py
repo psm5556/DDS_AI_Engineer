@@ -382,7 +382,7 @@ class DemoAgent:
             r = await s.tool("dds-study", "add_outputs", {"study_id": s.study_id,
                                                           "outputs": [{"name": "floor_force", "note": "바닥 전달력 [N]"}]})
             await s.say(f"Output에 바닥 전달력(floor_force)을 추가했습니다. 이미 해석한 {r['extracted']['floor_force']}건에서 뽑았고, "
-                        "이후 케이스도 해석할 때 함께 뽑습니다. '데이터·모델' 탭에서 볼 수 있습니다.")
+                        "이후 케이스도 해석할 때 함께 뽑습니다. '데이터' 탭에서 볼 수 있습니다.")
             return
         if "보고서" in body:
             await (self._washer_report(s) if s.mode == "washer" else self._generic_report(s))

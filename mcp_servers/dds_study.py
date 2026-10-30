@@ -198,7 +198,8 @@ def build_dataset(study_id: int, targets: list[str] | None = None, frames: str |
 
 @mcp.tool()
 def deploy_model(model_id: int) -> dict:
-    """Surrogate 모델을 예측 Simulator로 배포한다. 웹앱 Simulator 화면에서 슬라이더로 바로 예측할 수 있다."""
+    """모델을 그 스터디 Simulator의 현재 버전으로 배포한다. 웹앱 Simulator 탭에서 슬라이더로 바로 예측할 수 있다.
+    학습할 때마다 새 버전(v1, v2…)이 생긴다. 옛 버전의 model_id를 주면 되돌리기다. 공유 링크는 다시 보내지 않아도 현재 버전을 따라간다."""
     m = api.post(f"/api/models/{model_id}/deploy")
     return {"model_id": m["id"], "deployed": m["deployed"], "simulator_path": f"/simulator/{m['id']}"}
 

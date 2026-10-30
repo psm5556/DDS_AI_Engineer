@@ -10,6 +10,7 @@ import LoginPage from "./pages/LoginPage";
 import SettingsPage from "./pages/SettingsPage";
 import ToolsPage from "./pages/ToolsPage";
 import SimulatorPage, { SharedSimulatorPage } from "./pages/SimulatorPage";
+import SimulatorsPage from "./pages/SimulatorsPage";
 import WorkspacePage from "./pages/WorkspacePage";
 
 /** 주소가 바뀌면 오류 상태를 초기화한다 */
@@ -48,6 +49,7 @@ export default function App() {
       <Route path="/projects/:pid/new" element={protect(<WorkspacePage />)} />
       <Route path="/projects/:pid/c/:sid" element={protect(<WorkspacePage />)} />
       <Route path="/projects/:pid/*" element={<Navigate to=".." replace />} />
+      <Route path="/simulators" element={protect(<SimulatorsPage />)} />
       <Route path="/simulator/:mid" element={protect(<SimulatorPage />)} />
       <Route path="/s/:token" element={protect(<SharedSimulatorPage />)} />
       <Route path="/settings" element={protect(<SettingsPage />)} />

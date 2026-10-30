@@ -63,6 +63,7 @@ export interface StudyStatus { study: Study; counts: Record<string, number>; bes
 export interface SurrogateModel {
   id: number; study_id: number; name: string; algo: string; outputs: string[];
   metrics: Record<string, { r2: number; rmse: number }>; n_train: number; deployed: boolean; created_at: string;
+  version: number | null; deployed_at: string | null;
 }
 
 export interface AgentRelease { id: number; version: string; filename: string; sha256: string; size: number; notes: string; is_latest: boolean; created_at: string }

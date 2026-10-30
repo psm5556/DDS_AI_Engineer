@@ -176,8 +176,12 @@ class SurrogateModel(Base):
     metrics = Column(JSON, default=dict)  # {output: {r2, rmse}}
     n_train = Column(Integer, default=0)
     path = Column(String(500), nullable=False)
-    deployed = Column(Boolean, default=False, nullable=False)
+    deployed = Column(Boolean, default=False, nullable=False)  # 이 스터디 Simulator의 현재 버전(스터디마다 하나)
     best_score = Column(Float)
+    version = Column(Integer)  # 스터디 안에서 1, 2, 3…
+    created_by = Column(Integer, ForeignKey("users.id"))
+    deployed_at = Column(DateTime)
+    field_models = Column(JSON)  # 이 버전의 3D 모델 {필드: 모델 id}. 되돌리면 3D도 그때 것으로 돌아간다
     created_at = Column(DateTime, default=_now, nullable=False)
 
 
@@ -221,6 +225,16 @@ class ShareLink(Base):
     enabled = Column(Boolean, default=True, nullable=False)
     uses = Column(Integer, default=0, nullable=False)
     expires_at = Column(DateTime)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class ShareAccess(Base):
+    """공유 링크를 연 사람. 링크를 처음 열면 그 사람의 '공유받은 Simulator' 목록에 들어간다(주소를 따로 보관하지 않아도 되게)."""
+    __tablename__ = "share_access"
+    share_id = Column(Integer, ForeignKey("share_links.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    hidden = Column(Boolean, default=False, nullable=False)  # 받은 사람이 목록에서 뺐다. 링크를 다시 열면 돌아온다
+    last_opened = Column(DateTime, default=_now, nullable=False)
     created_at = Column(DateTime, default=_now, nullable=False)
 
 

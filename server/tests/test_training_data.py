@@ -193,6 +193,31 @@ def test_pc_sample_reply_completes_dataset(client, tmp_path):  # noqa: F811
         registry.conns.pop(me["id"], None)
 
 
+def test_reconcile_does_not_exclude_case_finished_meanwhile(client):  # noqa: F811
+    """조회가 데이터셋을 읽은 뒤 샘플이 끝나면, 낡은 목록으로 '연결이 끊긴 케이스'로 잘못 빼면 안 된다(간헐적으로 12건 중 10건만 남았다)."""
+    from server.app import models
+    from server.app.database import SessionLocal
+    from server.app.study import dataset as ds
+
+    admin, me = _auth(client, "admin")
+    pid = client.post("/api/projects", json={"name": "낡은 목록"}, headers=admin).json()["id"]
+    sid = client.post(f"/api/projects/{pid}/studies", headers=admin, json={"name": "낡은 목록", "adapter": "mock", "variables": [], "objectives": []}).json()["id"]
+    with SessionLocal() as db:
+        row = models.TrainingDataset(study_id=sid, name="x", spec={}, status="building", pending=[999999], excluded=[], created_by=me["id"])
+        db.add(row)
+        db.commit()
+        ds_id = row.id
+    with SessionLocal() as request_db:
+        stale = request_db.get(models.TrainingDataset, ds_id)
+        assert stale.pending == [999999]  # 이 요청이 읽은 값
+        with SessionLocal() as worker_db:  # 그 사이 작업 스레드가 샘플을 끝냈다
+            worker_db.get(models.TrainingDataset, ds_id).pending = []
+            worker_db.commit()
+        ds.reconcile(request_db, stale)
+    d = _ready(client, ds_id, admin)
+    assert all(x["case_id"] != 999999 for x in d["excluded"]), d["excluded"]
+
+
 def test_field_training_reports_excluded_cases(client):  # noqa: F811
     """큰 case.h5가 PC에만 있으면 형상·필드 학습에서 빠지는데, 이제 몇 건이 왜 빠졌는지 남긴다."""
     admin, _ = _auth(client, "admin")

@@ -141,6 +141,9 @@ def reconcile(db: Session, ds: models.TrainingDataset):
     from ..agent.link import registry
 
     with _lock:
+        db.refresh(ds)  # 잠금 전에 읽은 값은 낡았을 수 있다. 그 사이 끝난 케이스를 끊긴 것으로 보면 안 된다
+        if ds.status != "building":
+            return
         lost = []
         for cid in ds.pending or []:
             if (ds.id, cid) in _building:

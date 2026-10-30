@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  ChevronsUpDown, Loader2, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Settings, Shield, SquarePen, Sun, Users, Wrench, X,
+  ChevronsUpDown, Loader2, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Settings, Shield, SlidersHorizontal, SquarePen, Sun, Users, Wrench, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -54,6 +54,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
       <aside className="sidebar rail" aria-label="사이드바 (접힘)">
         <button className="icon-btn rail-btn" onClick={layout.toggle} aria-label="사이드바 펼치기" title="사이드바 펼치기 (Ctrl+B)"><PanelLeftOpen size={18} /></button>
         <Link className="icon-btn rail-btn" to="/" aria-label="새 프로젝트" title="새 프로젝트"><SquarePen size={18} /></Link>
+        <Link className="icon-btn rail-btn" to="/simulators" aria-label="Simulator" title="Simulator"><SlidersHorizontal size={18} /></Link>
         <span className="grow" />
         <AgentStatusRow compact />
         <Link className="icon-btn rail-btn" to="/tools" aria-label="CAD·CAE 툴" title="CAD·CAE 툴"><Wrench size={18} /></Link>
@@ -107,6 +108,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         </div>
         <nav className="side-nav-list" aria-label="바로 가기">
           <button className="side-nav" onClick={() => nav("/")}><SquarePen size={16} />새 프로젝트</button>
+          <NavLink className="side-nav" to="/simulators" title="내 Simulator와 공유받은 Simulator"><SlidersHorizontal size={16} />Simulator</NavLink>
           <label className="side-nav side-find">
             <Search size={16} />
             <input type="search" placeholder="프로젝트 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="프로젝트 검색" />

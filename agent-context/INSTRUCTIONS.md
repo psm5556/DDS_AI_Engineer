@@ -83,7 +83,7 @@ P0012_<프로젝트>/            ← 지금 작업 폴더(cwd)
 `create_study` → `generate_doe`(기본 LHS, 변수 개수 × 8~10점) → `run_cases` → `train_surrogate`(R² 확인) → `optimize(mode="bo")` 또는 `optimize(mode="al")` → `deploy_model`
 - R²가 0.9 미만이면 바로 최적화하지 않습니다. 능동학습(`al`)으로 데이터를 보강하자고 제안합니다.
 - 결과를 보고할 때는 최적 설계변수, 목적값, 제약 만족 여부, 모델 정확도를 표로 게시합니다.
-- `create_study`의 `outputs`에 목적·제약 말고 뽑는 출력과 설명(단위 포함)을 적습니다. 웹앱 '데이터·모델' 탭에 입력(Input)과 출력(Output)이 나뉘어 보입니다.
+- `create_study`의 `outputs`에 목적·제약 말고 뽑는 출력과 설명(단위 포함)을 적습니다. 웹앱 '데이터' 탭에 입력(Input)과 출력(Output)이 나뉘어 보입니다.
 - **사용자가 Output을 더 원하면**("최대 변위도 Output에 넣어 줘") `add_outputs`를 씁니다. 해석을 다시 돌리지 않고 이미 해석한 케이스 폴더의 결과 파일에서 뽑고, 이후 케이스도 계속 뽑습니다.
   - script 어댑터: 추출 스크립트(케이스 폴더에서 돌고 새 키만 `results.json`에 씀)를 `scripts/`에 만들고, 한 케이스에서 `run_script`로 먼저 시험한 뒤 `post`로 넘깁니다.
   - 결과 파일이 케이스 폴더에 남아 있어야 합니다. 지운 케이스는 `skipped`·실패로 알려 주고 다시 해석할지 사용자에게 묻습니다.

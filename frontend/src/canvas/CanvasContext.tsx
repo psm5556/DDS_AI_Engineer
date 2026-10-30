@@ -25,6 +25,9 @@ interface Ctx {
   /** 'AI 보고서 작성'을 누른 때(시각, 그때 최신 판 id) — 새 판이 오거나 에이전트 차례가 끝날 때까지 '작성 중'을 보여 준다 */
   reportAsk: ReportAsk | null;
   setReportAsk: (v: ReportAsk | null) => void;
+  /** 데이터·Simulator 탭이 함께 보는 스터디(탭을 옮겨도 같은 스터디) */
+  studyId: number | null;
+  setStudyId: (id: number | null) => void;
 }
 const CanvasCtx = createContext<Ctx | null>(null);
 
@@ -35,6 +38,7 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
   const [follow, setFollow] = useState(true);
   const [openRequest, setOpenRequest] = useState(0);
   const [reportAsk, setReportAsk] = useState<ReportAsk | null>(null);
+  const [studyId, setStudyId] = useState<number | null>(null);
   const manualAt = useRef(0);
 
   const setTab = useCallback((t: CanvasTab) => { manualAt.current = Date.now(); setTabState(t); }, []);
@@ -53,8 +57,8 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
   }, [follow]);
 
   const value = useMemo(() => ({
-    tab, setTab, flowId, setFlowId, focus, showArtifact, showFlow, follow, setFollow, autoShow, openRequest, reportAsk, setReportAsk,
-  }), [tab, setTab, flowId, focus, showArtifact, showFlow, follow, autoShow, openRequest, reportAsk]);
+    tab, setTab, flowId, setFlowId, focus, showArtifact, showFlow, follow, setFollow, autoShow, openRequest, reportAsk, setReportAsk, studyId, setStudyId,
+  }), [tab, setTab, flowId, focus, showArtifact, showFlow, follow, autoShow, openRequest, reportAsk, studyId]);
   return <CanvasCtx.Provider value={value}>{children}</CanvasCtx.Provider>;
 }
 

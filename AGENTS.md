@@ -113,7 +113,8 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 실제 툴에서 스킬 고치기 | `docs/onsite-validation.md` 순서대로. 고친 곳의 `TODO(사내검증)` 표시를 지운다 |
 | MCP 툴 추가 | `mcp_servers/dds_*.py`(FastMCP 데코레이터) → 서버 API(필요 시) → `agent-context/INSTRUCTIONS.md`에 사용법 |
 | 대화 흐름(승인·권한·결과 카드) | `frontend/src/chat/ChatView.tsx` · 서버 `server/app/agent/hub.py` |
-| 오른쪽 패널 탭 | `frontend/src/canvas/CanvasPanel.tsx` · `views.tsx`(작업 흐름: 흐름도 고정 + 'N단계' 결과 스크롤 · 데이터·모델: 입력/출력) · `ReportView.tsx`(보고서) · 단계 번호 `frontend/src/flow/order.ts` |
+| 오른쪽 패널 탭 | `frontend/src/canvas/CanvasPanel.tsx` · `views.tsx`(작업 흐름: 흐름도 고정 + 'N단계' 결과 스크롤 · 데이터: 입력/출력·학습 데이터·케이스) · `ReportView.tsx`(보고서) · `SimulatorTab.tsx`(Simulator·모델 버전) · 단계 번호 `frontend/src/flow/order.ts` |
+| Simulator | 화면 `frontend/src/pages/SimulatorPage.tsx`(`SimulatorView`를 탭과 넓은 화면이 함께 쓴다) · 목록 `SimulatorsPage.tsx` · 버전·3D 묶기 `server/app/study/service.py` `deploy_version`·`field_models_for` · 목록·공유 `server/app/routers/studies.py` · 규칙 `docs/product-spec.md` 3-7절 |
 | DOE·학습·최적화 로직 | `server/app/study/*` + `server/tests` |
 | 보고서 | AI가 새로 쓰는 보고서: 자료·저장 `server/app/routers/reports.py`, Word·HTML `server/app/report.py`, 쓰는 규칙 `agent-context/INSTRUCTIONS.md` 1-0절·`mcp_servers/dds_flow.py` `write_report` |
 | 해석 데이터 저장(HDF5) | `cae_adapters/h5store.py`(case.h5 쓰기·읽기·묶기·검증) → PC Agent `executor._archive` → 서버 `/api/cases/{id}/archive` · 규약 `docs/cae-data-hdf5.md` · 툴별 전체 추출 `dyna_to_h5.py`·`op2_to_h5.py`·`abq_odb_to_npz.py` |

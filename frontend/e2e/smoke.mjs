@@ -93,15 +93,27 @@ await step("프로젝트", async () => {
     await step(`탭 ${t}`, async () => { await page.getByRole("tab", { name: t }).first().click({ timeout: 5000 }); await shot(`tab-${t}`); });
   }
   await step("대화 전환 메뉴", async () => { await page.locator(".ws-conv .ws-crumb").click(); await shot("conv-menu"); await page.keyboard.press("Escape"); });
-  await step("Simulator", async () => {
-    await page.getByRole("tab", { name: "데이터" }).click();
-    const sim = page.getByRole("link", { name: /Simulator 열기/ }).first();
-    if (!(await sim.count())) { console.log("  (배포된 Simulator 없음 — 건너뜀)"); return; }
-    await sim.click();
-    await page.waitForURL(/\/simulator\//);
-    await page.waitForTimeout(3500);
-    await shot("simulator");
+  await step("Simulator 탭", async () => {
+    await page.getByRole("tab", { name: "Simulator" }).click();
+    await page.waitForTimeout(3000);
+    await shot("tab-simulator");
+    // 탭을 열어도 대화가 그대로 있어야 한다
+    if (!(await page.locator(".canvas").count()) || !(await page.locator(".ws-conv").count())) throw new Error("Simulator 탭에서 대화나 패널이 사라졌습니다");
+    const toggle = page.locator(".sim-ver-toggle");
+    if (await toggle.count()) { await toggle.click(); await page.waitForTimeout(300); await shot("tab-simulator-versions"); }
   });
+});
+
+await step("Simulator 목록", async () => {
+  await page.goto(BASE + "/simulators");
+  await page.waitForTimeout(1200);
+  await shot("simulators");
+  const row = page.locator(".sim-row a.recent-row").first();
+  if (!(await row.count())) { console.log("  (배포된 Simulator 없음 — 건너뜀)"); return; }
+  await row.click();
+  await page.waitForURL(/\/(simulator|s)\//);
+  await page.waitForTimeout(3500);
+  await shot("simulator");
 });
 
 await step("설정", async () => { await page.goto(BASE + "/settings"); await page.waitForTimeout(1500); await shot("settings"); });
