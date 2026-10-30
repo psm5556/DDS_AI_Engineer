@@ -3,11 +3,11 @@
 작성: 2026-10-30. 상태: **계획. 코드는 아직 바꾸지 않았다.**
 
 ## 1. 결론
-- **데이터:** `case.h5`는 손실 없는 보관본으로 그대로 두고, 케이스마다 학습 전용 HDF5 `train.h5`를 따로 만든다. 큰 모델도 서버로 올릴 수 있게 하는 핵심이다.
+- **데이터:** `case.h5`는 손실 없는 보관본으로 두되 재료·경계조건·하중을 더한다(스키마 v2). 케이스마다 학습 전용 HDF5 `train.h5`를 따로 만든다. 큰 모델도 서버로 올릴 수 있게 하는 핵심이다.
 - **방법:** 기존 PCA+GP를 유지하고, GeoTransolver를 더한다. PCA+GP는 설계변수가 같고 메쉬 구조가 같은 경우에 쓰고, GeoTransolver는 메쉬가 달라지거나 처음 보는 형상에 쓴다.
 - **판정:** 같은 시험 케이스에서 신경망이 PCA+GP를 이기지 못하면 배포하지 않는다.
 - **GPU:** GPU 3개로 앙상블 학습(한 GPU에 모델 하나), 나머지 1개로 예측을 맡는다. 4개를 묶어도 메모리가 합쳐지지는 않는다.
-- **PhysicsNeMo:** 쓴다. 다만 웹 서버와 같은 파이썬 환경에는 넣을 수 없다(3절). Linux 컨테이너의 별도 학습 작업자로 돌린다.
+- **PhysicsNeMo:** GeoTransolver 학습에 쓴다. PCA+GP는 PhysicsNeMo 없이 지금 서버에서 돈다. 웹 서버와 같은 파이썬 환경에는 넣을 수 없어(3절) Linux 컨테이너의 별도 학습 작업자로 돌리고, 학습기는 규약으로 분리해 바꿀 수 있게 한다(6절).
 - **가장 큰 위험:** GPU가 아니라 **해석 케이스 수와 하중·경계조건 정보**다(8절).
 
 ## 2. "형상 학습"으로 풀 문제
@@ -49,7 +49,7 @@
 | 4 | `h5store.py:249` | 파트 이름 기본값이 필드 이름이라 필드마다 메쉬를 따로 저장하고, 필드끼리 노드가 맞는다는 보장이 없다 | 샘플에서 메쉬 하나로 합치고 검사한다 |
 | 5 | `fieldmodel.py:153` | 요소·적분점 값을 받지 못한다 | 생성기에서 노드로 평균한다 |
 | 6 | 스키마 `unit`, 필드 이름 | 툴마다 이름(`node_displacement` 등)과 단위계가 달라 스터디를 섞을 수 없다 | 표준 이름표와 단위 환산(mm·MPa) |
-| 7 | 스키마 전체 | **하중·경계조건·재료가 구조화되어 있지 않다.** 입력 덱 원문으로만 들어간다 | 처음에는 데이터셋 하나 = 하중 조건 하나, 스칼라는 `conditions`로. 노드별 표시는 6단계 |
+| 7 | 스키마 전체, `h5store.py:316` | **하중·경계조건·재료가 구조화되어 있지 않다.** 입력 덱 원문으로만 들어가고, 5 MB가 넘는 덱은 그마저 PC에만 남는다 | `case.h5` 스키마 v2로 저장하고 툴별 추출기를 만든다(5절). 시범 학습은 데이터셋 하나 = 하중 조건 하나로 한다 |
 | 8 | `studies.py:347`, `service.py:393` | 학습이 HTTP 요청 안에서 끝난다. 진행률·취소·재시작 복구가 없다 | 작업 대기열과 별도 작업자 |
 | 9 | `studies.py:365`, `models.py:247` | 예측 모델이 서버 프로세스에 joblib으로 올라가고, 모델 종류 구분이 없다 | `kind` 컬럼 추가, 신경망은 예측 작업자로 넘긴다 |
 
@@ -62,6 +62,38 @@
       data/training/datasets/<id>/manifest.json  (샘플·sha256·분할·통계, 만들면 고치지 않는다)
 ```
 
+**`case.h5` 스키마 v2 (v1에 `+` 부분을 더한다)**
+```
+case.h5
+├── meta/                      설계변수 · 결과 스칼라
+│   └── + units                길이 · 힘 · 응력 · 시간 단위
+├── mesh/<part>/               nodes · elements/<형식> · surface
+│   ├── + element_material/<형식>   (M,)  요소별 재료 번호
+│   └── + thickness            쉘 두께
+├── + materials/<id>           재료 모델 이름 · E · ν · 밀도 · 물성표(소성·고무 등)
+├── + boundary/<step>/<part>/  fixed_mask (N,3) · prescribed_u (N,3)
+├── + loads/<step>/
+│   ├── <part>/nodal_force     (N,3)
+│   ├── <part>/pressure        면 목록 + 값
+│   └── body                   중력 · 회전 속도 · 축
+├── steps/<step>/              time · fields/<이름>
+├── history/ · files/ · manifest
+```
+- 재료·경계조건·하중마다 추출 상태를 manifest에 적는다: `ok`(추출함) · `none`(해당 조건 없음) · `not_extracted`(추출 못 함). 빈칸으로 두면 "고정 조건 없음"과 구분되지 않는다.
+- v1 파일은 그대로 읽고, 세 항목을 `not_extracted`로 본다.
+- 정보원은 입력 덱(`.inp`, `.k`, `.bdf` 등)이다. 해석이 끝난 뒤에는 원본이 지워질 수 있으므로 묶을 때 함께 추출한다.
+
+**검토했지만 쓰지 않는 구조** (2026-10-30, 외부 AI 제안 `Geometry·Material·BoundaryConditions·Loads·Results·Metadata`). 재료·경계조건·하중을 구조화한다는 생각과 단위 표기만 가져왔다.
+| 제안 | 쓰지 않는 이유 |
+|---|---|
+| `Connectivity (E,K)` 하나 | 요소 형식이 섞이면 K가 달라진다. 파트·형식별 저장 유지 |
+| `Stress (T,E,IP,6)` | 형식마다 적분점 수가 다르고 쉘은 두께 방향 점도 있다. 행마다 요소·적분점 번호를 붙이는 방식 유지 |
+| `Results/` 한 묶음 | 정적 + 모드처럼 스텝이 여러 개면 시간의 뜻이 섞인다. `/steps/<step>/` 유지 |
+| `NodeMaterialId` | 재료는 요소에 속한다. 파트 경계 노드는 재료가 두 개일 수 있다 |
+| `YoungModulus`·`PoissonRatio`만 | 밀도가 없어 모드·동해석에 부족하고, 소성·고무 재료를 담지 못한다 |
+| 스텝 구분 없는 `Force`·`FixedMask`, 칸 없는 체적력 | 스텝별 하중, 면 압력, 드럼 회전의 원심력을 담지 못한다 |
+| 설계변수·이력·파일 목록 없음 | DOE와 연결되지 않고 "빠짐없이 저장"을 확인할 수 없다 |
+
 **`train.h5` (스키마 `dds-train-h5` v1, 케이스 하나 = 샘플 하나)**
 ```
 /                     attrs: format, schema, case_id, study_id, project_uid, tool, source_sha256, length_unit, stress_unit
@@ -69,10 +101,13 @@
 /geometry/surface     (T,3) int32    3D 보기용
 /geometry/normals     (N,3) float32  표면 법선
 /geometry/edges       (E,2) int32    MeshGraphNet을 쓸 때만
-/geometry/node_attrs/<이름>  (N,)    두께·파트 번호·재료 번호
-/conditions           attrs: params.<변수>, global.<하중·재료 스칼라>
+/geometry/node_attrs/<이름>  (N,)    두께·파트 번호·재료 번호(요소 값을 노드로 옮긴 것)
+/inputs/fixed_mask    (N,3) uint8    고정 표시
+/inputs/prescribed_u  (N,3) float32  강제 변위
+/inputs/nodal_load    (N,3) float32  절점 하중 + 압력을 노드로 옮긴 값
+/conditions           attrs: params.<변수>, global.<중력·회전 속도·재료 스칼라>, extraction(항목별 추출 상태)
 /targets/time         (F,)
-/targets/<표준 이름>   (F,N,C) float32  attrs: unit, components, source_field
+/targets/<표준 이름>   (F,N,C) float32  노드 기준. attrs: unit, components, source_field
 /qc                   attrs: 노드 수, 필드별 최소·최대, NaN 수, 검사 결과
 ```
 
@@ -96,6 +131,8 @@
 - 프레임 고르기: 정적 해석은 마지막, 시간 해석은 등간격 N개.
 - 고유모드: 부호와 순서가 케이스마다 뒤집히므로 MAC로 맞춘 뒤 학습한다.
 - 응력: `log1p` 변환(낙하 시험 예제와 같음). 응력 집중부 오차에 가중치를 둔다.
+- 적분점 응력은 `case.h5`에 보관하고, `train.h5`에는 노드 평균값을 넣는다. 100만 요소 × 8점이면 float32 무압축으로 프레임당 192 MB이고, 모델 출력은 노드 기준이다.
+- 추출 상태가 `not_extracted`인 입력은 학습에서 빼고, 어떤 입력을 썼는지 모델 정보에 남긴다.
 - 분할: **케이스 단위로 나눈다.** 같은 케이스의 프레임이 학습과 시험에 나뉘면 안 된다. 설계 공간 가장자리 케이스도 시험에 일부 남긴다.
 - 통계(평균·표준편차)는 학습 분할에서만 계산한다.
 - HDF5 파일은 DataLoader 작업자마다 따로 연다. 파일이 샘플별로 나뉘어 있어 경합이 적다.
@@ -113,6 +150,7 @@
     └──── data/training (같은 서버면 마운트, 다른 서버면 NFS) ────┘
 ```
 - 새 코드는 `trainer/`(자체 requirements·Dockerfile)에 두고 서버 코드에서 import하지 않는다.
+- 학습기 규약: 입력은 데이터셋 `manifest.json`과 `train.h5`, 출력은 모델 파일·`metrics.json`, 예측 응답은 지금 Simulator 형식(`points`·`values`·`uncertainty`)이다. 이 규약만 지키면 PhysicsNeMo가 아닌 학습기로 바꿔도 서버와 화면은 그대로다.
 - 작업자는 `GET /api/training/jobs/next`로 일을 받고 진행률을 보고한다. 서비스 토큰을 쓴다.
 - 새 테이블 `training_jobs`, `training_datasets`. `field_models`에는 `kind`(rom|neural)와 `dataset_id`를 더한다.
 - 체크포인트에서 이어서 학습하고, 모델 파일은 안전한 방식(`weights_only`)으로 읽는다.
@@ -141,12 +179,12 @@
 | 단계 | 할 일 | 통과 기준 |
 |---|---|---|
 | **0. GPU 서버 확인** | `nvidia-smi -L`, `nvidia-smi topo -m`, 드라이버·OS·Docker, 이미지 반입(`docker save/load` 또는 사내 미러), 공식 낙하 시험 예제를 4 GPU로 실행, 노드 수별 메모리 측정, 온도 확인 | 예제 학습이 끝까지 돌고, 카드 이름·메모리·노드 한계 값이 이 문서에 적힘 |
-| **1. 학습 데이터** | `train.h5` 생성기, PC Agent `case.train_sample`, 업로드 API, 표준 이름표·단위 환산, 데이터셋 manifest, 4절 1~6번 수정. `__version__` 올림 | pytest. 실제 툴 1종의 작은 모델로 `train.h5` 생성, 최댓값·좌표가 원본과 일치, 500 MB 넘는 케이스도 학습 대상에 들어감 |
+| **1. 학습 데이터** | `case.h5` 스키마 v2(v1 파일도 읽기), 사내에서 가장 많이 쓰는 툴 1종의 입력 덱 추출기, `train.h5` 생성기, PC Agent `case.train_sample`, 업로드 API, 표준 이름표·단위 환산, 데이터셋 manifest, 4절 1~7번 수정. `docs/cae-data-hdf5.md` 갱신, `__version__` 올림 | pytest. 실제 툴 1종의 작은 모델로 `train.h5` 생성, 최댓값·좌표가 원본과 일치, 고정 노드 수·하중 합계가 입력 덱과 일치, 추출 못 한 항목이 `not_extracted`로 표시, 500 MB 넘는 케이스도 학습 대상에 들어감 |
 | **2. 작업 기반** | 작업 테이블·API, 가짜 학습기, 진행률·취소·이어 하기, 데이터·모델 탭 표시, MCP(`build_dataset`, `train_shape_model`, `training_status`) | pytest(torch 없이), `npm run smoke -- --demo`·`--reduced`, 작업자를 죽였다 살려도 이어짐 |
 | **3. PhysicsNeMo 학습** | HDF5 리더, 정적 해석 + 필드 하나 + 마지막 프레임부터, 앙상블, 시험 지표, PCA+GP 비교, 배포 판정 | GPU 서버에서 mock 브래킷 데이터로 학습 끝, 판정 근거가 보고서로 나옴(mock은 물리가 단순해 정확도 판단에는 쓰지 않음) |
 | **4. 예측·Simulator** | 예측 작업자, `kind`별 분기, 기존 3D 응답 형식 재사용, 메쉬 업로드, 불확실도·학습 범위 밖 경고, "예측이며 해석이 아님" 표시 | 슬라이더 응답 시간 측정, 학습 범위 밖 입력에 경고, 스모크 통과 |
 | **5. 실제 데이터 시범** | 드럼 세탁기 부품 1종, 하중 조건 1개, DOE 100~300개, 엔지니어 검토, 후보를 해석으로 다시 확인하고 학습에 추가 | 8절의 합격 기준 통과, 또는 왜 안 되는지와 필요한 케이스 수가 정리됨 |
-| **6. 넓히기** | 시범 결과가 좋을 때만: 시간 이력, 노드별 하중·경계조건, 스터디 간 학습, MeshGraphNet | 항목별로 계획을 따로 세움 |
+| **6. 넓히기** | 시범 결과가 좋을 때만: 시간 이력, 여러 하중 조건을 섞은 학습, 나머지 툴의 추출기, 스터디 간 학습, MeshGraphNet | 항목별로 계획을 따로 세움 |
 
 ## 8. 합격 기준과 위험
 **처음 합격 기준(5단계에서 담당 엔지니어와 확정)**
@@ -158,7 +196,9 @@
 | 위험 | 대응 |
 |---|---|
 | 케이스 수가 모자람 | PCA+GP로 먼저 쓰고, 능동학습(`suggest_next`)으로 필요한 곳만 해석. 보관한 `case.h5`를 다시 활용 |
-| 하중·경계조건이 입력에 없어 다른 조건에 일반화되지 않음 | 처음에는 조건별로 데이터셋을 나눈다. 다른 조건에 쓰면 경고 |
+| 입력 덱 추출이 툴·버전마다 실패함(실제 툴 미검증) | 툴 1종부터 한다. 못 뽑은 항목은 `not_extracted`로 표시하고 학습 입력에서 뺀다 |
+| 다른 하중 조건에 일반화되지 않음 | 시범은 조건별로 데이터셋을 나눈다. 학습하지 않은 조건에 쓰면 경고 |
+| PhysicsNeMo를 사내에서 쓸 수 없거나 맞지 않음 | PCA+GP는 그대로 동작한다. 학습기 규약(6절)을 지키는 순수 PyTorch 구현으로 바꾼다 |
 | PhysicsNeMo가 자주 바뀜(v2.2.0에서 `guard_config` 제거 등) | 이미지 태그 고정, 레시피를 `trainer/`로 복사해 관리 |
 | 레시피가 HDF5 리더와 맞지 않거나 읽기가 느림 | `train.h5`를 원본으로 둔 채 서버에서 Zarr 캐시 생성(Mesh 데이터파이프가 Zarr 지원). 원본 형식은 그대로 |
 | 사내망에 이미지가 없음 | 외부 PC에서 받아 `docker save`로 반입. 불가하면 사내 pip 미러로 설치 |
