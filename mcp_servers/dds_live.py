@@ -1,7 +1,8 @@
 """dds-live MCP: 사용자가 열어 둔 CAD/CAE GUI 세션에 붙어 '사람과 같은 화면'에서 함께 모델링한다 (Live Link).
 프로토콜·플러그인: agent-context/live/PROTOCOL.md
 - 소켓 플러그인(practice, abaqus, hypermesh): 코드를 툴의 GUI 스레드에서 실행 → 화면이 바로 바뀐다
-- NX: 대기열 방식 — 저널을 큐에 넣고 사용자가 NX에서 'DDS 실행'(dds_live_nx.py)을 누르면 열린 세션에서 실행
+- NX: 대기열 방식 — 코드를 큐에 넣으면 세션 안 실행기(dds_live_nx.py)가 실행한다. 실행기는 이 MCP가 열린 NX에서 스스로 띄운다
+- 사용자에게 버튼·저널·플러그인 실행을 부탁하지 않는다. 붙을 수 없으면 원인을 에이전트에게 돌려주고 배치로 진행하게 한다
 - 빠른 툴(live_set_params·live_view·live_undo): AI가 코드를 쓰지 않고 값만 넘긴다. NX는 세션 안 도우미(nx/ddslive_nx_ops.py)를 live_exec로 부른다
 - 캡처: 플러그인의 뷰포트 이미지, 안 되면 툴 창을 화면 캡처 → 웹앱 결과(이미지)로 게시
 """
@@ -10,6 +11,7 @@ import ctypes
 import json
 import os
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -30,6 +32,9 @@ if os.name == "nt":  # 화면 배율(125%·150%)에서도 창 좌표와 실제 �
     except Exception:  # noqa: BLE001
         ctypes.windll.user32.SetProcessDPIAware()
 NX_QUEUE = Path.home() / ".dds-agent" / "live" / "nx" / "queue"
+NX_ALIVE_SEC = 3  # 실행기가 이 시간 안에 표시를 남겼으면 붙어 있는 것이다
+NX_WINDOW_WAIT = 240  # NX를 새로 띄웠을 때 창이 뜨기를 기다리는 시간(초). 사내 라이선스 확인에 오래 걸린다
+NO_ASK = "사용자에게 버튼 클릭, 저널·스크립트 실행, 플러그인 시작을 부탁하지 마세요."
 
 TOOLS = {
     "practice": {"port": 47800, "lang": "python", "window": "DDS 연습용 CAD", "label": "연습용 CAD (라이선스 불필요)"},
@@ -45,6 +50,7 @@ mcp = MCPServer(
         "치수·설계변수는 live_set_params, 화면은 live_view, 되돌리기는 live_undo로 한다(코드를 쓰지 않아 빠르다). "
         "live_exec는 이것들로 안 되는 일만, 하나의 명령 묶음으로 실행한다. "
         "사용자가 툴 화면을 보고 있으므로 캡처는 큰 단계가 끝났을 때와 요청할 때만 한다(capture=true로 같은 호출에서). "
+        "연결은 이 도구들이 스스로 한다. 사용자에게 리본 버튼을 누르거나 저널·스크립트를 실행하거나 플러그인을 켜 달라고 절대 부탁하지 않는다. "
         "해석 제출처럼 오래 걸리는 일은 Live Link가 아니라 dds-cae(배치)로 한다. 툴별 방법은 live-modeling 스킬을 읽는다."
     ),
 )
@@ -78,6 +84,158 @@ def _call(tool: str, op: str, timeout: float = 120, **fields) -> dict:
     return json.loads(buf.decode("utf-8"))
 
 
+def _nx_listening() -> bool:
+    """세션 안 실행기가 대기열을 보고 있는가"""
+    try:
+        return time.time() - (NX_QUEUE / "listener.alive").stat().st_mtime < NX_ALIVE_SEC
+    except OSError:
+        return False
+
+
+def _windows_of(*exe_names: str) -> list[int]:
+    """이 실행 파일들의 보이는 최상위 창"""
+    if os.name != "nt":
+        return []
+    from ctypes import wintypes
+    user32, kernel32 = ctypes.windll.user32, ctypes.windll.kernel32
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    names = {n.lower() for n in exe_names}
+    found = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def cb(hwnd, _):
+        if user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd):
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            h = kernel32.OpenProcess(0x1000, False, pid.value)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if h:
+                buf, n = ctypes.create_unicode_buffer(1024), wintypes.DWORD(1024)
+                if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)) and Path(buf.value).name.lower() in names:
+                    found.append(hwnd)
+                kernel32.CloseHandle(h)
+        return True
+
+    user32.EnumWindows(cb, 0)
+    return found
+
+
+def _press(*vks: int) -> None:
+    """키를 차례로 누르고 거꾸로 뗀다"""
+    user32 = ctypes.windll.user32
+    for vk in vks:
+        user32.keybd_event(vk, 0, 0, 0)
+    for vk in reversed(vks):
+        user32.keybd_event(vk, 0, 2, 0)
+
+
+def _focus(hwnd: int) -> None:
+    user32 = ctypes.windll.user32
+    if user32.IsIconic(hwnd):
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+    _press(0x12)  # Alt를 한 번 눌러야 다른 프로그램이 창을 앞으로 가져올 수 있다
+    user32.SetForegroundWindow(hwnd)
+    time.sleep(0.2)
+
+
+def _process_dialogs(hwnd: int) -> set[int]:
+    """같은 프로세스의 보이는 대화상자(#32770) 창"""
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    found: set[int] = set()
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def cb(h, _):
+        other, cls = wintypes.DWORD(), ctypes.create_unicode_buffer(64)
+        user32.GetWindowThreadProcessId(h, ctypes.byref(other))
+        user32.GetClassNameW(h, cls, 64)
+        if other.value == pid.value and cls.value == "#32770" and user32.IsWindowVisible(h):
+            found.add(h)
+        return True
+
+    user32.EnumWindows(cb, 0)
+    return found
+
+
+def _file_box(dlg: int) -> int | None:
+    """파일 대화상자의 파일 이름 칸"""
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    found = []
+
+    @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    def cb(h, _):
+        cls = ctypes.create_unicode_buffer(32)
+        user32.GetClassNameW(h, cls, 32)
+        if cls.value == "Edit" and user32.IsWindowVisible(h):
+            found.append(h)
+        return True
+
+    user32.EnumChildWindows(dlg, cb, 0)
+    return found[0] if found else None
+
+
+def _nx_play_journal(hwnd: int, journal: Path) -> str | None:
+    """열린 NX에서 저널을 실행한다: Ctrl+U(NX Open 실행) 파일 창에 경로를 넣고 확인. 끝나면 사용자가 보던 창으로 돌려놓는다.
+    TODO(사내검증): 버전별 Ctrl+U 단축키와 파일 창. 명령 창이 열려 있으면 NX가 단축키를 받지 않는다."""
+    user32 = ctypes.windll.user32
+    user32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_size_t, ctypes.c_wchar_p]
+    prev, before = user32.GetForegroundWindow(), _process_dialogs(hwnd)
+    _focus(hwnd)
+    _press(0x11, 0x55)  # Ctrl+U
+    dlg = None
+    for _ in range(60):
+        time.sleep(0.1)
+        fresh = _process_dialogs(hwnd) - before
+        if fresh:
+            dlg = fresh.pop()
+            break
+    if not dlg:
+        return "NX가 실행 창을 열지 않았습니다. 진행 중인 명령 창이 열려 있을 수 있습니다."
+    box = _file_box(dlg)
+    if not box:
+        _press(0x1B)  # 모르는 창이면 닫는다
+        return "NX 실행 창의 파일 이름 칸을 찾지 못했습니다."
+    user32.SendMessageW(box, 0x000C, 0, str(journal))  # WM_SETTEXT
+    time.sleep(0.1)
+    user32.PostMessageW(dlg, 0x0111, 1, 0)  # WM_COMMAND IDOK
+    time.sleep(0.2)
+    if prev and prev != hwnd:
+        _press(0x12)
+        user32.SetForegroundWindow(prev)
+    return None
+
+
+def _nx_launch(model_path: str | None = None) -> str | None:
+    """NX를 띄운다. run_journal.exe와 같은 폴더의 ugraf.exe를 쓴다."""
+    run_journal = settings.tools.get("nx_run_journal") or ""
+    exe = Path(run_journal).with_name("ugraf.exe") if run_journal else None
+    if not exe or not exe.exists():
+        return "이 PC에서 NX(ugraf.exe)를 찾지 못했습니다. 웹앱 CAD·CAE 툴 화면에서 경로를 확인하세요."
+    subprocess.Popen([str(exe)] + ([model_path] if model_path else []), cwd=str(exe.parent))
+    return None
+
+
+def _nx_start(model_path: str | None = None) -> str | None:
+    """세션 안 실행기를 띄운다. NX가 없으면 NX부터 띄운다. 실패하면 원인을 돌려준다."""
+    if os.name != "nt":
+        return "NX Live Link는 Windows PC에서만 됩니다."
+    wins = _windows_of("ugraf.exe")
+    if not wins:
+        err = _nx_launch(model_path)
+        if err:
+            return err
+        t0 = time.time()
+        while not wins and time.time() - t0 < NX_WINDOW_WAIT:
+            time.sleep(1)
+            wins = _windows_of("ugraf.exe")
+        if not wins:
+            return f"NX를 띄웠지만 {NX_WINDOW_WAIT}초 안에 창이 뜨지 않았습니다."
+        time.sleep(5)  # 창이 뜬 직후에는 단축키를 받지 않는다
+    return _nx_play_journal(wins[0], NX_OPS_DIR / "dds_live_nx.py")
+
+
 def _nx_exec(code: str, wait_sec: int) -> dict:
     NX_QUEUE.mkdir(parents=True, exist_ok=True)
     name = f"job_{int(time.time() * 1000)}"
@@ -86,6 +244,11 @@ def _nx_exec(code: str, wait_sec: int) -> dict:
     tmp.write_text(code, encoding="utf-8")
     os.replace(tmp, NX_QUEUE / f"{name}.py")
     res_file = NX_QUEUE / f"{name}.result.json"
+    start_err = None if _nx_listening() else _nx_start()
+    if start_err:
+        (NX_QUEUE / f"{name}.py").unlink(missing_ok=True)  # 나중에 뜻밖의 때 실행되지 않게
+        return {"ok": False, "error": f"NX 세션에 붙지 못했습니다: {start_err} "
+                                      f"잠시 뒤 다시 시도하거나 dds-cae 배치로 진행하세요. {NO_ASK}"}
     t0 = time.time()
     while time.time() - t0 < wait_sec:
         if res_file.exists():
@@ -98,7 +261,8 @@ def _nx_exec(code: str, wait_sec: int) -> dict:
             return res
         time.sleep(0.1)  # 1초 간격이면 단계마다 평균 0.5초씩 더 기다린다
     return {"ok": False, "pending": True, "job": name,
-            "error": "NX에서 아직 실행하지 않았습니다. 사용자에게 NX의 'DDS 실행' 버튼(dds_live_nx.py)을 눌러 달라고 안내한 뒤 live_result로 확인하세요."}
+            "error": f"NX가 {wait_sec}초 안에 끝내지 않았습니다. 오래 걸리는 작업이거나 NX에 진행 중인 명령이 있을 수 있습니다. "
+                     f"live_result로 다시 확인하세요. {NO_ASK}"}
 
 
 # ---------- 창 캡처 (플러그인이 캡처를 못 할 때) ----------
@@ -284,28 +448,48 @@ def live_status() -> list[dict]:
                 r = _call(name, "ping", timeout=3)
                 row.update(connected=bool(r.get("ok")), version=r.get("version"))
             except OSError:
-                row.update(connected=False, how=f"플러그인 미실행 — live_launch(tool='{name}') 또는 live-modeling 스킬의 시작 방법 참고")
+                row.update(connected=False, how=f"플러그인이 꺼져 있습니다. live_launch(tool='{name}')로 스스로 띄웁니다")
         else:
-            row.update(connected=None, how="대기열 방식: live_exec 후 사용자가 NX에서 'DDS 실행'을 누름")
+            row.update(connected=_nx_listening(), how="대기열 방식: 첫 live_* 호출 때 열린 NX에 스스로 붙습니다(NX가 없으면 띄웁니다)")
         out.append(row)
     return out
 
 
 @mcp.tool()
 def live_launch(tool: str, model_path: str | None = None) -> dict:
-    """툴 GUI를 Live Link 플러그인과 함께 띄운다(가능한 툴만). 이미 열려 있으면 그 화면에서 플러그인만 시작하도록 사용자에게 안내한다."""
+    """툴 GUI를 Live Link와 함께 띄운다. NX는 이미 열려 있으면 그 세션에 붙는다. 사용자가 할 일은 없다."""
     env = {**os.environ, "DDS_LIVE_TOKEN": token()}
+    if tool == "nx":
+        if _nx_listening():
+            return {"ok": True, "tool": tool, "already": True}
+        err = _nx_start(model_path)
+        if err:
+            return {"ok": False, "error": f"{err} {NO_ASK}"}
+        for _ in range(60):
+            time.sleep(0.5)
+            if _nx_listening():
+                return {"ok": True, "tool": tool}
+        return {"ok": True, "tool": tool, "note": "실행기를 띄웠습니다. 대기 표시는 아직 없습니다. live_exec를 작업마다 실행합니다."}
     if tool == "practice":
         exe = Path(sys.executable)
         pyw = exe.with_name("pythonw.exe") if exe.with_name("pythonw.exe").exists() else exe
         subprocess.Popen([str(pyw), str(LIVE_DIR / "practice_tool.py")], env=env, cwd=str(LIVE_DIR))
     elif tool == "abaqus":
+        _register_abaqus()
         plugin_dir = LIVE_DIR / "abaqus" / "abaqus_plugins"
         env["ABAQUS_PLUGIN_DIRS"] = str(plugin_dir)  # TODO(사내검증): 플러그인 경로 지정 방법(abaqus_v6.env의 plugin_central_dir 등)
         cmd = [settings.tools.get("abaqus", "abaqus"), "cae"] + ([f"database={model_path}"] if model_path else [])
         subprocess.Popen(cmd, env=env, shell=os.name == "nt")
+    elif tool == "hypermesh":
+        script = LIVE_DIR / "hypermesh" / "dds_live_hm.tcl"
+        _register_hypermesh(script)
+        hmbatch = settings.tools.get("altair_hmbatch") or ""
+        hm = Path(hmbatch).with_name("hmopengl.exe") if hmbatch else None
+        exe = str(hm) if hm and hm.exists() else settings.tools.get("altair_hw", "hw")
+        # TODO(사내검증): 버전별 GUI 시작 인자(-tcl)
+        subprocess.Popen([exe, "-tcl", str(script)] + ([model_path] if model_path else []), env=env, shell=os.name == "nt")
     else:
-        return {"ok": False, "how": f"{tool}은(는) 사용자가 직접 열고 플러그인을 시작해야 합니다. live-modeling 스킬의 '{tool}' 절을 안내하세요."}
+        return {"ok": False, "error": f"{tool}은(는) Live Link를 지원하지 않습니다. dds-cae 배치로 진행하세요. {NO_ASK}"}
     for _ in range(60):
         time.sleep(1)
         try:
@@ -313,7 +497,45 @@ def live_launch(tool: str, model_path: str | None = None) -> dict:
                 return {"ok": True, "tool": tool}
         except OSError:
             pass
-    return {"ok": False, "error": "플러그인 응답이 없습니다. 툴 창이 열렸는지 확인하세요."}
+    return {"ok": False, "error": f"60초 안에 플러그인이 응답하지 않았습니다. 라이선스 대기일 수 있습니다. dds-cae 배치로 진행하거나 다시 시도하세요. {NO_ASK}"}
+
+
+def _register_abaqus() -> None:
+    """앞으로 여는 Abaqus/CAE에서 Live Link가 저절로 켜지게 사용자 플러그인 폴더에 복사한다(불러올 때 바로 시작한다)."""
+    src, dst = LIVE_DIR / "abaqus" / "abaqus_plugins" / "ddsLive", Path.home() / "abaqus_plugins" / "ddsLive"
+    try:
+        shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    except OSError:
+        pass  # 복사하지 못해도 이번 실행은 ABAQUS_PLUGIN_DIRS로 켜진다
+
+
+def _register_hypermesh(script: Path) -> None:
+    """앞으로 여는 HyperMesh에서 Live Link가 저절로 켜지게 hmcustom.tcl에 한 줄 넣는다(다른 내용은 그대로 둔다)."""
+    f, line = Path.home() / "hmcustom.tcl", f'source "{script.as_posix()}"'
+    try:
+        old = f.read_text(encoding="utf-8") if f.exists() else ""
+        if line not in old:
+            f.write_text(old.rstrip() + ("\n" if old.strip() else "") + line + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+TOOL_EXES = {"abaqus": ("abq_cae.exe", "abaqus.exe", "ABQcaeK.exe"), "hypermesh": ("hmopengl.exe", "hw.exe", "hwx.exe")}
+
+
+def _call_up(tool: str, op: str, timeout: float = 120, **fields) -> dict:
+    """플러그인이 꺼져 있으면 스스로 띄운 뒤 부른다."""
+    try:
+        return _call(tool, op, timeout, **fields)
+    except OSError as e:
+        first = e
+    if _windows_of(*TOOL_EXES.get(tool, ())):  # 플러그인 없이 열린 세션에는 코드를 넣을 길이 없다. 사용자에게 켜 달라고 하지 않는다
+        return {"ok": False, "error": f"{tool} 세션에 Live Link가 켜져 있지 않아 붙을 수 없습니다({first}). "
+                                      f"저장된 모델을 live_launch(tool='{tool}', model_path=...)로 새 세션에 열거나 dds-cae 배치로 진행하세요. {NO_ASK}"}
+    up = live_launch(tool)
+    if not up.get("ok"):
+        return up
+    return _call(tool, op, timeout, **fields)
 
 
 @mcp.tool()
@@ -323,7 +545,10 @@ def live_info(tool: str, all_expressions: bool = False) -> dict:
     자동 이름(p12 등) expression까지 보려면 all_expressions=true."""
     if tool == "nx":
         return _nx_ops(f"ops.summary(all_expressions={bool(all_expressions)!r})", 60)
-    return _call(tool, "info")
+    try:
+        return _call_up(tool, "info")
+    except OSError as e:
+        return {"ok": False, "error": f"{tool} Live Link에 연결할 수 없습니다({e}). {NO_ASK}"}
 
 
 @mcp.tool()
@@ -388,9 +613,9 @@ def live_exec(tool: str, code: str, timeout_sec: int = 120) -> dict:
     if tool == "nx":
         return _nx_exec(code, timeout_sec)
     try:
-        return _call(tool, "exec", timeout=timeout_sec, code=code)
+        return _call_up(tool, "exec", timeout=timeout_sec, code=code)
     except OSError as e:
-        return {"ok": False, "error": f"{tool} Live Link에 연결할 수 없습니다({e}). live_status로 확인하세요."}
+        return {"ok": False, "error": f"{tool} Live Link에 연결할 수 없습니다({e}). {NO_ASK}"}
 
 
 @mcp.tool()

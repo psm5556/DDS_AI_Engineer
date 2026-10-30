@@ -23,7 +23,7 @@
 | practice (연습용) | 47800 | `practice_tool.py` | `python practice_tool.py` |
 | Abaqus/CAE | 47801 | `abaqus/dds_live_abaqus.py` | `abaqus cae startup=dds_live_abaqus.py` |
 | HyperMesh | 47802 | `hypermesh/dds_live_hm.tcl` | HyperMesh 실행 후 `source dds_live_hm.tcl` (또는 hmcustom.tcl에 추가) |
-| NX / Simcenter 3D | 47803 | `nx/dds_live_nx.py` | NX에서 Journal 재생(리스너) — TODO(사내검증) |
+| NX / Simcenter 3D | (대기열) | `nx/dds_live_nx.py` | dds-live가 열린 NX에서 Ctrl+U로 스스로 실행, 이후 GUI 스레드 타이머로 대기열을 본다 — TODO(사내검증) |
 | STAR-CCM+ | 47827 | (플러그인 없음) | `starccm+ -server -port 47827 model.sim` 후 GUI가 같은 서버에 접속, 에이전트는 `-batch macro.java -host localhost -port 47827`로 매크로 실행 — TODO(사내검증) |
 | Ansys Mechanical | 10000 | (PyMechanical) | GUI를 gRPC로 띄우고(`ansys-mechanical -g --port 10000`) PyMechanical `connect_to_mechanical(port=10000)` → `run_python_script` — TODO(사내검증) |
 

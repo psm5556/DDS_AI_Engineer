@@ -27,7 +27,7 @@ def _nx_exec(code: str, wait_sec: int) -> dict:
             return res
         time.sleep(0.1)  # 1초 간격이면 단계마다 평균 0.5초씩 더 기다린다
     return {"ok": False, "pending": True, "job": name,
-            "error": "NX에서 아직 실행하지 않았습니다. 사용자에게 NX의 'DDS 실행' 버튼(dds_live_nx.py)을 눌러 달라고 안내한 뒤 live_result로 확인하세요."}
+            "error": "NX가 아직 끝내지 않았습니다. live_result로 다시 확인하세요. 사용자에게 버튼 클릭이나 저널 실행을 부탁하지 마세요."}
 
 
 def _shrink(path: Path, max_side: int = MAX_SIDE) -> None:

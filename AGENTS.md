@@ -58,7 +58,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `cae_adapters/` | `catalog.py`(지원 툴 29종 단일 목록·기본 설치 경로·설치 흔적 단어) · `tool_commands.py`(실행 명령 키) · `script.py`(케이스 스크립트 실행) · `mock.py`(연습용 솔버) |
 | `agent-context/` | AI CLI에게 주는 작업 규칙(`INSTRUCTIONS.md`)과 툴별 스킬(`skills/<툴>/SKILL.md`·`scripts/`). PC Agent가 프로젝트 폴더로 동기화한다 |
 | `frontend/src/` | React+TS. `pages/`(첫 화면·작업 공간·툴·Simulator·설정·관리) · `chat/`(대화·입력창) · `canvas/`(오른쪽 패널 탭) · `components/`(`HeroMesh` 로그인 3D, `AgentGlyph` 에이전트 기호·글자 로고, `Skeleton`) · `motion.ts`(움직임 도구) · `modern.css`(최종 디자인 층) |
-| `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없으면 자동 빌드) |
+| `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없거나 소스가 새로우면 자동 빌드). 색은 `tokens.css` 값을 쓴다 |
 | `deploy/linux/` | Linux 서버 systemd 서비스 파일 |
 | `scripts/` | `dev_live.py` · `prepare_onsite.py`(사내 서버 준비, Linux 서버용 설치 묶음 `--pack`·`--import-pack`) · `fetch_runtimes.py` · `build_agent_bundle.py` · `install-agent.ps1` · `e2e_*.py` · `hero/`(로그인 화면의 해석 결과 생성기. 실행에는 쓰이지 않고, 별도 환경에 gmsh가 필요하다. 결과는 `frontend/public/hero/`) |
 | `docs/` | `handoff.md` 인수인계 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 · `cae-data-hdf5.md` 해석 데이터(case.h5) · `shape-learning-plan.md` 형상 학습 계획(train.h5·GPU 서버·PhysicsNeMo) · `product-spec.md` 디자인·기능 명세서 · `inhouse-ai-guide.md` 사내 AI 지침(기능·디자인 요구사항, 다음 일감) |
@@ -98,7 +98,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
   - PC Agent 쪽: `agent/dds_agent/main.py`의 `handle()`
   - 서버 쪽: `registry.runner(user.id).call("타입", {...})`
 - PC Agent·MCP·스킬을 바꿨으면 `agent/dds_agent/__init__.py`의 `__version__`을 올린다.
-  배포는 관리 > Agent 배포 > "서버 코드로 첫 버전 배포"(같은 버전은 한 번만)로 하며, 연결된 PC가 유휴 시 자동 업데이트한다.
+  배포는 관리 > Agent 배포 > "서버 코드로 첫 버전 배포"(같은 버전은 한 번만)로 하며, 자동 업데이트가 켜진 PC(설정, 기본 켜짐)는 작업이 없고 5분 조용할 때 업데이트한다.
 - 비밀값(토큰·PIN·secret key)과 `data/` 아래 파일은 커밋하지 않는다.
 - 셸에서 백슬래시가 든 텍스트를 heredoc으로 파일에 쓰면 깨질 수 있다. 파일 편집 도구를 쓴다.
 

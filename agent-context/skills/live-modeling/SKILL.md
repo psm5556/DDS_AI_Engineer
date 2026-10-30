@@ -7,9 +7,15 @@ description: 사용자가 열어 둔 CAD/CAE GUI(NX, Abaqus/CAE, HyperMesh, STAR
 
 자동화(배치·DOE) 전에 **해석 모델을 만드는 단계**는 사람의 판단이 많이 필요하다. Live Link는 사용자가 보고 있는 GUI 세션에서 에이전트가 작은 단계씩 작업하고, 매 단계 화면을 보여 주며 확인받는 방식이다.
 
+## 0. 절대 규칙: 사용자에게 툴 조작을 부탁하지 않는다
+- 리본 버튼 클릭, 저널·매크로·스크립트 실행, 플러그인 시작, 메뉴 선택을 **절대** 요청하지 않는다. 연결과 실행은 도구가 스스로 한다.
+- 요청받은 작업을 바로 한다. "준비되면 알려 주세요"처럼 사용자를 기다리지 않는다.
+- 도구가 붙지 못했다고 돌려주면 그 원인을 읽고 스스로 해결한다. 다시 시도하거나 `live_launch(model_path=...)`로 새 세션을 열거나 `dds-cae` 배치로 같은 작업을 한다.
+- 끝내 못 하면 무엇을 시도했고 왜 안 됐는지 알린다. 이때도 조작을 부탁하지 않는다.
+
 ## 1. 진행 원칙
-1. `dds-live.live_status`로 붙을 수 있는 툴을 확인한다.
-   - 연결이 안 돼 있으면 아래 툴별 '시작 방법'을 사용자에게 안내한다. 연습용이나 Abaqus는 `live_launch`로 직접 띄울 수 있다.
+1. `dds-live.live_status`로 상태를 확인한다.
+   - 꺼져 있으면 `live_launch`로 스스로 띄운다. NX는 첫 `live_*` 호출 때 열린 세션에 스스로 붙으므로 그냥 호출한다.
 2. `live_info`로 열린 모델 구조(파트·재료·스텝·세트)를 먼저 읽는다. 이름을 추측하지 않는다.
 3. **하나의 논리 단위씩** 실행한다(예: 재료·단면·할당 → 스텝·하중·경계조건 → 메쉬).
    - 치수·설계변수 바꾸기, 화면 바꾸기, 되돌리기는 빠른 툴(`live_set_params`·`live_view`·`live_undo`)을 먼저 쓴다. 코드를 쓰지 않아 빠르고 틀릴 일이 적다(지금은 NX, `live_set_params`는 연습용 CAD도).
@@ -32,7 +38,8 @@ description: 사용자가 열어 둔 CAD/CAE GUI(NX, Abaqus/CAE, HyperMesh, STAR
 
 ### Abaqus/CAE (abaqus) — Python, 커널 객체 `mdb`, `session`
 - 시작: `live_launch(tool="abaqus", model_path="...cae")`
-  - 또는 사용자가 `%USERPROFILE%\abaqus_plugins\ddsLive`에 플러그인을 복사하고 CAE를 재시작하면 Plug-ins > DDS Live Link 시작
+  - 플러그인을 사용자 폴더에 스스로 등록하므로 이후 여는 CAE에서는 저절로 켜진다.
+  - 플러그인 없이 이미 열린 세션에는 붙을 수 없다. 저장된 cae를 새 세션으로 열거나 배치로 한다.
 - 예시
   ```python
   m = mdb.models["Model-1"]
@@ -45,16 +52,16 @@ description: 사용자가 열어 둔 CAD/CAE GUI(NX, Abaqus/CAE, HyperMesh, STAR
 - 상세 API는 `abaqus-automation` 스킬(references/cae-model-api.md)을 본다.
 
 ### HyperMesh (hypermesh) — Tcl
-- 시작: 사용자가 HyperMesh에서 `source <설치폴더>/agent-context/live/hypermesh/dds_live_hm.tcl`
-  - 상시 사용하려면 hmcustom.tcl에 추가한다.
+- 시작: `live_launch(tool="hypermesh", model_path="...hm")`
+  - hmcustom.tcl에 스스로 등록하므로 이후 여는 HyperMesh에서는 저절로 켜진다.
+  - 플러그인 없이 이미 열린 세션에는 붙을 수 없다. 저장된 모델을 새 세션으로 열거나 배치로 한다.
 - 예시: `*createmark comps 1 "all"; set n [hm_marklength comps 1]; set n` (마지막 값이 result)
 - 상세 명령은 `altair-automation` 스킬(references/hypermesh-tcl.md)을 본다.
 
 ### NX / Simcenter 3D (nx) — Python NXOpen, 대기열 방식
-- NX Open은 GUI 스레드에서만 안전하다. 그래서 에이전트가 `live_exec(tool="nx", code=...)`로 저널을 대기열에 넣는다.
-- 그다음 사용자에게 **"NX에서 'DDS 실행' 버튼을 눌러 주세요"**라고 안내한다.
-  - 버튼은 `dds_live_nx.py`를 리본에 등록한 것이다. 처음 한 번 등록을 도와준다.
-- 버튼을 누르면 열린 세션에서 실행되고 Undo 마크가 남는다. 결과는 `live_result(job)`로 확인한다.
+- NX Open은 GUI 스레드에서만 안전하다. 그래서 에이전트가 `live_exec(tool="nx", code=...)`로 코드를 대기열에 넣는다.
+- 첫 호출 때 도구가 열린 NX에 세션 안 실행기(`dds_live_nx.py`)를 스스로 띄운다. NX가 없으면 NX부터 띄운다. 이후에는 실행기가 대기열을 바로 처리한다.
+- 열린 세션에서 실행되고 Undo 마크가 남는다. 호출이 시간 안에 끝나지 않으면 `live_result(job)`로 다시 확인한다.
 - 코드에서 쓸 수 있는 것: `session`, `work_part`, `display_part`, `NXOpen`
   - 상세 API는 `nx-cad-automation`, `simcenter3d-automation` 스킬을 본다.
 
@@ -74,7 +81,7 @@ description: 사용자가 열어 둔 CAD/CAE GUI(NX, Abaqus/CAE, HyperMesh, STAR
    - 느리다는 말이 나오면 이 값으로 어디서 걸리는지 사용자에게 알려 준다.
 
 ### STAR-CCM+ — 클라이언트-서버 공유 (TODO(사내검증))
-- 사용자가 `starccm+ -server -port 47827 model.sim`으로 서버를 띄우고 GUI 클라이언트로 접속한다.
+- 에이전트가 `dds-cae`로 `starccm+ -server -port 47827 model.sim` 서버를 띄운다. GUI는 같은 서버에 접속해 화면을 보여 준다.
 - 에이전트는 매크로를 `dds-cae.run_script(tool="starccm", args=["-host","localhost","-port","47827"])`로 같은 서버에 실행한다. 같은 sim이므로 사용자 화면에 반영된다.
 
 ### Ansys Mechanical — PyMechanical GUI 연결 (TODO(사내검증))

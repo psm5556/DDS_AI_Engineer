@@ -50,6 +50,7 @@ def fake_nx(tmp_path, monkeypatch):
 
     def nx_loop():  # dds_live_nx.py와 같은 방식: 작업 코드를 exec하고 result를 문자열로 남긴다
         while not stop.is_set():
+            (queue / "listener.alive").write_text("1", encoding="utf-8")  # 세션 안 실행기가 붙어 있다는 표시
             for job in sorted(queue.glob("job_*.py")):
                 res = queue / (job.stem + ".result.json")
                 if res.exists():
@@ -117,8 +118,10 @@ def test_capture_same_call_and_shrink(fake_nx, tmp_path, monkeypatch):
 
 def test_pending_when_nx_does_not_run(tmp_path, monkeypatch):
     monkeypatch.setattr(dds_live, "NX_QUEUE", tmp_path)
+    monkeypatch.setattr(dds_live, "_nx_start", lambda *a: None)  # 실행기는 띄웠지만 NX가 바빠 아직 처리하지 않은 경우
     r = dds_live.live_set_params("nx", {"thickness": 4.0}, timeout_sec=1)
     assert r["pending"] and (tmp_path / f"{r['job']}.py").exists()
+    assert "부탁하지 마세요" in r["error"]
 
 
 def test_other_tools_point_to_live_exec():
