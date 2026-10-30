@@ -182,6 +182,8 @@ def on_case_status(msg: dict):
         for key in ("results", "error", "run_dir", "images", "fields"):
             if key in msg:
                 setattr(case, key, msg[key])
+        if msg.get("archive"):
+            case.archive = {**(case.archive or {}), **msg["archive"]}
         db.commit()
         study = db.get(models.Study, case.study_id)
         manager.publish({"type": "case_updated", "project_id": study.project_id,
@@ -294,6 +296,8 @@ def _on_extracted(msg: dict):
         if not case:
             return
         case.results = {**(case.results or {}), **(msg.get("results") or {})}
+        if msg.get("archive"):
+            case.archive = {**(case.archive or {}), **msg["archive"]}
         if msg.get("error"):
             case.error = msg["error"]
         elif (case.error or "").startswith("Output 추출 실패"):
@@ -323,7 +327,8 @@ def _extract_on_server(job: dict):
         from cae_adapters.base import CaseOutcome
         out = CaseOutcome("failed", error=str(e))
     on_case_status({"case_id": job["case_id"], "status": "complete", "extract": True, "results": out.results,
-                    "error": None if out.status == "complete" else f"Output 추출 실패: {out.error}"})
+                    "error": None if out.status == "complete" else f"Output 추출 실패: {out.error}",
+                    "archive": _pack_on_server(job, run_dir) if run_dir.is_dir() else None})
 
 
 def _run_on_server(job: dict):
@@ -343,20 +348,55 @@ def _run_on_server(job: dict):
         dest.write_bytes(f.read_bytes())
         fields.append(f.stem)
     on_case_status({"case_id": job["case_id"], "status": out.status, "results": out.results, "error": out.error,
-                    "fields": fields})
+                    "fields": fields, "archive": _pack_on_server(job, run_dir) if out.status != "dry_run" else None})
+
+
+def archive_path(project_id: int, study_id: int, case_id: int) -> Path:
+    """서버에 둔 케이스 해석 데이터(case.h5, HDF5)."""
+    return settings.files_dir / f"project_{project_id}" / "h5" / f"study_{study_id}" / f"case_{case_id}.h5"
+
+
+def _pack_on_server(job: dict, run_dir: Path) -> dict | None:
+    from cae_adapters.h5store import archive_info, file_sha256, pack_case
+
+    dest = archive_path(job["project_id"], job["study_id"], job["case_id"])
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        s = pack_case(run_dir, out=dest, meta={"case_id": job["case_id"], "study_id": job["study_id"],
+                                                "project_uid": job.get("project_uid", ""), "adapter": job["adapter"]})
+    except Exception as e:  # 묶지 못해도 해석 결과(스칼라)는 그대로 둔다
+        log.exception("case.h5 묶기 실패")
+        return {"ok": False, "error": str(e)}
+    return {**archive_info(s), "stored": "server", "sha256": file_sha256(dest)}
 
 
 def field_path(project_id: int, study_id: int, case_id: int, name: str) -> Path:
     return settings.files_dir / f"project_{project_id}" / "fields" / f"study_{study_id}" / f"case_{case_id}" / f"{name}.npz"
 
 
+def _has_field(study, c, field: str) -> bool:
+    if field in (c.fields or []):
+        return True
+    a = c.archive or {}
+    return a.get("stored") == "server" and field in (a.get("field_names") or []) and         archive_path(study.project_id, study.id, c.id).is_file()
+
+
+def _snapshot(study, c, field: str, load_npz):
+    """케이스의 필드 스냅샷: 올린 fields/<이름>.npz가 있으면 그것, 없으면 서버의 case.h5(HDF5)에서 마지막 프레임."""
+    p = field_path(study.project_id, study.id, c.id, field)
+    if p.is_file():
+        return load_npz(p)
+    from cae_adapters.h5store import read_snapshot
+    return read_snapshot(archive_path(study.project_id, study.id, c.id), field)
+
+
 def train_field(db: Session, study: models.Study, field: str, flow_id=None, node_id=None) -> models.FieldModel:
     from .fieldmodel import load_snapshot, train_field_rom
     names = _var_names(study)
-    done = [c for c in study.cases if c.status == "complete" and field in (c.fields or [])]
+    done = [c for c in study.cases if c.status == "complete" and _has_field(study, c, field)]
     if len(done) < 4:
         raise ValueError(f"'{field}' 필드가 있는 완료 케이스가 4개 이상 필요합니다 (현재 {len(done)}개)")
-    snaps = [load_snapshot(field_path(study.project_id, study.id, c.id, field)) for c in done]
+    snaps = [_snapshot(study, c, field, load_snapshot) for c in done]
     X = np.array([[c.params[v] for v in names] for c in done])
     rom = train_field_rom(names, field, X, snaps)
     fm = models.FieldModel(study_id=study.id, field=field, n_nodes=rom.n_nodes, n_train=len(done),

@@ -110,3 +110,10 @@ description: Simcenter 3D(NX CAE Pre/Post) + Simcenter Nastran 배치 자동화 
 ```
 - 형상(GRID·요소)이 OP2에 없으면(`PARAM,POST,-1` 미사용) `--bdf model.dat`을 함께 준다.
 - `--field disp`(변위 크기)가 가장 안정적이다. `vm`은 요소 von Mises를 노드로 평균한 값이다.
+
+## 결과 전체 저장 — case.h5 (HDF5)
+케이스가 끝나면 PC Agent가 케이스 폴더를 `case.h5`(HDF5 압축)로 묶어 서버에 올린다(docs/cae-data-hdf5.md). results.json·fields/*.npz·history/*.csv·로그·입력 덱은 자동으로 담긴다. **해석 결과 전체(모든 스텝·프레임·필드)를 빠짐없이 남기려면** 아래 추출 단계를 스터디 `adapter_config.post` 끝에 붙인다. 원본 결과 파일이 지워져도 나중에 Output을 추가하거나 3D 학습을 다시 할 수 있다.
+```json
+{"tool": "python", "script": "scripts/op2_to_h5.py", "args": ["model-solution_1.op2", "--mode", "nx"]}
+```
+- `scripts/op2_to_h5.py`(플랫폼 python, pyNastran): OP2의 모든 결과 표(변위·고유벡터·응력·변형률·힘·반력·온도)를 서브케이스·모드·시간마다, 메쉬(OP2 기하 또는 `--bdf`)와 고유치 표까지 case.h5에 쓴다. TODO(사내검증): 사내 Nastran OP2 읽기·복소수 결과

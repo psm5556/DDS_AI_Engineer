@@ -7,6 +7,8 @@ scipy==1.17.1
 # CAE 결과 처리 (스킬에서 사용): Nastran OP2/F06, LS-DYNA binout/d3plot, 그래프 이미지
 pyNastran==1.4.1
 lasso-python==2.0.3
+# 해석 데이터 저장(case.h5, HDF5 압축) — lasso-python도 쓰는 패키지
+h5py==3.16.0
 matplotlib==3.11.2
 # CAD·CAE COM 자동화 (CATIA, SolidWorks, Moldflow Synergy) — Windows 전용
 pywin32==312; sys_platform == "win32"

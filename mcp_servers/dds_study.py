@@ -115,9 +115,21 @@ def get_study(study_id: int, include_cases: bool = False) -> dict:
     include_cases=True면 케이스별 params·results·status도 준다(제약조건을 만족하는 최적 설계를 직접 고를 때)."""
     out = _summary(api.get(f"/api/studies/{study_id}"))
     if include_cases:
-        out["cases"] = [{"case_id": c["id"], "status": c["status"], "params": c["params"],
-                         "results": c.get("results")} for c in api.get(f"/api/studies/{study_id}/cases")]
+        out["cases"] = [{"case_id": c["id"], "status": c["status"], "params": c["params"], "results": c.get("results"),
+                         "data": {k: (c.get("archive") or {}).get(k) for k in ("stored", "size", "field_names", "ok")} if c.get("archive") else None}
+                        for c in api.get(f"/api/studies/{study_id}/cases")]
     return out
+
+
+@mcp.tool()
+def case_data(case_id: int) -> dict:
+    """케이스 해석 데이터(case.h5, HDF5)에 무엇이 담겼는지: 설계변수·결과, 메쉬(파트·노드·요소 수), 필드(스텝·프레임·성분·단위),
+    시간 이력, 함께 담긴 파일, PC에 원본으로만 남은 결과 파일(raw), 검증 결과(checks). stored=server면 서버에도 있다.
+    Output을 추가할 때 원본 결과 파일이 없으면 case.h5에서 뽑는 추출 스크립트(cae_adapters.h5store)를 쓴다(docs/cae-data-hdf5.md)."""
+    s = api.get(f"/api/cases/{case_id}/archive")
+    if s.get("files") and len(s["files"]) > 40:
+        s["files"] = s["files"][:40] + [f"... {len(s['files']) - 40}개 더"]
+    return s
 
 
 @mcp.tool()

@@ -160,6 +160,8 @@ class Case(TimestampMixin, Base):
     run_by = Column(Integer, ForeignKey("users.id"))
     images = Column(JSON, default=list)  # 서버 files 경로 목록
     fields = Column(JSON, default=list)  # 업로드된 필드 이름 목록 (fields/<이름>.npz)
+    # 해석 데이터 묶음(case.h5, HDF5) 정보: {stored: server|pc, size, sha256, pc_path, field_names, frames, raw, ok, packed_at}
+    archive = Column(JSON)
     error = Column(Text)
 
 

@@ -49,6 +49,10 @@ P0012_<프로젝트>/            ← 지금 작업 폴더(cwd)
 - 사용자가 결과 파일을 직접 보고 싶어 하면 웹앱의 [폴더 열기]·[뷰어로 열기]를 안내한다. 사내 CAE 뷰어가 등록돼 있으면 그 뷰어로 열린다.
 - 해석이 무겁거나 케이스가 많으면 HPC를 제안한다. 스터디 `adapter_config`에 `"runner": "hpc"`를 넣는다. 그러려면 PC Agent에 `[hpc]` 설정이 있고 작업 폴더가 공유 스토리지에 있어야 한다.
 - 3D 형상·필드가 필요하면 `adapter_config.post`에 툴별 필드 추출 스크립트를 추가한다. post는 여러 단계를 리스트로 받을 수 있다.
+- **해석 결과는 빠짐없이 남긴다.** 케이스가 끝나면 PC Agent가 케이스 폴더를 `case.h5`(HDF5 압축)로 묶어 서버에 올린다(docs/cae-data-hdf5.md).
+  - 결과 파일 내용 전체(모든 스텝·프레임·필드)를 담으려면 스터디를 만들 때 툴별 "결과 전체 저장" 단계를 `post` 끝에 붙인다:
+    LS-DYNA `dyna_to_h5.py` · Nastran/OptiStruct `op2_to_h5.py` · Abaqus `abq_odb_to_npz.py`(각 스킬의 '결과 전체 저장' 절). 기본으로 붙이고 Flow detail에 적는다.
+  - 무엇이 담겼는지는 `dds-study.case_data(case_id)`로 본다. 원본이 없어도 case.h5로 Output 추가·3D 학습을 다시 할 수 있다.
 
 ## 2. 툴 자동화 방법
 - 먼저 `dds-cae.list_tools`로 이 PC에서 쓸 수 있는 툴(status: ready / partial / missing)과 읽을 스킬을 확인합니다.

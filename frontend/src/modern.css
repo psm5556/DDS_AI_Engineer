@@ -507,3 +507,10 @@ td.empty-row { padding: 22px 14px !important; text-align: center; }
 /* 케이스 표를 촘촘히: 좁은 캔버스에서도 출력 열까지 보이게 */
 .case-table th, .case-table td { padding: 6px 8px; font-size: 12.5px; }
 .art-table th, .art-table td { white-space: nowrap; }
+/* 케이스 해석 데이터(case.h5) */
+.h5-line { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.h5-chip { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 99px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--ink-2); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+button.h5-chip:hover { border-color: var(--brand-200); color: var(--brand); background: var(--brand-soft); }
+.h5-chip.pc { color: var(--ink-3); }
+.h5-chip.err { color: var(--err); background: var(--err-soft); border-color: var(--err-ring); }

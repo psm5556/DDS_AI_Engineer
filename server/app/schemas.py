@@ -303,6 +303,7 @@ class CaseResponse(ORM):
     run_by: int | None
     images: list[str] | None
     fields: list[str] | None = None
+    archive: dict[str, Any] | None = None
     error: str | None
 
 

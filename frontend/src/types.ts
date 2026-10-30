@@ -55,6 +55,9 @@ export interface Case {
   id: number; study_id: number; params: Record<string, number>; results: Record<string, number>;
   status: string; source: string; run_dir: string | null; run_by: number | null; images: string[] | null; error: string | null;
   fields?: string[] | null;
+  /** 해석 데이터 묶음(case.h5, HDF5) — docs/cae-data-hdf5.md */
+  archive?: { stored?: "server" | "pc"; size?: number; ok?: boolean; error?: string; pc_path?: string; field_names?: string[];
+    fields?: number; frames?: number; history?: number; raw?: number; raw_size?: number; upload_error?: string } | null;
 }
 export interface StudyStatus { study: Study; counts: Record<string, number>; best: Case | null; running: boolean; extracting?: number[] }
 export interface SurrogateModel {

@@ -151,3 +151,11 @@ quit
 ```
 - 충돌 해석은 `--deformed 1`로 마지막 시점의 변형 형상까지 학습하면, Simulator에서 '찌그러진 모양 + 응력'을 바로 볼 수 있다.
 - `--field eps`(유효 소성 변형률), `disp`(변위 크기)도 된다. d3plot에 해당 결과가 저장되도록 `*DATABASE_EXTENT_BINARY`를 확인한다.
+
+## 결과 전체 저장 — case.h5 (HDF5)
+케이스가 끝나면 PC Agent가 케이스 폴더를 `case.h5`(HDF5 압축)로 묶어 서버에 올린다(docs/cae-data-hdf5.md). results.json·fields/*.npz·history/*.csv·로그·입력 덱은 자동으로 담긴다. **해석 결과 전체(모든 스텝·프레임·필드)를 빠짐없이 남기려면** 아래 추출 단계를 스터디 `adapter_config.post` 끝에 붙인다. 원본 결과 파일이 지워져도 나중에 Output을 추가하거나 3D 학습을 다시 할 수 있다.
+```json
+{"tool": "python", "script": "scripts/dyna_to_h5.py", "args": ["d3plot", "--binout", "binout*"]}
+```
+- `scripts/dyna_to_h5.py`(플랫폼 python, lasso-python): d3plot의 모든 상태·모든 배열(변위·속도·응력·변형률·소성변형률·요소 생존)과 메쉬, binout의 모든 숫자 이력(glstat·matsum·rcforc·nodout…)을 case.h5에 바로 쓴다.
+- 상태가 수백 개라 너무 크면 `--every 5`처럼 줄인다(사용자에게 알린다). TODO(사내검증): 사내 d3plot·binout 읽기

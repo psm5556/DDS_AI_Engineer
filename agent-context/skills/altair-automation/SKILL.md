@@ -144,3 +144,7 @@ optistruct.bat case.fem -nt 4          # Linux: optistruct case.fem -nt 4
 - OptiStruct OP2 출력(`OUTPUT,OP2`)이 있으면 `simcenter3d-automation/scripts/op2_fields.py`를 그대로 쓴다:
   `{"tool": "python", "script": "scripts/op2_fields.py", "args": ["model.op2", "--bdf", "model.fem", "--field", "vm"]}`
   (스크립트를 프로젝트 `scripts/`로 복사해서 쓴다)
+
+## 결과 전체 저장 — case.h5 (HDF5)
+케이스가 끝나면 PC Agent가 케이스 폴더를 `case.h5`(HDF5 압축)로 묶어 서버에 올린다(docs/cae-data-hdf5.md). results.json·fields/*.npz·history/*.csv·로그·입력 덱은 자동으로 담긴다. **해석 결과 전체(모든 스텝·프레임·필드)를 빠짐없이 남기려면** 아래 추출 단계를 스터디 `adapter_config.post` 끝에 붙인다. 원본 결과 파일이 지워져도 나중에 Output을 추가하거나 3D 학습을 다시 할 수 있다.
+- OptiStruct 결과를 OP2로 쓰게 하고(`OUTPUT,OP2`), `simcenter3d-automation/scripts/op2_to_h5.py`를 `--mode optistruct`로 쓴다. H3D만 있으면 HyperView 배치로 필요한 필드를 fields/*.npz로 내보낸다. TODO(사내검증)

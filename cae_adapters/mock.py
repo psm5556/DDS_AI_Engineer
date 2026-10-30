@@ -150,6 +150,15 @@ FUNCTIONS = {
 }
 
 
+def washer_history(params: dict, vib: float, n: int = 400) -> np.ndarray:
+    """탈수 중 통 변위 시간 이력(예시): 회전수 주기의 원운동 + 약한 기동 과도 — [time, x, y, z] (s, mm)."""
+    rpm = params.get("rpm", 1200.0)
+    t = np.linspace(0.0, 2.0, n)
+    w = 2 * np.pi * rpm / 60
+    ramp = 1 - np.exp(-t / 0.3)
+    return np.column_stack([t, vib * ramp * np.cos(w * t), vib * ramp * np.sin(w * t), 0.15 * vib * ramp * np.sin(2 * w * t)])
+
+
 def _compute(fn_name: str, params: dict):
     results = FUNCTIONS[fn_name][0](params)
     return results if isinstance(results, tuple) else (results, {})
@@ -195,6 +204,10 @@ class MockAdapter(CaeAdapter):
             (run_dir / "fields").mkdir(exist_ok=True)
             for name, f in fields.items():
                 np.savez_compressed(run_dir / "fields" / f"{name}.npz", **f)
+        if fn_name == "washer":  # 시간 이력도 케이스 폴더에 남긴다 → case.h5의 /history로 담긴다
+            (run_dir / "history").mkdir(exist_ok=True)
+            np.savetxt(run_dir / "history" / "tub_displacement.csv", washer_history(params, results["vibration"]),
+                       delimiter=",", header="time,x,y,z", comments="", fmt="%.6g")
         if config.get("outputs"):
             results = {k: v for k, v in results.items() if k in config["outputs"]}
         noise = float(config.get("noise", 0))

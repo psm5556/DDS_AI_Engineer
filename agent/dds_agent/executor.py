@@ -17,6 +17,10 @@ from .server_api import ServerApi
 
 log = logging.getLogger(__name__)
 MAX_IMAGES = 6
+# 케이스가 끝나면 케이스 폴더를 case.h5로 묶는다(빠짐없이: 메타·필드 전 프레임·이력·작은 파일·원본 목록).
+# upload_max_mb 이하면 서버에도 올린다(넘으면 PC에만 두고 정보만 보낸다). float32=True면 실수를 4바이트로 줄인다(손실 있음).
+ARCHIVE_DEFAULTS = {"enabled": True, "upload_max_mb": 500, "text_max_mb": 5, "hash_max_mb": 512,
+                    "compression": "gzip", "level": 4, "float32": False}
 
 
 def _now() -> str:
@@ -63,8 +67,10 @@ class CaseExecutor:
             out = CaseOutcome("failed", error=str(e))
         if out.results and run_dir.is_dir():
             ws.record_case(sdir, run_dir, {"results": {**(job.get("results") or {}), **out.results}})
+        archive = self._archive(job, run_dir) if out.results else None  # 새 Output도 case.h5에 반영
         self.report({"type": "case.status", "case_id": job["case_id"], "status": "complete", "extract": True,
-                     "results": out.results, "error": None if out.status == "complete" else f"Output 추출 실패: {out.error}"})
+                     "results": out.results, "error": None if out.status == "complete" else f"Output 추출 실패: {out.error}",
+                     "archive": archive})
 
     def _run_case(self, job: dict):
         ws = self.s.workspace
@@ -91,8 +97,35 @@ class CaseExecutor:
         ws.record_case(sdir, run_dir, {**meta, "status": out.status, "results": out.results, "error": out.error, "finished": _now()})
         images = self._upload_images(job["project_id"], run_dir / "images")
         fields = self._upload_fields(job["case_id"], run_dir / "fields")
+        archive = self._archive(job, run_dir) if out.status != "dry_run" else None
         self.report({"type": "case.status", "case_id": job["case_id"], "status": out.status,
-                     "results": out.results, "error": out.error, "images": images, "fields": fields})
+                     "results": out.results, "error": out.error, "images": images, "fields": fields, "archive": archive})
+
+    def _archive(self, job: dict, run_dir: Path) -> dict | None:
+        """케이스 폴더 → case.h5(HDF5). 실패해도 케이스 결과는 그대로 보고한다."""
+        from cae_adapters.h5store import H5_NAME, archive_info, file_sha256, pack_case
+
+        cfg = {**ARCHIVE_DEFAULTS, **(self.s.archive or {})}
+        if not cfg["enabled"] or not run_dir.is_dir():
+            return None
+        try:
+            s = pack_case(run_dir, meta={"case_id": job["case_id"], "study_id": job["study_id"], "adapter": job.get("adapter", ""),
+                                         "project_uid": job.get("project_uid") or "", "host": os.environ.get("COMPUTERNAME", "")},
+                          text_max_mb=cfg["text_max_mb"], hash_max_mb=cfg["hash_max_mb"], compression=cfg["compression"],
+                          level=cfg["level"], float32=cfg["float32"])
+        except Exception as e:
+            log.exception("case.h5 묶기 실패")
+            return {"ok": False, "error": f"case.h5 묶기 실패: {e}", "stored": "pc"}
+        h5 = run_dir / H5_NAME
+        info = {**archive_info(s), "stored": "pc", "pc_path": str(h5), "sha256": file_sha256(h5)}
+        if s["size"] <= cfg["upload_max_mb"] * 1e6:
+            try:
+                self.api.upload(f"/api/cases/{job['case_id']}/archive", h5)
+                info["stored"] = "server"
+            except Exception as e:
+                log.warning("case.h5 올리기 실패 %s: %s", h5, e)
+                info["upload_error"] = str(e)[:300]
+        return info
 
     def _upload_fields(self, case_id: int, folder: Path) -> list[str]:
         """필드·형상 데이터(fields/*.npz: points, values, triangles)를 서버로 올려 형상·필드 학습에 쓴다."""

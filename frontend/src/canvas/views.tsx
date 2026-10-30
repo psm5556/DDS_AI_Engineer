@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, Gauge, Loader2, Play, Plus, Trash2, Workflow } from "lucide-react";
+import { Database, FolderOpen, Gauge, Loader2, Play, Plus, Trash2, Workflow } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { del, get, put } from "../api";
+import { del, download, get, put } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
 import { useAuth } from "../auth";
 import { Confirm } from "../components/Modal";
@@ -175,6 +175,24 @@ function outputNames(s: Study, cases: Case[]): string[] {
   return Array.from(new Set([...names, ...rest]));
 }
 
+const bytes = (n?: number) => (!n ? "" : n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
+
+/** 케이스 해석 데이터(case.h5) 칸: 서버에 있으면 받기, PC에만 있으면 위치를 알려 준다 */
+function ArchiveCell({ c, name }: { c: Case; name: string }) {
+  const toast = useToast();
+  const a = c.archive;
+  if (!a) return <span className="muted">-</span>;
+  if (a.ok === false) return <span className="h5-chip err" title={a.error ?? "묶지 못했습니다"}>오류</span>;
+  const what = [a.field_names?.length ? `필드 ${a.field_names.join(", ")}` : "", a.frames ? `프레임 ${a.frames}` : "",
+    a.history ? `이력 ${a.history}` : "", a.raw ? `PC 원본 ${a.raw}개(${bytes(a.raw_size)})` : ""].filter(Boolean).join(" · ");
+  return a.stored === "server" ? (
+    <button className="h5-chip" title={`case.h5 받기 — ${what || "메타·결과·로그"}`}
+      onClick={() => download(`/api/cases/${c.id}/archive/file`, `${name}_C${String(c.id).padStart(4, "0")}.h5`).catch((e: Error) => toast(e.message, true))}>
+      {bytes(a.size)}</button>
+  ) : <span className="h5-chip pc" title={`PC에만 있습니다(크기가 커서 서버에 올리지 않음${a.upload_error ? " 또는 올리기 실패" : ""}) — ${a.pc_path ?? ""}
+${what}`}>PC · {bytes(a.size)}</span>;
+}
+
 function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const { user } = useAuth();
   const open = useOpenLocal(pid);
@@ -218,6 +236,17 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
           {st.running && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />실행 중</span>}
           {extracting.size > 0 && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />Output 추출 중 {extracting.size}건</span>}
         </div>
+        {(() => {
+          const saved = (cases ?? []).filter((c) => c.archive && c.archive.ok !== false);
+          if (!saved.length) return null;
+          const onServer = saved.filter((c) => c.archive?.stored === "server");
+          return (
+            <p className="small muted h5-line" title="케이스마다 결과(메타·필드 전 프레임·이력·로그)를 HDF5로 압축해 담은 파일 — docs/cae-data-hdf5.md">
+              <Database size={12} />해석 데이터(HDF5) {saved.length}/{cases?.length ?? 0}건 저장 · 서버 {onServer.length}건 {bytes(onServer.reduce((t, c) => t + (c.archive?.size ?? 0), 0))}
+              {saved.length > onServer.length && ` · PC에만 ${saved.length - onServer.length}건`}
+            </p>
+          );
+        })()}
       </section>
 
       {/* 입력(설계 변수)과 출력(해석에서 뽑는 값)을 나눠 보여 준다. Output은 대화로 언제든 늘릴 수 있다 */}
@@ -276,9 +305,10 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
               <th colSpan={3} />
               {vars.length > 0 && <th colSpan={vars.length} className="col-in grp">입력</th>}
               {outs.length > 0 && <th colSpan={outs.length} className="col-out grp">출력</th>}
-              <th />
+              <th colSpan={2} />
             </tr>
-            <tr><th>ID</th><th>출처</th><th>상태</th>{vars.map((v) => <th key={v} className="r col-in">{v}</th>)}{outs.map((o) => <th key={o} className="r col-out">{o}</th>)}<th /></tr>
+            <tr><th>ID</th><th>출처</th><th>상태</th>{vars.map((v) => <th key={v} className="r col-in">{v}</th>)}{outs.map((o) => <th key={o} className="r col-out">{o}</th>)}
+              <th title="해석 데이터(case.h5, HDF5)">HDF5</th><th /></tr>
           </thead>
           <tbody>{(cases ?? []).map((c) => (
             <tr key={c.id} className={st.best?.id === c.id ? "best-row" : ""} title={c.error ?? undefined}>
@@ -289,6 +319,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
                 <td key={o} className="r col-out">{o in (c.results ?? {}) ? fmt(c.results[o])
                   : extracting.has(c.id) ? <Loader2 size={11} className="spin muted" aria-label="추출 중" /> : ""}</td>
               ))}
+              <td className="nowrap"><ArchiveCell c={c} name={s.name} /></td>
               <td className="r nowrap">{(() => {
                 const rel = relFromRunDir(c.run_dir);
                 const mine = c.run_by === user?.id;

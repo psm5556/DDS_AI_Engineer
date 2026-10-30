@@ -147,3 +147,10 @@ nastran case.bdf scr=yes old=no batch=no
 - `scripts/nastran_run.py`: (python) 편집 → `PARAM,POST,-1` 보장 → nastran 실행 → 판정 → 추출
 - `scripts/nastran_op2_extract.py`: (python) f06 판정, OP2 → results.json, images/*.png, fields/*.npz
 - [references/bdf-format.md](references/bdf-format.md): 필드 형식, 주요 카드 필드 번호, SOL별 최소 덱
+
+## 결과 전체 저장 — case.h5 (HDF5)
+케이스가 끝나면 PC Agent가 케이스 폴더를 `case.h5`(HDF5 압축)로 묶어 서버에 올린다(docs/cae-data-hdf5.md). results.json·fields/*.npz·history/*.csv·로그·입력 덱은 자동으로 담긴다. **해석 결과 전체(모든 스텝·프레임·필드)를 빠짐없이 남기려면** 아래 추출 단계를 스터디 `adapter_config.post` 끝에 붙인다. 원본 결과 파일이 지워져도 나중에 Output을 추가하거나 3D 학습을 다시 할 수 있다.
+- `simcenter3d-automation/scripts/op2_to_h5.py`를 프로젝트 `scripts/`로 복사해 쓴다(OP2 형식이 같다). `--mode msc`, 메쉬는 `--bdf job.bdf`.
+```json
+{"tool": "python", "script": "scripts/op2_to_h5.py", "args": ["job.op2", "--mode", "msc", "--bdf", "job.bdf"]}
+```

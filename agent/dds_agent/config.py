@@ -43,6 +43,8 @@ class AgentSettings:
     auto_update: bool = True  # 서버에 새 버전이 배포되면 유휴 시 자동 업데이트
     tray: bool = True  # Windows 트레이 아이콘으로 연결 상태 표시
     max_parallel_cases: int = 1
+    # 케이스 해석 데이터 저장(case.h5, HDF5 압축) — executor.ARCHIVE_DEFAULTS를 덮어쓴다. 예) [archive] upload_max_mb = 1000
+    archive: dict = field(default_factory=dict)
     tools: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_TOOL_PATHS))
     tool_commands: dict[str, list[str]] = field(default_factory=dict)
     tool_env: dict[str, dict[str, str]] = field(default_factory=dict)  # 툴별 추가 환경변수 (예: amesim의 AME)

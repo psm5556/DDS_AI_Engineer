@@ -180,3 +180,11 @@ session.printToFile(fileName='images/mises', format=PNG, canvasObjects=(vp,))   
 ```
 - `--field U --invariant magnitude --name disp` 처럼 변위 크기도 저장할 수 있다. 여러 필드가 필요하면 post를 여러 번 실행하거나 스크립트를 두 번 호출한다.
 - 스크립트: `scripts/abq_odb_fields.py`(Abaqus 내장 python, py2/3 겸용, 외곽 면 자동 추출, ELEMENT_NODAL → 노드 평균)
+
+## 결과 전체 저장 — case.h5 (HDF5)
+케이스가 끝나면 PC Agent가 케이스 폴더를 `case.h5`(HDF5 압축)로 묶어 서버에 올린다(docs/cae-data-hdf5.md). results.json·fields/*.npz·history/*.csv·로그·입력 덱은 자동으로 담긴다. **해석 결과 전체(모든 스텝·프레임·필드)를 빠짐없이 남기려면** 아래 추출 단계를 스터디 `adapter_config.post` 끝에 붙인다. 원본 결과 파일이 지워져도 나중에 Output을 추가하거나 3D 학습을 다시 할 수 있다.
+```json
+{"tool": "abaqus_python", "script": "scripts/abq_odb_to_npz.py", "args": ["job.odb"]}
+```
+- `scripts/abq_odb_to_npz.py`(Abaqus 내장 python, py2/3 겸용): 모든 스텝·프레임·필드 출력(bulkDataBlocks)과 이력 출력, 인스턴스별 메쉬를 `h5in/*.npz`·`history/*.csv`로 남긴다. Abaqus 파이썬에는 h5py가 없어서이고, PC Agent가 case.h5로 묶는다.
+- 큰 ODB는 `--every 5`·`--fields S,U,PEEQ`로 줄일 수 있다(사용자에게 알린다). TODO(사내검증): 프레임마다 행 수, 큰 ODB 시간

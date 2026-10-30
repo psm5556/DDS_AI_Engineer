@@ -20,6 +20,7 @@ class Settings:
     # 케이스 실행을 맡을 Agent가 없을 때 서버에서 직접 mock 어댑터를 돌릴지(개발/데모용)
     allow_server_mock: bool = True
     max_upload_mb: int = 1024  # 대화 첨부 파일 최대 크기(CAD·해석 입력 파일)
+    archive_max_mb: int = 4096  # 케이스 해석 데이터(case.h5, HDF5) 한 개의 최대 크기 — 넘으면 PC에만 둔다
     # 사내 웹 CAE 뷰어: 결과 파일을 새 창으로 여는 URL 템플릿. {path}=파일 절대경로(그 PC 기준), {host}=PC 이름,
     # {project_id}, {rel}=프로젝트 폴더 기준 상대경로. 예) "http://cae-viewer.corp/open?host={host}&file={path}"
     web_viewer_url: str = ""

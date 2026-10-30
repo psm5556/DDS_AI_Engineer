@@ -31,6 +31,12 @@
 - 요소 값은 노드로 평균해서 저장한다. 표면 노드만 저장해도 된다(용량 절약).
 - 툴별 추출 방법은 각 스킬의 "결과 추출" 절을 참고한다. 예를 들어 Abaqus는 odb의 표면 노드 좌표와 `S` 불변량, Nastran OP2는 pyNastran으로 추출한다.
 
+### 1-1-1. 결과 전체 저장 (case.h5, HDF5)
+케이스가 끝나면 PC Agent가 케이스 폴더를 `case.h5`(HDF5 압축)로 묶는다. 스키마와 규약은 **docs/cae-data-hdf5.md**.
+- 자동으로 담기는 것: params·results·case.json, `fields/*.npz`, `history/*.csv`, 작은 텍스트(로그·입력 덱)·이미지. 큰 바이너리 결과는 manifest에 목록·크기·sha256만.
+- 결과 파일 내용 전체를 담으려면: 플랫폼 python 스크립트는 `cae_adapters.h5store.CaseH5`로 `case.h5`에 바로 쓰고, 툴 내장 python(h5py 없음)은 `h5in/*.npz`(frames·time·labels·meta_json, 메쉬는 points·elements__<형식>)로 남긴다.
+- `fields/*.npz`도 확장 키(`frames`(F,N,C)·`time`·`step`·`unit`·`components`)를 쓰면 모든 프레임이 담긴다.
+
 ### 1-2. Output 추가 추출 (나중에 출력 항목을 늘릴 때)
 사용자가 해석을 마친 뒤 "OO도 Output에 넣어 줘"라고 하면 에이전트는 `dds-study.add_outputs`를 쓴다. 해석은 다시 돌리지 않는다.
 

@@ -4,15 +4,18 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import base64
+import hashlib
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from cae_adapters import REGISTRY
 
 from .. import models, schemas
 from ..agent.link import AgentError
+from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, require_member
 from ..study import service
@@ -274,6 +277,70 @@ async def upload_field(case_id: int, file: UploadFile = File(...), user=Depends(
     c.fields = sorted(set((c.fields or []) + [name]))
     db.commit()
     return {"ok": True, "field": name}
+
+
+# ---------- 케이스 해석 데이터(case.h5, HDF5) ----------
+def _case_member(case_id: int, user, db) -> tuple[models.Case, models.Study]:
+    c = get_or_404(db, models.Case, case_id, "케이스")
+    study = db.get(models.Study, c.study_id)
+    require_member(study.project_id, user, db)
+    return c, study
+
+
+@router.post("/cases/{case_id}/archive")
+async def upload_archive(case_id: int, file: UploadFile = File(...), user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """PC Agent가 케이스 폴더를 묶은 case.h5를 올린다. 크기 제한(archive_max_mb)을 넘으면 PC에만 둔다."""
+    from cae_adapters.h5store import FORMAT, archive_info, summary
+
+    c, study = _case_member(case_id, user, db)
+    dest = service.archive_path(study.project_id, study.id, c.id)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp, limit, size = dest.with_suffix(".part"), settings.archive_max_mb * 1024 * 1024, 0
+    h = hashlib.sha256()
+    with open(tmp, "wb") as out:  # 큰 파일도 메모리에 다 올리지 않고 나눠 쓴다
+        while chunk := await file.read(1 << 20):
+            size += len(chunk)
+            if size > limit:
+                out.close()
+                tmp.unlink(missing_ok=True)
+                raise HTTPException(413, f"case.h5는 {settings.archive_max_mb} MB까지 올릴 수 있습니다 → PC에 그대로 둡니다")
+            h.update(chunk)
+            out.write(chunk)
+    try:
+        s = summary(tmp)
+        if s["format"] != FORMAT:
+            raise ValueError("DDS case.h5 형식이 아닙니다")
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(400, f"case.h5를 읽지 못했습니다: {e}")
+    tmp.replace(dest)
+    c.archive = {**(c.archive or {}), **archive_info(s), "stored": "server", "sha256": h.hexdigest()}
+    db.commit()
+    manager.publish({"type": "case_updated", "project_id": study.project_id, "data": {"id": c.id, "study_id": study.id}})
+    return c.archive
+
+
+@router.get("/cases/{case_id}/archive")
+def archive_summary(case_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """case.h5에 담긴 것: 메타·메쉬·필드(스텝·프레임)·이력·파일, PC에 원본으로 남은 파일 목록, 검증 결과."""
+    from cae_adapters.h5store import summary
+
+    c, study = _case_member(case_id, user, db)
+    path = service.archive_path(study.project_id, study.id, c.id)
+    if path.is_file():
+        return {**summary(path), "stored": "server"}
+    if c.archive:
+        return {**c.archive, "stored": c.archive.get("stored", "pc")}
+    raise HTTPException(404, "이 케이스의 해석 데이터(case.h5)가 아직 없습니다")
+
+
+@router.get("/cases/{case_id}/archive/file")
+def archive_file(case_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    c, study = _case_member(case_id, user, db)
+    path = service.archive_path(study.project_id, study.id, c.id)
+    if not path.is_file():
+        raise HTTPException(404, "서버에 case.h5가 없습니다 → 케이스를 실행한 PC의 케이스 폴더에 있습니다")
+    return FileResponse(path, filename=f"{study.name}_C{c.id:04d}.h5", media_type="application/x-hdf5")
 
 
 @router.post("/studies/{study_id}/train_field", response_model=schemas.FieldModelResponse)
