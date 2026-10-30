@@ -803,3 +803,86 @@ button:active:not(:disabled), .btn:active { transform: scale(.98); }
 
 /* 고정폭 글꼴에는 한글이 없어 대체 글꼴로 나오는데, 띄어쓰기만 고정폭 폭이라 벌어져 보인다 */
 .login-tag, .hero-readout i, .hero-readout em, .home-recent .home-sec, .recent-row .small, .tools-hint, .side-group h4 { word-spacing: -.28em; }
+
+/* ---------- 작업대: 일하는 화면도 같은 재료로. 상자를 줄이고 선으로 나누며, 머리말·숫자는 고정폭 ---------- */
+/* 머리줄 */
+.ws-head, .canvas, .canvas-head { background: transparent; }
+.ws-head { min-height: 48px; border-bottom: 1px solid var(--line); }
+.canvas-head { min-height: 48px; padding: 0 var(--sp-2) 0 var(--sp-4); }
+.canvas-tabs { gap: var(--sp-4); }
+.canvas-tabs button { padding: 0; border-radius: 0; box-shadow: inset 0 -2px 0 transparent; transition: color var(--dur-fast), box-shadow var(--dur) var(--ease-out); }
+.canvas-tabs button:hover:not(:disabled) { background: none; }
+.canvas-tabs button.on { background: none; font-weight: 600; box-shadow: inset 0 -2px 0 var(--brand-solid); }
+
+/* 일반 화면 제목 */
+.page > h1, .page h1:first-child, .sim-head h1 { font-size: var(--fs-28); letter-spacing: var(--track-display); font-weight: 650; }
+.crumb { font-family: var(--font-mono); font-size: var(--fs-11); letter-spacing: var(--track-label); color: var(--ink-3); word-spacing: -.28em; }
+
+/* 대화 카드 */
+.chat-card { border-radius: var(--r-m); }
+.flow-card.st-review { box-shadow: none; }
+.perm-card { box-shadow: none; }
+.flow-steps .fs-ico { font-family: var(--font-mono); font-weight: 500; border-radius: var(--r-s); background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.flow-steps .fs-complete .fs-ico, .flow-steps .fs-in_progress .fs-ico, .flow-steps .fs-failed .fs-ico { box-shadow: none; }
+.flow-steps .fs-tag { font-family: var(--font-mono); background: transparent; padding: 0; color: var(--ink-3); }
+.flow-steps .fs-in_progress .fs-label { color: var(--brand); }
+.flow-steps .fs-in_progress .fs-ico { background: var(--brand-soft); color: var(--brand); }
+.chat-arts { border: none; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; padding: 0; }
+.chat-arts-head { padding: var(--sp-2) 0 var(--sp-1); font-family: var(--font-mono); font-size: var(--fs-11); letter-spacing: var(--track-label); color: var(--ink-3); word-spacing: -.28em; }
+.chat-art-open { border-radius: 0; padding: 0; }
+.chat-art-open:hover:not(:disabled) { background: transparent; }
+.chat-arts-more { margin: var(--sp-1) 0 var(--sp-2); }
+.cv-toolgroup-head { padding: 0; border-radius: 0; background: transparent; color: var(--ink-3); }
+.cv-toolgroup-head:hover:not(:disabled) { background: transparent; color: var(--ink); }
+
+/* 흐름도: 얇은 선 위의 도면 */
+.flow-canvas, .canvas .flow-canvas { background: transparent; border-color: var(--line); border-radius: var(--r-s); }
+.flow-canvas .react-flow__background { background: transparent; }
+.flow-canvas .react-flow__background pattern circle { fill: var(--line); }
+.flow-canvas .react-flow__edge-path { stroke-width: 1.2; }
+.flow-canvas .react-flow__edge.animated .react-flow__edge-path { stroke: var(--brand-solid); }
+.flow-canvas .react-flow__edge-textbg { fill: var(--paper); }
+.flow-canvas .react-flow__controls { border-radius: var(--r-s); }
+.flow-node, .flow-node.compact { border-radius: var(--r-s); }
+.flow-node:hover { box-shadow: none; }
+.flow-node.sel { border-color: var(--brand-solid); box-shadow: inset 0 0 0 1px var(--brand-solid); }
+.fn-no { min-width: 0; height: auto; padding: 0; border-radius: 0; background: transparent; font-family: var(--font-mono); font-size: var(--fs-11); font-weight: 500; color: var(--ink-3); }
+.flow-node.sel .fn-no { background: transparent; color: var(--brand); }
+.flow-node.compact .fn-sub, .fn-type { font-family: var(--font-mono); word-spacing: -.28em; }
+.flow-node.compact .fn-sub { color: var(--ink-3); }
+.flow-node.st-in_progress { border-color: var(--brand-solid); }
+
+/* 진행 막대: 머리카락처럼 얇게 */
+.pbar, .flow-progress { height: 2px; border-radius: 0; background: var(--line); }
+.pbar i, .flow-progress > div { border-radius: 0; background: var(--brand-solid); transition: width var(--dur-slow) var(--ease-out); }
+.flow-tab > .pbar { margin-bottom: var(--sp-3); }
+
+/* 단계별 결과: 카드 상자 없이 선과 번호로 */
+.flow-title { font-size: var(--fs-16); font-weight: 650; letter-spacing: var(--track-title); }
+.flow-hint { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--ink-3); word-spacing: -.28em; }
+.step-no, .step-no.muted, .step-sec.st-failed .step-no, .step-sec.sel .step-no { padding: 0; border-radius: 0; background: transparent; font-family: var(--font-mono); font-size: var(--fs-12); font-weight: 500; word-spacing: -.28em; }
+.step-no { color: var(--brand); }
+.step-sec.sel .step-no { color: var(--brand); }
+.step-sec.sel .step-head { border-bottom-color: var(--brand-solid); }
+.step-head { transition: border-color var(--dur) var(--ease-out); }
+.step-label { font-size: var(--fs-14); }
+.canvas .art-card, .canvas .art-card.panel { padding: 0 0 var(--sp-4); border: none; border-radius: 0; background: transparent; }
+.art-card .panel-head h3 { font-size: var(--fs-13); font-weight: 600; }
+.art-card .panel-head .small.muted { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--ink-3); word-spacing: -.28em; }
+.art-card .panel-head .icon-btn { opacity: 0; transition: opacity var(--dur-fast); }
+.art-card:hover .panel-head .icon-btn, .art-card .panel-head .icon-btn:focus-visible { opacity: 1; }
+
+/* 표: 머리는 고정폭, 숫자도 고정폭으로 자릿수가 맞게 */
+th { font-family: var(--font-mono); font-size: var(--fs-11); letter-spacing: .02em; word-spacing: -.28em; }
+.case-table th { font-size: var(--fs-11); }
+td.r { font-family: var(--font-mono); font-size: var(--fs-12); }
+.case-table td.r { font-size: var(--fs-12); }
+.case-table, .art-table { border-radius: var(--r-s); }
+
+/* 칩·막대·값 */
+.chip { border-radius: var(--r-s); transition: background-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out); }
+.block .lbl, .io-head .cnt, .block-head .cnt { font-family: var(--font-mono); font-weight: 500; font-size: var(--fs-11); letter-spacing: var(--track-label); word-spacing: -.28em; }
+.cond-big b, .sim-out b { font-family: var(--font-mono); font-weight: 500; letter-spacing: -.02em; }
+.cond-big span { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--ink-3); }
+.empty-hero { border: none; background: transparent; }
+.seg button.on { box-shadow: none; }

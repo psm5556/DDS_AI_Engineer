@@ -103,7 +103,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
         </div>
         {flow.status === "review" && <span className="notice-inline warn">대화의 카드에서 승인하거나 반려하세요</span>}
       </div>
-      <div className="bar" aria-label="진행률"><i style={{ width: `${(done / Math.max(1, flow.nodes.length)) * 100}%` }} /></div>
+      <div className="pbar" aria-label="진행률"><i style={{ width: `${(done / Math.max(1, flow.nodes.length)) * 100}%` }} /></div>
       <FlowCanvas flow={flow} selected={sel} onSelect={goStep} artifactCount={count} compact />
       <p className="small muted flow-hint">단계를 누르면 그 단계의 결과로 이동합니다 · 결과 {mine.length + outside.length}개</p>
 
