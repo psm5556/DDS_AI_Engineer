@@ -489,7 +489,7 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 | 작업 흐름 | `GET·POST /api/projects/{p}/flows` · `GET /api/flows/{f}` · `PUT …/status` · `PUT …/nodes/{n}` |
 | 결과 | `GET·POST /api/projects/{p}/artifacts` · `DELETE /api/artifacts/{a}` · `POST /api/projects/{p}/files`(이미지) · `GET …/files/{path}` |
 | 보고서 | `GET /api/projects/{p}/reports` · `GET …/reports/latest` · `GET /api/reports/{r}` · `POST /api/projects/{p}/reports` · `GET …/report-context` · `GET …/report?format=docx|html&report_id=` |
-| 스터디 | `GET·POST /api/projects/{p}/studies` · `GET /api/studies/{s}`(counts·best·running·extracting) · `…/cases` · `…/doe` · `…/run` · `…/train` · `…/suggest` · `…/outputs` · `…/train_field` · `…/field-models` |
+| 스터디 | `GET·POST /api/projects/{p}/studies` · `GET /api/studies/{s}`(counts·best·running·extracting) · `…/cases` · `…/doe` · `…/run` · `…/stop`(대기·실행 중 케이스 중지) · `…/train` · `…/suggest` · `…/outputs` · `…/train_field` · `…/field-models` |
 | 케이스 데이터 | `POST /api/cases/{c}/fields` · `POST·GET /api/cases/{c}/archive` · `GET …/archive/file` · `POST /api/cases/{c}/train_sample?spec_hash=` |
 | 학습 데이터 | `POST·GET /api/studies/{s}/datasets` · `GET /api/datasets/{d}` · `GET /api/datasets/{d}/manifest` |
 | 모델·Simulator | `GET /api/projects/{p}/models` · `GET /api/models/{m}/spec`(versions·current_model_id) · `POST …/deploy`(현재 버전 지정·되돌리기) · `…/predict·predict_batch` · 공유 `/api/models/{m}/shares`, `/api/shares/{t}/…` · 필드 `/api/field-models/{f}/mesh·predict`, `GET /api/studies/{s}/field-models?model_id=` · 목록 `GET /api/simulators`, `DELETE /api/simulators/shared/{share}` |

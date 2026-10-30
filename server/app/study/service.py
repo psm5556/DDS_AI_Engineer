@@ -131,7 +131,7 @@ def publish_cases_table(db, study, flow_id=None, node_id=None):
 # Agent가 없고 mock 어댑터면 개발/데모용으로 서버에서 직접 돌린다.
 _batches: dict[int, set[int]] = {}  # study_id → 아직 끝나지 않은 case id
 _batch_lock = threading.Lock()
-FINAL = {"complete", "failed", "dry_run"}
+FINAL = {"complete", "failed", "dry_run", "cancelled"}
 
 
 def is_running(study_id: int) -> bool:
@@ -170,6 +170,32 @@ def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, us
         else:
             _pool.submit(_run_on_server, job)
     return len(jobs)
+
+
+def stop_cases(study_id: int, case_ids: list[int] | None, user_id: int) -> dict:
+    """사용자가 대기·실행 중인 케이스를 중지한다. 솔버 창이 숨어 있어 이것이 웹앱에서 해석을 멈출 유일한 길이다.
+    실제 상태는 PC Agent가 끝낸 뒤 case.status로 알린다. 다른 멤버의 PC에서 도는 해석은 끝내지 않는다."""
+    from ..agent.link import AgentError, registry
+
+    with SessionLocal() as db:
+        study = db.get(models.Study, study_id)
+        extracting_now = _extracting.get(study_id, set())
+        chosen = [c for c in study.cases if not case_ids or c.id in case_ids]
+        active = [c for c in chosen if c.status in ("queued", "running") or c.id in extracting_now]
+        mine = [c for c in active if c.run_by == user_id]
+        others = len(active) - len(mine)
+        if others and not mine:
+            raise PermissionError("다른 멤버의 PC에서 도는 케이스입니다 → 그 멤버에게 중지를 요청하세요")
+        conn = registry.get(user_id)
+        if conn is None and mine and not (study.adapter == "mock" and settings.allow_server_mock):
+            raise AgentError("케이스를 실행한 PC Agent가 연결되어 있지 않아 멈출 수 없습니다 → PC Agent를 켠 뒤 다시 누르세요")
+        run_ids = [c.id for c in mine if c.status in ("queued", "running")]
+        extract_ids = [c.id for c in mine if c.id in extracting_now and c.status == "complete"]
+    if conn is None:  # 서버에서 도는 연습용 mock은 바로 끝나므로 멈출 것이 없다
+        return {"stopping": 0, "others": others}
+    if run_ids or extract_ids:
+        conn.send({"type": "case.cancel", "case_ids": run_ids, "extract_ids": extract_ids})
+    return {"stopping": len(run_ids) + len(extract_ids), "others": others}
 
 
 def on_case_status(msg: dict):

@@ -15,6 +15,7 @@ import sys
 import time
 from pathlib import Path
 
+from cae_adapters.hidden import console_python, run_hidden
 from cae_adapters.tool_commands import build_command, tool_env
 
 from . import __version__, updater
@@ -68,7 +69,7 @@ def _collect(d: Path) -> tuple[dict, list[str]]:
 def _run(cmd: list[str], d: Path, env: dict, timeout: int) -> dict:
     t0 = time.time()
     try:
-        p = subprocess.run(cmd, cwd=d, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        p = run_hidden(cmd, cwd=d, env=env, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         code, stdout, stderr, timed_out = p.returncode, p.stdout, p.stderr, False
     except subprocess.TimeoutExpired as e:
         decode = lambda b: b.decode("utf-8", "replace") if isinstance(b, bytes) else (b or "")  # noqa: E731
@@ -92,7 +93,7 @@ def op_python(settings: AgentSettings, env: dict, req: dict) -> dict:
     _write_inputs(d, req.get("files"))
     name = req.get("filename") or "check.py"
     (d / name).write_text(req["script"], encoding="utf-8")
-    return _run([sys.executable, name, *[str(a) for a in req.get("args") or []]], d, _python_env(env, d), int(req.get("timeout_sec") or 600))
+    return _run([console_python(), name, *[str(a) for a in req.get("args") or []]], d, _python_env(env, d), int(req.get("timeout_sec") or 600))
 
 
 def op_tool(settings: AgentSettings, env: dict, req: dict) -> dict:

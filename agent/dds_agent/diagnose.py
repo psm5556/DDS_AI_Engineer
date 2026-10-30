@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from cae_adapters.hidden import hidden_kwargs
 from cae_adapters.tool_commands import DEFAULT_TOOL_COMMANDS, DEFAULT_TOOL_PATHS
 
 from .config import AgentSettings
@@ -34,7 +35,7 @@ def _version(path: str, args: list[str] | None) -> str | None:
     try:
         cmd = (["cmd", "/c", path] if path.lower().endswith((".bat", ".cmd")) else [path]) + args
         p = subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace",
-                           timeout=25, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                           timeout=25, **hidden_kwargs())
         out = (p.stdout or p.stderr).strip().splitlines()
         return out[0][:160] if out else None
     except (OSError, subprocess.TimeoutExpired):

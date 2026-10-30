@@ -13,6 +13,8 @@
   case.run        {case_id, study_id, project_id, params, adapter, adapter_config, dry_run}
   case.extract    {case_id, study_id, project_id, params, results, run_dir, adapter, adapter_config, steps, names}
                   (Output 추가 — 해석 없이 추출 단계만 실행, case.status {extract: true, results: 새 값만}로 답한다)
+  case.cancel     {case_ids, extract_ids}              (사용자가 중지. 대기는 시작하지 않고 실행 중이면 솔버 트리를 끝낸다.
+                  case.status {status: "cancelled"}로 답한다. 추출은 case.status {extract: true, error}로 답한다)
   case.train_sample {dataset_id, case_id, study_id, project_id, run_dir, spec, spec_hash}
                   (학습 샘플을 만들어 POST /api/cases/{id}/train_sample로 올리고 case.train_sample {ok, error}로 답한다)
   agent.release   {version, sha256}                    (새 버전 배포. 자동 업데이트가 켜져 있으면 유휴 시 설치)

@@ -4,9 +4,14 @@ from __future__ import annotations
 import re
 import shlex
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+from cae_adapters.hidden import RunStopped, decode_output, hidden_kwargs, run_hidden
+
+STOPPED_MESSAGE = "사용자가 중지했습니다"
 
 
 @dataclass
@@ -27,6 +32,9 @@ def _tail(text: str, limit: int = 8000) -> str:
 
 
 class JobRunner:
+    def __init__(self):
+        self.stop = threading.Event()  # 사용자가 케이스를 중지하면 켜진다. 창이 없어 이것이 해석을 멈출 유일한 길이다
+
     def run(self, command: list[str], cwd: Path, timeout: int | None = None, env: dict | None = None) -> JobResult:
         raise NotImplementedError
 
@@ -35,15 +43,18 @@ class LocalRunner(JobRunner):
     def run(self, command, cwd, timeout=None, env=None):
         cwd.mkdir(parents=True, exist_ok=True)
         try:
-            p = subprocess.run(
-                command, cwd=cwd, env=env, capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=timeout,
-            )
-            res = JobResult(command, str(cwd), p.returncode, _tail(p.stdout), _tail(p.stderr))
+            if self.stop.is_set():  # 여러 단계를 차례로 돌 때 다음 단계를 시작하지 않는다
+                raise RunStopped(command)
+            # 창 없이, 입력 대기 없이. 시간 초과·중지 때는 솔버 자손까지 끝낸다(숨은 솔버가 라이선스를 쥔 채 남지 않게)
+            p = run_hidden(command, cwd=cwd, env=env, timeout=timeout, stop=self.stop)
+            res = JobResult(command, str(cwd), p.returncode, _tail(decode_output(p.stdout)), _tail(decode_output(p.stderr)))
         except FileNotFoundError as e:
             res = JobResult(command, str(cwd), None, "", f"실행 파일을 찾을 수 없습니다: {e}")
+        except RunStopped as e:
+            res = JobResult(command, str(cwd), None, _tail(decode_output(e.stdout)), STOPPED_MESSAGE)
         except subprocess.TimeoutExpired as e:
-            res = JobResult(command, str(cwd), None, _tail(e.stdout or ""), f"시간 초과({timeout}s)")
+            res = JobResult(command, str(cwd), None, _tail(decode_output(e.stdout)),
+                            f"시간 초과({timeout}s): 솔버까지 끝냈습니다 → 더 오래 걸리는 해석이면 timeout_sec를 늘려 다시 실행하세요")
         (cwd / "run.log").write_text(
             f"$ {' '.join(command)}\n[returncode] {res.returncode}\n[stdout]\n{res.stdout}\n[stderr]\n{res.stderr}\n",
             encoding="utf-8",
@@ -79,6 +90,7 @@ class HpcRunner(JobRunner):
     """
 
     def __init__(self, cfg: dict | None = None):
+        super().__init__()
         cfg = dict(cfg or {})
         preset = SCHEDULERS.get(cfg.get("scheduler", "slurm"), {})
         self.cfg = {**preset, **{k: v for k, v in cfg.items() if k in preset}, **cfg}
@@ -117,11 +129,15 @@ class HpcRunner(JobRunner):
         args = [str(a).format(**kw) for a in self.cfg[key]]
         if self.cfg.get("ssh"):
             args = ["ssh", "-o", "BatchMode=yes", self.cfg["ssh"], " ".join(shlex.quote(a) for a in args)]
-        return subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+        # 상태 조회가 poll_sec마다 돌므로 창이 뜨면 그때마다 포커스를 뺏는다
+        return subprocess.run(args, capture_output=True, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace",
+                              timeout=120, **hidden_kwargs())
 
     # ---------- 실행 ----------
     def run(self, command, cwd, timeout=None, env=None):
         cwd = Path(cwd)
+        if self.stop.is_set():
+            return JobResult(command, str(cwd), None, "", STOPPED_MESSAGE)
         rdir = self.remote_path(cwd.resolve())
         rcmd = self.remote_command(command)
         name = f"dds_{cwd.name}"[:60]
@@ -140,10 +156,13 @@ class HpcRunner(JobRunner):
         (cwd / "hpc_job_id.txt").write_text(job, encoding="utf-8")
         t0 = time.time()
         while True:
-            time.sleep(self.poll)
+            self.stop.wait(self.poll)  # 중지하면 다음 조회까지 기다리지 않는다
             done_file = cwd / ".dds_exitcode"
             if done_file.exists():
                 break
+            if self.stop.is_set():
+                self._sched("cancel", job=job)
+                return JobResult(rcmd, str(cwd), None, _read_tail(cwd / "hpc.log"), f"{STOPPED_MESSAGE} — HPC 작업 {job} 취소")
             st = self._sched("status", job=job)
             if FINISHED.search((st.stdout or "") + (st.stderr or "")) and not done_file.exists():
                 time.sleep(self.poll)  # 공유 스토리지 반영 지연 대비 한 번 더 기다림

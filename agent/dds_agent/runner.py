@@ -41,5 +41,9 @@ class AgentRunner(ABC):
         """기존 세션 재개. 지원하지 않으면 False."""
         return False
 
+    def working_in_background(self) -> bool:
+        """턴과 상관없이 이 러너 아래에서 계산이 돌고 있는지(자동 업데이트가 끼어들지 않게)."""
+        return False
+
     def shutdown(self) -> None:
         pass

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Database, FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
+import { Database, FolderOpen, Loader2, Plus, Square, Trash2 } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { del, download, get, put } from "../api";
+import { del, download, get, post, put } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
 import { useAuth } from "../auth";
 import { AgentGlyph } from "../components/AgentGlyph";
@@ -171,7 +171,7 @@ export function StudiesView({ pid }: { pid: number }) {
 }
 
 const CASE_STATUS: Record<string, [string, string]> = {
-  pending: ["대기", ""], queued: ["대기열", "info"], running: ["실행 중", "info"], complete: ["완료", "ok"], failed: ["실패", "err"], dry_run: ["스크립트만", "warn"],
+  pending: ["대기", ""], queued: ["대기열", "info"], running: ["실행 중", "info"], complete: ["완료", "ok"], failed: ["실패", "err"], dry_run: ["스크립트만", "warn"], cancelled: ["중지됨", "warn"],
 };
 
 /** 출력 순서: 목적 → 제약 → 추가한 출력 → 그 밖에 케이스 결과에 있는 키(서버 output_names와 같은 규칙) */
@@ -276,6 +276,19 @@ function DatasetsBlock({ s, done }: { s: Study; done: number }) {
 function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const { data: st } = useQuery({ queryKey: ["study", id], queryFn: () => get<StudyStatus>(`/api/studies/${id}`) });
   const { data: cases } = useQuery({ queryKey: ["study", id, "cases"], queryFn: () => get<Case[]>(`/api/studies/${id}/cases`) });
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [askStop, setAskStop] = useState(false);
+  // 해석 창이 사용자 화면에 없으므로 웹앱에서 멈출 수 있어야 한다
+  const stop = useMutation({
+    mutationFn: () => post<{ stopping: number; others: number }>(`/api/studies/${id}/stop`),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["study", id] });
+      toast(r.others ? `${r.stopping}건을 중지합니다. 다른 멤버의 PC에서 도는 ${r.others}건은 그대로 둡니다` : `${r.stopping}건을 중지합니다`);
+    },
+    onError: (e: Error) => toast(e.message, true),
+  });
   // 최적값이 바뀌었을 때만 잠깐 강조한다(화면을 처음 열 때는 그대로)
   const bestBox = useRef<HTMLDivElement>(null);
   const bestId = st?.best?.id;
@@ -293,6 +306,9 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const total = Object.values(st.counts).reduce((a, b) => a + b, 0);
   const done = (cases ?? []).filter((c) => c.status === "complete");
   const extracting = new Set(st.extracting ?? []);
+  const myRunning = (cases ?? []).filter((c) => c.run_by === user?.id && c.status === "running").length;
+  const myQueued = (cases ?? []).filter((c) => c.run_by === user?.id && c.status === "queued").length;
+  const myExtracting = (cases ?? []).filter((c) => c.run_by === user?.id && extracting.has(c.id)).length;
   const role = (o: string) => {
     const ob = s.objectives.find((x) => x.name === o);
     if (ob) return ob.goal === "min" ? "목적 · 최소" : "목적 · 최대";
@@ -320,7 +336,16 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
           </span>
           {st.running && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />실행 중</span>}
           {extracting.size > 0 && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />Output 추출 중 {extracting.size}건</span>}
+          {myRunning + myQueued + myExtracting > 0 && (
+            <button className="small" disabled={stop.isPending} onClick={() => setAskStop(true)}><Square size={12} />중지</button>
+          )}
         </div>
+        {askStop && <Confirm title="해석 중지" danger confirmLabel="중지"
+          message={[myRunning ? `실행 중인 해석 ${myRunning}건을 끝냅니다. 끝낸 해석의 결과는 남지 않습니다.` : "",
+            myQueued ? `대기 중인 ${myQueued}건은 시작하지 않습니다.` : "",
+            myExtracting ? `Output 추출 ${myExtracting}건을 멈춥니다.` : "",
+            "다시 돌리려면 대화로 요청하세요."].filter(Boolean).join(" ")}
+          onConfirm={() => stop.mutate()} onClose={() => setAskStop(false)} />}
         {(() => {
           const saved = (cases ?? []).filter((c) => c.archive && c.archive.ok !== false);
           if (!saved.length) return null;

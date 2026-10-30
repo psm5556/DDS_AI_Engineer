@@ -182,11 +182,12 @@ def path_keys() -> set[str]:
 def _verify(cmd: list[str], paths: dict[str, str]) -> bool:
     import subprocess
 
+    from .hidden import hidden_kwargs
+
     try:
         args = [paths.get(c[1:-1], c) if c.startswith("{") and c.endswith("}") else c for c in cmd]
         # 입력을 막는다: WSL이 없으면 wsl.exe가 콘솔에서 '아무 키나 누르면 설치'를 기다려 시간 초과까지 멈춘다
-        return subprocess.run(args, capture_output=True, stdin=subprocess.DEVNULL, timeout=20,
-                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).returncode == 0
+        return subprocess.run(args, capture_output=True, stdin=subprocess.DEVNULL, timeout=20, **hidden_kwargs()).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
 

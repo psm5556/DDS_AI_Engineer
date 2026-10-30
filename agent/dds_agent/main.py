@@ -21,6 +21,8 @@ from pathlib import Path
 
 import websockets
 
+from cae_adapters.hidden import console_python, hidden_kwargs, spawn_gui_detached
+
 from . import __version__, devtest, installer, toolscan, updater
 from .acp_runner import AcpRunner
 from .config import REPO_ROOT, load_settings
@@ -119,7 +121,8 @@ class Agent:
         """ACP session/new에 넘길 MCP 서버 정의. 세션별로 DDS_PROJECT_ID를 고정한다."""
         env = {"DDS_PROJECT_ID": str(project_id), "DDS_SERVER_URL": self.s.server_url, "DDS_TOKEN": self.s.token,
                "PYTHONPATH": str(REPO_ROOT), "PYTHONIOENCODING": "utf-8"}
-        return [{"name": name.replace("_", "-"), "command": sys.executable,
+        # launcher는 자동 업데이트로 교체되지 않아 Agent가 pythonw일 수 있다. MCP가 pythonw면 그 아래 솔버 창이 다시 보인다
+        return [{"name": name.replace("_", "-"), "command": console_python(),
                  "args": [str(REPO_ROOT / "mcp_servers" / f"{name}.py")],
                  "env": [{"name": k, "value": v} for k, v in env.items()]} for name in MCP_SERVERS]
 
@@ -192,7 +195,8 @@ class Agent:
         if with_viewer and target.is_file():
             cmd = self.s.viewers.get(target.suffix.lower()) or self.s.viewers.get("*")
             if cmd:
-                subprocess.Popen([c.replace("{file}", str(target)) for c in cmd], cwd=str(target.parent))
+                # 뷰어 본체는 보이고, .bat으로 설정한 뷰어의 콘솔만 숨는다
+                spawn_gui_detached([c.replace("{file}", str(target)) for c in cmd], cwd=str(target.parent))
                 return {"ok": True, "opened": str(target), "with": cmd[0]}
         if os.name == "nt":
             if target.is_file() and not with_viewer:
@@ -224,7 +228,7 @@ class Agent:
                 f"p = {ask}\nsys.stdout.write(p or '')\n")
         try:
             out = subprocess.run([sys.executable, "-c", code, *args], capture_output=True, text=True, encoding="utf-8",
-                                 timeout=900, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                 timeout=900, **hidden_kwargs())
         except subprocess.TimeoutExpired:
             return ""
         if out.returncode != 0:
@@ -297,7 +301,10 @@ class Agent:
                 "sessions": len(self.session_runner)}
 
     def busy(self) -> bool:
-        return bool(self.active_prompts or self.installing or self.devtests or self.executor.running or self.executor.queued)
+        if self.active_prompts or self.installing or self.devtests or self.executor.running or self.executor.queued:
+            return True
+        # 턴이 끝나도 AI가 백그라운드로 남긴 솔버가 돌 수 있다. 다시 시작하면 그 해석이 함께 끝나므로 기다린다
+        return any(r.working_in_background() for r in list(self.runners.values()))
 
     def touch(self, msg_type: str | None):
         """사람이 일을 시킨 메시지면 시각을 남긴다. 화면을 열어 두면 계속 오는 조회(local.*)는 일로 치지 않는다."""
@@ -484,6 +491,8 @@ class Agent:
         # case.extract: Output 추가 — 해석한 케이스에서 새 Output만 뽑는다 · case.train_sample: 학습 샘플을 만들어 올린다
         elif t in ("case.run", "case.extract", "case.train_sample"):
             self.executor.submit(msg)
+        elif t == "case.cancel":  # 창이 없으니 사용자가 웹앱에서 해석을 멈출 수 있는 유일한 길이다
+            self.executor.cancel(msg.get("case_ids") or [], msg.get("extract_ids"))
         elif t in ("agent.release", "agent.update"):
             if self.auto_update or msg.get("force"):
                 self.schedule_update(msg["version"], msg.get("sha256"), bool(msg.get("force")))

@@ -328,6 +328,15 @@ class RunRequest(BaseModel):
     dry_run: bool = False
 
 
+class StopRequest(BaseModel):
+    case_ids: list[int] | None = None  # None이면 대기·실행 중 전체
+
+
+class StopResponse(BaseModel):
+    stopping: int  # PC Agent에 중지를 보낸 케이스 수
+    others: int  # 다른 멤버의 PC에서 돌아 중지하지 않은 케이스 수
+
+
 class TrainRequest(BaseModel):
     outputs: list[str] | None = None  # None이면 objectives 전체
     algo: Literal["gp"] = "gp"

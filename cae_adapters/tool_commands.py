@@ -5,9 +5,9 @@ config.toml의 [tool_commands]로 덮어쓸 수 있다.
 from __future__ import annotations
 
 import os
-import sys
 
 from .base import resolve_cmd
+from .hidden import console_python
 
 DEFAULT_TOOL_COMMANDS: dict[str, list[str]] = {
     "nx": ["{nx_run_journal}", "{script}", "-args", "{args}"],
@@ -119,7 +119,8 @@ def build_command(tool: str, script: str | None, args: list[str], paths: dict[st
     table = {**DEFAULT_TOOL_COMMANDS, **(commands or {})}
     if tool not in table:
         raise ValueError(f"알 수 없는 tool 키: {tool} (사용 가능: {', '.join(sorted(table))})")
-    values = {**DEFAULT_TOOL_PATHS, **paths, "python": sys.executable}
+    # pythonw로 돌리면 드라이버 스크립트가 부르는 솔버·배치 파일의 콘솔 창이 다시 보인다
+    values = {**DEFAULT_TOOL_PATHS, **paths, "python": console_python()}
     cmd: list[str] = []
     for i, part in enumerate(table[tool]):
         if part == "{args}":

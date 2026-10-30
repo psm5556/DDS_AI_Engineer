@@ -49,7 +49,8 @@ def main():
         print("✓ PC Agent 연결")
 
         pid = c.post("/api/projects", json={"name": "E2E 데모"}).json()["id"]
-        sid = c.post(f"/api/projects/{pid}/sessions").json()["id"]
+        # 에이전트를 직접 고른다: 연결 직후에는 서버가 Agent의 기본값(hello)을 아직 몰라 실제 Gemini CLI를 띄울 수 있다
+        sid = c.post(f"/api/projects/{pid}/sessions", json={"agent": "demo"}).json()["id"]
         c.post(f"/api/sessions/{sid}/prompt", json={"text": "mock 솔버로 Branin 최적화하고 Simulator 배포해줘"}).raise_for_status()
         wait_for(lambda: not c.get(f"/api/sessions/{sid}/status").json()["busy"] and
                  c.get(f"/api/projects/{pid}/flows").json(), what="플로우 제안")

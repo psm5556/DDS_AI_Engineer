@@ -18,6 +18,8 @@ mcp = MCPServer(
     ),
 )
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+# 넘으면 솔버까지 끝나는 한계다. 긴 해석을 잘라 라이선스 시간을 버리지 않게 넉넉히 둔다
+RUN_SCRIPT_TIMEOUT_SEC = 24 * 3600
 
 
 @mcp.tool()
@@ -63,9 +65,11 @@ def project_folder(project_id: int | None = None) -> dict:
 @mcp.tool()
 def run_script(tool: str, script: str, filename: str = "script.py", args: list[str] | None = None,
                params: dict[str, float] | None = None, inputs: list[str] | None = None, dry_run: bool = False,
-               timeout_sec: int = 3600, publish_images: bool = True, flow_id: int | None = None,
+               timeout_sec: int = RUN_SCRIPT_TIMEOUT_SEC, publish_images: bool = True, flow_id: int | None = None,
                node_id: str | None = None, project_id: int | None = None) -> dict:
     """스크립트를 지정한 툴로 1회 실행한다(탐색·디버깅·단발 작업).
+
+    - timeout_sec: 넘으면 스크립트와 그 아래 솔버까지 모두 끝내고 결과 없이 돌아오는 한계다. 해석에 쓸 때는 예상 시간보다 넉넉히 준다.
 
     - tool: list_tools의 키 (nx, simcenter, abaqus_cae, abaqus_python, lsdyna, ansys_wb, starccm, amesim, python ...)
     - script: 스크립트 본문. 실행 폴더(runs/<시각>_<파일명>/)에 filename으로 저장된다.

@@ -88,6 +88,17 @@ def _dispatch():
     raise RuntimeError("LightTools COM connect failed (%s)" % last)
 
 
+def start_gui(exe):
+    """스크립트가 끝나도 사용자가 이어서 쓰는 창이므로 AI CLI의 Job에서 떼어 띄운다.
+    Job 안에 두면 PC Agent가 다시 시작하거나 죽을 때 저장하지 않은 모델과 함께 끝난다."""
+    d = subprocess.DEVNULL
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # 배치 파일로 띄워도 콘솔은 보이지 않게
+    try:
+        subprocess.Popen([exe], stdin=d, stdout=d, stderr=d, creationflags=flags | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0))
+    except PermissionError:  # 바깥 Job이 빠져나가기를 금지한 PC: 안 띄우는 것보다 낫다
+        subprocess.Popen([exe], stdin=d, stdout=d, stderr=d, creationflags=flags)
+
+
 def connect(attach):
     """실행 중인 LightTools에 붙는다. 없고 attach가 아니면 lt.exe를 띄우고 붙을 때까지 기다린다."""
     try:
@@ -99,7 +110,7 @@ def connect(attach):
     if not exe or not os.path.exists(exe):
         fail("LightTools executable not found on this PC. Ask the user to pick lt.exe in the web app (CAD/CAE tools > LightTools)")
     log("starting LightTools: " + exe)
-    subprocess.Popen([exe])
+    start_gui(exe)
     t0 = time.time()
     while time.time() - t0 < 180:
         time.sleep(5)

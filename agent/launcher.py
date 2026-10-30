@@ -28,6 +28,15 @@ def read(name: str) -> str:
     return p.read_text(encoding="utf-8").strip() if p.exists() else ""
 
 
+def agent_python() -> str:
+    """Agent 본체는 python.exe + 숨은 콘솔로 띄운다. pythonw면 그 아래 콘솔 프로그램이 창을 연다.
+    이 파일은 버전 폴더 밖에 복사되어 cae_adapters를 불러올 수 없으므로 hidden.console_python과 같은 일을 직접 한다.
+    자동 업데이트로 교체되지 않으니 Agent 쪽(hidden.py)이 이 파일에 의존하지 않는다."""
+    exe = Path(sys.executable)
+    python = exe.with_name("python.exe")
+    return str(python) if exe.name.lower() == "pythonw.exe" and python.exists() else sys.executable
+
+
 def main():
     just_updated, crashes = False, 0
     while True:
@@ -43,8 +52,9 @@ def main():
         log(f"Agent {version} 시작")
         started = time.time()
         with open(HOME / "logs" / "agent.log", "a", encoding="utf-8") as out:
-            rc = subprocess.call([sys.executable, "-m", "agent.dds_agent.main"], cwd=vdir, env=env,
-                                 stdout=out, stderr=subprocess.STDOUT)
+            rc = subprocess.call([agent_python(), "-m", "agent.dds_agent.main"], cwd=vdir, env=env,
+                                 stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         lived = time.time() - started
         if rc == RESTART_CODE:
             log(f"다시 시작 → {read('current.txt')}")

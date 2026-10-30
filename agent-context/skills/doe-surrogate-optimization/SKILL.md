@@ -18,6 +18,7 @@ dds-study.create_study(
     "timeout_sec": 3600
   })
 ```
+- `timeout_sec`는 케이스 한 단계의 한계입니다. 넘으면 그 아래 솔버까지 모두 끝나고 결과가 남지 않습니다. 예상 해석 시간보다 넉넉히 줍니다.
 - 변수 이름은 스크립트가 `params.json`에서 읽는 키와 같아야 합니다.
 - 목적함수 이름은 스크립트가 `results.json`에 쓰는 키와 같아야 합니다.
 - `inputs`와 `script` 경로는 **프로젝트 폴더 기준**입니다. 프로젝트 폴더 위치는 `dds-cae.project_folder`로 확인합니다.

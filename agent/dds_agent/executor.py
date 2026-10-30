@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ from cae_adapters import get_adapter
 from cae_adapters.base import CaseOutcome
 
 from .config import AgentSettings
-from .job_runner import get_runner
+from .job_runner import STOPPED_MESSAGE, get_runner
 from .server_api import ServerApi
 
 log = logging.getLogger(__name__)
@@ -35,19 +36,54 @@ class CaseExecutor:
         self.api = ServerApi(settings)
         self.queued = 0
         self.running = 0
+        self._stops: dict[int, threading.Event] = {}  # 대기·실행 중인 케이스 → 중지 신호
 
     def submit(self, job: dict):
         self.queued += 1
-        fn = {"case.extract": self._extract, "case.train_sample": self._train_sample}.get(job.get("type"), self._run_case)
-        self.pool.submit(self._run, fn, job)
+        kind = job.get("type")
+        fn = {"case.extract": self._extract, "case.train_sample": self._train_sample}.get(kind, self._run_case)
+        stop = threading.Event()
+        if kind != "case.train_sample":  # 학습 샘플은 솔버를 돌리지 않아 금방 끝난다
+            self._stops[job["case_id"]] = stop
+        self.pool.submit(self._run, fn, job, stop)
 
-    def _run(self, fn: Callable[[dict], None], job: dict):
+    def _run(self, fn: Callable[[dict], None], job: dict, stop: threading.Event):
         self.queued -= 1
         self.running += 1
         try:
-            fn(job)
+            if stop.is_set():  # 차례를 기다리다 중지됐다. 해석을 시작하지 않는다
+                self._report_stopped(job["case_id"], job.get("type") == "case.extract")
+            else:
+                fn(job)
         finally:
             self.running -= 1
+            if self._stops.get(job.get("case_id")) is stop:
+                self._stops.pop(job["case_id"], None)
+
+    def cancel(self, case_ids: list[int], extract_ids: list[int] | None = None):
+        """사용자가 중지한 케이스: 대기 중이면 시작하지 않고, 실행 중이면 솔버 트리를 끝낸다.
+        이 PC에서 돌고 있지 않은 케이스(Agent가 다시 시작해 잊은 것)는 화면에 '실행 중'으로 남지 않게 바로 알린다."""
+        for ids, extract in ((case_ids, False), (extract_ids or [], True)):
+            for case_id in ids:
+                stop = self._stops.get(case_id)
+                if stop:
+                    stop.set()
+                else:
+                    self._report_stopped(case_id, extract)
+
+    def _report_stopped(self, case_id: int, extract: bool):
+        if extract:  # 해석 결과는 그대로 두고 추출만 멈춘다
+            self.report({"type": "case.status", "case_id": case_id, "status": "complete", "extract": True, "results": {},
+                         "error": f"Output 추출 실패: {STOPPED_MESSAGE}"})
+        else:
+            self.report({"type": "case.status", "case_id": case_id, "status": "cancelled", "error": STOPPED_MESSAGE})
+
+    def _runner_for(self, job: dict):
+        runner = get_runner((job.get("adapter_config") or {}).get("runner") or self.s.runner, self.s.hpc)
+        stop = self._stops.get(job["case_id"])
+        if stop:
+            runner.stop = stop
+        return runner
 
     def _case_dir(self, job: dict) -> Path:
         run_dir = Path(job["run_dir"]) if job.get("run_dir") else None
@@ -87,7 +123,7 @@ class CaseExecutor:
         try:
             out = get_adapter(job["adapter"]).extract(
                 job["params"], run_dir, job.get("adapter_config") or {}, job.get("steps") or [], job.get("names") or [],
-                get_runner((job.get("adapter_config") or {}).get("runner") or self.s.runner, self.s.hpc), self.s.tools,
+                self._runner_for(job), self.s.tools,
                 project_dir=ws.project_dir(job["project_id"], job.get("project_name"), job.get("project_uid")),
                 tool_commands=self.s.tool_commands, tool_envs=self.s.tool_env)
         except Exception as e:
@@ -115,13 +151,19 @@ class CaseExecutor:
         try:
             out = get_adapter(job["adapter"]).run_case(
                 job["params"], run_dir, job.get("adapter_config") or {},
-                get_runner((job.get("adapter_config") or {}).get("runner") or self.s.runner, self.s.hpc), self.s.tools,
+                self._runner_for(job), self.s.tools,
                 job.get("dry_run", False), project_dir=project_dir, tool_commands=self.s.tool_commands,
                 case_meta={"case_id": job["case_id"], "study_id": job["study_id"]}, tool_envs=self.s.tool_env,
             )
         except Exception as e:
             log.exception("케이스 실행 오류")
             out = CaseOutcome("failed", error=str(e))
+        stop = self._stops.get(job["case_id"])
+        if stop and stop.is_set() and out.status == "failed":  # 중지로 끝난 것을 해석 실패로 보이지 않게 한다
+            out = CaseOutcome("cancelled", error=STOPPED_MESSAGE)
+            ws.record_case(sdir, run_dir, {**meta, "status": out.status, "error": out.error, "finished": _now()})
+            self.report({"type": "case.status", "case_id": job["case_id"], "status": out.status, "error": out.error})
+            return
         ws.record_case(sdir, run_dir, {**meta, "status": out.status, "results": out.results, "error": out.error, "finished": _now()})
         images = self._upload_images(job["project_id"], run_dir / "images")
         fields = self._upload_fields(job["case_id"], run_dir / "fields")

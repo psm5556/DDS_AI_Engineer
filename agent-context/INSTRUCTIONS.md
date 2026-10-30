@@ -78,6 +78,11 @@ P0012_<프로젝트>/            ← 지금 작업 폴더(cwd)
 - 새 스크립트는 반드시 **1회 시험 실행**(`run_script`)으로 검증합니다. 그다음 스터디(`create_study`, adapter="script")로 반복 실행합니다.
 - 툴 실행 파일이 없거나 라이선스 오류가 나면 무리하게 우회하지 말고 사용자에게 알립니다. 툴 위치와 상태는 `dds-cae.list_tools`로 확인합니다.
 - 실제 툴 없이 검증해야 하면 `dry_run=true`로 스크립트와 명령만 만들어 사용자에게 보여 줍니다.
+- GUI는 `dds-live.live_launch`로만 띄웁니다. 셸 도구로 `start`·`Start-Process`를 쓰지 않습니다. 사용자 화면에 콘솔 창이 뜨고, 그 창을 닫으면 작업이 함께 끝납니다. 배치 실행은 `dds-cae.run_script`로 합니다.
+- 해석 창은 사용자에게 보이지 않습니다. 그래서 다음을 지킵니다.
+  - `timeout_sec`(`run_script`·스터디 설정)는 넘으면 스크립트와 그 아래 솔버까지 모두 끝내는 한계입니다. 결과 없이 끝나니 예상 해석 시간보다 넉넉히 줍니다.
+  - 솔버는 끝날 때까지 기다리는 방식으로 돌립니다(abaqus의 `interactive`처럼). 백그라운드로 남기면 PC Agent가 다시 시작하거나 죽을 때 함께 끝날 수 있습니다.
+  - 사용자가 해석을 멈춰 달라고 하면 `dds-study.stop_cases`를 씁니다. 사용자는 데이터 탭의 '중지' 버튼으로도 멈출 수 있습니다.
 
 ## 3. 설계 탐색 순서 (dds-study)
 `create_study` → `generate_doe`(기본 LHS, 변수 개수 × 8~10점) → `run_cases` → `train_surrogate`(R² 확인) → `optimize(mode="bo")` 또는 `optimize(mode="al")` → `deploy_model`

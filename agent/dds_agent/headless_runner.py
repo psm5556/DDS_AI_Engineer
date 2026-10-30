@@ -10,6 +10,8 @@ import subprocess
 import threading
 import uuid
 
+from cae_adapters.hidden import KillOnExitJob, hidden_kwargs, kill_tree
+
 from .runner import AgentError, AgentRunner
 
 log = logging.getLogger(__name__)
@@ -22,6 +24,7 @@ class HeadlessRunner(AgentRunner):
         self._cwd: dict[str, str] = {}
         self._turns: dict[str, int] = {}
         self._procs: dict[str, subprocess.Popen] = {}
+        self._job = KillOnExitJob()  # Agent가 비정상 종료해도 숨은 CLI가 고아로 남지 않게
 
     def new_session(self, cwd: str, mcp_servers=None) -> str:
         sid = f"headless-{uuid.uuid4().hex[:8]}"
@@ -39,9 +42,11 @@ class HeadlessRunner(AgentRunner):
             args += ["--resume", "latest"]
         try:
             proc = subprocess.Popen(args, cwd=self._cwd.get(session_id), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace", env=self.env)
+                                    stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace", env=self.env,
+                                    **hidden_kwargs())
         except FileNotFoundError as e:
             raise AgentError(f"gemini 실행 파일을 찾을 수 없습니다: {e}")
+        self._job.assign(proc)
         self._procs[session_id] = proc
         stderr: list[str] = []
         threading.Thread(target=lambda: stderr.extend(proc.stderr), daemon=True).start()
@@ -77,4 +82,4 @@ class HeadlessRunner(AgentRunner):
     def cancel(self, session_id: str) -> None:
         proc = self._procs.get(session_id)
         if proc and proc.poll() is None:
-            proc.terminate()
+            kill_tree(proc)  # gemini는 .cmd 셈이라 terminate로는 node가 남는다

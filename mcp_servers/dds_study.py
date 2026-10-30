@@ -110,6 +110,13 @@ def run_cases(study_id: int, case_ids: list[int] | None = None, dry_run: bool = 
 
 
 @mcp.tool()
+def stop_cases(study_id: int, case_ids: list[int] | None = None) -> dict:
+    """대기·실행 중인 케이스를 중지한다(case_ids를 주지 않으면 전체). 실행 중인 솔버는 끝나고 결과가 남지 않으며, 대기 케이스는 시작하지 않는다.
+    케이스는 'cancelled'가 되고, 다시 돌리려면 run_cases에 case_ids로 지정한다. 사용자가 멈춰 달라고 할 때만 쓴다."""
+    return api.post(f"/api/studies/{study_id}/stop", {"case_ids": case_ids})
+
+
+@mcp.tool()
 def get_study(study_id: int, include_cases: bool = False) -> dict:
     """스터디 진행 상황(상태별 케이스 수, 실행 중 여부, 현재 최적 케이스).
     include_cases=True면 케이스별 params·results·status도 준다(제약조건을 만족하는 최적 설계를 직접 고를 때)."""

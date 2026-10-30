@@ -1,6 +1,7 @@
 """자동 업데이트: 켜 두면 일이 없을 때 뒤에서 하고, 하는 일을 끊지 않으며, 끄면 멈춘다."""
 import asyncio
 import zipfile
+from types import SimpleNamespace
 
 import pytest
 
@@ -35,6 +36,21 @@ def test_updates_in_background_once_idle(agent):
         await _settle(agent)
         assert agent.steps == ["prepare 99.0.0", "activate 99.0.0"]
         assert agent.restart and agent.update_state == "restarting:99.0.0"
+    asyncio.run(run())
+
+
+def test_waits_while_background_solver_computes(agent):
+    """턴이 끝나도 AI가 남긴 솔버가 돌고 있으면 다시 시작해 끝내지 않는다"""
+    state = {"working": True}
+    agent.runners["claude"] = SimpleNamespace(working_in_background=lambda: state["working"], shutdown=lambda: None)
+
+    async def run():
+        agent.schedule_update("99.0.0", "x")
+        await _settle(agent, 0.4)
+        assert agent.steps == [] and not agent.restart
+        state["working"] = False
+        await _settle(agent)
+        assert agent.steps == ["prepare 99.0.0", "activate 99.0.0"]
     asyncio.run(run())
 
 

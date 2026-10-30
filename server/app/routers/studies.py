@@ -95,6 +95,17 @@ def run_cases(study_id: int, body: schemas.RunRequest, user=Depends(get_current_
     return {"queued": n}
 
 
+@router.post("/studies/{study_id}/stop", response_model=schemas.StopResponse)
+def stop_cases(study_id: int, body: schemas.StopRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    _study(study_id, user, db)
+    try:
+        return service.stop_cases(study_id, body.case_ids, user.id)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except AgentError as e:
+        raise HTTPException(409, str(e))
+
+
 @router.post("/studies/{study_id}/outputs")
 def add_outputs(study_id: int, body: schemas.OutputAddRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
     """Output 추가: 이미 해석한 케이스에서도 추출하고, 이후 케이스는 해석할 때 함께 추출한다."""

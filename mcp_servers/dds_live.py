@@ -13,12 +13,12 @@ import os
 import secrets
 import shutil
 import socket
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 from _common import ROOT, api, resolve_pid, settings
+from cae_adapters.hidden import spawn_gui_detached
 from mcp.server import MCPServer
 
 LIVE_DIR = ROOT / "agent-context" / "live"
@@ -213,7 +213,10 @@ def _nx_launch(model_path: str | None = None) -> str | None:
     exe = Path(run_journal).with_name("ugraf.exe") if run_journal else None
     if not exe or not exe.exists():
         return "이 PC에서 NX(ugraf.exe)를 찾지 못했습니다. 웹앱 CAD·CAE 툴 화면에서 경로를 확인하세요."
-    subprocess.Popen([str(exe)] + ([model_path] if model_path else []), cwd=str(exe.parent))
+    try:
+        spawn_gui_detached([str(exe)] + ([model_path] if model_path else []), cwd=str(exe.parent))
+    except (OSError, ValueError) as e:
+        return f"NX를 띄우지 못했습니다: {e}"
     return None
 
 
@@ -470,26 +473,30 @@ def live_launch(tool: str, model_path: str | None = None) -> dict:
             if _nx_listening():
                 return {"ok": True, "tool": tool}
         return {"ok": True, "tool": tool, "note": "실행기를 띄웠습니다. 대기 표시는 아직 없습니다. live_exec를 작업마다 실행합니다."}
-    if tool == "practice":
-        exe = Path(sys.executable)
-        pyw = exe.with_name("pythonw.exe") if exe.with_name("pythonw.exe").exists() else exe
-        subprocess.Popen([str(pyw), str(LIVE_DIR / "practice_tool.py")], env=env, cwd=str(LIVE_DIR))
-    elif tool == "abaqus":
-        _register_abaqus()
-        plugin_dir = LIVE_DIR / "abaqus" / "abaqus_plugins"
-        env["ABAQUS_PLUGIN_DIRS"] = str(plugin_dir)  # TODO(사내검증): 플러그인 경로 지정 방법(abaqus_v6.env의 plugin_central_dir 등)
-        cmd = [settings.tools.get("abaqus", "abaqus"), "cae"] + ([f"database={model_path}"] if model_path else [])
-        subprocess.Popen(cmd, env=env, shell=os.name == "nt")
-    elif tool == "hypermesh":
-        script = LIVE_DIR / "hypermesh" / "dds_live_hm.tcl"
-        _register_hypermesh(script)
-        hmbatch = settings.tools.get("altair_hmbatch") or ""
-        hm = Path(hmbatch).with_name("hmopengl.exe") if hmbatch else None
-        exe = str(hm) if hm and hm.exists() else settings.tools.get("altair_hw", "hw")
-        # TODO(사내검증): 버전별 GUI 시작 인자(-tcl)
-        subprocess.Popen([exe, "-tcl", str(script)] + ([model_path] if model_path else []), env=env, shell=os.name == "nt")
-    else:
-        return {"ok": False, "error": f"{tool}은(는) Live Link를 지원하지 않습니다. dds-cae 배치로 진행하세요. {NO_ASK}"}
+    # GUI는 CLI 트리와 끊어 띄운다: Agent가 다시 시작하거나 CLI를 끝내도 사용자의 저장하지 않은 모델이 죽지 않는다
+    try:
+        if tool == "practice":
+            exe = Path(sys.executable)
+            pyw = exe.with_name("pythonw.exe") if exe.with_name("pythonw.exe").exists() else exe
+            spawn_gui_detached([str(pyw), str(LIVE_DIR / "practice_tool.py")], env=env, cwd=str(LIVE_DIR))
+        elif tool == "abaqus":
+            _register_abaqus()
+            plugin_dir = LIVE_DIR / "abaqus" / "abaqus_plugins"
+            env["ABAQUS_PLUGIN_DIRS"] = str(plugin_dir)  # TODO(사내검증): 플러그인 경로 지정 방법(abaqus_v6.env의 plugin_central_dir 등)
+            cmd = [settings.tools.get("abaqus", "abaqus"), "cae"] + ([f"database={model_path}"] if model_path else [])
+            spawn_gui_detached(cmd, env=env)
+        elif tool == "hypermesh":
+            script = LIVE_DIR / "hypermesh" / "dds_live_hm.tcl"
+            _register_hypermesh(script)
+            hmbatch = settings.tools.get("altair_hmbatch") or ""
+            hm = Path(hmbatch).with_name("hmopengl.exe") if hmbatch else None
+            exe = str(hm) if hm and hm.exists() else settings.tools.get("altair_hw", "hw")
+            # TODO(사내검증): 버전별 GUI 시작 인자(-tcl)
+            spawn_gui_detached([exe, "-tcl", str(script)] + ([model_path] if model_path else []), env=env)
+        else:
+            return {"ok": False, "error": f"{tool}은(는) Live Link를 지원하지 않습니다. dds-cae 배치로 진행하세요. {NO_ASK}"}
+    except (OSError, ValueError) as e:
+        return {"ok": False, "error": f"{tool}을(를) 띄우지 못했습니다: {e}. 웹앱 CAD·CAE 툴 화면에서 경로를 확인하거나 dds-cae 배치로 진행하세요. {NO_ASK}"}
     for _ in range(60):
         time.sleep(1)
         try:

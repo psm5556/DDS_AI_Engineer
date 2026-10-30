@@ -9,13 +9,19 @@ import logging
 import os
 import subprocess
 import threading
+import time
 from concurrent.futures import Future
 from typing import Any
+
+from cae_adapters.hidden import KillOnExitJob, hidden_kwargs, kill_tree
 
 from .runner import AgentError, AgentRunner
 
 log = logging.getLogger(__name__)
 PROTOCOL_VERSION = 1
+# 이 시간 동안 평균으로 코어 하나의 이만큼을 쓰면 계산 중으로 본다. CLI의 짧은 주기 작업은 평균에 묻힌다
+CPU_WINDOW_SEC = 30
+CPU_BUSY_CORES = 0.25
 
 
 class AcpRunner(AgentRunner):
@@ -24,6 +30,9 @@ class AcpRunner(AgentRunner):
         self.command = command
         self.env = env
         self.proc: subprocess.Popen | None = None
+        self._job: KillOnExitJob | None = None
+        self._cpu_mark: tuple[float, float] | None = None  # (시각, Job의 CPU 시간)
+        self._cpu_busy = False
         self._ids = itertools.count(1)
         self._pending: dict[int, Future] = {}
         self._perm: dict[str, int | str] = {}  # request_id → JSON-RPC id
@@ -41,10 +50,16 @@ class AcpRunner(AgentRunner):
             try:
                 self.proc = subprocess.Popen(
                     self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    env=self.env, bufsize=1, text=True, encoding="utf-8", errors="replace",
+                    env=self.env, bufsize=1, text=True, encoding="utf-8", errors="replace", **hidden_kwargs(),
                 )
             except FileNotFoundError as e:
                 raise AgentError(f"에이전트 실행 파일을 찾을 수 없습니다: {self.command[0]} ({e})")
+            if self._job:  # CLI만 죽었다. 사용자가 쓰는 GUI까지 끝내지 않게 정리한다
+                self._job.stop()
+            # 창이 없으니 Agent가 비정상 종료해도 사용자가 알아채지 못한다. 고아로 쌓이지 않게 Agent 수명에 묶는다
+            self._job = KillOnExitJob()
+            self._job.assign(self.proc)
+            self._cpu_mark = None
             threading.Thread(target=self._read_stdout, daemon=True).start()
             threading.Thread(target=self._read_stderr, daemon=True).start()
             self.agent_info = self._request("initialize", {
@@ -52,9 +67,34 @@ class AcpRunner(AgentRunner):
                 "clientCapabilities": {"fs": {"readTextFile": False, "writeTextFile": False}, "terminal": False},
             }, timeout=60)
 
+    def working_in_background(self) -> bool:
+        """CLI 아래 프로세스들이 CPU를 쓰는 중인지. 프로세스 이름으로는 CLI 도우미와 솔버를 가릴 수 없어 쓰는 양으로 본다.
+        한가한 CLI·MCP는 거의 쓰지 않는다. 라이선스를 기다리는 솔버처럼 CPU를 안 쓰는 것은 잡지 못한다."""
+        cpu = self._job.cpu_seconds() if self._job else None
+        if cpu is None:
+            return False
+        now = time.monotonic()
+        mark = self._cpu_mark
+        if mark is None:
+            self._cpu_mark = (now, cpu)
+        elif now - mark[0] >= CPU_WINDOW_SEC:
+            self._cpu_busy = (cpu - mark[1]) / (now - mark[0]) >= CPU_BUSY_CORES
+            self._cpu_mark = (now, cpu)
+        return self._cpu_busy
+
     def shutdown(self):
-        if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
+        job, self._job = self._job, None
+        # Job을 먼저 쓴다. 부모가 끝나 트리에서 빠진 자손까지 찾고, 창이 보이는 사용자 GUI는 남긴다
+        stopped = job.stop() if job else False
+        if not (self.proc and self.proc.poll() is None):
+            return
+        if stopped:
+            try:
+                self.proc.wait(timeout=3)
+                return
+            except subprocess.TimeoutExpired:
+                pass
+        kill_tree(self.proc)  # .cmd 셈은 terminate로 cmd.exe만 끝나 node가 숨은 채 남는다
 
     # ---------- JSON-RPC ----------
     def _send(self, msg: dict):

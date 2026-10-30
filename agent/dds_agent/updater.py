@@ -11,9 +11,10 @@ import logging
 import os
 import shutil
 import subprocess
-import sys
 import zipfile
 from pathlib import Path
+
+from cae_adapters.hidden import console_python, hidden_kwargs
 
 from . import __version__
 from .server_api import ServerApi
@@ -59,8 +60,8 @@ def prepare_update(api: ServerApi, version: str, sha256: str | None = None) -> N
     req = tmp / "requirements-agent.txt"
     if req.exists():
         log.info("의존성 설치 중...")
-        p = subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(req)],
-                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        p = subprocess.run([console_python(), "-m", "pip", "install", "-q", "-r", str(req)], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", **hidden_kwargs())
         if p.returncode != 0:
             raise RuntimeError(f"의존성 설치 실패:\n{p.stderr[-1500:]}")
     shutil.rmtree(target, ignore_errors=True)

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from cae_adapters.hidden import console_python
 from cae_adapters.tool_commands import DEFAULT_TOOL_PATHS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -74,7 +74,7 @@ class AgentSettings:
     def agent_command(self, name: str) -> list[str]:
         if name not in self.agents:
             raise KeyError(f"설정에 없는 에이전트입니다: {name}")
-        subst = {"{python}": sys.executable, "{demo_agent}": str(Path(__file__).parent / "demo_agent.py")}
+        subst = {"{python}": console_python(), "{demo_agent}": str(Path(__file__).parent / "demo_agent.py")}
         cmd = [subst.get(c, c) for c in self.agents[name]["command"]]
         cmd[0] = shutil.which(cmd[0]) or cmd[0]
         return cmd
