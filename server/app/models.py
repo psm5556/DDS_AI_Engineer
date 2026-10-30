@@ -112,6 +112,20 @@ class Artifact(Base):
     title = Column(String(200), nullable=False)
     payload = Column(JSON, default=dict)
     created_at = Column(DateTime, default=_now, nullable=False)
+    updated_at = Column(DateTime, default=_now, onupdate=_now)  # 같은 제목으로 다시 게시하면 갱신(보고서가 최신인지 판단)
+
+
+class Report(Base):
+    """AI가 작업 흐름·결과·스터디를 읽고 새로 쓴 종합 보고서(markdown). 결과는 본문에 ![제목](artifact:<id>)로 넣는다.
+    다시 쓸 때마다 새 판이 쌓이고, 화면과 Word·HTML은 가장 최근 판을 쓴다."""
+    __tablename__ = "reports"
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    flow_id = Column(Integer, ForeignKey("flows.id", ondelete="SET NULL"))
+    title = Column(String(200), nullable=False)
+    body = Column(Text, default="")
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=_now, nullable=False)
 
 
 class Study(TimestampMixin, Base):
@@ -124,6 +138,8 @@ class Study(TimestampMixin, Base):
     variables = Column(JSON, default=list)
     objectives = Column(JSON, default=list)
     constraints = Column(JSON, default=list)
+    # 추출할 출력(Output) [{name, note}] — 나중에 추가하면 이미 해석한 케이스에서도 추출한다(results 키와 합쳐 화면에 보인다)
+    outputs = Column(JSON, default=list)
     adapter = Column(String(50), nullable=False, default="mock")
     adapter_config = Column(JSON, default=dict)
     version = Column(Integer, default=1, nullable=False)

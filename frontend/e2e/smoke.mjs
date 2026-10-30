@@ -79,7 +79,7 @@ await step("프로젝트", async () => {
   await page.waitForURL(/\/projects\//, { timeout: 15000 });
   await page.waitForTimeout(2000);
   await shot("workspace");
-  for (const t of ["작업 흐름", "결과", "데이터", "파일"]) {
+  for (const t of ["작업 흐름", "보고서", "데이터", "파일"]) {
     await step(`탭 ${t}`, async () => { await page.getByRole("tab", { name: t }).first().click({ timeout: 5000 }); await shot(`tab-${t}`); });
   }
   await step("대화 전환 메뉴", async () => { await page.locator(".ws-conv .ws-crumb").click(); await shot("conv-menu"); await page.keyboard.press("Escape"); });

@@ -430,3 +430,80 @@ td.empty-row { padding: 22px 14px !important; text-align: center; }
 .tool-cat .tool-apps { grid-template-columns: repeat(auto-fill, 78px); gap: 0; }
 .tool-cat .tool-app { padding: 8px 0 6px; gap: 6px; border-radius: 12px; }
 .tool-cat .tool-app-name { font-size: 11.5px; }
+
+/* ---------- 작업 흐름 탭: 흐름도 아래 단계별 결과 (흐름도·결과·대화·보고서가 같은 'N단계' 번호) ---------- */
+.fn-no { flex: none; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink-2); background: var(--panel-3); }
+.flow-node.sel .fn-no { color: #fff; background: var(--brand); }
+/* 흐름도(위)는 고정하고 단계별 결과(아래)만 스크롤한다. 흐름도가 길면 높이를 줄여 전체가 보이게 축소한다 */
+.canvas-body.pinned { overflow: hidden; display: flex; flex-direction: column; padding-bottom: 0; }
+.canvas-body.pinned > .flow-tab { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.canvas-body.pinned .flow-tab > * { flex: none; }
+.canvas-body.pinned .flow-canvas { max-height: 40vh; }
+.canvas-body.pinned .step-list { flex: 1 1 auto; min-height: 120px; overflow-y: auto; padding: 4px 4px 20px 0; margin-top: 8px;
+  border-top: 1px solid var(--line); }
+.step-list { display: flex; flex-direction: column; gap: 22px; margin-top: 18px; }
+.step-sec { scroll-margin-top: 4px; padding-top: 12px; }
+.step-sec.sel .step-no { color: #fff; background: var(--brand); }
+.step-sec.sel .step-head { border-bottom-color: var(--brand-200); }
+.step-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
+.step-no { flex: none; font-size: var(--fs-xs); font-weight: 700; color: var(--brand); background: var(--brand-soft); border-radius: 99px; padding: 2px 9px;
+  font-variant-numeric: tabular-nums; }
+.step-no.muted { color: var(--ink-3); background: var(--panel-3); }
+.step-label { font-size: 15px; font-weight: 650; }
+.step-sec.st-failed .step-no { color: var(--err); background: var(--err-soft); }
+.step-sec.st-pending .step-label { color: var(--ink-3); }
+.step-detail { margin: -4px 0 10px; }
+.step-empty { padding: 6px 0 2px; }
+.canvas-tabs .tab-spin { width: 10px; height: 10px; margin-left: 2px; }
+
+/* ---------- 보고서 탭: AI가 새로 쓴 문서 ---------- */
+.report-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.report-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.report-meta select { width: auto; max-width: 220px; min-height: 30px; }
+.notice-inline.info { background: var(--info-soft); color: var(--info); border: 1px solid var(--info-ring); }
+.report-note { display: flex; align-items: center; gap: 8px; white-space: normal; margin: 0 0 12px; }
+.report-doc { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-l); padding: 28px 32px 32px; line-height: 1.75; }
+.report-doc h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 18px; text-wrap: balance; }
+.report-doc .md h2 { font-size: 17px; font-weight: 650; margin: 26px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.report-doc .md h3 { font-size: 15px; font-weight: 650; margin: 18px 0 6px; }
+.report-doc .md p, .report-doc .md li { font-size: var(--fs-m); }
+.report-doc .md table { margin: 8px 0; }
+.rep-fig { margin: 16px 0 20px; padding: 12px; border-radius: var(--radius-m); background: var(--panel-2); border: 1px solid var(--line-2); }
+.rep-fig figcaption { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-top: 8px; font-size: var(--fs-s); color: var(--ink-2); }
+.rep-fig figcaption .link-btn { margin-left: auto; font-size: var(--fs-xs); }
+.rep-fig .art-image { margin: 0; }
+.rep-missing { padding: 8px 0; }
+
+/* ---------- 데이터·모델 탭: 입력(Input)과 출력(Output)을 나눠 보인다 ---------- */
+.io-block { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 20px; }
+.io-col { min-width: 0; }
+.io-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; min-height: 30px; }
+.io-head .cnt { color: var(--ink-4); font-size: var(--fs-s); }
+.io-tag { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.02em; border-radius: 99px; padding: 3px 10px; }
+.io-tag.in { color: var(--brand); background: var(--brand-soft); }
+.io-tag.out { color: var(--mean); background: var(--mean-soft); }
+.io-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.io-list li { display: flex; align-items: baseline; gap: 10px; padding: 6px 2px; border-bottom: 1px solid var(--line-2); font-size: var(--fs-m); min-width: 0; }
+.io-list li:last-child { border-bottom: none; }
+.io-list b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.io-meta { flex: 1; min-width: 0; color: var(--ink-3); font-size: var(--fs-s); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.io-cov { flex: none; font-size: var(--fs-xs); color: var(--ok); font-variant-numeric: tabular-nums; }
+.io-cov.part { color: var(--warn); }
+/* 머리글만 색을 달리한다(고정 머리글이 비치지 않게 불투명하게, 본문 행 강조와 겹치지 않게) */
+.case-table th.col-in { background: linear-gradient(var(--brand-soft), var(--brand-soft)), var(--panel); }
+.case-table th.col-out { background: linear-gradient(var(--mean-soft), var(--mean-soft)), var(--panel); }
+.case-table tr.io-group th { font-size: var(--fs-xs); font-weight: 700; padding-top: 4px; padding-bottom: 4px; border-bottom: none; }
+.case-table tr.io-group th.col-in { color: var(--brand); text-align: center; }
+.case-table tr.io-group th.col-out { color: var(--mean); text-align: center; }
+/* 머리글 두 줄(입력·출력 묶음 + 항목 이름)이 스크롤할 때 겹치지 않게 */
+.case-table tr.io-group th { height: 24px; box-sizing: border-box; }
+.case-table thead tr + tr th { top: 24px; }
+/* 고정 흐름도의 작은 노드 */
+.flow-node.compact { width: 168px; padding: 7px 10px; gap: 3px; }
+.flow-node.compact .fn-label { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flow-node.compact .fn-sub { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-4); }
+.flow-node.compact.st-complete .fn-sub svg { color: var(--ok); }
+/* 케이스 표를 촘촘히: 좁은 캔버스에서도 출력 열까지 보이게 */
+.case-table th, .case-table td { padding: 6px 8px; font-size: 12.5px; }
+.art-table th, .art-table td { white-space: nowrap; }

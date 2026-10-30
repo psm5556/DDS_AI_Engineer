@@ -54,6 +54,8 @@ class DemoSession:
         self.stack = AsyncExitStack()
         self.clients: dict[str, ClientSession] = {}
         self.flow_id: int | None = None
+        self.study_id: int | None = None
+        self.model_id: int | None = None
         self.mode = "branin"
         self.cancelled = False
 
@@ -224,6 +226,9 @@ class DemoAgent:
             return
 
         flow = await s.tool("dds-flow", "get_flow", {"flow_id": s.flow_id})
+        if flow["status"] == "complete":  # 끝난 뒤의 이어지는 요청: 보고서 다시 쓰기 · Output 추가
+            await self._follow_up(s, body)
+            return
         if flow["status"] not in ("approved", "in_progress"):
             await s.say(f"현재 플로우 상태가 '{flow['status']}'입니다. 승인 후 다시 요청해 주세요.")
             return
@@ -261,9 +266,10 @@ class DemoAgent:
 
         await node("doe", "in_progress")
         study = await s.tool("dds-study", "create_study", {
-            "name": "탈수 진동", "adapter": "mock", "adapter_config": {"function": "washer", "delay_sec": 0.05},
-            "variables": variables, "objectives": [{"name": "vibration", "goal": "min"}]})
-        sid = study["study_id"]
+            "name": "탈수 진동", "adapter": "mock", "adapter_config": {"function": "washer", "delay_sec": 0.05, "outputs": ["vibration"]},
+            "variables": variables, "objectives": [{"name": "vibration", "goal": "min"}],
+            "outputs": [{"name": "vibration", "note": "통 진동 변위 [mm]"}]})
+        sid = s.study_id = study["study_id"]
         await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 60, "seed": 12, "flow_id": fid, "node_id": "doe"})
         await node("doe", "complete")
         await node("solve", "in_progress")
@@ -280,36 +286,109 @@ class DemoAgent:
         d = await s.tool("dds-study", "deploy_model", {"model_id": o["model_id"]})
         await node("deploy", "complete", f"모델 #{d['model_id']}")
 
-        # 보고서: 현재 설계(모두 0) 예측과 최적 설계를 비교해 결론을 쓰고 Word·HTML로 저장
+        s.model_id = o["model_id"]
+
+        # 보고서: 작업 흐름·결과를 읽고 AI가 새로 쓴다(보고서 탭) → Word·HTML 파일도 저장
         await node("report", "in_progress")
-        pred = await s.tool("dds-study", "predict", {"model_id": o["model_id"], "params": {v["name"]: 0.0 for v in variables}})
-        now = pred.get("mean", pred).get("vibration", 0.0)
-        cut = (1 - br["vibration"] / now) * 100 if now else 0.0
-        await s.tool("dds-flow", "publish_artifact", {
-            "kind": "markdown", "title": "결론 및 권고", "flow_id": fid, "node_id": "report",
-            "payload": {"text": (
-                "## 탈수 진동 결론\n"
-                f"- 탈수 1,200 rpm, 편심 0.5 kg 조건에서 DOE 60건과 최적화 8건을 해석했습니다.\n"
-                f"- 현재 설계(모두 0) 예측 진동 **{now:.1f} mm** → 최적 설계 **{br['vibration']:.1f} mm** (**{cut:.0f}% 감소**)\n"
-                f"- 최적 설계: 스프링 강성 **{bp['spring_k']:+.0f}%**, 댐퍼 감쇠력 **{bp['damper_c']:+.0f}%**, "
-                f"밸런서 {bp['balancer_m']:+.0f}%, 스프링 위치 {bp['spring_pos']:+.0f} mm\n"
-                f"- 예측 모델 정확도(교차검증 R²): {m['metrics']['vibration']['r2']:.3f}\n"
-                "- 스프링 강성과 댐퍼 감쇠력이 진동을 가장 크게 좌우하고, 밸런서·스프링 위치의 영향은 작습니다.\n\n"
-                "### 권고\n"
-                "1. 최적 설계로 실제 해석을 1건 더 돌려 예측을 확인합니다.\n"
-                f"2. Simulator(모델 #{d['model_id']})로 회전수·부품 값을 바꿔 보며 설계팀과 함께 검토합니다.")}})
-        rep = await s.tool("dds-flow", "make_report", {"formats": ["docx", "html"], "flow_id": fid})
-        names = [Path(f).name for f in rep["files"]]
-        await node("report", "complete", " · ".join(names))
+        rep = await self._washer_report(s)
+        files = await s.tool("dds-flow", "make_report", {"formats": ["docx", "html"]})
+        await node("report", "complete", f"보고서 탭 · Word·HTML {len(files['files'])}개 저장")
         await s.say(
             "탈수 진동 최적화를 마쳤습니다.\n\n"
-            f"- **진동**: 현재 설계 {now:.1f} mm → 최적 설계 {br['vibration']:.1f} mm (**{cut:.0f}% 감소**)\n"
-            f"- **최적 설계**: 스프링 강성 {bp['spring_k']:+.0f}%, 댐퍼 감쇠력 {bp['damper_c']:+.0f}% "
-            f"(밸런서 {bp['balancer_m']:+.0f}%, 스프링 위치 {bp['spring_pos']:+.0f} mm)\n"
-            f"- **해석**: DOE 60건 + 최적화 8건 · 예측 모델 R² {m['metrics']['vibration']['r2']:.3f}\n"
-            f"- **Simulator**: 모델 #{d['model_id']} — 부품 값을 바꾸면 진동을 바로 예측합니다\n"
-            f"- **보고서**: `reports/{names[0]}` 외 — '결과' 탭에서도 내려받을 수 있습니다\n\n"
-            "최적 설계로 검증 해석을 1건 더 돌려 볼까요?")
+            f"- 진동 {rep['now']:.1f} mm → {rep['best']:.1f} mm (**{rep['cut']:.0f}% 감소**), "
+            f"스프링 강성 {bp['spring_k']:+.0f}% · 댐퍼 감쇠력 {bp['damper_c']:+.0f}%\n"
+            "- 보고서는 오른쪽 **보고서** 탭에 있습니다. 다음으로 최적 설계 검증 해석을 권합니다.")
+
+    async def _washer_report(self, s) -> dict:
+        """세탁기 보고서: 자료를 읽고 결론·해석을 쓰며, 결과(표·그래프)를 본문에 넣는다."""
+        ctx = await s.tool("dds-flow", "get_report_context", {})
+        st = next(x for x in ctx["studies"] if x["study_id"] == s.study_id)
+
+        def art(part: str, kind: str | None = None) -> str:
+            return next((r["embed"] for r in reversed(ctx["results"]) if part in r["title"] and (kind is None or r["kind"] == kind)), "")
+
+        bp, br = st["best"]["params"], st["best"]["results"]
+        pred = await s.tool("dds-study", "predict", {"model_id": s.model_id, "params": {v["name"]: 0.0 for v in st["inputs"]}})
+        now = pred.get("mean", pred).get("vibration", 0.0)
+        cut = (1 - br["vibration"] / now) * 100 if now else 0.0
+        r2 = (st["models"][0]["r2"] if st["models"] else {}).get("vibration", 0.0)
+        n = sum(st["cases"].values())
+        flow = next(f for f in ctx["flows"] if f["flow_id"] == s.flow_id)
+        steps = "\n".join(f"{x['no']}. {x['label']}{' — ' + x['detail'] if x['detail'] else ''}" for x in flow["steps"])
+        trade = ""
+        if any(o["name"] == "floor_force" and o["extracted"] for o in st["outputs"]):
+            cs = await s.tool("dds-study", "get_study", {"study_id": s.study_id, "include_cases": True})
+            vals = [c["results"]["floor_force"] for c in cs["cases"] if "floor_force" in (c.get("results") or {})]
+            fb = br.get("floor_force")
+            if fb and vals:
+                trade = (f"- 바닥 전달력은 최적 설계에서 **{fb:.0f} N**입니다(전체 케이스 {min(vals):.0f}~{max(vals):.0f} N). "
+                         "스프링·댐퍼를 단단하게 할수록 진동은 줄고 전달력은 커지므로 함께 보고 정해야 합니다.\n")
+        body = (
+            "## 요약\n"
+            f"- 탈수 1,200 rpm·편심 0.5 kg 조건에서 통 진동이 현재 설계 **{now:.1f} mm** → 최적 설계 **{br['vibration']:.1f} mm**로 "
+            f"**{cut:.0f}% 줄었습니다**.\n"
+            f"- 최적 설계는 스프링 강성 **{bp['spring_k']:+.0f}%**, 댐퍼 감쇠력 **{bp['damper_c']:+.0f}%** 조합입니다. "
+            f"밸런서({bp['balancer_m']:+.0f}%)·스프링 위치({bp['spring_pos']:+.0f} mm)의 영향은 작습니다.\n"
+            f"- 진동 예측 모델의 정확도는 R² {r2:.3f}입니다(1에 가까울수록 해석과 잘 맞음). Simulator에서 바로 쓸 수 있습니다.\n"
+            + trade
+            + "\n## 목적과 조건\n"
+            "- 목적: 탈수 중 통 진동을 줄이는 스프링·댐퍼 설계\n"
+            "- 조건: 탈수 1,200 rpm, 세탁물 편심 0.5 kg, RecurDyn 탈수 해석 모델\n"
+            f"{art('설계 변수', 'table')}\n"
+            "\n## 수행 내용\n" + steps + "\n"
+            f"\n## 결과\n### 설계 공간 탐색\n{art('DOE 샘플 분포')}\n"
+            f"해석 {n}건 중 처음 60건은 LHS로 설계 범위를 고르게 채웠고, 나머지는 최적화가 고른 점입니다.\n"
+            f"\n### 진동 예측 모델\n{art('예측 정확도')}\n"
+            f"교차검증에서 예측값이 해석값과 거의 한 줄 위에 놓여(R² {r2:.3f}) 설계 범위 안에서는 해석 대신 예측 모델을 써도 됩니다.\n"
+            f"\n### 최적화\n{art('수렴 이력')}\n"
+            f"베이지안 최적화 8회 동안 진동이 {br['vibration']:.2f} mm까지 내려갔고, 마지막 몇 회는 거의 바뀌지 않아 수렴했다고 봅니다.\n"
+            "\n## 결론과 권고\n"
+            f"1. 스프링 강성 {bp['spring_k']:+.0f}%, 댐퍼 감쇠력 {bp['damper_c']:+.0f}%를 설계안으로 제안합니다.\n"
+            "2. 최적 설계로 실제 해석을 1건 더 돌려 예측을 확인합니다.\n"
+            "3. Simulator로 회전수·부품 값을 바꿔 보며 설계팀과 함께 검토합니다.\n"
+            "\n## 한계\n- 이 데모의 해석 값은 예시 식으로 만든 값입니다. 실제 과제에서는 RecurDyn 해석 결과로 바뀝니다.\n")
+        await s.tool("dds-flow", "write_report", {"title": "드럼세탁기 탈수 진동 저감 보고서", "body": body, "flow_id": s.flow_id})
+        return {"now": now, "best": br["vibration"], "cut": cut}
+
+    async def _generic_report(self, s):
+        """다른 시나리오의 보고서: 스터디 요약 + 단계 순서대로 결과를 넣는다."""
+        ctx = await s.tool("dds-flow", "get_report_context", {})
+        flow = next(f for f in ctx["flows"] if f["flow_id"] == s.flow_id)
+        lines = ["## 요약"]
+        for st in ctx["studies"]:
+            best = st["best"]
+            if not best:
+                continue
+            r2 = ", ".join(f"{k} {v:.3f}" for k, v in (st["models"][0]["r2"] if st["models"] else {}).items())
+            obj = next((o["name"] for o in st["outputs"] if o["role"].startswith("목적")), next(iter(best["results"]), ""))
+            lines.append(f"- {st['name']}: 해석 {st['cases'].get('complete', 0)}건, 최적 {obj} **{best['results'].get(obj, 0):.4g}** "
+                         f"({', '.join(f'{k}={v:.3g}' for k, v in best['params'].items())})" + (f", 예측 모델 R² {r2}" if r2 else ""))
+        lines += ["", "## 수행 내용", *[f"{x['no']}. {x['label']}{' — ' + x['detail'] if x['detail'] else ''}" for x in flow["steps"]],
+                  "", "## 결과"]
+        for x in flow["steps"]:
+            embeds = [r["embed"] for r in ctx["results"] if r["step"] == f"{x['no']}단계 · {x['label']}"]
+            if embeds:
+                lines += [f"### {x['no']}단계 · {x['label']}", *embeds, ""]
+        lines += ["## 결론과 권고", "1. 최적 설계점에서 실제 해석으로 검증 해석을 1건 더 수행합니다.",
+                  "2. Simulator로 설계 변수를 바꿔 보며 설계팀과 함께 검토합니다."]
+        await s.tool("dds-flow", "write_report", {"title": f"{flow['title']} 보고서", "body": "\n".join(lines), "flow_id": s.flow_id})
+
+    async def _follow_up(self, s, body: str):
+        """작업 흐름을 마친 뒤의 요청: Output 추가(세탁기: 바닥 전달력) · 보고서 다시 쓰기."""
+        if any(k in body for k in ("Output", "output", "출력", "전달력")):
+            if s.mode != "washer" or not s.study_id:
+                await s.say("이 데모에서는 세탁기 시나리오에서 Output 추가(바닥 전달력)를 해 볼 수 있습니다.")
+                return
+            r = await s.tool("dds-study", "add_outputs", {"study_id": s.study_id,
+                                                          "outputs": [{"name": "floor_force", "note": "바닥 전달력 [N]"}]})
+            await s.say(f"Output에 바닥 전달력(floor_force)을 추가했습니다. 이미 해석한 {r['extracted']['floor_force']}건에서 뽑았고, "
+                        "이후 케이스도 해석할 때 함께 뽑습니다. '데이터·모델' 탭에서 볼 수 있습니다.")
+            return
+        if "보고서" in body:
+            await (self._washer_report(s) if s.mode == "washer" else self._generic_report(s))
+            await s.say("최신 결과로 보고서를 다시 썼습니다. 오른쪽 **보고서** 탭에서 볼 수 있습니다.")
+            return
+        await s.say("이 작업 흐름은 끝났습니다. '보고서 다시 써 줘'나 'Output 추가'를 요청할 수 있습니다.")
 
     async def _branin(self, s, fid, node):
         await node("doe", "in_progress")
@@ -317,7 +396,7 @@ class DemoAgent:
             "name": "Branin", "adapter": "mock", "adapter_config": {"function": "branin", "delay_sec": 0.05},
             "variables": [{"name": "x1", "lower": -5, "upper": 10}, {"name": "x2", "lower": 0, "upper": 15}],
             "objectives": [{"name": "f", "goal": "min"}]})
-        sid = study["study_id"]
+        sid = s.study_id = study["study_id"]
         await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 20, "seed": 7, "flow_id": fid, "node_id": "doe"})
         await node("doe", "complete")
         await node("solve", "in_progress")
@@ -346,7 +425,7 @@ class DemoAgent:
             "name": "Beam3D", "adapter": "mock", "adapter_config": {"function": "beam3d", "delay_sec": 0.05},
             "variables": [{"name": "width", "lower": 10, "upper": 40}, {"name": "height", "lower": 20, "upper": 80}],
             "objectives": [{"name": "max_stress", "goal": "min"}]})
-        sid = study["study_id"]
+        sid = s.study_id = study["study_id"]
         await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 16, "seed": 5, "flow_id": fid, "node_id": "doe"})
         await node("doe", "complete")
         await node("solve", "in_progress")
@@ -403,7 +482,7 @@ class DemoAgent:
             "name": "브래킷 DOE", "adapter": "mock", "adapter_config": {"function": "bracket3d", "delay_sec": 0.05},
             "variables": [{"name": "thickness", "lower": 6, "upper": 14}, {"name": "rib_height", "lower": 10, "upper": 40}],
             "objectives": [{"name": "mass", "goal": "min"}], "constraints": [{"name": "max_stress", "upper": STRESS_LIMIT}]})
-        sid = study["study_id"]
+        sid = s.study_id = study["study_id"]
         await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 20, "seed": 11, "flow_id": fid, "node_id": "doe"})
         await node("doe", "complete")
         await node("solve", "in_progress")
@@ -448,19 +527,17 @@ class DemoAgent:
                 "### 권고\n"
                 "1. 최경량 설계점 부근에서 실제 해석으로 검증 해석을 1~2건 수행합니다.\n"
                 f"2. 3D Simulator(모델 #{d['model_id']})로 설계팀이 두께·리브를 바꿔 응력 분포를 바로 확인하게 공유합니다.")}})
+        await self._generic_report(s)  # 결론 요약(위 markdown)과 단계별 결과를 넣어 보고서 탭에 쓴다
         rep = await s.tool("dds-flow", "make_report", {"formats": ["docx", "html"], "flow_id": fid})
         names = [Path(f).name for f in rep["files"]]
-        await node("report", "complete", " · ".join(names))
+        await node("report", "complete", f"보고서 탭 · Word·HTML {len(names)}개 저장")
+        # 대화에는 핵심만: 파일 경로·단계별 내용은 작업 흐름·보고서 탭에 있다
         await s.say(
             "전체 과정을 마쳤습니다.\n\n"
-            "- **CAD**: `cad/bracket.stl`, 파라미터 `cad/expressions.json`\n"
-            "- **해석 모델**: `model/bracket.inp` (강재, 벽 고정, 끝단 2 kN)\n"
-            f"- **DOE**: {len(done)}건 해석, 케이스별 응력 필드 저장\n"
-            f"- **예측 모델**: 질량 R² {r2['mass']:.3f}, 응력 R² {r2['max_stress']:.3f} · 형상·응력 필드 모드 {fm['info']['modes']}개\n"
-            f"- **Simulator**: 모델 #{d['model_id']} — 두께·리브를 바꾸며 3D 응력 분포를 바로 봅니다\n"
-            f"- **보고서**: `reports/{names[0]}` 외 — '결과' 탭에서도 내려받을 수 있습니다\n\n"
-            f"응력 {STRESS_LIMIT:.0f} MPa 이하 최경량 설계는 두께 {bp['thickness']:.1f} mm, 리브 {bp['rib_height']:.1f} mm "
-            f"(질량 {br['mass']:.0f} g)입니다.")
+            f"- 응력 {STRESS_LIMIT:.0f} MPa 이하 최경량 설계: 두께 {bp['thickness']:.1f} mm, 리브 {bp['rib_height']:.1f} mm "
+            f"(질량 {br['mass']:.0f} g)\n"
+            f"- 예측 모델 R² 질량 {r2['mass']:.3f} · 응력 {r2['max_stress']:.3f}, 3D Simulator로 응력 분포를 바로 봅니다\n"
+            "- 보고서는 오른쪽 **보고서** 탭에 있습니다.")
 
 
 def main():

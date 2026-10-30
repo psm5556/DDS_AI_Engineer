@@ -4,26 +4,46 @@ import { Box, Brain, CheckCircle2, Cpu, FileOutput, Grid3x3, Loader2, Rocket, Se
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NODE_STATUS, NODE_TYPE } from "../format";
 import type { Flow, FlowNode } from "../types";
+import { stepNumbers } from "./order";
 
 const TYPE_ICON: Record<string, typeof Box> = {
   cad: Box, pre: Settings2, solve: Cpu, post: FileOutput, doe: Grid3x3, train: Brain, optimize: Target, deploy: Rocket, task: Workflow,
 };
 
 // React Flow의 data는 Record<string, unknown>이어야 하므로 type 별칭(교차 타입)으로 둔다
-type StepData = FlowNode & { selected?: boolean; artifacts?: number; rtl?: boolean } & Record<string, unknown>;
+type StepData = FlowNode & { selected?: boolean; artifacts?: number; rtl?: boolean; no?: number; compact?: boolean } & Record<string, unknown>;
 
 function StepNode({ data }: NodeProps<Node<StepData>>) {
   const Icon = TYPE_ICON[data.type] ?? Workflow;
+  const st = (
+    <span className="fn-st" title={NODE_STATUS[data.status]}>
+      {data.status === "complete" ? <CheckCircle2 size={14} /> : data.status === "failed" ? <XCircle size={14} />
+        : data.status === "in_progress" ? <Loader2 size={14} className="spin" /> : <i className="dot" />}
+    </span>
+  );
+  if (data.compact) {
+    // 고정된 흐름도용 작은 노드: 번호 · 이름 · 상태 · 결과 수만(설명은 아래 단계별 결과에 있다)
+    return (
+      <div className={`flow-node compact st-${data.status} ${data.selected ? "sel" : ""}`} title={`${NODE_TYPE[data.type] ?? data.type}${data.tool ? ` · ${data.tool}` : ""}${data.detail ? ` — ${data.detail}` : ""}`}>
+        <Handle type="target" position={data.rtl ? Position.Right : Position.Left} />
+        <div className="fn-top">
+          {data.no != null && <span className="fn-no" aria-label={`${data.no}단계`}>{data.no}</span>}
+          <b className="fn-label">{data.label}</b>
+          {st}
+        </div>
+        <span className="fn-sub"><Icon size={11} />{NODE_TYPE[data.type] ?? data.type}{data.artifacts ? ` · 결과 ${data.artifacts}` : ""}</span>
+        <Handle type="source" position={data.rtl ? Position.Left : Position.Right} />
+      </div>
+    );
+  }
   return (
     <div className={`flow-node st-${data.status} ${data.selected ? "sel" : ""}`}>
       <Handle type="target" position={data.rtl ? Position.Right : Position.Left} />
       <div className="fn-top">
+        {data.no != null && <span className="fn-no" aria-label={`${data.no}단계`}>{data.no}</span>}
         <span className="fn-icon"><Icon size={14} /></span>
         <span className="fn-type">{NODE_TYPE[data.type] ?? data.type}{data.tool ? ` · ${data.tool}` : ""}</span>
-        <span className="fn-st" title={NODE_STATUS[data.status]}>
-          {data.status === "complete" ? <CheckCircle2 size={14} /> : data.status === "failed" ? <XCircle size={14} />
-            : data.status === "in_progress" ? <Loader2 size={14} className="spin" /> : <i className="dot" />}
-        </span>
+        {st}
       </div>
       <b className="fn-label">{data.label}</b>
       {data.detail && <span className="fn-detail">{data.detail}</span>}
@@ -34,11 +54,13 @@ function StepNode({ data }: NodeProps<Node<StepData>>) {
 }
 const nodeTypes = { step: StepNode };
 
-const COL_W = 250, ROW_H = 118, ROW_GAP = 46;
+interface Dims { col: number; row: number; gap: number }
+const FULL: Dims = { col: 250, row: 118, gap: 46 };
+const COMPACT: Dims = { col: 186, row: 66, gap: 24 }; // 작업 흐름 탭에 고정된 흐름도(노드 폭 168)
 
 /** 엣지로 단계 깊이(위상 정렬)를 정하고, 컨테이너 폭에 맞춰 perRow개씩 줄을 바꿔 뱀처럼(→ ← →) 배치한다.
  *  같은 깊이의 병렬 단계는 세로로 쌓는다. 좁은 캔버스에서도 노드가 작아지지 않게 하기 위함. */
-function layout(flow: Flow, perRow: number): { pos: Record<string, { x: number; y: number }>; rtl: Record<string, boolean>; height: number } {
+function layout(flow: Flow, perRow: number, d: Dims): { pos: Record<string, { x: number; y: number }>; rtl: Record<string, boolean>; height: number } {
   const depth: Record<string, number> = {};
   const incoming: Record<string, string[]> = {};
   flow.nodes.forEach((n) => { incoming[n.id] = []; });
@@ -62,31 +84,35 @@ function layout(flow: Flow, perRow: number): { pos: Record<string, { x: number; 
     const back = r % 2 === 1;
     row.forEach((ids, i) => {
       const col = back ? perRow - 1 - i : i;
-      (ids ?? []).forEach((id, k) => { pos[id] = { x: col * COL_W, y: y + k * ROW_H }; rtl[id] = back; });
+      (ids ?? []).forEach((id, k) => { pos[id] = { x: col * d.col, y: y + k * d.row }; rtl[id] = back; });
     });
-    y += Math.max(...row.map((ids) => (ids ?? []).length)) * ROW_H + ROW_GAP;
+    y += Math.max(...row.map((ids) => (ids ?? []).length)) * d.row + d.gap;
   }
-  return { pos, rtl, height: y - ROW_GAP };
+  return { pos, rtl, height: y - d.gap };
 }
 
-export function FlowCanvas({ flow, selected, onSelect, artifactCount, mini }: {
+export function FlowCanvas({ flow, selected, onSelect, artifactCount, mini, compact }: {
   flow: Flow; selected: string | null; onSelect: (id: string | null) => void; artifactCount: Record<string, number>; mini?: boolean;
+  /** 작은 노드로 촘촘히(작업 흐름 탭 위에 고정할 때) */
+  compact?: boolean;
 }) {
+  const dims = compact ? COMPACT : FULL;
   // 컨테이너 폭에 맞춰 한 줄에 놓을 단계 수
   const box = useRef<HTMLDivElement>(null);
   const [perRow, setPerRow] = useState(4);
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setPerRow(Math.max(2, Math.floor((e.contentRect.width - 30) / (COL_W - 10)))));
+    const ro = new ResizeObserver(([e]) => setPerRow(Math.max(2, Math.floor((e.contentRect.width - 30) / (dims.col - 10)))));
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [dims.col]);
   const { nodes, edges, height } = useMemo(() => {
-    const { pos, rtl, height } = layout(flow, perRow);
+    const { pos, rtl, height } = layout(flow, perRow, dims);
+    const no = stepNumbers(flow); // 아래 단계별 결과·대화 카드·보고서와 같은 번호
     const nodes: Node<StepData>[] = flow.nodes.map((n) => ({
       id: n.id, type: "step", position: pos[n.id],
-      data: { ...n, selected: n.id === selected, artifacts: artifactCount[n.id] ?? 0, rtl: rtl[n.id] },
+      data: { ...n, selected: n.id === selected, artifacts: artifactCount[n.id] ?? 0, rtl: rtl[n.id], no: no[n.id], compact },
     }));
     const done = new Set(flow.nodes.filter((n) => n.status === "complete").map((n) => n.id));
     const active = new Set(flow.nodes.filter((n) => n.status === "in_progress").map((n) => n.id));
@@ -96,11 +122,11 @@ export function FlowCanvas({ flow, selected, onSelect, artifactCount, mini }: {
       markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
     }));
     return { nodes, edges, height };
-  }, [flow, selected, artifactCount, perRow]);
+  }, [flow, selected, artifactCount, perRow, dims, compact]);
 
   return (
     // 캔버스: 그래프 높이만큼 늘려 실제 크기(축소 없이)로 보이게 한다 — 길면 캔버스가 스크롤된다
-    <div ref={box} className={`flow-canvas ${mini ? "mini" : ""}`} style={mini ? undefined : { height: Math.max(240, height + 70) }}>
+    <div ref={box} className={`flow-canvas ${mini ? "mini" : ""}`} style={mini ? undefined : { height: Math.max(compact ? 130 : 240, height + (compact ? 50 : 70)) }}>
       {/* mini: 대화 카드 안 미리보기 — 확대·이동 없이 전체를 맞춰 보여 준다 */}
       <ReactFlow key={perRow} nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: mini ? 0.08 : 0.06, maxZoom: 1 }} minZoom={0.2}
         nodesDraggable={false} nodesConnectable={false} elementsSelectable={!mini} proOptions={{ hideAttribution: true }}

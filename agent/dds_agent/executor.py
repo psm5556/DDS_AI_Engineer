@@ -33,15 +33,38 @@ class CaseExecutor:
 
     def submit(self, job: dict):
         self.queued += 1
-        self.pool.submit(self._run, job)
+        self.pool.submit(self._run, self._extract if job.get("type") == "case.extract" else self._run_case, job)
 
-    def _run(self, job: dict):
+    def _run(self, fn: Callable[[dict], None], job: dict):
         self.queued -= 1
         self.running += 1
         try:
-            self._run_case(job)
+            fn(job)
         finally:
             self.running -= 1
+
+    def _extract(self, job: dict):
+        """Output 추가: 이미 해석한 케이스 폴더에서 새 Output만 뽑아 보고한다(해석은 다시 하지 않는다)."""
+        ws = self.s.workspace
+        sdir = ws.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
+                            job.get("project_uid"))
+        run_dir = Path(job["run_dir"]) if job.get("run_dir") else None
+        if not (run_dir and run_dir.is_dir()):  # 작업 폴더를 옮겼으면 스터디 폴더에서 다시 찾는다
+            found = sorted((sdir / "cases").glob(f"C{job['case_id']:04d}_*"))
+            run_dir = found[0] if found else sdir / "cases" / f"C{job['case_id']:04d}"
+        try:
+            out = get_adapter(job["adapter"]).extract(
+                job["params"], run_dir, job.get("adapter_config") or {}, job.get("steps") or [], job.get("names") or [],
+                get_runner((job.get("adapter_config") or {}).get("runner") or self.s.runner, self.s.hpc), self.s.tools,
+                project_dir=ws.project_dir(job["project_id"], job.get("project_name"), job.get("project_uid")),
+                tool_commands=self.s.tool_commands, tool_envs=self.s.tool_env)
+        except Exception as e:
+            log.exception("Output 추출 오류")
+            out = CaseOutcome("failed", error=str(e))
+        if out.results and run_dir.is_dir():
+            ws.record_case(sdir, run_dir, {"results": {**(job.get("results") or {}), **out.results}})
+        self.report({"type": "case.status", "case_id": job["case_id"], "status": "complete", "extract": True,
+                     "results": out.results, "error": None if out.status == "complete" else f"Output 추출 실패: {out.error}"})
 
     def _run_case(self, job: dict):
         ws = self.s.workspace

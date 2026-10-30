@@ -19,8 +19,12 @@ export interface Flow {
 export type ArtifactKind = "table" | "scatter" | "line" | "bar" | "parallel" | "markdown" | "image";
 export interface Artifact {
   id: number; project_id: number; flow_id: number | null; node_id: string | null;
-  kind: ArtifactKind; title: string; payload: Record<string, unknown>; created_at: string;
+  kind: ArtifactKind; title: string; payload: Record<string, unknown>; created_at: string; updated_at?: string | null;
 }
+
+/** AI가 작업 흐름·결과를 읽고 새로 쓴 종합 보고서(가장 최근 판). 본문에 ![캡션](artifact:<id>) 줄로 결과를 넣는다 */
+export interface Report { id: number; project_id: number; flow_id: number | null; title: string; body: string; created_at: string; new_results: number }
+export interface ReportSummary { id: number; title: string; created_at: string }
 
 export interface ChatSession { id: number; project_id: number; user_id: number; title: string; agent: string; agent_session_id: string | null; created_at: string }
 export interface ChatMessage {
@@ -40,9 +44,11 @@ export interface AgentStatus {
 
 export interface Variable { name: string; lower: number; upper: number }
 export interface Objective { name: string; goal: "min" | "max" }
+export interface OutputDef { name: string; note?: string }
 export interface Study {
   id: number; project_id: number; name: string; variables: Variable[]; objectives: Objective[];
   constraints?: { name: string; upper?: number; lower?: number }[] | null;
+  outputs?: OutputDef[] | null;
   adapter: string; adapter_config: Record<string, unknown>; version: number; created_at: string;
 }
 export interface Case {
@@ -50,7 +56,7 @@ export interface Case {
   status: string; source: string; run_dir: string | null; run_by: number | null; images: string[] | null; error: string | null;
   fields?: string[] | null;
 }
-export interface StudyStatus { study: Study; counts: Record<string, number>; best: Case | null; running: boolean }
+export interface StudyStatus { study: Study; counts: Record<string, number>; best: Case | null; running: boolean; extracting?: number[] }
 export interface SurrogateModel {
   id: number; study_id: number; name: string; algo: string; outputs: string[];
   metrics: Record<string, { r2: number; rmse: number }>; n_train: number; deployed: boolean; created_at: string;

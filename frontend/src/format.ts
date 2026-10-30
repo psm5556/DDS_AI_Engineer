@@ -53,3 +53,6 @@ export async function copyText(text: string): Promise<boolean> {
 /** 화면 어디서든 에이전트 채팅에 메시지를 보낸다 (예: 플로우 승인 후 "진행하세요") */
 export const AGENT_SEND = "dds:agent-send";
 export const sendToAgent = (text: string) => window.dispatchEvent(new CustomEvent(AGENT_SEND, { detail: text }));
+/** 보내지 않고 입력창만 채운다(사용자가 이어서 쓰게) — 예: "Output 추가: " */
+export const AGENT_PREFILL = "dds:agent-prefill";
+export const prefillAgent = (text: string) => window.dispatchEvent(new CustomEvent(AGENT_PREFILL, { detail: text }));

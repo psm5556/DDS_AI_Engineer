@@ -12,11 +12,12 @@ import { useFlowDecision } from "../canvas/views";
 import { Markdown } from "../components/Markdown";
 import { Composer } from "./Composer";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
-import { isQuietTool, readableArgs, toolLabel } from "./labels";
-import { AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, localIso } from "../format";
+import { readableArgs, toolLabel } from "./labels";
+import { AGENT_PREFILL, AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, localIso } from "../format";
 import { useLive } from "../live";
 import { useToast } from "../toast";
-import type { AgentStatus, Artifact, ChatMessage, ChatSession, Flow, FlowNode, PermissionRequest } from "../types";
+import { orderNodes } from "../flow/order";
+import type { AgentStatus, Artifact, ChatMessage, ChatSession, Flow, PermissionRequest } from "../types";
 
 /** 가운데 대화: 사용자는 말로 지시하고, 에이전트의 작업 흐름 제안·실행 확인·결과가 대화 안의 카드로 이어진다.
  *  같은 내용은 오른쪽 라이브 캔버스에 크게 쌓인다. */
@@ -78,10 +79,12 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     if (!sid || !msgs) return [];
     const since = session?.created_at ?? msgs[0]?.created_at ?? "";
     const items: Item[] = [];
+    // 에이전트의 생각·툴 호출은 사람이 볼 필요가 적으므로 연달아 나온 것을 한 줄 묶음으로 접어 둔다
     for (const m of msgs) {
       const last = items[items.length - 1];
-      if (m.role === "tool" && last?.kind === "tools") last.items.push(m);
-      else if (m.role === "tool") items.push({ kind: "tools", at: m.created_at, items: [m] });
+      const quiet = m.role === "tool" || m.role === "thought";
+      if (quiet && last?.kind === "tools") last.items.push(m);
+      else if (quiet) items.push({ kind: "tools", at: m.created_at, items: [m] });
       else items.push({ kind: "msg", at: m.created_at, m });
     }
     (flows ?? []).filter((f) => f.created_at >= since).forEach((f) => items.push({ kind: "flow", at: f.created_at, f }));
@@ -175,7 +178,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     const review = (flows ?? []).find((f) => f.status === "review");
     const done = (flows ?? []).some((f) => f.status === "complete");
     if (review) return [`작업 흐름 '${review.title}'에서 바꿀 점: `, "이 작업 흐름의 각 단계를 자세히 설명해 줘", "승인 전에 필요한 입력 파일과 툴 경로를 점검해 줘"];
-    if (done) return ["결과를 해석해서 결론·권고가 담긴 보고서 요약을 작성해 줘", "능동학습으로 예측 모델 정확도를 더 높여 줘",
+    if (done) return ["최신 결과로 보고서를 다시 작성해 줘", "Output 추가: ", "능동학습으로 예측 모델 정확도를 더 높여 줘",
       "최적 설계점에서 실제 해석으로 확인(검증 해석)해 줘", "응력 분포를 3D로 보고 싶어 — 형상·필드 모델을 학습해 줘", "Simulator를 설계팀과 공유할 수 있게 배포해 줘"];
     if (timeline.length) return ["지금 진행 상황을 요약해 줘", "실패한 케이스 원인을 찾아서 고쳐 줘", "다음 단계로 진행해 줘"];
     return CHAT_SUGGEST;
@@ -187,6 +190,13 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     window.addEventListener(AGENT_SEND, h);
     return () => window.removeEventListener(AGENT_SEND, h);
   }, [send]);
+  // 보내지 않고 입력창만 채우기(예: 데이터 탭의 'Output 추가')
+  const [seed, setSeed] = useState<{ text: string; n: number } | undefined>();
+  useEffect(() => {
+    const h = (e: Event) => setSeed((s) => ({ text: (e as CustomEvent<string>).detail, n: (s?.n ?? 0) + 1 }));
+    window.addEventListener(AGENT_PREFILL, h);
+    return () => window.removeEventListener(AGENT_PREFILL, h);
+  }, []);
 
   // "작업하는 중…" 대신 지금 무엇을 하는지: 진행 중인 단계 → 실행 중인 툴 → 생각 중
   const activity = useMemo(() => {
@@ -230,7 +240,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
           ) : timeline.map((it) => {
             if (it.kind === "flow") return <FlowCard key={`f${it.f.id}`} pid={pid} f={it.f} readOnly={readOnly} />;
             if (it.kind === "arts") return <ArtifactChips key={`a${it.items[0].id}`} items={it.items} />;
-            if (it.kind === "tools") return it.items.length > 1 ? <ToolGroup key={`t${it.items[0].id}`} items={it.items} /> : <Message key={it.items[0].id} m={it.items[0]} />;
+            if (it.kind === "tools") return <ToolGroup key={`t${it.items[0].id}`} items={it.items} />;
             return <Message key={it.m.id} m={it.m} />;
           })}
           {perms.map((p) => <PermissionCard key={p.request_id} p={p} readOnly={readOnly} onAnswer={(o) => void answer(p, o)} />)}
@@ -240,7 +250,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
 
       <div className="chat-composer">
         <div className="chat-col">
-          <Composer projectId={pid} suggestions={suggestions} busy={busy && !readOnly} onStop={cancel} disabled={disabled}
+          <Composer projectId={pid} suggestions={suggestions} busy={busy && !readOnly} onStop={cancel} disabled={disabled} seed={seed}
             onSend={(o) => send(o.text, o.attachmentIds)}
             placeholder={readOnly ? "다른 멤버의 대화입니다. 보내면 내 새 대화로 시작합니다" : disabled ? "PC Agent 연결 후 사용할 수 있습니다"
               : "무엇이든 요청하세요"}
@@ -265,7 +275,7 @@ function ArtifactChips({ items }: { items: Artifact[] }) {
       {shown.map((a) => {
         const Icon = KIND_ICON[a.kind] ?? FileText;
         return (
-          <button key={a.id} className="chat-art-row chat-art-open" onClick={() => canvas.showArtifact(a.id)} title="캔버스에서 보기">
+          <button key={a.id} className="chat-art-row chat-art-open" onClick={() => canvas.showArtifact(a.id, a.flow_id)} title="작업 흐름 탭의 그 단계에서 보기">
             <Icon size={14} className="kind" /><span className="chat-art-title">{a.title}</span><ChevronRight size={14} className="muted" />
           </button>
         );
@@ -273,21 +283,6 @@ function ArtifactChips({ items }: { items: Artifact[] }) {
       {items.length > 4 && <button className="link-btn chat-arts-more" onClick={() => setAll(!all)}>{all ? "접기" : `${items.length - 4}개 더 보기`}</button>}
     </div>
   );
-}
-
-/** 단계를 실행 순서대로(엣지 기준 위상 정렬, 같은 순위는 원래 순서) */
-export function orderNodes(f: Flow): FlowNode[] {
-  const indeg = new Map(f.nodes.map((n) => [n.id, 0]));
-  f.edges.forEach((e) => indeg.set(e.target, (indeg.get(e.target) ?? 0) + 1));
-  const out: FlowNode[] = [];
-  const left = [...f.nodes];
-  while (left.length) {
-    const i = Math.max(0, left.findIndex((n) => (indeg.get(n.id) ?? 0) === 0));
-    const [n] = left.splice(i, 1);
-    out.push(n);
-    f.edges.filter((e) => e.source === n.id).forEach((e) => indeg.set(e.target, (indeg.get(e.target) ?? 1) - 1));
-  }
-  return out;
 }
 
 /** 대화 속 작업 흐름 카드: 실행 순서대로 단계 목록 + 진행률 + 승인/반려 (그래프는 캔버스에서) */
@@ -344,18 +339,20 @@ function FlowCard({ pid, f, readOnly }: { pid: number; f: Flow; readOnly: boolea
 
 function ToolGroup({ items }: { items: ChatMessage[] }) {
   const [open, setOpen] = useState(false);
-  const failed = items.filter((m) => m.meta?.status === "failed").length;
-  const running = items.some((m) => m.meta?.status !== "completed" && m.meta?.status !== "failed");
-  const visible = items.filter((m) => !isQuietTool(m.meta?.title || m.content));
-  const last = visible[visible.length - 1] ?? items[items.length - 1];
+  const tools = items.filter((m) => m.role === "tool");
+  if (!tools.length) return null; // 생각만 있는 묶음은 보이지 않는다(진행 중에는 아래 '생각하는 중…'이 보인다)
+  const failed = tools.filter((m) => m.meta?.status === "failed").length;
+  const running = tools.find((m) => m.meta?.status !== "completed" && m.meta?.status !== "failed");
+  const label = running ? `${toolLabel(running.meta?.title || running.content)[0]} 중…`
+    : tools.length === 1 ? toolLabel(tools[0].meta?.title || tools[0].content)[0] : `작업 ${tools.length}건`;
   return (
     <div className="cv-toolgroup">
-      <button className="cv-toolgroup-head" onClick={() => setOpen(!open)} aria-expanded={open} title="에이전트가 사용한 도구 기록">
-        <Wrench size={12} />에이전트 작업 {items.length}건{failed ? ` · 실패 ${failed}` : ""}
+      <button className="cv-toolgroup-head" onClick={() => setOpen(!open)} aria-expanded={open} title="에이전트가 한 작업(툴 사용·생각) 기록">
         {running ? <Loader2 size={12} className="spin" /> : failed ? <X size={12} className="err" /> : <Check size={12} className="ok" />}
-        <span className="small muted">{open ? "접기" : "펼치기"}</span>
+        {label}{failed ? ` · 실패 ${failed}` : ""}
+        <span className="small muted">{open ? "접기" : "자세히"}</span>
       </button>
-      {open ? items.map((m) => <Message key={m.id} m={m} />) : <Message m={last} />}
+      {open && items.map((m) => <Message key={m.id} m={m} />)}
     </div>
   );
 }

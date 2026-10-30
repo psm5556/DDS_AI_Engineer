@@ -37,6 +37,11 @@ class CaeAdapter(ABC):
                  runner, tools: dict[str, str], dry_run: bool = False, **kwargs) -> CaseOutcome:
         ...
 
+    def extract(self, params: dict[str, float], run_dir: Path, config: dict[str, Any], steps: list[dict],
+                names: list[str], runner, tools: dict[str, str], **kwargs) -> CaseOutcome:
+        """이미 해석을 마친 케이스 폴더에서 Output(names)만 다시 뽑는다(해석은 다시 하지 않는다). results에는 새로 뽑은 값만 담는다."""
+        return CaseOutcome("failed", error=f"'{self.label or self.name}' 실행 방식은 Output 추가 추출을 지원하지 않습니다")
+
 
 def resolve_cmd(exe: str) -> list[str]:
     """Windows .bat/.cmd(abaqus.bat 등)는 cmd /c 로 감싼다."""
@@ -55,3 +60,11 @@ def read_results(path: Path) -> dict[str, float]:
         raise FileNotFoundError(f"결과 파일이 생성되지 않았습니다: {path}")
     data = json.loads(path.read_text(encoding="utf-8"))
     return {k: float(v) for k, v in data.items() if isinstance(v, (int, float))}
+
+
+def read_results_if_any(path: Path) -> dict[str, float]:
+    """results.json이 있으면 읽고, 없거나 깨졌으면 빈 결과(단계마다 쓴 값을 모을 때)."""
+    try:
+        return read_results(path)
+    except (OSError, ValueError, AttributeError):
+        return {}

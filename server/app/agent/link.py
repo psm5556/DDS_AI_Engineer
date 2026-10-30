@@ -11,6 +11,8 @@
   session.cancel  {session_id}
   permission.reply {request_id, option_id|null}
   case.run        {case_id, study_id, project_id, params, adapter, adapter_config, dry_run}
+  case.extract    {case_id, study_id, project_id, params, results, run_dir, adapter, adapter_config, steps, names}
+                  (Output 추가 — 해석 없이 추출 단계만 실행, case.status {extract: true, results: 새 값만}로 답한다)
 Agent → 서버 알림
   hello           {hostname, version, agents:[{name,label,installed,login}], default_agent, tools}
   agent.event     {session_id, update}                 (ACP session/update)

@@ -418,7 +418,7 @@ class Agent:
                 await asyncio.to_thread(self.runner(name).respond_permission, req, msg.get("option_id"))
             except (AgentError, KeyError) as e:
                 log.warning("권한 응답 실패: %s", e)
-        elif t == "case.run":
+        elif t in ("case.run", "case.extract"):  # case.extract: Output 추가 — 해석한 케이스에서 새 Output만 뽑는다
             self.executor.submit(msg)
         elif t in ("agent.release", "agent.update"):
             if self.s.auto_update or msg.get("force"):

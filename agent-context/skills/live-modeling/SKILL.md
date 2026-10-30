@@ -82,5 +82,5 @@ description: 사용자가 열어 둔 CAD/CAE GUI(NX, Abaqus/CAE, HyperMesh, STAR
 - `dds-cae.run_script(tool="ansys_python")`로 `ansys.mechanical.core.connect_to_mechanical(port=10000)` 후 `run_python_script(...)`를 실행한다. 사용자가 보는 Mechanical 트리가 바로 바뀐다.
 
 ## 3. 사용자에게 보여 주는 방식
-- 큰 단계가 끝날 때 `live_capture(tool, title="2. 재료·단면 할당")` → 오른쪽 캔버스 '결과'에 화면이 쌓인다. 이미지는 긴 변 1600px로 줄여 올린다.
+- 큰 단계가 끝날 때 `live_capture(tool, title="2. 재료·단면 할당")` → 오른쪽 캔버스 '작업 흐름' 탭의 그 단계 아래에 화면이 쌓인다(flow_id·node_id를 넣는다). 이미지는 긴 변 1600px로 줄여 올린다.
 - 큰 흐름은 `dds-flow.propose_flow`로 먼저 보여 준다(type: cad/pre). 각 단계를 `update_node`로 진행 표시한다.

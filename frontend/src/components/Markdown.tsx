@@ -17,7 +17,13 @@ const marked = new Marked({
   },
 });
 
+/** 한 개짜리 ~는 범위 표기(6~14 mm)로 쓰므로 취소선이 되지 않게 글자로 둔다(~~취소~~만 취소선). 코드(`…`) 안은 그대로 */
+function keepTilde(text: string): string {
+  // marked 14는 \~ 이스케이프를 무시하므로 HTML 문자 참조로 바꾼다
+  return text.split(/(`+[^`]*`+)/).map((part, i) => (i % 2 ? part : part.replace(/(?<!~)~(?!~)/g, "&#126;"))).join("");
+}
+
 export function Markdown({ text, className }: { text: string; className?: string }) {
-  const html = useMemo(() => marked.parse(text ?? "", { async: false }) as string, [text]);
+  const html = useMemo(() => marked.parse(keepTilde(text ?? ""), { async: false }) as string, [text]);
   return <div className={`md ${className ?? ""}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }

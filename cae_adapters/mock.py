@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 
-from .base import CaeAdapter, CaseOutcome, write_json
+from .base import CaeAdapter, CaseOutcome, read_results_if_any, write_json
 
 
 def _branin(p):
@@ -132,7 +132,10 @@ def _washer(p):
     dy = (p["damper_c"] - (25 + 8 * s)) / 65.8
     db = (p.get("balancer_m", 5.0) - 5.0) / 25.0
     dp = (p.get("spring_pos", 5.0) - 5.0) / 20.0
-    return {"vibration": 2.6 + 0.3 * s + 3.67 * (1 + 0.25 * s) * (2 * dx * dx + 1.6 * dy * dy) + 0.3 * db * db + 0.15 * dp * dp}
+    vib = 2.6 + 0.3 * s + 3.67 * (1 + 0.25 * s) * (2 * dx * dx + 1.6 * dy * dy) + 0.3 * db * db + 0.15 * dp * dp
+    # 바닥 전달력[N]: 스프링·댐퍼가 단단할수록 진동은 줄지만 바닥으로 가는 힘은 커진다(Output 추가 연습용 상충 관계)
+    force = (180 + 1.6 * p["spring_k"] + 0.9 * p["damper_c"] + 0.4 * abs(p.get("spring_pos", 0.0))) * (1 + 0.08 * s) + 12 * vib
+    return {"vibration": vib, "floor_force": force}
 
 
 FUNCTIONS = {
@@ -143,15 +146,37 @@ FUNCTIONS = {
     "bracket3d": (_bracket3d, "bracket과 같고 + 3D 표면 응력 필드(fields/stress.npz, 처짐 10배 확대) — 형상·필드 학습"),
     "beam3d": (_beam3d, "beam과 같고 + 3D 표면 메쉬 응력 필드(fields/stress.npz, 처짐 형상 포함) — 형상·필드 학습 연습"),
     "washer": (_washer, "드럼세탁기 탈수 진동 변수 spring_k -10~30, damper_c -10~50, balancer_m -20~20 [%], spring_pos -20~20 [mm], "
-                        "rpm(선택, 기본 1200), 출력 vibration[mm]"),
+                        "rpm(선택, 기본 1200), 출력 vibration[mm], floor_force[N](바닥 전달력)"),
 }
+
+
+def _compute(fn_name: str, params: dict):
+    results = FUNCTIONS[fn_name][0](params)
+    return results if isinstance(results, tuple) else (results, {})
 
 
 class MockAdapter(CaeAdapter):
     name = "mock"
     label = "Mock 솔버"
-    description = "해석함수 기반 가짜 솔버. " + " / ".join(f"{k}: {v[1]}" for k, v in FUNCTIONS.items())
-    config_example = {"function": "branin", "delay_sec": 0.2, "noise": 0.0}
+    description = ("해석함수 기반 가짜 솔버. adapter_config.outputs를 주면 그 출력만 남긴다(나중에 Output 추가로 늘릴 수 있다). "
+                   + " / ".join(f"{k}: {v[1]}" for k, v in FUNCTIONS.items()))
+    config_example = {"function": "branin", "delay_sec": 0.2, "noise": 0.0, "outputs": ["f"]}
+
+    def extract(self, params, run_dir, config, steps, names, runner, tools, **_):
+        """해석함수를 다시 계산해 요청한 출력만 돌려준다(실제 툴의 '결과 파일에서 다시 추출'에 해당)."""
+        fn_name = config.get("function", "branin")
+        if fn_name not in FUNCTIONS:
+            return CaseOutcome("failed", error=f"알 수 없는 함수: {fn_name}")
+        try:
+            results, _ = _compute(fn_name, params)
+        except KeyError as e:
+            return CaseOutcome("failed", error=f"설계변수 {e} 가 필요합니다")
+        got = {k: v for k, v in results.items() if k in names}
+        if not got:
+            return CaseOutcome("failed", error=f"'{fn_name}' 함수에는 {', '.join(names)} 출력이 없습니다")
+        if run_dir.is_dir():
+            write_json(run_dir / "results.json", {**read_results_if_any(run_dir / "results.json"), **got})
+        return CaseOutcome("complete", results=got)
 
     def run_case(self, params, run_dir, config, runner, tools, dry_run=False, **_):
         fn_name = config.get("function", "branin")
@@ -163,14 +188,15 @@ class MockAdapter(CaeAdapter):
             return CaseOutcome("dry_run", files=["params.json"])
         time.sleep(float(config.get("delay_sec", 0)))
         try:
-            results = FUNCTIONS[fn_name][0](params)
+            results, fields = _compute(fn_name, params)
         except KeyError as e:
             return CaseOutcome("failed", error=f"설계변수 {e} 가 필요합니다")
-        if isinstance(results, tuple):  # (스칼라 결과, 필드) — 필드는 fields/<이름>.npz 규약으로 저장
-            results, fields = results
+        if fields:  # 필드는 fields/<이름>.npz 규약으로 저장
             (run_dir / "fields").mkdir(exist_ok=True)
             for name, f in fields.items():
                 np.savez_compressed(run_dir / "fields" / f"{name}.npz", **f)
+        if config.get("outputs"):
+            results = {k: v for k, v in results.items() if k in config["outputs"]}
         noise = float(config.get("noise", 0))
         if noise:
             rng = np.random.default_rng()

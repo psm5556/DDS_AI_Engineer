@@ -10,7 +10,8 @@ mcp = MCPServer(
     "dds-study",
     instructions=(
         "설계변수·목적함수를 정해 create_study → generate_doe → run_cases → train_surrogate 순으로 진행한다. "
-        "최적화는 optimize(mode='bo'), 학습 효율화는 optimize(mode='al')를 쓴다. 각 단계 결과는 웹앱에 자동으로 게시된다."
+        "최적화는 optimize(mode='bo'), 학습 효율화는 optimize(mode='al')를 쓴다. 각 단계 결과는 웹앱에 자동으로 게시된다. "
+        "사용자가 출력(Output) 항목을 더 원하면 add_outputs로 추가한다(이미 해석한 케이스에서도 추출된다)."
     ),
 )
 
@@ -32,20 +33,49 @@ def list_adapters() -> list[dict]:
 @mcp.tool()
 def create_study(name: str, variables: list[dict[str, Any]], objectives: list[dict[str, str]] | None = None,
                  adapter: str = "script", adapter_config: dict[str, Any] | None = None,
-                 constraints: list[dict[str, Any]] | None = None, project_id: int | None = None) -> dict:
-    """스터디를 만든다.
-    variables: [{"name": "thickness", "lower": 1.0, "upper": 5.0}]
+                 constraints: list[dict[str, Any]] | None = None, outputs: list[dict[str, str]] | None = None,
+                 project_id: int | None = None) -> dict:
+    """스터디를 만든다. 웹앱 '데이터·모델' 탭에 입력(Input)과 출력(Output)이 나뉘어 보인다.
+    variables: [{"name": "thickness", "lower": 1.0, "upper": 5.0}]  (입력)
     objectives: [{"name": "mass", "goal": "min"}]  (첫 번째가 최적화 대상, 이름은 results.json 키)
     constraints: [{"name": "max_stress", "upper": 250}]  (결과 제약 — 최적 케이스·BO가 이를 만족하는 쪽을 고른다.
                  BO에 반영하려면 train_surrogate의 outputs에 제약 항목도 넣는다)
+    outputs: [{"name": "deflection", "note": "끝단 처짐 [mm]"}]  (목적·제약 말고도 뽑는 출력과 화면 설명. 나중에 add_outputs로 늘린다)
     adapter='script' 이면 adapter_config: {"tool": "abaqus_cae", "script": "scripts/plate.py", "inputs": ["models/plate.cae"], "post": {...}}
-    adapter='mock' 이면 adapter_config: {"function": "branin" | "rosenbrock" | "beam"}
+    adapter='mock' 이면 adapter_config: {"function": "branin" | "rosenbrock" | "beam", "outputs": [남길 출력]}
     """
     pid = resolve_pid(project_id)
     s = api.post(f"/api/projects/{pid}/studies", {"name": name, "variables": variables, "objectives": objectives or [],
-                                                  "constraints": constraints or [],
+                                                  "constraints": constraints or [], "outputs": outputs or [],
                                                   "adapter": adapter, "adapter_config": adapter_config or {}})
     return {"study_id": s["id"]}
+
+
+@mcp.tool()
+def add_outputs(study_id: int, outputs: list[dict[str, str]], post: dict[str, Any] | list[dict[str, Any]] | None = None,
+                extract_existing: bool = True, wait_sec: int = 600) -> dict:
+    """Output(출력) 항목을 추가한다. 사용자가 "OO도 Output에 넣어 줘"라고 하면 쓴다.
+    - 이미 해석한 케이스: 해석은 다시 돌리지 않고 케이스 폴더의 결과 파일에서 새 Output만 뽑아 기존 결과에 합친다.
+    - 이후 케이스: 해석할 때 post 단계가 함께 돌아 계속 추출된다.
+    outputs: [{"name": "floor_force", "note": "바닥 전달력 [N]"}]  (name은 results.json 키)
+    post: script 어댑터일 때 추출 단계 {"tool": "abaqus_python", "script": "scripts/extract_disp.py", "args": []}
+          추출 스크립트는 케이스 폴더(cwd)에서 돌고 새 키만 results.json에 써도 된다(기존 값은 플랫폼이 지킨다).
+          붙이기 전에 dds-cae.run_script로 한 케이스의 결과 파일(inputs=["studies/S001_…/cases/C0001_doe/model.odb"])에서 먼저 시험한다.
+    mock 어댑터는 post 없이 해석함수에서 다시 계산한다.
+    """
+    r = api.post(f"/api/studies/{study_id}/outputs", {"outputs": outputs, "post": post, "extract_existing": extract_existing})
+    st = _wait(study_id, wait_sec)
+    cases = api.get(f"/api/studies/{study_id}/cases")
+    names = [o["name"] for o in outputs]
+    done = [c for c in cases if c["status"] == "complete"]
+    out = {"queued": r["queued"], "skipped_no_agent": r["skipped"], "still_extracting": len(st.get("extracting") or []),
+           "extracted": {n: sum(1 for c in done if n in (c.get("results") or {})) for n in names}, "complete_cases": len(done)}
+    fails = [{"case_id": c["id"], "error": c["error"][-500:]} for c in done if (c.get("error") or "").startswith("Output 추출 실패")][-3:]
+    if fails:
+        out["recent_failures"] = fails
+    if r.get("note"):
+        out["note"] = r["note"]
+    return out
 
 
 @mcp.tool()
@@ -61,7 +91,7 @@ def _wait(study_id: int, wait_sec: int) -> dict:
     t0 = time.time()
     while True:
         st = api.get(f"/api/studies/{study_id}")
-        if not st.get("running") or time.time() - t0 > wait_sec:
+        if not (st.get("running") or st.get("extracting")) or time.time() - t0 > wait_sec:
             return st
         time.sleep(2)
 

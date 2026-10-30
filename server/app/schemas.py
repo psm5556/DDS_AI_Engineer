@@ -212,6 +212,30 @@ class ArtifactResponse(ORM):
     title: str
     payload: dict[str, Any]
     created_at: datetime
+    updated_at: datetime | None = None
+
+
+# ---------- 보고서 (AI가 새로 쓴 종합 보고서) ----------
+class ReportCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    body: str = Field(..., min_length=1)  # markdown. 결과는 한 줄에 ![제목](artifact:<id>)
+    flow_id: int | None = None
+
+
+class ReportResponse(ORM):
+    id: int
+    project_id: int
+    flow_id: int | None
+    title: str
+    body: str
+    created_at: datetime
+    new_results: int = 0  # 이 판을 쓴 뒤 새로 생기거나 바뀐 결과 수(다시 쓸지 판단)
+
+
+class ReportSummary(ORM):
+    id: int
+    title: str
+    created_at: datetime
 
 
 # ---------- Study ----------
@@ -232,13 +256,26 @@ class Constraint(BaseModel):
     lower: float | None = None
 
 
+class OutputDef(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)  # results.json 키
+    note: str = ""  # 화면에 보일 설명(예: "바닥 전달력 [N]")
+
+
 class StudyCreate(BaseModel):
     name: str
     variables: list[Variable]
     objectives: list[Objective] = []
     constraints: list[Constraint] = []
+    outputs: list[OutputDef] = []
     adapter: str = "mock"
     adapter_config: dict[str, Any] = {}
+
+
+class OutputAddRequest(BaseModel):
+    """Output 추가: 목록에 넣고, post(추출 단계)를 이후 케이스에 붙이고, 이미 해석한 케이스에서도 추출한다."""
+    outputs: list[OutputDef] = Field(..., min_length=1)
+    post: dict[str, Any] | list[dict[str, Any]] | None = None  # {"tool", "script", "args"} — script 어댑터일 때
+    extract_existing: bool = True
 
 
 class StudyResponse(ORM):
@@ -248,6 +285,7 @@ class StudyResponse(ORM):
     variables: list[dict[str, Any]]
     objectives: list[dict[str, Any]]
     constraints: list[dict[str, Any]] | None = None
+    outputs: list[dict[str, Any]] | None = None
     adapter: str
     adapter_config: dict[str, Any]
     version: int
@@ -273,6 +311,7 @@ class StudyStatus(BaseModel):
     counts: dict[str, int]
     best: CaseResponse | None
     running: bool = False
+    extracting: list[int] = []  # Output을 추출하는 중인 케이스 id
 
 
 class DoeRequest(BaseModel):

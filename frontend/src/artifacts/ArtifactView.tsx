@@ -114,9 +114,14 @@ export function ArtifactCard({ a, onDelete, compact, actions, highlight }: {
         {actions}
         {onDelete && <button className="icon-btn" title="삭제" aria-label={`${a.title} 삭제`} onClick={onDelete}><Trash2 size={14} /></button>}
       </div>
-      {a.kind === "table" ? <Table a={a} maxRows={compact ? 6 : undefined} />
-        : a.kind === "markdown" ? <Markdown text={String((a.payload as { text?: string }).text ?? "")} />
-        : a.kind === "image" ? <ImageArt a={a} /> : <Chart a={a} height={compact ? 200 : 300} />}
+      <ArtifactBody a={a} compact={compact} />
     </section>
   );
+}
+
+/** 결과 내용만(머리글 없이) — 카드와 보고서 본문의 그림·표가 함께 쓴다 */
+export function ArtifactBody({ a, compact }: { a: Artifact; compact?: boolean }) {
+  return a.kind === "table" ? <Table a={a} maxRows={compact ? 6 : undefined} />
+    : a.kind === "markdown" ? <Markdown text={String((a.payload as { text?: string }).text ?? "")} />
+    : a.kind === "image" ? <ImageArt a={a} /> : <Chart a={a} height={compact ? 200 : 300} />;
 }

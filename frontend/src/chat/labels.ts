@@ -7,13 +7,16 @@ const TOOL_LABEL: Record<string, string> = {
   "dds-flow.publish_artifact": "결과 게시",
   "dds-flow.publish_image": "그림 게시",
   "dds-flow.set_project_info": "프로젝트 이름 정리",
-  "dds-flow.make_report": "보고서 저장",
+  "dds-flow.make_report": "보고서 파일 저장",
+  "dds-flow.get_report_context": "보고서 자료 읽기",
+  "dds-flow.write_report": "보고서 작성",
   "dds-cae.case_contract": "스크립트 규약 확인",
   "dds-cae.list_tools": "내 PC CAD/CAE 툴 확인",
   "dds-cae.project_folder": "프로젝트 폴더 확인",
   "dds-cae.run_script": "스크립트 실행",
   "dds-study.list_adapters": "실행 방식 확인",
   "dds-study.create_study": "스터디 만들기",
+  "dds-study.add_outputs": "Output 추가·추출",
   "dds-study.generate_doe": "DOE 설계점 만들기",
   "dds-study.run_cases": "케이스 해석 실행",
   "dds-study.get_study": "스터디 진행 확인",
@@ -42,12 +45,6 @@ export function toolLabel(title: string): [string, string | null] {
   const key = canonical(title);
   if (key && TOOL_LABEL[key]) return [TOOL_LABEL[key], title];
   return [title, null];
-}
-
-/** 이 툴 호출은 화면에 이미 다른 방식(진행 표시)으로 드러나므로 묶음에서 눈에 덜 띄게 한다 */
-export function isQuietTool(title: string): boolean {
-  const key = canonical(title);
-  return key === "dds-flow.update_node" || key === "dds-flow.get_flow";
 }
 
 const ARG_LABEL: Record<string, string> = {

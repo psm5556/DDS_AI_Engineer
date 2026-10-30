@@ -109,9 +109,10 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 실제 툴에서 스킬 고치기 | `docs/onsite-validation.md` 순서대로. 고친 곳의 `TODO(사내검증)` 표시를 지운다 |
 | MCP 툴 추가 | `mcp_servers/dds_*.py`(FastMCP 데코레이터) → 서버 API(필요 시) → `agent-context/INSTRUCTIONS.md`에 사용법 |
 | 대화 흐름(승인·권한·결과 카드) | `frontend/src/chat/ChatView.tsx` · 서버 `server/app/agent/hub.py` |
-| 오른쪽 패널 탭 | `frontend/src/canvas/CanvasPanel.tsx`·`views.tsx` |
+| 오른쪽 패널 탭 | `frontend/src/canvas/CanvasPanel.tsx` · `views.tsx`(작업 흐름: 흐름도 고정 + 'N단계' 결과 스크롤 · 데이터·모델: 입력/출력) · `ReportView.tsx`(보고서) · 단계 번호 `frontend/src/flow/order.ts` |
 | DOE·학습·최적화 로직 | `server/app/study/*` + `server/tests` |
-| 보고서 양식 | `server/app/report.py` |
+| 보고서 | AI가 새로 쓰는 보고서: 자료·저장 `server/app/routers/reports.py`, Word·HTML `server/app/report.py`, 쓰는 규칙 `agent-context/INSTRUCTIONS.md` 1-0절·`mcp_servers/dds_flow.py` `write_report` |
+| Output 추가 추출 | `server/app/study/service.py` `add_outputs` → PC Agent `case.extract`(`executor.py`) → 어댑터 `extract()` · 규약 `docs/skill-contract.md` 1-2절 |
 | PC Agent 설치 과정 | `scripts/install-agent.ps1`(실제 설치) · `installer/DdsAgentSetup.cs`(설치 창) · `server/app/routers/agents.py`(배포·설치 파일) |
 | Live Link 속도 개선 | `.claude/skills/live-link-speedup/SKILL.md`부터 읽는다(개발용 스킬, Agent 배포에는 들어가지 않음) |
 

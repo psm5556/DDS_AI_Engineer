@@ -31,7 +31,8 @@ def _status(study: models.Study) -> dict:
     counts: dict[str, int] = {}
     for c in study.cases:
         counts[c.status] = counts.get(c.status, 0) + 1
-    return {"study": study, "counts": counts, "best": service.best_case(study), "running": service.is_running(study.id)}
+    return {"study": study, "counts": counts, "best": service.best_case(study), "running": service.is_running(study.id),
+            "extracting": service.extracting(study.id)}
 
 
 @router.get("/adapters")
@@ -55,7 +56,7 @@ def create_study(body: schemas.StudyCreate, project: models.Project = Depends(ge
     s = models.Study(project_id=project.id, name=body.name, variables=[v.model_dump() for v in body.variables],
                      objectives=[o.model_dump() for o in body.objectives],
                      constraints=[c.model_dump(exclude_none=True) for c in body.constraints], adapter=body.adapter,
-                     adapter_config=body.adapter_config)
+                     outputs=[o.model_dump() for o in body.outputs], adapter_config=body.adapter_config)
     db.add(s)
     db.commit()
     manager.publish({"type": "study_updated", "project_id": project.id, "data": {"id": s.id}})
@@ -89,6 +90,16 @@ def run_cases(study_id: int, body: schemas.RunRequest, user=Depends(get_current_
     except AgentError as e:
         raise HTTPException(409, str(e))
     return {"queued": n}
+
+
+@router.post("/studies/{study_id}/outputs")
+def add_outputs(study_id: int, body: schemas.OutputAddRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Output 추가: 이미 해석한 케이스에서도 추출하고, 이후 케이스는 해석할 때 함께 추출한다."""
+    s = _study(study_id, user, db)
+    try:
+        return service.add_outputs(db, s, [o.model_dump() for o in body.outputs], body.post, body.extract_existing, user.id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/studies/{study_id}/train", response_model=schemas.ModelResponse)

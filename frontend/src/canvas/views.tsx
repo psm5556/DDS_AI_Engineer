@@ -1,19 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileDown, FolderOpen, Gauge, Play, Plus, Sparkles, Trash2, Workflow } from "lucide-react";
+import { FolderOpen, Gauge, Loader2, Play, Plus, Trash2, Workflow } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { del, download, get, put } from "../api";
+import { del, get, put } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
 import { useAuth } from "../auth";
 import { Confirm } from "../components/Modal";
 import { FlowCanvas } from "../flow/FlowCanvas";
-import { FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, ROLE_LABEL, sendToAgent, when } from "../format";
+import { FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_LABEL, sendToAgent, when } from "../format";
+import { orderNodes } from "../flow/order";
 import { useCanvas } from "./CanvasContext";
 import { relFromRunDir, useOpenLocal } from "./LocalFiles";
 import { useToast } from "../toast";
 import type { Artifact, Case, Flow, Project, StudyStatus, Study, SurrogateModel, User } from "../types";
 
-/** 캔버스에 들어가는 화면들: 작업 흐름 · 결과 · 데이터·모델(예측 모델·Simulator) · 멤버.
+/** 캔버스에 들어가는 화면들: 작업 흐름(단계별 결과) · 데이터·모델(입력·출력, 예측 모델·Simulator) · 멤버. 보고서는 ReportView.
  *  대화(가운데)에서 에이전트가 일하면 해당 화면이 실시간으로 갱신된다. */
 
 /* ---------- 작업 흐름 ---------- */
@@ -38,15 +39,31 @@ export function useFlowDecision(pid: number) {
   });
 }
 
-export function FlowView({ flows, arts }: { flows?: Flow[]; arts: Artifact[] }) {
-  const { flowId: fid, setFlowId: setFid, setTab } = useCanvas();
+/** 작업 흐름 탭: 위에는 흐름도, 아래에는 단계 순서대로 그 단계의 결과(표·그래프·이미지)를 모두 펼친다.
+ *  흐름도의 단계를 누르면 그 단계 결과로 스크롤한다. 흐름도·결과·대화 카드·보고서가 같은 'N단계' 번호를 쓴다. */
+export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; arts: Artifact[] }) {
+  const { flowId: fid, setFlowId: setFid, focus } = useCanvas();
   const [sel, setSel] = useState<string | null>(null);
+  const [rm, setRm] = useState<Artifact | null>(null);
+  const qc = useQueryClient();
+  const toast = useToast();
+  const remove = useMutation({
+    mutationFn: (id: number) => del(`/api/artifacts/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["artifacts", pid] }); toast("삭제했습니다"); },
+    onError: (e: Error) => toast(e.message ?? "삭제하지 못했습니다", true),
+  });
   const flow = flows?.find((f) => f.id === fid) ?? flows?.[0];
   useEffect(() => { setSel(null); }, [flow?.id]);
-  // 그래프가 길어 단계 설명이 화면 밖에 생기므로, 단계를 고르면 설명으로 스크롤한다
+  // 대화에서 결과를 누르면(또는 에이전트가 새 결과를 올리면) 그 결과로 스크롤
   useEffect(() => {
-    if (sel) setTimeout(() => document.getElementById("node-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
-  }, [sel]);
+    if (!focus) return;
+    const t = setTimeout(() => document.getElementById(`art-${focus.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+    return () => clearTimeout(t);
+  }, [focus]);
+  const goStep = (id: string | null) => {
+    setSel(id);
+    if (id) setTimeout(() => document.getElementById(`step-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
+  };
 
   if (!flows) return <div className="busy"><span className="spinner" /></div>;
   if (!flow) {
@@ -59,12 +76,18 @@ export function FlowView({ flows, arts }: { flows?: Flow[]; arts: Artifact[] }) 
     );
   }
 
-  const count: Record<string, number> = {};
-  arts.filter((a) => a.flow_id === flow.id && a.node_id).forEach((a) => { count[a.node_id!] = (count[a.node_id!] ?? 0) + 1; });
-  const node = flow.nodes.find((n) => n.id === sel);
-  const shown = arts.filter((a) => a.flow_id === flow.id && (!sel || a.node_id === sel));
+  const steps = orderNodes(flow);
+  const known = new Set(flow.nodes.map((n) => n.id));
+  const mine = [...arts].filter((a) => a.flow_id === flow.id).sort((a, b) => a.id - b.id);
+  const byNode: Record<string, Artifact[]> = {};
+  mine.forEach((a) => { if (a.node_id && known.has(a.node_id)) (byNode[a.node_id] ??= []).push(a); });
+  // 단계에 붙지 않은 결과: 이 흐름의 것 + 어느 흐름에도 없는 것(가장 최근 흐름에서만 보여 준다)
+  const outside = [...mine.filter((a) => !a.node_id || !known.has(a.node_id)),
+    ...(flow.id === flows[0]?.id ? arts.filter((a) => a.flow_id == null).sort((a, b) => a.id - b.id) : [])];
+  const count = Object.fromEntries(Object.entries(byNode).map(([k, v]) => [k, v.length]));
   const st = FLOW_STATUS[flow.status];
   const done = flow.nodes.filter((n) => n.status === "complete").length;
+  const card = (a: Artifact) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} highlight={a.id === focus?.id} />;
 
   return (
     <div className="flow-tab">
@@ -81,83 +104,41 @@ export function FlowView({ flows, arts }: { flows?: Flow[]; arts: Artifact[] }) 
         {flow.status === "review" && <span className="notice-inline warn">대화의 카드에서 승인하거나 반려하세요</span>}
       </div>
       <div className="bar" aria-label="진행률"><i style={{ width: `${(done / Math.max(1, flow.nodes.length)) * 100}%` }} /></div>
-      <FlowCanvas flow={flow} selected={sel} onSelect={setSel} artifactCount={count} />
-      {node && (
-        <div className="panel node-detail" id="node-detail">
-          <div className="panel-head"><h3>{node.label}</h3>
-            <span className="chip">{NODE_TYPE[node.type] ?? node.type}{node.tool ? ` · ${node.tool}` : ""}</span>
-            <span className={`chip ${node.status === "complete" ? "ok" : node.status === "failed" ? "err" : node.status === "in_progress" ? "info" : ""}`}>{NODE_STATUS[node.status]}</span></div>
-          {node.detail && <p className="small">{node.detail}</p>}
-          {flow.status !== "review" && (
-            <button className="small" onClick={() => sendToAgent(`작업 흐름 #${flow.id}의 '${node.label}' 단계에 대해 설명하고, 결과나 문제를 알려줘`)}>
-              이 단계에 대해 에이전트에게 묻기</button>
-          )}
-        </div>
-      )}
-      {node ? (
-        <>
-          <div className="home-sec" style={{ marginTop: 20 }}>'{node.label}' 단계 결과 <span className="count">{shown.length}</span></div>
-          <div className="art-grid" style={{ marginTop: 20 }}>
-            {shown.map((a) => <ArtifactCard key={a.id} a={a} />)}
-            {!shown.length && <p className="small muted">이 단계에서 게시된 결과가 없습니다.</p>}
-          </div>
-        </>
-      ) : (
-        <p className="small muted flow-hint">단계를 누르면 그 단계의 설명과 결과를 봅니다
-          {shown.length > 0 && <> · <button className="link-btn" onClick={() => setTab("results")}>결과 {shown.length}개 모두 보기</button></>}</p>
-      )}
-    </div>
-  );
-}
+      <FlowCanvas flow={flow} selected={sel} onSelect={goStep} artifactCount={count} compact />
+      <p className="small muted flow-hint">단계를 누르면 그 단계의 결과로 이동합니다 · 결과 {mine.length + outside.length}개</p>
 
-/* ---------- 결과 ---------- */
-export function ResultsView({ pid, arts, flows }: { pid: number; arts: Artifact[]; flows: Flow[] }) {
-  const [flowId, setFlowId] = useState<number | "all">("all");
-  const { focusArtifactId } = useCanvas();
-  // 대화에서 "캔버스에서 보기"로 고른 결과로 스크롤
-  useEffect(() => {
-    if (!focusArtifactId) return;
-    setFlowId("all");
-    setTimeout(() => document.getElementById(`art-${focusArtifactId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
-  }, [focusArtifactId]);
-  const [rm, setRm] = useState<Artifact | null>(null);
-  const qc = useQueryClient();
-  const toast = useToast();
-  const shown = arts.filter((a) => flowId === "all" || a.flow_id === flowId);
-  const remove = useMutation({
-    mutationFn: (id: number) => del(`/api/artifacts/${id}`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["artifacts", pid] }); toast("삭제했습니다"); },
-    onError: (e: Error) => toast(e.message ?? "삭제하지 못했습니다", true),
-  });
-  return (
-    <>
-      {/* 결과의 끝은 보고서 — 받기를 가장 눈에 띄게, 요약 요청은 보조로 */}
-      <div className="results-bar">
-        {flows.length > 1 ? (
-          <select value={flowId} onChange={(e) => setFlowId(e.target.value === "all" ? "all" : Number(e.target.value))} aria-label="작업 흐름별 보기">
-            <option value="all">모든 작업 흐름 · {arts.length}</option>
-            {flows.map((f) => <option key={f.id} value={f.id}>#{f.id} {f.title}</option>)}
-          </select>
-        ) : <span className="small muted">결과 {arts.length}개</span>}
-        <span className="grow" />
-        <button className="small ghost" title="에이전트가 결과를 해석해 결론·권고를 쓰고 보고서 맨 앞에 넣습니다"
-          onClick={() => sendToAgent("지금까지의 결과(표·그래프·이미지)를 해석해서 결론·권고가 담긴 보고서 요약(markdown 아티팩트)을 작성해 줘")}>
-          <Sparkles size={13} />요약 작성 요청</button>
-        <span className="split-btn">
-          <button className="small primary" title="결과를 모은 보고서 (Word)" disabled={!arts.length}
-            onClick={() => download(`/api/projects/${pid}/report?format=docx${flowId !== "all" ? `&flow_id=${flowId}` : ""}`, "보고서.docx").catch((e: Error) => toast(e.message, true))}>
-            <FileDown size={13} />보고서 받기</button>
-          <button className="small" title="같은 보고서를 HTML로" disabled={!arts.length}
-            onClick={() => download(`/api/projects/${pid}/report?format=html${flowId !== "all" ? `&flow_id=${flowId}` : ""}`, "보고서.html").catch((e: Error) => toast(e.message, true))}>
-            HTML</button>
-        </span>
+      {/* 흐름도는 고정, 결과만 이 안에서 스크롤 */}
+      <div className="step-list" aria-label="단계별 결과">
+        {steps.map((n, i) => {
+          const list = byNode[n.id] ?? [];
+          return (
+            <section key={n.id} id={`step-${n.id}`} className={`step-sec st-${n.status} ${sel === n.id ? "sel" : ""}`} aria-label={`${i + 1}단계 ${n.label}`}>
+              <header className="step-head">
+                <span className="step-no">{i + 1}단계</span>
+                <b className="step-label">{n.label}</b>
+                <span className="chip">{NODE_TYPE[n.type] ?? n.type}{n.tool ? ` · ${n.tool}` : ""}</span>
+                <span className={`chip ${n.status === "complete" ? "ok" : n.status === "failed" ? "err" : n.status === "in_progress" ? "info" : ""}`}>{NODE_STATUS[n.status]}</span>
+                <span className="grow" />
+                {n.status === "failed" && flow.status !== "review" && (
+                  <button className="small ghost" onClick={() => sendToAgent(`${i + 1}단계 '${n.label}'이(가) 실패했습니다. 원인을 찾아 고쳐 주세요`)}>원인 찾기</button>
+                )}
+              </header>
+              {n.detail && <p className="small muted step-detail">{n.detail}</p>}
+              {list.length ? <div className="art-grid">{list.map(card)}</div>
+                : <p className="small muted step-empty">{n.status === "pending" ? "아직 시작하지 않았습니다" : n.status === "in_progress" ? "진행 중입니다. 결과가 나오면 여기에 쌓입니다" : "이 단계에서 게시된 결과가 없습니다"}</p>}
+            </section>
+          );
+        })}
+        {outside.length > 0 && (
+          <section className="step-sec" id="step-outside" aria-label="단계 밖 결과">
+            <header className="step-head"><span className="step-no muted">기타</span><b className="step-label">단계에 묶이지 않은 결과</b></header>
+            <div className="art-grid">{outside.map(card)}</div>
+          </section>
+        )}
       </div>
-      {!shown.length ? <p className="small muted">아직 게시된 결과가 없습니다. 에이전트가 작업하면서 표·그래프·컨투어 이미지를 여기에 올립니다.</p> : (
-        <div className="art-grid">{shown.map((a) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} highlight={a.id === focusArtifactId} />)}</div>
-      )}
       {rm && <Confirm title="결과 삭제" message={`'${rm.title}'을(를) 삭제할까요?`} confirmLabel="삭제" danger
         onConfirm={() => remove.mutate(rm.id)} onClose={() => setRm(null)} />}
-    </>
+    </div>
   );
 }
 
@@ -187,6 +168,13 @@ const CASE_STATUS: Record<string, [string, string]> = {
   pending: ["대기", ""], queued: ["대기열", "info"], running: ["실행 중", "info"], complete: ["완료", "ok"], failed: ["실패", "err"], dry_run: ["스크립트만", "warn"],
 };
 
+/** 출력 순서: 목적 → 제약 → 추가한 출력 → 그 밖에 케이스 결과에 있는 키(서버 output_names와 같은 규칙) */
+function outputNames(s: Study, cases: Case[]): string[] {
+  const names = [...s.objectives.map((o) => o.name), ...(s.constraints ?? []).map((c) => c.name), ...(s.outputs ?? []).map((o) => o.name)];
+  const rest = Array.from(new Set(cases.flatMap((c) => Object.keys(c.results ?? {})))).sort();
+  return Array.from(new Set([...names, ...rest]));
+}
+
 function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const { user } = useAuth();
   const open = useOpenLocal(pid);
@@ -196,10 +184,20 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
   if (!st) return <div className="busy"><span className="spinner" /></div>;
   const s = st.study;
   const vars = s.variables.map((v) => v.name);
-  const outs = Array.from(new Set((cases ?? []).flatMap((c) => Object.keys(c.results))));
+  const outs = outputNames(s, cases ?? []);
   const obj = s.objectives[0];
   const cons = (s.constraints ?? []).map((c) => [c.lower != null ? `${c.lower} ≤ ` : "", c.name, c.upper != null ? ` ≤ ${c.upper}` : ""].join("")).join(", ");
   const total = Object.values(st.counts).reduce((a, b) => a + b, 0);
+  const done = (cases ?? []).filter((c) => c.status === "complete");
+  const extracting = new Set(st.extracting ?? []);
+  const role = (o: string) => {
+    const ob = s.objectives.find((x) => x.name === o);
+    if (ob) return ob.goal === "min" ? "목적 · 최소" : "목적 · 최대";
+    const c = (s.constraints ?? []).find((x) => x.name === o);
+    if (c) return `제약 · ${[c.lower != null ? `≥ ${c.lower}` : "", c.upper != null ? `≤ ${c.upper}` : ""].filter(Boolean).join(" ")}`;
+    return "";
+  };
+  const note = (o: string) => s.outputs?.find((x) => x.name === o)?.note ?? "";
   return (
     <div className="stack">
       <section className="block">
@@ -218,6 +216,30 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
             {` · ${s.adapter}${s.adapter_config?.tool ? `/${String(s.adapter_config.tool)}` : ""}`}
           </span>
           {st.running && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />실행 중</span>}
+          {extracting.size > 0 && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />Output 추출 중 {extracting.size}건</span>}
+        </div>
+      </section>
+
+      {/* 입력(설계 변수)과 출력(해석에서 뽑는 값)을 나눠 보여 준다. Output은 대화로 언제든 늘릴 수 있다 */}
+      <section className="block io-block" aria-label="입력과 출력">
+        <div className="io-col">
+          <div className="io-head"><span className="io-tag in">입력 · Input</span><span className="cnt">{vars.length}개</span></div>
+          <ul className="io-list">{s.variables.map((v) => (
+            <li key={v.name}><b>{v.name}</b><span className="io-meta">{fmt(v.lower)} ~ {fmt(v.upper)}</span></li>))}</ul>
+        </div>
+        <div className="io-col">
+          <div className="io-head">
+            <span className="io-tag out">출력 · Output</span><span className="cnt">{outs.length}개</span><span className="grow" />
+            <button className="small ghost" title="입력창에 요청을 채웁니다. 이름(예: 바닥 전달력)을 적어 보내면 이미 해석한 케이스에서도 뽑습니다"
+              onClick={() => prefillAgent(`'${s.name}' 스터디에 Output 추가: `)}><Plus size={13} />Output 추가</button>
+          </div>
+          <ul className="io-list">{outs.map((o) => {
+            const n = done.filter((c) => o in (c.results ?? {})).length;
+            return (
+              <li key={o}><b>{o}</b><span className="io-meta">{[role(o), note(o)].filter(Boolean).join(" · ")}</span>
+                <span className={`io-cov ${done.length && n < done.length ? "part" : ""}`} title="값이 있는 완료 케이스 수">{n}/{done.length}</span></li>
+            );
+          })}{!outs.length && <li className="muted small">완료된 케이스가 생기면 결과 항목이 여기에 보입니다</li>}</ul>
         </div>
       </section>
 
@@ -227,7 +249,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
           <div className="row"><span className="small muted grow">아직 예측 모델이 없습니다. 케이스가 쌓이면 학습할 수 있습니다.</span>
             <button className="small" onClick={() => sendToAgent(`스터디 '${s.name}'(#${s.id})의 완료된 케이스로 예측 모델을 학습해 줘`)}>학습 요청</button></div>
         ) : (
-          <div className="model-list">{(models ?? []).filter((m) => m.study_id === id).slice(0, 8).map((m) => (
+          <div className="model-list">{(models ?? []).filter((m) => m.study_id === id).filter((m, i) => i < 3 || m.deployed).map((m) => (
             <div key={m.id} className="model-row">
               <div className="grow">
                 <b>{m.name}</b>
@@ -237,6 +259,11 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
               {m.deployed ? <Link className="btn small primary" to={`/simulator/${m.id}`}><Play size={13} />Simulator 열기</Link>
                 : <button className="small" onClick={() => sendToAgent(`예측 모델 '${m.name}'(#${m.id})을 Simulator로 배포해 줘`)}>배포 요청</button>}
             </div>))}
+            {(() => {
+              const mine = (models ?? []).filter((m) => m.study_id === id);
+              const hidden = mine.filter((m, i) => !(i < 3 || m.deployed)).length;
+              return hidden > 0 && <p className="small muted">이전에 학습한 모델 {hidden}개는 숨겼습니다(최근 3개와 배포한 모델만 보입니다)</p>;
+            })()}
           </div>
         )}
       </section>
@@ -244,13 +271,24 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
       <section className="block">
         <div className="block-head"><h3>케이스</h3><span className="cnt">{cases?.length ?? 0}건</span></div>
         <div className="table-wrap case-table"><table>
-          <thead><tr><th>ID</th><th>출처</th><th>상태</th>{vars.map((v) => <th key={v} className="r">{v}</th>)}{outs.map((o) => <th key={o} className="r">{o}</th>)}<th /></tr></thead>
+          <thead>
+            <tr className="io-group">
+              <th colSpan={3} />
+              {vars.length > 0 && <th colSpan={vars.length} className="col-in grp">입력</th>}
+              {outs.length > 0 && <th colSpan={outs.length} className="col-out grp">출력</th>}
+              <th />
+            </tr>
+            <tr><th>ID</th><th>출처</th><th>상태</th>{vars.map((v) => <th key={v} className="r col-in">{v}</th>)}{outs.map((o) => <th key={o} className="r col-out">{o}</th>)}<th /></tr>
+          </thead>
           <tbody>{(cases ?? []).map((c) => (
             <tr key={c.id} className={st.best?.id === c.id ? "best-row" : ""} title={c.error ?? undefined}>
               <td>{c.id}</td><td>{({ doe: "DOE", bo: "최적화", al: "능동학습", manual: "직접" } as Record<string, string>)[c.source] ?? c.source}</td>
               <td className="status-cell"><span className={`st ${c.status === "complete" ? "done" : c.status === "failed" ? "fail" : ""}`}><i />{CASE_STATUS[c.status]?.[0] ?? c.status}</span></td>
-              {vars.map((v) => <td key={v} className="r">{fmt(c.params[v])}</td>)}
-              {outs.map((o) => <td key={o} className="r">{fmt(c.results[o])}</td>)}
+              {vars.map((v) => <td key={v} className="r col-in">{fmt(c.params[v])}</td>)}
+              {outs.map((o) => (
+                <td key={o} className="r col-out">{o in (c.results ?? {}) ? fmt(c.results[o])
+                  : extracting.has(c.id) ? <Loader2 size={11} className="spin muted" aria-label="추출 중" /> : ""}</td>
+              ))}
               <td className="r nowrap">{(() => {
                 const rel = relFromRunDir(c.run_dir);
                 const mine = c.run_by === user?.id;

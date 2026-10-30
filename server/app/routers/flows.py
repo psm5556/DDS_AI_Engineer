@@ -1,18 +1,15 @@
 """Flow(작업 흐름 그래프)와 아티팩트. 에이전트는 dds-flow MCP 툴로, 사용자는 UI로 접근한다."""
 import uuid
-from datetime import date
 from pathlib import Path
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, require_member
-from .. import report
 from ..study.service import publish_artifact
 from ..ws import manager
 
@@ -148,23 +145,3 @@ def get_file(path: str, project: models.Project = Depends(get_project_for_member
         raise HTTPException(404, "파일이 없습니다")
     return FileResponse(target)
 
-
-@router.get("/projects/{project_id}/report")
-def project_report(format: str = "html", flow_id: int | None = None, project: models.Project = Depends(get_project_for_member),
-                   db: Session = Depends(get_db)):
-    """결과(요약·표·그래프·이미지)를 모은 보고서. format: html | docx. flow_id를 주면 그 작업 흐름의 결과만."""
-    q = db.query(models.Artifact).filter_by(project_id=project.id)
-    flow = None
-    if flow_id:
-        flow = get_or_404(db, models.Flow, flow_id, "플로우")
-        q = q.filter_by(flow_id=flow_id)
-    else:
-        flow = db.query(models.Flow).filter_by(project_id=project.id).order_by(models.Flow.id.desc()).first()
-    arts = q.all()
-    name = f"{project.name}_보고서_{date.today():%Y%m%d}"
-    if format == "docx":
-        data = report.build_docx(project, arts, flow)
-        return Response(data, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.docx"})
-    return HTMLResponse(report.build_html(project, arts, flow),
-                        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.html"})

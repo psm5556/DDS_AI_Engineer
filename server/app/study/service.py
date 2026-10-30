@@ -46,6 +46,23 @@ def _var_names(study):
     return [v["name"] for v in study.variables]
 
 
+def output_names(study: models.Study) -> list[str]:
+    """출력(Output) 순서: 목적 → 제약 → 추가한 출력 → 그 밖에 케이스 결과에 있는 키."""
+    names = [o["name"] for o in study.objectives or []] + [c["name"] for c in study.constraints or []]
+    names += [o["name"] for o in study.outputs or []]
+    names += sorted({k for c in study.cases for k in (c.results or {})})
+    return list(dict.fromkeys(names))
+
+
+# 스터디가 마지막으로 쓴 작업 흐름 단계 — 케이스가 끝난 뒤 자동 게시하는 결과(수렴 이력 등)도 그 단계에 붙인다
+_ctx: dict[int, tuple[int, str | None]] = {}
+
+
+def _remember(study_id: int, flow_id, node_id):
+    if flow_id:
+        _ctx[study_id] = (flow_id, node_id)
+
+
 def _complete_cases(study):
     return [c for c in study.cases if c.status == "complete"]
 
@@ -77,6 +94,7 @@ def best_case(study: models.Study, feasible_only: bool = True) -> models.Case | 
 # ---------- DOE ----------
 def create_doe(db: Session, study: models.Study, method: str, n: int, seed: int | None,
                flow_id=None, node_id=None) -> list[models.Case]:
+    _remember(study.id, flow_id, node_id)
     pts = doe.sample(study.variables, n, method, seed)
     cases = [models.Case(study_id=study.id, params=p, source="doe") for p in pts]
     db.add_all(cases)
@@ -99,9 +117,9 @@ CASE_SOURCE_KO = {"doe": "DOE", "bo": "최적화", "al": "능동학습", "manual
 def publish_cases_table(db, study, flow_id=None, node_id=None):
     db.refresh(study)
     names = _var_names(study)
-    outs = sorted({k for c in study.cases for k in c.results})
+    outs = output_names(study)
     rows = [[c.id, CASE_SOURCE_KO.get(c.source, c.source), CASE_STATUS_KO.get(c.status, c.status), *[round(c.params.get(v, float("nan")), 4) for v in names],
-             *[round(c.results[o], 5) if o in c.results else None for o in outs]] for c in study.cases]
+             *[round(c.results[o], 5) if o in (c.results or {}) else None for o in outs]] for c in study.cases]
     publish_artifact(db, study.project_id, "table", f"[{study.name}] 케이스 결과",
                      {"columns": ["ID", "출처", "상태", *names, *outs], "rows": rows}, flow_id, node_id)
 
@@ -153,7 +171,9 @@ def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, us
 
 
 def on_case_status(msg: dict):
-    """Agent(또는 서버 mock 실행)가 보낸 케이스 상태 반영."""
+    """Agent(또는 서버 mock 실행)가 보낸 케이스 상태 반영. extract=True는 Output 추가 추출 결과다(기존 결과에 합친다)."""
+    if msg.get("extract"):
+        return _on_extracted(msg)
     with SessionLocal() as db:
         case = db.get(models.Case, msg["case_id"])
         if not case:
@@ -168,6 +188,8 @@ def on_case_status(msg: dict):
                          "data": {"id": case.id, "study_id": study.id, "status": case.status}})
         if case.status not in FINAL:
             return
+        if case.status == "complete":
+            _extract_missing(study, case)
         with _batch_lock:
             left = _batches.get(study.id, set())
             left.discard(case.id)
@@ -175,9 +197,133 @@ def on_case_status(msg: dict):
             if done:
                 _batches.pop(study.id, None)
         if done:
+            ctx = _ctx.get(study.id, (None, None))
             publish_cases_table(db, study)
-            publish_convergence(db, study)
+            publish_convergence(db, study, *ctx)
             manager.publish({"type": "study_updated", "project_id": study.project_id, "data": {"id": study.id}})
+
+
+# ---------- Output 추가 추출 ----------
+# 해석은 다시 돌리지 않고, 케이스 폴더에 남은 해석 결과에서 새 Output만 뽑아 기존 결과에 합친다.
+_extracting: dict[int, set[int]] = {}  # study_id → 추출 중인 case id
+
+
+def extracting(study_id: int) -> list[int]:
+    return sorted(_extracting.get(study_id, set()))
+
+
+def _steps_for(study: models.Study, names: list[str]) -> list[dict]:
+    """이 Output들을 추가할 때 함께 받은 추출 단계(post)."""
+    steps: list[dict] = []
+    for o in study.outputs or []:
+        if o["name"] in names:
+            steps += [s for s in o.get("post") or [] if s not in steps]
+    return steps
+
+
+def add_outputs(db: Session, study: models.Study, outputs: list[dict], post, extract_existing: bool, user_id: int) -> dict:
+    """Output을 목록에 넣고, 추출 단계를 이후 케이스에 붙이고, 이미 해석을 마친 케이스에서도 추출한다."""
+    steps = post if isinstance(post, list) else [post] if post else []
+    if steps and study.adapter != "script":
+        raise ValueError("추출 단계(post)는 script 어댑터 스터디에만 붙일 수 있습니다")
+    names = [o["name"] for o in outputs]
+    have = {o["name"]: o for o in study.outputs or []}
+    for o in outputs:
+        have[o["name"]] = {**have.get(o["name"], {}), "name": o["name"], "note": o.get("note") or have.get(o["name"], {}).get("note", ""),
+                           "post": steps or have.get(o["name"], {}).get("post") or []}
+    study.outputs = list(have.values())
+    cfg = dict(study.adapter_config or {})
+    if steps:  # 이후 케이스: 해석 → 기존 post → 새 추출 단계 순서로 실행된다
+        old = cfg.get("post") or []
+        old = old if isinstance(old, list) else [old]
+        cfg["post"] = old + [s for s in steps if s not in old]
+    if study.adapter == "mock" and cfg.get("outputs"):
+        cfg["outputs"] = list(dict.fromkeys([*cfg["outputs"], *names]))
+    study.adapter_config = cfg
+    study.version += 1
+    db.commit()
+    can = study.adapter == "mock" or bool(_steps_for(study, names))
+    queued, skipped = extract_outputs_async(study.id, names, user_id) if extract_existing and can else (0, 0)
+    publish_cases_table(db, study)
+    manager.publish({"type": "study_updated", "project_id": study.project_id, "data": {"id": study.id}})
+    return {"outputs": study.outputs, "queued": queued, "skipped": skipped,
+            "note": "" if can else "추출 단계(post)가 없어 이미 해석한 케이스에서는 뽑지 않았습니다. 케이스 스크립트가 이 키를 results.json에 쓰면 이후 케이스부터 보입니다."}
+
+
+def extract_outputs_async(study_id: int, names: list[str], user_id: int, case_ids: list[int] | None = None) -> tuple[int, int]:
+    """완료된 케이스마다 그 케이스를 해석한 PC Agent로 case.extract를 보낸다. 연결이 없으면 건너뛴다(mock은 서버에서)."""
+    from ..agent.link import registry
+
+    with SessionLocal() as db:
+        study = db.get(models.Study, study_id)
+        project = db.get(models.Project, study.project_id)
+        steps = _steps_for(study, names)
+        jobs, skipped = [], 0
+        for c in study.cases:
+            if c.status != "complete" or (case_ids and c.id not in case_ids) or c.id in _extracting.get(study_id, set()):
+                continue
+            conn = registry.get(c.run_by or user_id)
+            if conn is None and not (study.adapter == "mock" and settings.allow_server_mock):
+                skipped += 1
+                continue
+            jobs.append((conn, {"type": "case.extract", "case_id": c.id, "study_id": study.id, "project_id": study.project_id,
+                                "project_name": project.name, "project_uid": project.uid, "study_name": study.name,
+                                "source": c.source, "params": c.params, "results": c.results or {}, "run_dir": c.run_dir,
+                                "adapter": study.adapter, "adapter_config": study.adapter_config or {},
+                                "steps": steps, "names": names}))
+    with _batch_lock:
+        _extracting.setdefault(study_id, set()).update(j["case_id"] for _, j in jobs)
+    for conn, job in jobs:
+        if conn is not None:
+            conn.send(job)
+        else:
+            _pool.submit(_extract_on_server, job)
+    return len(jobs), skipped
+
+
+def _extract_missing(study: models.Study, case: models.Case):
+    """추가한 Output이 빠진 채 끝난 케이스(Output을 추가할 때 이미 실행 중이던 케이스)는 바로 추출한다."""
+    missing = [o["name"] for o in study.outputs or [] if o["name"] not in (case.results or {})]
+    if missing and (study.adapter == "mock" or _steps_for(study, missing)):
+        extract_outputs_async(study.id, missing, case.run_by or 0, [case.id])
+
+
+def _on_extracted(msg: dict):
+    with SessionLocal() as db:
+        case = db.get(models.Case, msg["case_id"])
+        if not case:
+            return
+        case.results = {**(case.results or {}), **(msg.get("results") or {})}
+        if msg.get("error"):
+            case.error = msg["error"]
+        elif (case.error or "").startswith("Output 추출 실패"):
+            case.error = None
+        db.commit()
+        study = db.get(models.Study, case.study_id)
+        with _batch_lock:
+            left = _extracting.get(study.id, set())
+            left.discard(case.id)
+            done = not left
+            if done:
+                _extracting.pop(study.id, None)
+        manager.publish({"type": "case_updated", "project_id": study.project_id,
+                         "data": {"id": case.id, "study_id": study.id, "status": case.status}})
+        if done:
+            publish_cases_table(db, study)
+            manager.publish({"type": "study_updated", "project_id": study.project_id, "data": {"id": study.id}})
+
+
+def _extract_on_server(job: dict):
+    run_dir = settings.data_dir / "runs" / f"study_{job['study_id']}" / f"case_{job['case_id']:04d}"
+    try:
+        out = get_adapter(job["adapter"]).extract(job["params"], run_dir, job["adapter_config"], job["steps"], job["names"],
+                                                  None, {})
+    except Exception as e:
+        log.exception("서버 mock 추출 실패")
+        from cae_adapters.base import CaseOutcome
+        out = CaseOutcome("failed", error=str(e))
+    on_case_status({"case_id": job["case_id"], "status": "complete", "extract": True, "results": out.results,
+                    "error": None if out.status == "complete" else f"Output 추출 실패: {out.error}"})
 
 
 def _run_on_server(job: dict):
@@ -231,7 +377,7 @@ def train_field(db: Session, study: models.Study, field: str, flow_id=None, node
     return fm
 
 
-def publish_convergence(db, study):
+def publish_convergence(db, study, flow_id=None, node_id=None):
     if not study.objectives:
         return
     obj = study.objectives[0]
@@ -247,7 +393,7 @@ def publish_convergence(db, study):
     if pts_raw:
         publish_artifact(db, study.project_id, "line", f"[{study.name}] {obj['name']} 수렴 이력",
                          {"x": "평가 횟수", "series": [{"name": "평가값", "points": pts_raw},
-                                                    {"name": "최적값", "points": pts_best}]})
+                                                    {"name": "최적값", "points": pts_best}]}, flow_id, node_id)
 
 
 # ---------- 학습 ----------
@@ -256,6 +402,7 @@ def _model_path(model_id: int) -> Path:
 
 
 def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=None, node_id=None) -> models.SurrogateModel:
+    _remember(study.id, flow_id, node_id)
     outputs = outputs or [o["name"] for o in study.objectives]
     done = [c for c in _complete_cases(study) if all(o in c.results for o in outputs)]
     if not outputs:
@@ -299,6 +446,7 @@ def load_surrogate(m: models.SurrogateModel) -> Surrogate:
 # ---------- 제안 (BO / 능동학습) ----------
 def suggest(db: Session, study: models.Study, mode: str, n: int, model_id: int | None,
             flow_id=None, node_id=None) -> list[models.Case]:
+    _remember(study.id, flow_id, node_id)
     q = db.query(models.SurrogateModel).filter_by(study_id=study.id)
     m = q.filter_by(id=model_id).first() if model_id else q.order_by(models.SurrogateModel.id.desc()).first()
     if not m:

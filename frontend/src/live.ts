@@ -58,7 +58,11 @@ export function useLiveInvalidation() {
         qc.invalidateQueries({ queryKey: ["flows", pid] });
         qc.invalidateQueries({ queryKey: ["projects"] });
         break;
-      case "artifact_updated": qc.invalidateQueries({ queryKey: ["artifacts", pid] }); break;
+      case "artifact_updated":
+        qc.invalidateQueries({ queryKey: ["artifacts", pid] });
+        qc.invalidateQueries({ queryKey: ["reports", pid] }); // 보고서 뒤에 생긴 결과 수
+        break;
+      case "report_updated": qc.invalidateQueries({ queryKey: ["reports", pid] }); break;
       case "study_updated":
       case "case_updated":
         qc.invalidateQueries({ queryKey: ["studies", pid] });
