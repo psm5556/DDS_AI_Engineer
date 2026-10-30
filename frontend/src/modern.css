@@ -816,7 +816,6 @@ button:active:not(:disabled), .btn:active { transform: scale(.98); }
 
 /* 일반 화면 제목 */
 .page > h1, .page h1:first-child, .sim-head h1 { font-size: var(--fs-28); letter-spacing: var(--track-display); font-weight: 650; }
-.crumb { font-family: var(--font-mono); font-size: var(--fs-11); letter-spacing: var(--track-label); color: var(--ink-3); word-spacing: -.28em; }
 
 /* 대화 카드 */
 .chat-card { border-radius: var(--r-m); }
@@ -1013,3 +1012,12 @@ td.r { font-family: var(--font-mono); font-size: var(--fs-12); }
 .recent-row .small.sim-row-out { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font); }
 a.side-nav { color: inherit; text-decoration: none; }
 a.side-nav.active { background: var(--active); color: var(--ink); }
+
+/* ---------- 눌리는 것은 한눈에 보이게: 글자 버튼은 항상 테두리를 둔다 ---------- */
+button.ghost, .btn.ghost { border-color: var(--line-strong); }
+.view-tools { gap: var(--sp-1); }
+.view-tools .tog { border-color: var(--line-strong); background: var(--panel); color: var(--ink-2); }
+.view-tools .tog.on { border-color: var(--brand-200); }
+.sim-ver-toggle { border: 1px solid var(--line-strong); background: var(--panel); }
+.sim-nav { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.sim-nav .btn { display: inline-flex; align-items: center; gap: var(--sp-1); }

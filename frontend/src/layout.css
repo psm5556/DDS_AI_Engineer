@@ -40,8 +40,6 @@
 /* ---------- DOE 머리글 + 탭 (설정 · ① · ②) ---------- */
 .proj-head { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
 .proj-head .grow { min-width: 260px; }
-.crumb { font-size: var(--fs-13); color: var(--ink-4); margin-bottom: 4px; }
-.crumb a { color: inherit; }
 .proj-head h1 { font-size: var(--fs-28); letter-spacing: -0.02em; }
 .proj-sub { color: var(--ink-3); font-size: var(--fs-s); margin-top: 4px; }
 .proj-head .icon-btn.on { color: var(--star); }

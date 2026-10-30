@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Link2, RotateCcw, Share2, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, FolderOpen, Link2, RotateCcw, Share2, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { del, get, post } from "../api";
@@ -85,10 +85,11 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
   return (
     <div className={embedded ? "sim-page sim-embed" : "page sim-page"}>
       {!embedded && <>
-        <div className="crumb">
-          <Link to="/simulators">Simulator</Link><span> / </span>
-          {spec.project_id ? <Link to={`/projects/${spec.project_id}`}>{spec.project_name || "프로젝트"}</Link> : <span>공유받은 Simulator</span>}
-        </div>
+        {/* 이동은 경로 글자가 아니라 버튼으로: 눌러서 어디로 가는지 한눈에 보이게 한다 */}
+        <nav className="sim-nav" aria-label="이동">
+          <Link className="btn small" to="/simulators"><ArrowLeft size={14} />Simulator 목록</Link>
+          {spec.project_id && <Link className="btn small" to={`/projects/${spec.project_id}`} title="이 Simulator를 만든 프로젝트의 대화와 결과를 엽니다"><FolderOpen size={14} />프로젝트 열기: {spec.project_name || "프로젝트"}</Link>}
+        </nav>
         <div className="sim-head">
           <div className="grow"><h1>{spec.study_name} Simulator</h1>
             <p className="page-sub">{spec.shared_by ? `${spec.shared_by}님이 공유${spec.note ? ` · ${spec.note}` : ""} · ` : ""}
