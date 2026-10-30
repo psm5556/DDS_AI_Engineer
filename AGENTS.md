@@ -57,7 +57,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `mcp_servers/` | AI CLI가 쓰는 MCP 툴: `dds_flow`(작업 흐름·결과 게시·보고서) · `dds_cae`(스크립트·툴 실행, `list_tools`) · `dds_study`(DOE·학습·BO·배포) · `dds_live`(실행 중인 CAD/CAE와 Live Link) |
 | `cae_adapters/` | `catalog.py`(지원 툴 29종 단일 목록·기본 설치 경로·설치 흔적 단어) · `tool_commands.py`(실행 명령 키) · `script.py`(케이스 스크립트 실행) · `mock.py`(연습용 솔버) |
 | `agent-context/` | AI CLI에게 주는 작업 규칙(`INSTRUCTIONS.md`)과 툴별 스킬(`skills/<툴>/SKILL.md`·`scripts/`). PC Agent가 프로젝트 폴더로 동기화한다 |
-| `frontend/src/` | React+TS. `pages/`(첫 화면·작업 공간·툴·Simulator·설정·관리) · `chat/`(대화·입력창) · `canvas/`(오른쪽 패널 탭) · `components/` · `modern.css`(최종 디자인 층) |
+| `frontend/src/` | React+TS. `pages/`(첫 화면·작업 공간·툴·Simulator·설정·관리) · `chat/`(대화·입력창) · `canvas/`(오른쪽 패널 탭) · `components/`(`HeroMesh` 로그인 3D, `AgentGlyph` 에이전트 기호·글자 로고, `Skeleton`) · `motion.ts`(움직임 도구) · `modern.css`(최종 디자인 층) |
 | `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없으면 자동 빌드) |
 | `deploy/linux/` | Linux 서버 systemd 서비스 파일 |
 | `scripts/` | `dev_live.py` · `prepare_onsite.py`(사내 서버 준비, Linux 서버용 설치 묶음 `--pack`·`--import-pack`) · `fetch_runtimes.py` · `build_agent_bundle.py` · `install-agent.ps1` · `e2e_*.py` |
@@ -84,7 +84,10 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
   - 같은 기능의 버튼을 두 곳에 만들지 않는다.
   - 상태는 한 곳에서 보여 준다(예: PC Agent 상태는 사이드바 아래).
   - 아이콘만 있는 버튼은 뜻이 분명할 때만 쓰고, 아니면 글자를 붙인다.
-- 색·글자 크기·둥글기·그림자는 `frontend/src/design/tokens.css`의 토큰만 쓴다(`server/tests/test_design_tokens.py`가 hex 색·px 글자 크기·px 둥글기를 막고, 두 테마의 글자 대비를 검사한다). 새 스타일은 `modern.css` 끝에 덧붙인다(마지막에 불러오는 층). 규칙은 `docs/product-spec.md` 2절.
+- 색·글자 크기·둥글기·그림자·움직임 시간은 `frontend/src/design/tokens.css`의 토큰만 쓴다(`server/tests/test_design_tokens.py`가 hex 색·px 글자 크기·px 둥글기·움직임 시간 하드코딩을 막고, 두 테마의 글자 대비를 검사한다). 새 스타일은 `modern.css` 끝에 덧붙인다(마지막에 불러오는 층). 규칙은 `docs/product-spec.md` 2절.
+- 무대(로그인·첫 화면·빈 화면·보고서 표지·Simulator 머리)는 큰 글자와 등장 움직임을, 작업대(대화·작업 흐름·표·설정)는 상태가 바뀔 때의 짧은 움직임만 쓴다.
+  - 기본 CSS가 최종 모습이고 `@keyframes`는 시작만 정한다. 새로 생긴 것만 등장시킨다(`frontend/src/motion.ts`의 `useFreshKeys`).
+  - 화면을 바꾸면 `npm run smoke -- --reduced`도 돌린다. 애니메이션 라이브러리는 넣지 않는다.
 - 데스크톱(1440 폭) 기준이다. 모바일은 깨지지 않는 정도만 유지한다.
 - 오류는 원인과 할 일을 함께 보여 준다. 예: "서버에 설치 파일이 없습니다 → 관리 > Agent 배포에서 준비".
 
@@ -123,4 +126,5 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
   - 스킬에 `TODO(사내검증)` 표시가 약 560곳 있다.
   - 첫 실행은 반드시 작은 모델로 하고, 결과를 사람이 확인한다.
 - 외부 인터넷에서 무언가를 받으려 하지 않는다(설치·런타임은 `prepare_onsite.py`가 사내 자원만으로 만든다).
+- 글꼴 `@fontsource-variable/geist-mono`가 사내 npm 미러에 없으면 `npm ci`가 실패한다. 그때는 `frontend/package.json`과 `main.tsx`에서 빼면 된다. 고정폭은 Consolas로 대체된다.
 - 사용자 PC의 작업 폴더는 사람마다·PC마다 다르다. 서버에는 저장하지 않고 PC의 `index.json`에 저장한다(`docs/local-data.md`).
