@@ -257,6 +257,7 @@ def _build_setup_exe() -> Path | None:
         out.parent.mkdir(parents=True, exist_ok=True)
         try:
             r = subprocess.run([str(csc), "/nologo", "/target:winexe", "/codepage:65001", "/optimize+", f"/out:{out}",
+                                f"/win32icon:{src.with_name('dds-agent.ico')}",
                                 "/r:System.dll", "/r:System.Drawing.dll", "/r:System.Windows.Forms.dll", str(src)],
                                capture_output=True, timeout=180)
         except (OSError, subprocess.TimeoutExpired):

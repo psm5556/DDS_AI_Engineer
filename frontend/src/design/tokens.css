@@ -115,6 +115,12 @@
   --focus: #d63f10;
   --focus-ring: 0 0 0 3px rgb(214 63 16 / 0.2);
 
+  /* ---------- 로고: 삼성 블루 #1428A0 기준. 강조색(주홍)과 따로 둔다 ---------- */
+  --logo-top: #3048c8;
+  --logo-left: #1428a0;
+  --logo-right: #0e1c78;
+  --logo-text: #1428a0;
+
   /* ---------- 데이터 의미 색 ---------- */
   --mean: #0d9488;  --mean-soft: #f0fdfa;  --mean-ring: #99f6e4;  --mean-ink: #0f766e;
   --sigma: #7c3aed; --sigma-soft: #f5f3ff; --sigma-ring: #ddd6fe; --sigma-ink: #6d28d9;
@@ -185,6 +191,11 @@
   --brand-100: rgb(255 90 43 / 0.22);
   --brand-200: rgb(255 90 43 / 0.36);
   --focus-ring: 0 0 0 3px rgb(255 90 43 / 0.3);
+
+  --logo-top: #8fa2ff;
+  --logo-left: #4a63ec;
+  --logo-right: #2f4be0;
+  --logo-text: #8fa2ff;
 
   --mean: #2dd4bf;  --mean-soft: rgb(45 212 191 / 0.1);   --mean-ring: rgb(45 212 191 / 0.3);   --mean-ink: #5eead4;
   --sigma: #a78bfa; --sigma-soft: rgb(167 139 250 / 0.12); --sigma-ring: rgb(167 139 250 / 0.3); --sigma-ink: #c4b5fd;

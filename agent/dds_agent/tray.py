@@ -15,20 +15,26 @@ from typing import Callable
 
 log = logging.getLogger(__name__)
 
+BLUE = (20, 40, 160)  # 삼성 블루 #1428A0(로고·파비콘과 같다)
 COLORS = {"connected": (22, 163, 74), "connecting": (161, 161, 170), "error": (220, 38, 38), "updating": (245, 158, 11)}
 LABELS = {"connected": "연결됨", "connecting": "연결 중", "error": "오류", "updating": "업데이트 중"}
 
 
 def _icon_image(state: str):
+    """파비콘과 같은 삼성 블루 바탕의 흰 D + 상태 점. 4배로 그려 줄여 곡선을 매끄럽게 한다."""
     from PIL import Image, ImageDraw
 
-    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    s = 4
+    box = lambda *v: tuple(x * s for x in v)  # noqa: E731
+    img = Image.new("RGBA", (64 * s, 64 * s), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle((2, 2, 62, 62), radius=14, fill=(37, 99, 235))  # 앱 로고 파랑
-    d.line((14, 44, 24, 20, 33, 38, 40, 28, 50, 46), fill="white", width=6, joint="curve")
+    d.rounded_rectangle(box(1, 1, 63, 63), radius=14 * s, fill=BLUE)
+    # 상태 점이 오른쪽 아래를 가리므로 D를 조금 왼쪽 위로 둔다
+    d.rounded_rectangle(box(11, 8, 47, 48), radius=14 * s, fill="white", corners=(False, True, True, False))
+    d.rounded_rectangle(box(23, 20, 35, 36), radius=5 * s, fill=BLUE, corners=(False, True, True, False))
     c = COLORS.get(state, COLORS["connecting"])
-    d.ellipse((40, 40, 62, 62), fill=c, outline="white", width=3)  # 상태 점
-    return img
+    d.ellipse(box(41, 41, 63, 63), fill=c, outline="white", width=3 * s)  # 상태 점
+    return img.resize((64, 64), Image.LANCZOS)
 
 
 class Tray:

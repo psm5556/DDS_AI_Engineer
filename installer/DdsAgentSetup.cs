@@ -34,6 +34,7 @@ namespace DdsAgentSetup
         public SetupForm(string server)
         {
             Text = "DDS Conversa — PC Agent 설치";
+            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { } // exe에 넣은 D 아이콘을 창에도
             Font = new Font("Malgun Gothic", 9.5f);
             BackColor = Paper;
             ClientSize = new Size(560, 600);

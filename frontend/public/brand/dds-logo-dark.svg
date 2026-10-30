@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DDS">
+  <!-- 어두운 바탕용: 같은 블루 계열을 밝게 올려 바탕에 묻히지 않게 한다 -->
+  <path fill="#8FA2FF" fill-rule="evenodd" transform="matrix(.378 -.219 .378 .219 7.8 18)" d="M3 3H42Q61 3 61 22V42Q61 61 42 61H3ZM21 21H38Q43 21 43 26V38Q43 43 38 43H21Z"/>
+  <path fill="#4A63EC" fill-rule="evenodd" transform="matrix(.378 .219 0 .4375 7.8 18)" d="M3 3H42Q61 3 61 22V42Q61 61 42 61H3ZM21 21H38Q43 21 43 26V38Q43 43 38 43H21Z"/>
+  <path fill="#2F4BE0" transform="matrix(.378 -.219 0 .4375 32 32)" d="M3 3H61V17H20V25.5H61V61H3V47H44V38.5H3Z"/>
+</svg>

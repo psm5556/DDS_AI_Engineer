@@ -7,6 +7,7 @@ if (-not (Test-Path $csc)) { throw "csc.exe를 찾을 수 없습니다: $csc" }
 New-Item -ItemType Directory -Force (Join-Path $root 'dist') | Out-Null
 $out = Join-Path $root 'dist\DDS-Agent-Setup.exe'
 & $csc /nologo /target:winexe /codepage:65001 /optimize+ "/out:$out" `
+    "/win32icon:$(Join-Path $root 'installer\dds-agent.ico')" `
     /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `
     (Join-Path $root 'installer\DdsAgentSetup.cs')
 if ($LASTEXITCODE -ne 0) { throw 'csc 빌드 실패' }

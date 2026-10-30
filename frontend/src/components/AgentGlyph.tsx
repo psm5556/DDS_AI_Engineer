@@ -17,7 +17,19 @@ export function AgentGlyph({ state = "idle", size = 28, label }: { state?: Glyph
   );
 }
 
-/** 글자 로고. 그라디언트 사각형 대신 이름과 주홍 점으로 */
+/** DDS 로고: D · D · S 세 글자가 큐브의 세 면이 된다(위 → 왼쪽 → 오른쪽). 삼성 블루. 파일은 public/brand/ */
+const LOGO_D = "M3 3H42Q61 3 61 22V42Q61 61 42 61H3ZM21 21H38Q43 21 43 26V38Q43 43 38 43H21Z";
+export function DdsLogo() {
+  return (
+    <svg className="dds-logo" viewBox="0 0 64 64" aria-hidden="true">
+      <path className="f-top" fillRule="evenodd" transform="matrix(.378 -.219 .378 .219 7.8 18)" d={LOGO_D} />
+      <path className="f-left" fillRule="evenodd" transform="matrix(.378 .219 0 .4375 7.8 18)" d={LOGO_D} />
+      <path className="f-right" transform="matrix(.378 -.219 0 .4375 32 32)" d="M3 3H61V17H20V25.5H61V61H3V47H44V38.5H3Z" />
+    </svg>
+  );
+}
+
+/** 로고 + 앱 이름 */
 export function Wordmark({ size }: { size?: "l" }) {
-  return <span className={`wordmark ${size ?? ""}`} aria-label="DDS Conversa"><small aria-hidden="true">DDS</small><span aria-hidden="true">Conversa</span><i aria-hidden="true" /></span>;
+  return <span className={`wordmark ${size ?? ""}`} aria-label="DDS Conversa"><DdsLogo /><b aria-hidden="true">DDS</b><span aria-hidden="true">Conversa</span></span>;
 }
