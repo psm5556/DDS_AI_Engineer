@@ -8,7 +8,7 @@
 > 그 폴더에서 일하는 것은 웹앱의 CAD/CAE 에이전트이고, 그 폴더의 `AGENTS.md`/`CLAUDE.md`/`GEMINI.md` 지침을 따른다.
 
 이어받아 개발을 시작한다면 **[docs/handoff.md](docs/handoff.md)**(현재 상태·다음 할 일)를 먼저 읽는다.
-화면·기능 전체 명세는 **[docs/product-spec.md](docs/product-spec.md)**(디자인 원칙·화면별 명세·기능·API·MCP·수용 기준)에 있다.
+기능·디자인 요구사항과 다음 일감은 **[docs/inhouse-ai-guide.md](docs/inhouse-ai-guide.md)**, 화면·기능 전체 명세는 **[docs/product-spec.md](docs/product-spec.md)**(디자인 원칙·화면별 명세·기능·API·MCP·수용 기준)에 있다.
 사내 서버에 PC Agent 설치 파일이 아직 없다면 **[docs/onsite-ai-runbook.md](docs/onsite-ai-runbook.md)**부터 한다.
 
 ---
@@ -61,7 +61,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없으면 자동 빌드) |
 | `deploy/linux/` | Linux 서버 systemd 서비스 파일 |
 | `scripts/` | `dev_live.py` · `prepare_onsite.py`(사내 서버 준비, Linux 서버용 설치 묶음 `--pack`·`--import-pack`) · `fetch_runtimes.py` · `build_agent_bundle.py` · `install-agent.ps1` · `e2e_*.py` |
-| `docs/` | `handoff.md` 인수인계 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 · `cae-data-hdf5.md` 해석 데이터(case.h5) · `product-spec.md` 디자인·기능 명세서 |
+| `docs/` | `handoff.md` 인수인계 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 · `cae-data-hdf5.md` 해석 데이터(case.h5) · `product-spec.md` 디자인·기능 명세서 · `inhouse-ai-guide.md` 사내 AI 지침(기능·디자인 요구사항, 다음 일감) |
 | `data/`·`dist/`·`frontend/dist/` | **git에 없음**(.gitignore). DB·설치 파일·런타임·빌드 결과 |
 
 ## 4. 변경 후 반드시 검증

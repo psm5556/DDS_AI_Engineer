@@ -14,6 +14,7 @@
 | 남은 일 | 11절 |
 
 관련 문서
+- 사내 AI 지침(요구사항·다음 일감): [inhouse-ai-guide.md](inhouse-ai-guide.md)
 - 인수인계: [handoff.md](handoff.md)
 - 사내 서버 준비: [onsite-ai-runbook.md](onsite-ai-runbook.md)
 - 실제 툴 검증: [onsite-validation.md](onsite-validation.md)
