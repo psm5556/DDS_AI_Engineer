@@ -711,8 +711,25 @@ button:active:not(:disabled), .btn:active { transform: scale(.98); }
 .login-side .seg button { min-height: 28px; padding: 0; border-radius: 0; font-size: var(--fs-14); background: transparent; color: var(--ink-3); box-shadow: inset 0 -1px 0 transparent; }
 .login-side .seg button.on { background: transparent; color: var(--ink); box-shadow: inset 0 -2px 0 var(--brand-solid); }
 
-/* 3D 브래킷 */
+/* 해석 결과 3D: 후처리기처럼 띠 등고선 + 범례 + 최대값 표시 */
 .hero-mesh { position: absolute; inset: 0; }
+.hero-max { position: absolute; left: 0; top: 0; pointer-events: none; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--ink); will-change: transform; transition: opacity var(--dur); }
+.hero-max i { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border: 1.5px solid var(--ink); border-radius: 50%; background: var(--panel); }
+.hero-max span { position: absolute; left: 10px; top: -28px; padding: 2px 6px; white-space: nowrap; border: 1px solid var(--ink); border-radius: var(--r-xs); background: var(--panel); }
+.hero-max span::before { content: ""; position: absolute; left: -8px; bottom: -6px; width: 12px; height: 1px; background: var(--ink); transform: rotate(-42deg); }
+.hero-max b { font-weight: 600; }
+.hero-legend { position: absolute; right: var(--sp-5); top: var(--sp-5); display: flex; flex-direction: column; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.hero-legend > b { font-weight: 600; color: var(--ink); }
+.hero-legend > small { font-size: var(--fs-11); color: var(--ink-3); margin-bottom: var(--sp-2); }
+.hero-legend .bar { display: flex; gap: var(--sp-1); }
+.hero-legend .swatch { display: flex; flex-direction: column; width: 14px; border: 1px solid var(--ink); }
+.hero-legend .swatch i { display: block; height: 18px; }
+.hero-legend .ticks { display: flex; flex-direction: column; justify-content: space-between; margin: -7px 0; line-height: 14px; }
+.hero-case { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: var(--sp-1); max-width: 68%; }
+.hero-case .tabs { display: flex; gap: var(--sp-1); }
+.hero-case .tabs button { min-height: 24px; padding: 0 var(--sp-2); font-family: var(--font); font-size: var(--fs-12); color: var(--ink-3); background: transparent; border-color: var(--line-strong); }
+.hero-case .tabs button.on { color: var(--paper); background: var(--ink); border-color: var(--ink); } /* --ink는 테마마다 뒤집히므로 글자는 바탕색으로 */
+.hero-case em { text-align: right; }
 .hero-canvas { position: absolute; inset: 0; animation: fade var(--dur-reveal) var(--ease-out) backwards; }
 .hero-canvas canvas { display: block; }
 .hero-static { position: absolute; left: 32%; top: 36%; width: 58%; height: 54%; }

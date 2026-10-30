@@ -80,6 +80,14 @@ await step("CAD·CAE 툴", async () => {
   await page.keyboard.press("Escape");
 });
 
+await step("해석 결과 파일", async () => {
+  // 로그인 화면이 쓰는 세 해석 결과가 있고 형식이 맞는지(없으면 화면이 조용히 건너뛰므로 여기서 잡는다)
+  for (const id of ["structural", "thermal", "drop"]) {
+    const m = await page.evaluate((u) => fetch(u).then((r) => r.json()), `/hero/${id}.json`);
+    if (!m.arrays?.pos || !m.steps?.length) throw new Error(`${id}: 해석 결과 형식이 아닙니다`);
+  }
+});
+
 await step("프로젝트", async () => {
   await page.goto(BASE + "/");
   const first = page.locator(".recent-row").first();

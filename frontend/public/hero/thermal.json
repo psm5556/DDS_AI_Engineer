@@ -1,0 +1,171 @@
+{
+ "id": "thermal",
+ "kind": "열유동해석",
+ "name": "보드 히트싱크",
+ "method": "격자 볼츠만 + 유한체적(고체·공기)",
+ "element": "격자",
+ "elements": 302400,
+ "nodes": 5515,
+ "field": "온도",
+ "unit": "℃",
+ "vmin": 25.0,
+ "vmax": 94.0,
+ "lo": [
+  0.0,
+  0.0,
+  0.0
+ ],
+ "span": [
+  120.0,
+  70.0,
+  34.56129598228481
+ ],
+ "mode": "designs",
+ "seconds": 15,
+ "yaw": [
+  -0.95,
+  0.03
+ ],
+ "pitch": 0.6,
+ "steps": [
+  {
+   "H": 14,
+   "max": 93.5,
+   "dp": 25.0,
+   "balance": 0.915,
+   "outlet": 41.7,
+   "maxNode": 1536
+  },
+  {
+   "H": 20,
+   "max": 78.4,
+   "dp": 35.0,
+   "balance": 0.939,
+   "outlet": 44.0,
+   "maxNode": 909
+  },
+  {
+   "H": 26,
+   "max": 76.6,
+   "dp": 49.0,
+   "balance": 0.929,
+   "outlet": 44.5,
+   "maxNode": 909
+  }
+ ],
+ "fit": 100,
+ "digits": 1,
+ "dy": 0.12,
+ "readout": [
+  [
+   "핀 높이",
+   "H",
+   "mm"
+  ],
+  [
+   "최고 온도",
+   "max",
+   "℃"
+  ],
+  [
+   "출구 공기",
+   "outlet",
+   "℃"
+  ],
+  [
+   "압력 손실",
+   "dp",
+   "mPa"
+  ]
+ ],
+ "note": "칩 4 W · 입구 0.12 m/s(저속 층류)",
+ "plane": {
+  "x": [
+   0,
+   120
+  ],
+  "z": [
+   0,
+   36
+  ],
+  "y": 36.5
+ },
+ "arrays": {
+  "tris": {
+   "offset": 0,
+   "type": "uint32",
+   "shape": [
+    8640,
+    3
+   ]
+  },
+  "feature": {
+   "offset": 103680,
+   "type": "uint32",
+   "shape": [
+    2184,
+    2
+   ]
+  },
+  "mesh": {
+   "offset": 121152,
+   "type": "uint32",
+   "shape": [
+    14052,
+    2
+   ]
+  },
+  "pos": {
+   "offset": 233568,
+   "type": "int16",
+   "shape": [
+    3,
+    5515,
+    3
+   ]
+  },
+  "field": {
+   "offset": 332840,
+   "type": "uint8",
+   "shape": [
+    3,
+    5515
+   ]
+  },
+  "linePos": {
+   "offset": 349388,
+   "type": "int16",
+   "shape": [
+    3,
+    2016,
+    3
+   ]
+  },
+  "lineField": {
+   "offset": 385676,
+   "type": "uint8",
+   "shape": [
+    3,
+    36,
+    56
+   ]
+  },
+  "lineIndex": {
+   "offset": 391724,
+   "type": "uint32",
+   "shape": [
+    1980,
+    2
+   ]
+  },
+  "plane": {
+   "offset": 407564,
+   "type": "uint8",
+   "shape": [
+    3,
+    120,
+    36
+   ]
+  }
+ }
+}
