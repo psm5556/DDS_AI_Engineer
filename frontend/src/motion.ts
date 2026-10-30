@@ -13,8 +13,11 @@ export function scrollMode(): ScrollBehavior {
 }
 
 function ms(name: string, fallback: number): number {
-  const v = parseFloat(token(name));
-  return Number.isFinite(v) ? v : fallback;
+  // 브라우저가 800ms를 0.8s로 돌려주기도 하므로 단위를 본다
+  const raw = token(name).trim();
+  const v = parseFloat(raw);
+  if (!Number.isFinite(v)) return fallback;
+  return /\ds$/.test(raw) ? v * 1000 : v;
 }
 
 /** 값이 바뀐 곳을 잠깐 강조한다. 클래스와 달리 같은 요소를 다시 눌러도 다시 재생된다. */

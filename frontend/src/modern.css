@@ -886,3 +886,47 @@ td.r { font-family: var(--font-mono); font-size: var(--fs-12); }
 .cond-big span { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--ink-3); }
 .empty-hero { border: none; background: transparent; }
 .seg button.on { box-shadow: none; }
+
+/* 고정된 단계 머리글이 종이 무늬 바탕과 같은 색이 되게 */
+.canvas-body.pinned .step-head { background: var(--paper) var(--grain); }
+
+/* ---------- 대화의 움직임: 새로 생긴 것만 등장한다. 기록을 열 때는 재생하지 않는다(ChatView의 useFreshKeys) ---------- */
+.tl-item { display: flex; flex-direction: column; min-width: 0; }
+.tl-item.enter { animation: rise var(--dur) var(--ease-out) backwards; }
+.chat-msg .bubble.thinking { gap: var(--sp-2); }
+.activity-text { animation: fade var(--dur) var(--ease-out) backwards; }
+.perm-card { animation: rise var(--dur) var(--ease-out) backwards; }
+
+/* 답을 쓰는 중: 글 끝의 커서 */
+.bubble.streaming .md > :last-child:not(ul, ol, table, pre)::after, .bubble.streaming .md > :is(ul, ol):last-child > li:last-child::after {
+  content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: text-bottom; background: var(--brand-solid); animation: caret var(--dur-spin) steps(1) infinite; }
+
+/* 체크가 튀어오른다. 방금 끝난 것에만 붙는다 */
+.pop-in, .flow-steps.live .fs-complete .fs-ico svg, .flow-canvas.live .flow-node.st-complete .fn-st svg { animation: check-pop var(--dur-slow) var(--ease-out) backwards; }
+@keyframes check-pop { from { opacity: 0; transform: scale(.4); } }
+
+/* ---------- 상태의 움직임 ---------- */
+/* 진행 중: 고리가 퍼진다. 기본 상태가 '다 퍼져 사라진' 모습이라 움직임을 꺼도 고리만 없다. 눌리는 것 자체는 움직이지 않는다 */
+.flow-node { position: relative; transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out); }
+.flow-node.st-in_progress::after, .flow-steps .fs-in_progress .fs-ico::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; box-shadow: 0 0 0 2px var(--brand-solid);
+  opacity: 0; transform: scale(1.06); pointer-events: none; animation: ring-out var(--dur-pulse) var(--ease-out) infinite; }
+.flow-steps .fs-ico { position: relative; }
+@keyframes ring-out { from { opacity: .7; transform: none; } }
+.flow-canvas .react-flow__edge-path { transition: stroke var(--dur-slow) var(--ease-out); }
+
+/* 승인 대기: 호박색 고리 두 번 뒤 멈춘다 */
+.flow-card.st-review { position: relative; }
+.flow-card.st-review::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; box-shadow: 0 0 0 3px var(--warn-solid);
+  opacity: 0; pointer-events: none; animation: ring-fade var(--dur-pulse) var(--ease-out) 2; }
+@keyframes ring-fade { from { opacity: .8; } }
+
+/* 탭 전환: 투명도만(그래프·흐름도 크기를 흔들지 않는다) */
+.canvas-body { animation: fade var(--dur) var(--ease-out) backwards; }
+.page-fade { min-height: 100%; animation: fade var(--dur) var(--ease-out) backwards; }
+
+/* 떠 있는 것의 등장. 닫힘은 즉시 */
+@keyframes float-in { from { opacity: 0; transform: translateY(4px); } }
+.side-me-menu, .agent-pick-menu, .menu, [role="menu"], [role="listbox"] { animation: float-in var(--dur-fast) var(--ease-out) backwards; }
+.toast { animation: float-in var(--dur) var(--ease-out) backwards; }
+.modal-back { animation: fade var(--dur-fast) var(--ease-out) backwards; }
+.modal { animation: pop var(--dur) var(--ease-out) backwards; }

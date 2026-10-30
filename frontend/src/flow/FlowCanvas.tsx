@@ -126,7 +126,7 @@ export function FlowCanvas({ flow, selected, onSelect, artifactCount, mini, comp
 
   return (
     // 캔버스: 그래프 높이만큼 늘려 실제 크기(축소 없이)로 보이게 한다 — 길면 캔버스가 스크롤된다
-    <div ref={box} className={`flow-canvas ${mini ? "mini" : ""}`} style={mini ? undefined : { height: Math.max(compact ? 130 : 240, height + (compact ? 50 : 70)) }}>
+    <div ref={box} className={`flow-canvas ${mini ? "mini" : ""} ${flow.status === "in_progress" ? "live" : ""}`} style={mini ? undefined : { height: Math.max(compact ? 130 : 240, height + (compact ? 50 : 70)) }}>
       {/* mini: 대화 카드 안 미리보기 — 확대·이동 없이 전체를 맞춰 보여 준다 */}
       <ReactFlow key={perRow} nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView fitViewOptions={{ padding: mini ? 0.08 : 0.06, maxZoom: 1 }} minZoom={0.2}
         nodesDraggable={false} nodesConnectable={false} elementsSelectable={!mini} proOptions={{ hideAttribution: true }}

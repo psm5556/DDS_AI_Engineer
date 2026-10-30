@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle, BarChart3, Brain, Check, ChevronRight, CircleSlash, FileText, Image as ImageIcon, LineChart,
-  FileUp, Loader2, PanelRight, ScatterChart, ShieldQuestion, Sparkles, Table2, Workflow, Wrench, X,
+  FileUp, Loader2, PanelRight, ScatterChart, ShieldQuestion, Table2, Workflow, Wrench, X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -9,7 +9,9 @@ import { api, get, post } from "../api";
 import { useAuth } from "../auth";
 import { useCanvas } from "../canvas/CanvasContext";
 import { useFlowDecision } from "../canvas/views";
+import { AgentGlyph } from "../components/AgentGlyph";
 import { Markdown } from "../components/Markdown";
+import { scrollMode, useFreshKeys } from "../motion";
 import { Composer } from "./Composer";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
 import { readableArgs, toolLabel } from "./labels";
@@ -33,6 +35,8 @@ export const CHAT_SUGGEST = [
   "Abaqus 모델에서 하중을 바꿔 해석하고 최대 응력과 컨투어 이미지를 보여 줘",
   "mock 솔버(beam)로 질량 최소화 최적화를 해보고 Simulator로 배포해 줘",
 ];
+
+const THINKING = "생각하는 중…";
 
 export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: {
   pid: number; sid: number | null; onSession: (id: number) => void;
@@ -100,7 +104,29 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     return merged;
   }, [sid, msgs, flows, arts, session]);
 
-  useEffect(() => { bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: "smooth" }); }, [timeline.length, msgs, busy, perms]);
+  // 스크롤은 바닥 근처에 있을 때만 따라간다(위로 올려 읽는 사람을 끌어내리지 않는다).
+  // 처음 열 때와 글자가 흘러나올 때는 즉시, 새 항목이 생길 때만 부드럽게.
+  const atBottom = useRef(true);
+  const autoUntil = useRef(0); // 부드러운 스크롤 중에는 scroll 이벤트로 '바닥에서 벗어남'을 판단하지 않는다
+  const painted = useRef(0);
+  const onScroll = () => {
+    const el = bodyRef.current;
+    if (el && performance.now() > autoUntil.current) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
+  useEffect(() => {
+    const el = bodyRef.current;
+    const count = timeline.length + perms.length;
+    if (el && atBottom.current && count) {
+      if (painted.current && count > painted.current) {
+        autoUntil.current = performance.now() + 500;
+        el.scrollTo({ top: el.scrollHeight, behavior: scrollMode() });
+      } else if (performance.now() > autoUntil.current) el.scrollTop = el.scrollHeight;
+    }
+    painted.current = count;
+  }, [timeline.length, msgs, busy, perms]);
+
+  // 새로 생긴 항목만 등장 움직임을 준다. 메시지·흐름·결과는 따로 오므로 셋 다 온 뒤를 기준으로 삼는다
+  const fresh = useFreshKeys(!!sid && !!msgs && !!flows && !!arts);
 
   useLive((e) => {
     if (e.type !== "agent_event" || e.session_id !== sid || !sid) {
@@ -151,6 +177,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
         onSession(s.id);
       }
       setBusy(true);
+      atBottom.current = true; // 내가 보낸 말은 위로 올려 읽던 중이어도 따라간다
       qc.setQueryData<ChatMessage[]>(["messages", id], (xs) => [...(xs ?? []),
         { id: tempId, session_id: id!, role: "user", content: t || "첨부한 파일을 확인해 주세요.", meta: null, created_at: localIso() }]);
       await post(`/api/sessions/${id}/prompt`, { text: t, attachment_ids: attachmentIds });
@@ -208,12 +235,13 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     }
     const t = [...(msgs ?? [])].reverse().find((m) => m.role === "tool");
     if (t && t.meta?.status !== "completed" && t.meta?.status !== "failed") return `${toolLabel(t.meta?.title || t.content)[0]} 중…`;
-    return "생각하는 중…";
+    return THINKING;
   }, [flows, msgs]);
 
   // 방금 보낸 요청에 아직 답이 없으면(새 대화가 막 만들어진 직후 등) 바로 '생각하는 중'을 보여 준다
   const last = msgs?.[msgs.length - 1];
   const waiting = !!agent?.connected && !readOnly && last?.role === "user" && Date.now() - new Date(last.created_at).getTime() < 120_000;
+  const streamId = busy && last?.role === "agent" ? last.id : null; // 지금 글자가 흘러나오는 답
 
   const cancel = () => { if (sid) post(`/api/sessions/${sid}/cancel`).catch((e: Error) => toast(e.message, true)); };
   const answer = async (p: PermissionRequest, optionId: string | null) => {
@@ -225,7 +253,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
 
   return (
     <section className="chat" aria-label="에이전트와 대화">
-      <div className="chat-body" ref={bodyRef}>
+      <div className="chat-body" ref={bodyRef} onScroll={onScroll}>
         <div className="chat-col">
           {!agent?.connected ? (
             <div className="chat-empty"><AlertTriangle size={28} /><b>내 PC Agent가 연결되어 있지 않습니다</b>
@@ -233,18 +261,30 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
               <Link className="btn primary" to="/settings">PC Agent 설치·연결</Link></div>
           ) : !sid || !timeline.length ? (
             <div className="chat-empty">
-              <Sparkles size={28} /><b>무엇을 자동화할까요?</b>
+              <AgentGlyph size={32} /><b>무엇을 자동화할까요?</b>
               <p>CAD 변경, 해석 설정·실행, 결과 추출, DOE·예측 모델·최적화를 말로 요청하세요. 에이전트가 작업 흐름을 먼저 그려 보여 주고, 승인하면 실행합니다.</p>
               <div className="chat-suggest">{CHAT_SUGGEST.map((s) => <button key={s} onClick={() => void send(s)}>{s}</button>)}</div>
             </div>
           ) : timeline.map((it) => {
-            if (it.kind === "flow") return <FlowCard key={`f${it.f.id}`} pid={pid} f={it.f} readOnly={readOnly} />;
-            if (it.kind === "arts") return <ArtifactChips key={`a${it.items[0].id}`} items={it.items} />;
-            if (it.kind === "tools") return <ToolGroup key={`t${it.items[0].id}`} items={it.items} />;
-            return <Message key={it.m.id} m={it.m} />;
+            const key = it.kind === "flow" ? `f${it.f.id}` : it.kind === "arts" ? `a${it.items[0].id}` : it.kind === "tools" ? `t${it.items[0].id}` : `m${it.m.id}`;
+            // 내 메시지는 임시 id로 먼저 붙고 서버 id로 바뀐다 — 바뀔 때 다시 등장하지 않게 임시일 때만 움직인다
+            const enter = fresh(key) && !(it.kind === "msg" && it.m.role === "user" && it.m.id > 0);
+            return (
+              <div key={key} className={`tl-item ${enter ? "enter" : ""}`}>
+                {it.kind === "flow" ? <FlowCard pid={pid} f={it.f} readOnly={readOnly} />
+                  : it.kind === "arts" ? <ArtifactChips items={it.items} />
+                  : it.kind === "tools" ? <ToolGroup items={it.items} />
+                  : <Message m={it.m} streaming={it.m.id === streamId} />}
+              </div>
+            );
           })}
           {perms.map((p) => <PermissionCard key={p.request_id} p={p} readOnly={readOnly} onAnswer={(o) => void answer(p, o)} />)}
-          {(busy || waiting) && !perms.length && <div className="chat-msg agent"><div className="bubble thinking"><Loader2 size={14} className="spin" />{activity}</div></div>}
+          {(busy || waiting) && !perms.length && (
+            <div className="chat-msg agent"><div className="bubble thinking">
+              <AgentGlyph size={16} state={activity === THINKING ? "thinking" : "working"} />
+              <span key={activity} className="activity-text">{activity}</span>
+            </div></div>
+          )}
         </div>
       </div>
 
@@ -303,7 +343,7 @@ function FlowCard({ pid, f, readOnly }: { pid: number; f: Flow; readOnly: boolea
         <button className="small ghost" onClick={() => canvas.showFlow(f.id)} title="오른쪽 캔버스에 흐름도로 보기"><PanelRight size={13} />흐름도</button>
       </div>
       {review && <p className="small">에이전트가 아래 순서로 진행하려고 합니다. 확인하고 승인해 주세요.</p>}
-      <ol className="flow-steps">
+      <ol className={`flow-steps ${f.status === "in_progress" ? "live" : ""}`}>
         {shown.map((n, i) => (
           <li key={n.id} className={`fs-${n.status}`}>
             <span className="fs-ico" aria-label={NODE_STATUS[n.status]}>
@@ -340,15 +380,21 @@ function FlowCard({ pid, f, readOnly }: { pid: number; f: Flow; readOnly: boolea
 function ToolGroup({ items }: { items: ChatMessage[] }) {
   const [open, setOpen] = useState(false);
   const tools = items.filter((m) => m.role === "tool");
-  if (!tools.length) return null; // 생각만 있는 묶음은 보이지 않는다(진행 중에는 아래 '생각하는 중…'이 보인다)
   const failed = tools.filter((m) => m.meta?.status === "failed").length;
   const running = tools.find((m) => m.meta?.status !== "completed" && m.meta?.status !== "failed");
+  // 눈앞에서 끝났을 때만 체크가 튀어오른다(기록을 열 때는 그대로)
+  const wasRunning = useRef(false);
+  const justDone = useRef(false);
+  if (running) justDone.current = false;
+  else if (wasRunning.current) justDone.current = true;
+  wasRunning.current = !!running;
+  if (!tools.length) return null; // 생각만 있는 묶음은 보이지 않는다(진행 중에는 아래 '생각하는 중…'이 보인다)
   const label = running ? `${toolLabel(running.meta?.title || running.content)[0]} 중…`
     : tools.length === 1 ? toolLabel(tools[0].meta?.title || tools[0].content)[0] : `작업 ${tools.length}건`;
   return (
     <div className="cv-toolgroup">
       <button className="cv-toolgroup-head" onClick={() => setOpen(!open)} aria-expanded={open} title="에이전트가 한 작업(툴 사용·생각) 기록">
-        {running ? <Loader2 size={12} className="spin" /> : failed ? <X size={12} className="err" /> : <Check size={12} className="ok" />}
+        {running ? <Loader2 size={12} className="spin" /> : failed ? <X size={12} className="err" /> : <Check size={12} className={`ok ${justDone.current ? "pop-in" : ""}`} />}
         {label}{failed ? ` · 실패 ${failed}` : ""}
         <span className="small muted">{open ? "접기" : "자세히"}</span>
       </button>
@@ -357,7 +403,7 @@ function ToolGroup({ items }: { items: ChatMessage[] }) {
   );
 }
 
-function Message({ m }: { m: ChatMessage }) {
+function Message({ m, streaming }: { m: ChatMessage; streaming?: boolean }) {
   const [openTool, setOpenTool] = useState(false);
   if (m.role === "user") return (
     <div className="chat-msg user">
@@ -398,7 +444,7 @@ function Message({ m }: { m: ChatMessage }) {
       </div>
     );
   }
-  return <div className="chat-msg agent"><div className="bubble"><Markdown text={m.content} /></div></div>;
+  return <div className="chat-msg agent"><div className={`bubble ${streaming ? "streaming" : ""}`}><Markdown text={m.content} /></div></div>;
 }
 
 function PermissionCard({ p, readOnly, onAnswer }: { p: PermissionRequest; readOnly: boolean; onAnswer: (optionId: string | null) => void }) {

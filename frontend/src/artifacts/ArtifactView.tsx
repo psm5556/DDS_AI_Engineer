@@ -102,11 +102,11 @@ function ImageArt({ a }: { a: Artifact }) {
 }
 
 /** compact: 대화 안 미리보기(낮은 그래프, 표 6행). actions: 머리글 오른쪽 버튼(예: 캔버스에서 보기) */
-export function ArtifactCard({ a, onDelete, compact, actions, highlight }: {
-  a: Artifact; onDelete?: () => void; compact?: boolean; actions?: React.ReactNode; highlight?: boolean;
+export function ArtifactCard({ a, onDelete, compact, actions }: {
+  a: Artifact; onDelete?: () => void; compact?: boolean; actions?: React.ReactNode;
 }) {
   return (
-    <section id={`art-${a.id}`} className={`panel art-card kind-${a.kind} ${compact ? "compact" : ""} ${highlight ? "flash" : ""}`}>
+    <section id={`art-${a.id}`} className={`panel art-card kind-${a.kind} ${compact ? "compact" : ""}`}>
       <div className="panel-head">
         <h3>{a.title}</h3>
         <span className="small muted">{when(a.created_at)}</span>

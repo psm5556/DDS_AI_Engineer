@@ -9,6 +9,7 @@ import { Confirm } from "../components/Modal";
 import { FlowCanvas } from "../flow/FlowCanvas";
 import { FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_LABEL, sendToAgent, when } from "../format";
 import { orderNodes } from "../flow/order";
+import { flash, scrollMode } from "../motion";
 import { useCanvas } from "./CanvasContext";
 import { relFromRunDir, useOpenLocal } from "./LocalFiles";
 import { useToast } from "../toast";
@@ -57,12 +58,16 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
   // 대화에서 결과를 누르면(또는 에이전트가 새 결과를 올리면) 그 결과로 스크롤
   useEffect(() => {
     if (!focus) return;
-    const t = setTimeout(() => document.getElementById(`art-${focus.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+    const t = setTimeout(() => {
+      const el = document.getElementById(`art-${focus.id}`);
+      el?.scrollIntoView({ behavior: scrollMode(), block: "start" });
+      flash(el); // 같은 결과를 다시 눌러도 다시 강조된다
+    }, 120);
     return () => clearTimeout(t);
   }, [focus]);
   const goStep = (id: string | null) => {
     setSel(id);
-    if (id) setTimeout(() => document.getElementById(`step-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
+    if (id) setTimeout(() => document.getElementById(`step-${id}`)?.scrollIntoView({ behavior: scrollMode(), block: "start" }), 40);
   };
 
   if (!flows) return <div className="busy"><span className="spinner" /></div>;
@@ -87,7 +92,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
   const count = Object.fromEntries(Object.entries(byNode).map(([k, v]) => [k, v.length]));
   const st = FLOW_STATUS[flow.status];
   const done = flow.nodes.filter((n) => n.status === "complete").length;
-  const card = (a: Artifact) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} highlight={a.id === focus?.id} />;
+  const card = (a: Artifact) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} />;
 
   return (
     <div className="flow-tab">

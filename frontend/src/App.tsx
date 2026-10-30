@@ -23,11 +23,15 @@ function RouteBoundary({ children }: { children: React.ReactNode }) {
 function Shell({ children }: { children: React.ReactNode }) {
   const side = useSideLayout();
   useLiveInvalidation();
+  // 화면 전환 등장: 같은 프로젝트 안에서 대화를 바꿀 때처럼 주소만 바뀌면 다시 재생하지 않는다
+  const { pathname } = useLocation();
+  const [, first, second] = pathname.split("/");
+  const section = first === "projects" ? `projects/${second}` : first;
   return (
     <div className={`app-shell agentic ${side.collapsed ? "side-collapsed" : ""}`} style={{ "--side-w": `${side.width}px` } as React.CSSProperties}>
       <Sidebar layout={side} />
       <div className="app-main">
-        <RouteBoundary>{children}</RouteBoundary>
+        <div key={section} className="page-fade"><RouteBoundary>{children}</RouteBoundary></div>
       </div>
     </div>
   );
