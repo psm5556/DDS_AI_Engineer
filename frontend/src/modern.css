@@ -930,3 +930,52 @@ td.r { font-family: var(--font-mono); font-size: var(--fs-12); }
 .toast { animation: float-in var(--dur) var(--ease-out) backwards; }
 .modal-back { animation: fade var(--dur-fast) var(--ease-out) backwards; }
 .modal { animation: pop var(--dur) var(--ease-out) backwards; }
+
+/* ---------- 무대 마감: 보고서 ---------- */
+/* 표지·큰 제목·잡지 같은 그림 설명. Word·HTML 파일은 바꾸지 않는다 */
+.report-doc { padding: 0 0 var(--sp-7); border: none; border-radius: 0; background: transparent; }
+.report-cover { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-5) 0 var(--sp-4); margin-bottom: var(--sp-5); border-bottom: 1px solid var(--ink); animation: rise var(--dur-reveal) var(--ease-out) backwards; }
+.report-kicker { font-family: var(--font-mono); font-size: var(--fs-11); letter-spacing: var(--track-label); color: var(--ink-3); word-spacing: -.28em; }
+.report-doc .report-cover h1 { margin: 0; font-size: var(--fs-28); line-height: 1.15; font-weight: 650; letter-spacing: var(--track-display); }
+@container (min-width: 640px) { .report-doc .report-cover h1 { font-size: var(--fs-40); } }
+.report-cover + .md > p:first-child { font-size: var(--fs-16); line-height: 1.6; color: var(--ink); }
+.report-doc .md h2 { margin: var(--sp-6) 0 var(--sp-2); padding: var(--sp-3) 0 0; border-bottom: none; border-top: 1px solid var(--line); font-size: var(--fs-20); letter-spacing: var(--track-title); }
+.report-doc .md h3 { font-size: var(--fs-14); }
+.rep-fig { margin: var(--sp-5) 0; padding: 0; background: transparent; border-radius: 0; }
+.rep-fig figcaption { align-items: baseline; gap: var(--sp-2); margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); font-size: var(--fs-12); color: var(--ink-3); }
+.rep-fig figcaption b { font-family: var(--font-mono); font-weight: 500; color: var(--brand); word-spacing: -.28em; }
+.notice-inline svg.agent-glyph { display: inline-block; vertical-align: -2px; margin-right: var(--sp-1); }
+
+/* ---------- 무대 마감: Simulator ---------- */
+.sim-head h1 { font-size: var(--fs-40); line-height: 1.1; }
+.sim-page .block { padding: var(--sp-4) 0; border: none; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+.sim-out li:first-child { border-top: none; }
+.sim-out b { font-size: var(--fs-40); line-height: 1.1; letter-spacing: -.03em; transition: opacity var(--dur) var(--ease-out); }
+/* 값이 오래됐을 때만 흐려진다. 응답이 빠르면 흐려지기 전에 끝나 깜빡이지 않는다 */
+.sim-out.stale b { opacity: .45; transition-delay: var(--dur-wait); }
+.field3d-body { border-radius: var(--r-s); background: transparent; }
+
+/* ---------- 무대 마감: CAD·CAE 툴 ---------- */
+.tool-cat { padding: var(--sp-3) 0 var(--sp-1); border: none; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+.tool-cat h2 { font-family: var(--font-mono); font-size: var(--fs-11); font-weight: 500; letter-spacing: var(--track-label); color: var(--ink-3); word-spacing: -.28em; }
+.tool-app { animation: rise var(--dur-slow) var(--ease-out) backwards; }
+.tool-app:nth-child(2) { animation-delay: calc(var(--dur-fast) * .4); }
+.tool-app:nth-child(3) { animation-delay: calc(var(--dur-fast) * .8); }
+.tool-app:nth-child(4) { animation-delay: calc(var(--dur-fast) * 1.2); }
+.tool-app:nth-child(5) { animation-delay: calc(var(--dur-fast) * 1.6); }
+.tool-app:nth-child(n+6) { animation-delay: calc(var(--dur-fast) * 2); }
+
+/* ---------- 뼈대 화면: 잠깐 기다렸다가 나타나 빠른 로딩에서는 보이지 않는다 ---------- */
+.skeleton { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4) 0; animation: fade var(--dur) var(--ease-out) var(--dur-wait) backwards; }
+.skeleton i { display: block; height: 12px; border-radius: var(--r-xs); background: var(--panel-3); animation: skeleton-breathe var(--dur-pulse) ease-in-out infinite; }
+.skeleton i:nth-child(3n+2) { width: 86%; }
+.skeleton i:nth-child(3n) { width: 62%; }
+@keyframes skeleton-breathe { 50% { opacity: .45; } }
+.empty-hero > .agent-glyph { margin-bottom: var(--sp-1); }
+.chat-empty > .agent-glyph { color: var(--brand-solid); }
+
+/* ---------- 케이스가 많을 때: 실행 중 점 맥박은 적을 때만(views.tsx가 20건 이하에서만 붙인다) ---------- */
+.status-cell .st.run i { background: var(--brand-solid); }
+.status-cell .st.pulse i { animation: dot-breathe var(--dur-pulse) ease-in-out infinite; }
+@keyframes dot-breathe { 50% { opacity: .3; } }
+.report-cover + .md > h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }

@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Link2, RotateCcw, Share2, Sparkles, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { del, get, post } from "../api";
 import { Field3DPanel } from "../components/Field3DPanel";
 import { Modal } from "../components/Modal";
 import { baseLayout, chartColors, Plot, plotConfig } from "../components/Plot";
+import { Skeleton } from "../components/Skeleton";
 import { copyText, fmt, when } from "../format";
+import { useTheme } from "../theme";
 import { useToast } from "../toast";
 import type { Objective, SurrogateModel, Variable } from "../types";
 
@@ -44,24 +46,31 @@ function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
   const [pred, setPred] = useState<Pred | null>(null);
   const [sweepVar, setSweepVar] = useState<string | null>(null);
   const [sweep, setSweep] = useState<Batch | null>(null);
+  const [stale, setStale] = useState(false); // 입력을 바꿨는데 새 예측이 아직 오지 않음(값을 흐리게)
+  const seq = useRef(0);
+  useTheme(); // 테마를 바꾸면 민감도 그래프 색도 다시 그린다
   useEffect(() => { if (spec) { setX(mid0); setSweepVar(spec.variables[0]?.name ?? null); } }, [spec, mid0]);
 
-  // 입력이 바뀌면 바로 예측 (짧게 모아서)
+  // 입력이 바뀌면 바로 예측 (짧게 모아서). 늦게 도착한 옛 응답이 새 값을 덮지 않게 순서 번호를 본다
   useEffect(() => {
     if (!spec || !Object.keys(x).length) return;
+    const n = ++seq.current;
+    setStale(true);
     const t = setTimeout(() => {
-      post<Pred>(`${base}/predict`, { params: x }).then(setPred).catch(() => {});
+      post<Pred>(`${base}/predict`, { params: x })
+        .then((r) => { if (n === seq.current) { setPred(r); setStale(false); } })
+        .catch(() => { if (n === seq.current) setStale(false); });
       const v = spec.variables.find((q) => q.name === sweepVar);
       if (v) {
         const pts = Array.from({ length: SWEEP_N }, (_, i) => ({ ...x, [v.name]: v.lower + ((v.upper - v.lower) * i) / (SWEEP_N - 1) }));
-        post<Batch>(`${base}/predict_batch`, { points: pts }).then(setSweep).catch(() => {});
+        post<Batch>(`${base}/predict_batch`, { points: pts }).then((r) => { if (n === seq.current) setSweep(r); }).catch(() => {});
       }
     }, 120);
     return () => clearTimeout(t);
   }, [x, spec, base, sweepVar]);
 
   if (error) return <div className="page"><div className="notice err">{(error as Error).message}</div></div>;
-  if (!spec) return <div className="page"><div className="busy"><span className="spinner" /> 불러오는 중</div></div>;
+  if (!spec) return <Skeleton page rows={5} />;
   const outs = spec.model.outputs;
   const v = spec.variables.find((q) => q.name === sweepVar);
   const c = chartColors(); // 디자인 토큰 색(테마가 바뀌면 다시 그릴 때 새 값)
@@ -99,7 +108,7 @@ function SimulatorView({ base, specPath, modelId, fieldList, fieldBase }: {
           </section>
           <section className="block">
             <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted">± 예측 불확실도</span></div>
-            <ul className="sim-out">
+            <ul className={`sim-out ${stale ? "stale" : ""}`}>
               {outs.map((o) => {
                 const obj = spec.objectives.find((q) => q.name === o);
                 return (

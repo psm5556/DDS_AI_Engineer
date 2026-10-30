@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Database, FolderOpen, Gauge, Loader2, Play, Plus, Trash2, Workflow } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Database, FolderOpen, Loader2, Play, Plus, Trash2 } from "lucide-react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { del, download, get, put } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
 import { useAuth } from "../auth";
+import { AgentGlyph } from "../components/AgentGlyph";
 import { Confirm } from "../components/Modal";
+import { Skeleton } from "../components/Skeleton";
 import { FlowCanvas } from "../flow/FlowCanvas";
 import { FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_LABEL, sendToAgent, when } from "../format";
 import { orderNodes } from "../flow/order";
@@ -70,11 +72,11 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
     if (id) setTimeout(() => document.getElementById(`step-${id}`)?.scrollIntoView({ behavior: scrollMode(), block: "start" }), 40);
   };
 
-  if (!flows) return <div className="busy"><span className="spinner" /></div>;
+  if (!flows) return <Skeleton rows={5} />;
   if (!flow) {
     return (
       <div className="empty-hero">
-        <Workflow size={30} />
+        <AgentGlyph size={32} />
         <b>아직 작업 흐름이 없습니다</b>
         <p>대화창에 하고 싶은 일을 말하면, 에이전트가 CAD → 해석 → 결과 추출 → DOE·예측 모델까지 작업 흐름을 먼저 그려 여기에 보여 줍니다.</p>
       </div>
@@ -152,9 +154,9 @@ export function StudiesView({ pid }: { pid: number }) {
   const { data: studies } = useQuery({ queryKey: ["studies", pid], queryFn: () => get<Study[]>(`/api/projects/${pid}/studies`) });
   const [sid, setSid] = useState<number | null>(null);
   const cur = sid ?? studies?.[0]?.id ?? null;
-  if (!studies) return <div className="busy"><span className="spinner" /></div>;
+  if (!studies) return <Skeleton rows={5} />;
   if (!studies.length) {
-    return <div className="empty-hero"><Gauge size={30} /><b>아직 스터디가 없습니다</b>
+    return <div className="empty-hero"><AgentGlyph size={32} /><b>아직 스터디가 없습니다</b>
       <p>에이전트가 DOE를 시작하면 케이스 데이터·예측 모델이 여기에 쌓입니다.</p></div>;
   }
   return (
@@ -198,13 +200,50 @@ function ArchiveCell({ c, name }: { c: Case; name: string }) {
 ${what}`}>PC · {bytes(a.size)}</span>;
 }
 
-function StudyDetail({ pid, id }: { pid: number; id: number }) {
+const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** 케이스 표 한 줄. 케이스가 수백 건이어도 바뀐 줄만 다시 그린다(React Query가 바뀌지 않은 케이스 객체를 그대로 둔다) */
+const CaseRow = memo(function CaseRow({ c, vars, outs, best, extracting, pulse, name, pid }: {
+  c: Case; vars: string[]; outs: string[]; best: boolean; extracting: boolean; pulse: boolean; name: string; pid: number;
+}) {
   const { user } = useAuth();
   const open = useOpenLocal(pid);
+  const rel = relFromRunDir(c.run_dir);
+  const mine = c.run_by === user?.id;
+  const state = c.status === "complete" ? "done" : c.status === "failed" ? "fail" : c.status === "running" ? `run ${pulse ? "pulse" : ""}` : "";
+  return (
+    <tr className={best ? "best-row" : ""} title={c.error ?? undefined}>
+      <td>{c.id}</td><td>{({ doe: "DOE", bo: "최적화", al: "능동학습", manual: "직접" } as Record<string, string>)[c.source] ?? c.source}</td>
+      <td className="status-cell"><span className={`st ${state}`}><i />{CASE_STATUS[c.status]?.[0] ?? c.status}</span></td>
+      {vars.map((v) => <td key={v} className="r col-in">{fmt(c.params[v])}</td>)}
+      {outs.map((o) => (
+        <td key={o} className="r col-out">{o in (c.results ?? {}) ? fmt(c.results[o])
+          : extracting ? <Loader2 size={11} className="spin muted" aria-label="추출 중" /> : ""}</td>
+      ))}
+      <td className="nowrap"><ArchiveCell c={c} name={name} /></td>
+      <td className="r nowrap">{rel ? (
+        <button className="icon-btn" disabled={!mine} aria-label={`케이스 ${c.id} 폴더 열기`}
+          title={mine ? `내 PC에서 케이스 폴더 열기 — ${rel}` : "다른 멤버의 PC에서 실행된 케이스입니다"}
+          onClick={() => open.mutate({ path: rel })}><FolderOpen size={13} /></button>
+      ) : null}</td>
+    </tr>
+  );
+}, (a, b) => a.c === b.c && a.best === b.best && a.extracting === b.extracting && a.pulse === b.pulse && a.name === b.name && a.pid === b.pid
+  && sameList(a.vars, b.vars) && sameList(a.outs, b.outs));
+
+function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const { data: st } = useQuery({ queryKey: ["study", id], queryFn: () => get<StudyStatus>(`/api/studies/${id}`) });
   const { data: cases } = useQuery({ queryKey: ["study", id, "cases"], queryFn: () => get<Case[]>(`/api/studies/${id}/cases`) });
   const { data: models } = useQuery({ queryKey: ["models", pid], queryFn: () => get<SurrogateModel[]>(`/api/projects/${pid}/models`) });
-  if (!st) return <div className="busy"><span className="spinner" /></div>;
+  // 최적값이 바뀌었을 때만 잠깐 강조한다(화면을 처음 열 때는 그대로)
+  const bestBox = useRef<HTMLDivElement>(null);
+  const bestId = st?.best?.id;
+  const prevBest = useRef(bestId);
+  useEffect(() => {
+    if (prevBest.current != null && bestId != null && bestId !== prevBest.current) flash(bestBox.current);
+    if (bestId != null) prevBest.current = bestId;
+  }, [bestId]);
+  if (!st) return <Skeleton rows={6} />;
   const s = st.study;
   const vars = s.variables.map((v) => v.name);
   const outs = outputNames(s, cases ?? []);
@@ -226,7 +265,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
       <section className="block">
         <div className="lbl">{obj ? `현재 최적 · ${obj.name} ${obj.goal === "min" ? "최소" : "최대"}${cons ? ` · ${cons}` : ""}` : s.name}</div>
         {st.best ? (
-          <div className="cond-big">
+          <div className="cond-big" ref={bestBox}>
             {vars.map((v) => <div key={v}><span>{v}</span><b>{fmt(st.best!.params[v], 4)}</b></div>)}
             {obj && <div><span>{obj.name}</span><b style={{ color: "var(--brand)" }}>{fmt(st.best.results[obj.name], 4)}</b></div>}
           </div>
@@ -316,25 +355,8 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
               <th title="해석 데이터(case.h5, HDF5)">HDF5</th><th /></tr>
           </thead>
           <tbody>{(cases ?? []).map((c) => (
-            <tr key={c.id} className={st.best?.id === c.id ? "best-row" : ""} title={c.error ?? undefined}>
-              <td>{c.id}</td><td>{({ doe: "DOE", bo: "최적화", al: "능동학습", manual: "직접" } as Record<string, string>)[c.source] ?? c.source}</td>
-              <td className="status-cell"><span className={`st ${c.status === "complete" ? "done" : c.status === "failed" ? "fail" : ""}`}><i />{CASE_STATUS[c.status]?.[0] ?? c.status}</span></td>
-              {vars.map((v) => <td key={v} className="r col-in">{fmt(c.params[v])}</td>)}
-              {outs.map((o) => (
-                <td key={o} className="r col-out">{o in (c.results ?? {}) ? fmt(c.results[o])
-                  : extracting.has(c.id) ? <Loader2 size={11} className="spin muted" aria-label="추출 중" /> : ""}</td>
-              ))}
-              <td className="nowrap"><ArchiveCell c={c} name={s.name} /></td>
-              <td className="r nowrap">{(() => {
-                const rel = relFromRunDir(c.run_dir);
-                const mine = c.run_by === user?.id;
-                return rel ? (
-                  <button className="icon-btn" disabled={!mine} aria-label={`케이스 ${c.id} 폴더 열기`}
-                    title={mine ? `내 PC에서 케이스 폴더 열기 — ${rel}` : "다른 멤버의 PC에서 실행된 케이스입니다"}
-                    onClick={() => open.mutate({ path: rel })}><FolderOpen size={13} /></button>
-                ) : null;
-              })()}</td>
-            </tr>))}</tbody>
+            <CaseRow key={c.id} c={c} vars={vars} outs={outs} best={st.best?.id === c.id} extracting={extracting.has(c.id)}
+              pulse={(st.counts.running ?? 0) <= 20} name={s.name} pid={pid} />))}</tbody>
         </table></div>
       </section>
     </div>

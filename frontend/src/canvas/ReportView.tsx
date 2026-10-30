@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileDown, FileText, Sparkles } from "lucide-react";
+import { FileDown, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { download, get } from "../api";
 import { ArtifactBody } from "../artifacts/ArtifactView";
+import { AgentGlyph } from "../components/AgentGlyph";
 import { Markdown } from "../components/Markdown";
+import { Skeleton } from "../components/Skeleton";
 import { sendToAgent, when } from "../format";
 import { useToast } from "../toast";
 import type { Artifact, Report, ReportSummary } from "../types";
@@ -62,11 +64,11 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
   const save = (fmt: "docx" | "html") =>
     download(`/api/projects/${pid}/report?format=${fmt}${rep ? `&report_id=${rep.id}` : ""}`, `보고서.${fmt}`).catch((e: Error) => toast(e.message, true));
 
-  if (isLoading) return <div className="busy"><span className="spinner" /></div>;
+  if (isLoading) return <Skeleton rows={6} />;
   if (!rep) {
     return (
       <div className="empty-hero">
-        <FileText size={30} />
+        <AgentGlyph size={32} state={writing ? "thinking" : "idle"} />
         <b>{writing ? "AI가 보고서를 쓰고 있습니다" : "아직 보고서가 없습니다"}</b>
         <p>{writing ? "작업 흐름과 결과를 읽고 해석하는 중입니다. 다 쓰면 여기에 바로 보입니다."
           : "'AI 보고서 작성'을 누르면 AI가 작업 흐름과 결과(그래프·표·이미지)를 해석해 요약·결론·권고가 담긴 보고서를 씁니다. 결과가 바뀌면 다시 누르세요."}</p>
@@ -93,12 +95,16 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
           <button className="small" title="같은 보고서를 HTML로" onClick={() => void save("html")}>HTML</button>
         </span>
       </div>
-      {writing ? <p className="notice-inline info report-note"><span className="spinner" style={{ width: 11, height: 11 }} />AI가 최신 결과로 보고서를 다시 쓰고 있습니다. 다 쓰면 새 판으로 바뀝니다.</p>
+      {writing ? <p className="notice-inline info report-note"><AgentGlyph size={14} state="thinking" />AI가 최신 결과로 보고서를 다시 쓰고 있습니다. 다 쓰면 새 판으로 바뀝니다.</p>
         : rid == null && rep.new_results > 0 && (
           <p className="notice-inline warn report-note">이 보고서를 쓴 뒤 새로 생기거나 바뀐 결과가 {rep.new_results}개 있습니다 → 'AI 보고서 작성'으로 반영하세요</p>
         )}
-      <article className="report-doc">
-        <h1>{rep.title}</h1>
+      {/* 새 판이 오면 표지부터 다시 등장한다 */}
+      <article key={rep.id} className="report-doc">
+        <header className="report-cover">
+          <span className="report-kicker">AI 작성 보고서 · {when(rep.created_at)}</span>
+          <h1>{rep.title}</h1>
+        </header>
         {parts.map((p, i) => {
           if ("md" in p) return <Markdown key={i} text={p.md} />;
           const a = byId.get(p.id);
@@ -107,7 +113,7 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
           return (
             <figure key={i} className={`rep-fig kind-${a.kind}`}>
               <ArtifactBody a={a} />
-              <figcaption><b>{label}.</b> {p.caption || a.title}
+              <figcaption><b>{label}</b> {p.caption || a.title}
                 <button className="link-btn" onClick={() => c.showArtifact(a.id, a.flow_id)} title="작업 흐름 탭에서 이 결과가 나온 단계를 봅니다">단계에서 보기</button>
               </figcaption>
             </figure>

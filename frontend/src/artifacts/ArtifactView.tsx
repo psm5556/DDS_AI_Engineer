@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { blobUrl } from "../api";
 import { Markdown } from "../components/Markdown";
 import { baseLayout, chartColors, Plot, plotConfig } from "../components/Plot";
+import { Skeleton } from "../components/Skeleton";
 import { copyText, fmt, when } from "../format";
 import { useTheme } from "../theme";
 import { useToast } from "../toast";
@@ -94,7 +95,7 @@ function ImageArt({ a }: { a: Artifact }) {
   }, [a.project_id, p.path]);
   return (
     <figure className="art-image">
-      {src ? <img src={src} alt={p.caption ?? a.title} /> : <div className="busy"><span className="spinner" /></div>}
+      {src ? <img src={src} alt={p.caption ?? a.title} /> : <Skeleton rows={4} />}
       {p.caption && <figcaption>{p.caption}</figcaption>}
       {src && <a className="icon-btn" href={src} download={`${a.title}.png`} title="이미지 저장" aria-label="이미지 저장"><Download size={14} /></a>}
     </figure>

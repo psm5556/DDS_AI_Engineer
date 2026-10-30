@@ -8,6 +8,7 @@ import { CanvasProvider } from "../canvas/CanvasContext";
 import { CanvasPanel } from "../canvas/CanvasPanel";
 import { MembersPanel } from "../canvas/views";
 import { ChatView } from "../chat/ChatView";
+import { Skeleton } from "../components/Skeleton";
 import { Confirm, Modal } from "../components/Modal";
 import { ProjectMenu, RenameModal } from "../components/ProjectMenu";
 import { useConversaLayout } from "../components/sideLayout";
@@ -48,7 +49,7 @@ export default function WorkspacePage() {
   const sid = sidS ? Number(sidS) : null;
 
   if (error) return <div className="page"><div className="notice err">{(error as Error).message}</div></div>;
-  if (!p) return <div className="page"><div className="busy"><span className="spinner" /> 불러오는 중</div></div>;
+  if (!p) return <Skeleton page rows={5} />;
   const canvasOn = !canvasLayout.collapsed;
 
   return (

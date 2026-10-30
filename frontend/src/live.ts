@@ -8,6 +8,7 @@ export interface LiveEvent {
   data?: Record<string, unknown>; event?: Record<string, unknown>; [k: string]: unknown;
 }
 type Listener = (e: LiveEvent) => void;
+const CASE_BATCH_MS = 400;
 const listeners = new Set<Listener>();
 let ws: WebSocket | null = null;
 let retry = 1000;
@@ -47,6 +48,21 @@ export function useLive(fn: Listener) {
 /** 서버 변경 이벤트 → React Query 캐시 무효화 (앱 루트에서 한 번 사용) */
 export function useLiveInvalidation() {
   const qc = useQueryClient();
+  // 케이스 이벤트는 수백 건이 몰려 올 수 있어 묶어서 한 번만 다시 읽는다
+  const batch = useRef<{ pids: Set<number | undefined>; timer: ReturnType<typeof setTimeout> } | null>(null);
+  useEffect(() => () => { if (batch.current) clearTimeout(batch.current.timer); }, []);
+  const refreshStudies = (pid?: number) => {
+    if (batch.current) { batch.current.pids.add(pid); return; }
+    const pids = new Set([pid]);
+    batch.current = {
+      pids,
+      timer: setTimeout(() => {
+        batch.current = null;
+        pids.forEach((p) => qc.invalidateQueries({ queryKey: ["studies", p] }));
+        qc.invalidateQueries({ queryKey: ["study"] });
+      }, CASE_BATCH_MS),
+    };
+  };
   useLive((e) => {
     const pid = e.project_id;
     switch (e.type) {
@@ -65,8 +81,7 @@ export function useLiveInvalidation() {
       case "report_updated": qc.invalidateQueries({ queryKey: ["reports", pid] }); break;
       case "study_updated":
       case "case_updated":
-        qc.invalidateQueries({ queryKey: ["studies", pid] });
-        qc.invalidateQueries({ queryKey: ["study"] });
+        refreshStudies(pid);
         break;
       case "model_updated": qc.invalidateQueries({ queryKey: ["models", pid] }); break;
       case "agent_status":
