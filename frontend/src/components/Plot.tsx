@@ -5,7 +5,7 @@ import { token } from "../design/token";
 
 export const Plot = createPlotlyComponent(Plotly);
 
-/** 그래프 색: 격자·글자·강조·계열(주홍 → 청록 → 보라 → 호박 → 회청 → 빨강) */
+/** 그래프 색: 격자·글자·강조·계열(파랑 → 청록 → 보라 → 호박 → 회청 → 빨강) */
 export function chartColors() {
   return {
     grid: token("--line"), text: token("--ink-3"), muted: token("--ink-4"), brand: token("--brand"), err: token("--err"), mean: token("--mean"),
