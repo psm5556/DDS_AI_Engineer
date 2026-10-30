@@ -450,3 +450,32 @@ class TrainFieldRequest(BaseModel):
     field: str
     flow_id: int | None = None
     node_id: str | None = None
+
+
+class DatasetCreate(BaseModel):
+    name: str = ""
+    targets: list[str] | None = None  # 비우면 케이스에 있는 표준 출력 전부(변위·Mises·온도 등)
+    frames: str | int = "last"  # last | all | 등간격 프레임 수
+    step: str | None = None
+    flow_id: int | None = None
+    node_id: str | None = None
+
+
+class DatasetResponse(ORM):
+    id: int
+    study_id: int
+    name: str
+    spec: dict[str, Any]
+    status: str
+    pending: list[int]
+    excluded: list[dict[str, Any]]
+    n_samples: int
+    splits: dict[str, int]
+    targets: list[str]
+    inputs: list[str]
+    inputs_dropped: list[dict[str, Any]]
+    units_known: bool
+    same_mesh: bool
+    size: int
+    error: str | None
+    created_at: datetime

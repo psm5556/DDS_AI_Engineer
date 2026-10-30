@@ -13,11 +13,14 @@
   case.run        {case_id, study_id, project_id, params, adapter, adapter_config, dry_run}
   case.extract    {case_id, study_id, project_id, params, results, run_dir, adapter, adapter_config, steps, names}
                   (Output 추가 — 해석 없이 추출 단계만 실행, case.status {extract: true, results: 새 값만}로 답한다)
+  case.train_sample {dataset_id, case_id, study_id, project_id, run_dir, spec, spec_hash}
+                  (학습 샘플을 만들어 POST /api/cases/{id}/train_sample로 올리고 case.train_sample {ok, error}로 답한다)
 Agent → 서버 알림
   hello           {hostname, version, agents:[{name,label,installed,login}], default_agent, tools}
   agent.event     {session_id, update}                 (ACP session/update)
   agent.permission {session_id, request_id, params}    (ACP session/request_permission)
   case.status     {case_id, status, results?, error?, run_dir?, images?}
+  case.train_sample {dataset_id, case_id, ok, error}
 """
 from __future__ import annotations
 

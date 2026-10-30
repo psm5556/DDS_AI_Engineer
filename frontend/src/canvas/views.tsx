@@ -15,7 +15,7 @@ import { flash, scrollMode } from "../motion";
 import { useCanvas } from "./CanvasContext";
 import { relFromRunDir, useOpenLocal } from "./LocalFiles";
 import { useToast } from "../toast";
-import type { Artifact, Case, Flow, Project, StudyStatus, Study, SurrogateModel, User } from "../types";
+import type { Artifact, Case, Flow, Project, StudyStatus, Study, SurrogateModel, TrainingDataset, User } from "../types";
 
 /** 캔버스에 들어가는 화면들: 작업 흐름(단계별 결과) · 데이터·모델(입력·출력, 예측 모델·Simulator) · 멤버. 보고서는 ReportView.
  *  대화(가운데)에서 에이전트가 일하면 해당 화면이 실시간으로 갱신된다. */
@@ -231,6 +231,49 @@ const CaseRow = memo(function CaseRow({ c, vars, outs, best, extracting, pulse, 
 }, (a, b) => a.c === b.c && a.best === b.best && a.extracting === b.extracting && a.pulse === b.pulse && a.name === b.name && a.pid === b.pid
   && sameList(a.vars, b.vars) && sameList(a.outs, b.outs));
 
+const DATASET_STATUS: Record<TrainingDataset["status"], [string, string]> = { building: ["만드는 중", "info"], ready: ["준비됨", "ok"], failed: ["실패", "err"] };
+
+/** 학습 데이터: 몇 건을 어떻게 나눴는지, 빠진 케이스와 입력은 왜 빠졌는지를 숨기지 않고 보여 준다 */
+function DatasetsBlock({ s, done }: { s: Study; done: number }) {
+  const { data } = useQuery({
+    queryKey: ["study", s.id, "datasets"], queryFn: () => get<TrainingDataset[]>(`/api/studies/${s.id}/datasets`),
+    refetchInterval: (q) => (q.state.data?.some((d) => d.status === "building") ? 2000 : false),
+  });
+  if (!data || (!data.length && done < 4)) return null;
+  return (
+    <section className="block">
+      <div className="block-head"><h3>학습 데이터</h3><span className="cnt">{data.length}개</span></div>
+      {!data.length ? (
+        <div className="row"><span className="small muted grow">신경망 형상 학습에 쓸 데이터가 아직 없습니다. 해석은 다시 하지 않습니다.</span>
+          <button className="small" onClick={() => sendToAgent(`스터디 '${s.name}'(#${s.id})의 완료된 케이스로 학습 데이터셋을 만들어 줘`)}>만들기 요청</button></div>
+      ) : (
+        <div className="model-list">{data.slice(0, 3).map((d) => (
+          <div key={d.id} className="model-row">
+            <div className="grow">
+              <b>{d.name}</b>
+              <div className="model-r2">
+                <span className={`chip ${DATASET_STATUS[d.status][1]}`}>{DATASET_STATUS[d.status][0]}</span>
+                {d.status === "building" && <span className="small muted">남은 케이스 {d.pending.length}건</span>}
+                {d.status === "ready" && <span className="small muted">샘플 {d.n_samples}건(학습 {d.splits.train ?? 0} · 검증 {d.splits.val ?? 0} · 시험 {d.splits.test ?? 0}) · {bytes(d.size)}</span>}
+                {d.status === "ready" && !d.units_known && <span className="chip warn" title="스터디 adapter_config.units가 없어 단위를 맞추지 못했습니다. 다른 스터디와 섞으면 안 됩니다">단위 모름</span>}
+              </div>
+              {d.status === "ready" && <p className="small muted">출력 {d.targets.join(", ")} · 입력 형상{d.inputs.length ? `, ${d.inputs.join(", ")}` : ""}</p>}
+              {d.error && <p className="small" style={{ color: "var(--err-ink)" }}>{d.error}</p>}
+              {d.inputs_dropped.length > 0 && <p className="small" style={{ color: "var(--warn-ink)" }}>빠진 입력: {d.inputs_dropped.map((x) => `${x.name} — ${x.reason}`).join(" · ")}</p>}
+              {d.excluded.length > 0 && (
+                <details className="small"><summary style={{ color: "var(--warn-ink)", cursor: "pointer" }}>제외된 케이스 {d.excluded.length}건</summary>
+                  <ul>{Array.from(new Set(d.excluded.map((x) => x.reason))).map((r) => {
+                    const ids = d.excluded.filter((x) => x.reason === r).map((x) => x.case_id);
+                    return <li key={r}>{r} — 케이스 {ids.slice(0, 12).join(", ")}{ids.length > 12 ? ` 외 ${ids.length - 12}건` : ""}</li>;
+                  })}</ul></details>
+              )}
+            </div>
+          </div>))}</div>
+      )}
+    </section>
+  );
+}
+
 function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const { data: st } = useQuery({ queryKey: ["study", id], queryFn: () => get<StudyStatus>(`/api/studies/${id}`) });
   const { data: cases } = useQuery({ queryKey: ["study", id, "cases"], queryFn: () => get<Case[]>(`/api/studies/${id}/cases`) });
@@ -340,6 +383,8 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
           </div>
         )}
       </section>
+
+      <DatasetsBlock s={s} done={done.length} />
 
       <section className="block">
         <div className="block-head"><h3>케이스</h3><span className="cnt">{cases?.length ?? 0}건</span></div>

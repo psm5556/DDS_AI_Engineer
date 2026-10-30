@@ -53,6 +53,10 @@ P0012_<프로젝트>/            ← 지금 작업 폴더(cwd)
   - 결과 파일 내용 전체(모든 스텝·프레임·필드)를 담으려면 스터디를 만들 때 툴별 "결과 전체 저장" 단계를 `post` 끝에 붙인다:
     LS-DYNA `dyna_to_h5.py` · Nastran/OptiStruct `op2_to_h5.py` · Abaqus `abq_odb_to_npz.py`(각 스킬의 '결과 전체 저장' 절). 기본으로 붙이고 Flow detail에 적는다.
   - 무엇이 담겼는지는 `dds-study.case_data(case_id)`로 본다. 원본이 없어도 case.h5로 Output 추가·3D 학습을 다시 할 수 있다.
+- **신경망 형상 학습용 데이터는 `dds-study.build_dataset`으로 만든다**(docs/cae-data-hdf5.md 8절).
+  - 스터디를 만들 때 `adapter_config.units`에 단위를 넣는다: `{"length":"mm","force":"N","stress":"MPa","time":"s"}`. 없으면 단위를 모르는 데이터가 된다.
+  - 입력 덱(`.inp`)을 케이스 폴더에 남기면 재료·경계조건·하중이 자동으로 담긴다. 다른 툴의 덱은 아직 읽지 못해 `not_extracted`로 표시된다.
+  - 결과의 `excluded`(빠진 케이스와 이유), `inputs_dropped`(추출 못 한 입력), `units_known`을 사용자에게 알린다. 숨기지 않는다.
 
 ## 2. 툴 자동화 방법
 - 먼저 `dds-cae.list_tools`로 이 PC에서 쓸 수 있는 툴(status: ready / partial / missing)과 읽을 스킬을 확인합니다.

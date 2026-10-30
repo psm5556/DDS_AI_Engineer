@@ -1,9 +1,13 @@
 """CAE 해석 데이터 HDF5 저장소(case.h5) — 케이스 하나의 결과를 빠짐없이, 압축해서 한 파일에 담는다.
 
-구조(스키마 dds-cae-h5 v1, docs/cae-data-hdf5.md):
+구조(스키마 dds-cae-h5 v2, docs/cae-data-hdf5.md):
   /                         attrs: format, schema, created, writer, case_id, study_id, project_uid, tool
-  /meta                     attrs: params.*, results.*  · case_json(문자열)
+  /meta                     attrs: params.*, results.*, units.*  · case_json(문자열)
   /mesh/<part>/nodes        (N,3) 좌표 · node_ids (N,) · elements/<형식> (M,k) · element_ids/<형식> (M,) · surface (T,3)
+                            element_material/<형식> (M,) · element_thickness/<형식> (M,)
+  /materials/<이름>          attrs: index, model, E, nu, density · 물성표 데이터셋(plastic 등)
+  /boundary/<step>/<part>/  fixed_mask (N,6) · prescribed_u (N,6)  — 병진 3 + 회전 3 자유도
+  /loads/<step>/<part>/     nodal_force (N,6) · pressure/<형식> (P,3: 요소 행, 면 번호, 값)   ·  /loads/<step>/body attrs: gravity, rotation
   /steps/<step>/time        (F,) 시각(또는 모드·하중 번호)
   /steps/<step>/fields/<이름>  (F, N, C) — 프레임마다 한 줄. attrs: location(node|element|ip), part, components, unit, labels
   /history/<이름>           (T, K) 시간 이력 · attrs: columns, unit
@@ -24,8 +28,11 @@ from typing import Any
 
 import numpy as np
 
-FORMAT, SCHEMA = "dds-cae-h5", 1
+FORMAT, SCHEMA = "dds-cae-h5", 2
 H5_NAME = "case.h5"
+# 입력 정보의 추출 상태(manifest의 extraction). 빈칸으로 두면 "고정 조건 없음"과 "추출 못 함"을 구분할 수 없다
+SETUP_ITEMS = ("materials", "boundary", "loads")
+NOT_EXTRACTED = {"status": "not_extracted", "source": "", "reason": "이 파일에는 추출 기록이 없습니다", "warnings": []}
 # 원문을 함께 담는 작은 텍스트(로그·입력 덱·설정). 그 밖의 큰 바이너리(odb·d3plot·op2·rst 등)는 PC에 원본으로 남기고 목록에만 적는다
 TEXT_EXT = {".json", ".log", ".txt", ".csv", ".inp", ".k", ".key", ".dyn", ".bdf", ".dat", ".nas", ".py", ".jou", ".java",
             ".msg", ".sta", ".out", ".f06", ".cfg", ".ini", ".xml", ".yaml", ".yml", ".tcl", ".mac", ".apdl", ".cmd", ".bat", ".sh"}
@@ -51,8 +58,10 @@ class CaseH5:
         self.comp = {"compression": compression, "compression_opts": level} if compression == "gzip" else (
             {"compression": compression} if compression else {})
         self.float32 = float32
-        if mode != "r" and "format" not in self.f.attrs:
-            self.f.attrs.update({"format": FORMAT, "schema": SCHEMA, "created": _now()})
+        if mode != "r":
+            if "format" not in self.f.attrs:
+                self.f.attrs.update({"format": FORMAT, "created": _now()})
+            self.f.attrs["schema"] = SCHEMA
 
     def __enter__(self):
         return self
@@ -121,14 +130,87 @@ class CaseH5:
             a = a[None]
         base = f"steps/{_key(step)}"
         chunks = (1,) + a.shape[1:] if a.ndim >= 2 and a[0].size else None
-        self._put(f"{base}/fields/{_key(name)}", a, chunks=chunks, location=location, part=_key(part),
+        key = self._field_key(base, name, part, location)
+        self._put(f"{base}/fields/{key}", a, chunks=chunks, location=location, part=_key(part), base_name=_key(name),
                   components=json.dumps(components or [], ensure_ascii=False), unit=unit, **attrs)
         if labels is not None:
-            self._put(f"{base}/labels/{_key(name)}", labels)
+            self._put(f"{base}/labels/{key}", labels)
         if time is not None or f"{base}/time" not in self.f:
             t = np.atleast_1d(np.asarray(time if time is not None else np.arange(a.shape[0]), dtype=np.float64))
             if f"{base}/time" not in self.f or len(t) >= len(self.f[f"{base}/time"]):
                 self._put(f"{base}/time", t)
+
+    def _field_key(self, base: str, name: str, part: str, location: str) -> str:
+        """저장할 이름. 같은 이름이라도 파트·위치가 다르면 다른 데이터다(인스턴스가 둘인 모델의 S 등) — 덮어쓰지 않게 뒤에 붙인다."""
+        n, p = _key(name), _key(part)
+        for key in (n, f"{n}__{p}", f"{n}__{p}__{_key(location)}"):
+            ds = self.f.get(f"{base}/fields/{key}")
+            if ds is None or (_text(ds.attrs.get("part", "")) == p and _text(ds.attrs.get("location", "")) == location):
+                return key
+        raise ValueError(f"필드 이름을 정하지 못했습니다: {name} ({part}, {location})")
+
+    # ---------- 재료·경계조건·하중·단위 ----------
+    def set_units(self, units: dict):
+        g = self.f.require_group("meta")
+        g.attrs.update({f"units.{k}": str(v) for k, v in units.items() if v})
+
+    def units(self) -> dict:
+        meta = self.f.get("meta")
+        return {k[6:]: _text(v) for k, v in (meta.attrs.items() if meta is not None else []) if k.startswith("units.")}
+
+    def clear_setup(self):
+        for name in SETUP_ITEMS:
+            if name in self.f:
+                del self.f[name]
+
+    def add_material(self, name: str, model: str = "", props: dict | None = None, tables: dict | None = None, index: int | None = None):
+        base = f"materials/{_key(name)}"
+        g = self.f.require_group(base)
+        g.attrs.update({"model": model, **({"index": index} if index is not None else {}),
+                        **{k: float(v) for k, v in (props or {}).items() if v is not None}})
+        for k, t in (tables or {}).items():
+            self._put(f"{base}/{_key(k)}", np.asarray(t, dtype=np.float64))
+
+    def set_element_props(self, part: str, etype: str, material=None, thickness=None):
+        base = f"mesh/{_key(part)}"
+        if material is not None:
+            self._put(f"{base}/element_material/{_key(etype)}", np.asarray(material, dtype=np.int32))
+        if thickness is not None:
+            self._put(f"{base}/element_thickness/{_key(etype)}", np.asarray(thickness, dtype=np.float64))
+
+    def add_boundary(self, step: str, part: str, fixed_mask, prescribed_u):
+        base = f"boundary/{_key(step)}/{_key(part)}"
+        self._put(f"{base}/fixed_mask", np.asarray(fixed_mask, dtype=np.uint8))
+        self._put(f"{base}/prescribed_u", np.asarray(prescribed_u, dtype=np.float64))
+
+    def add_nodal_force(self, step: str, part: str, force):
+        self._put(f"loads/{_key(step)}/{_key(part)}/nodal_force", np.asarray(force, dtype=np.float64))
+
+    def add_pressure(self, step: str, part: str, etype: str, rows):
+        self._put(f"loads/{_key(step)}/{_key(part)}/pressure/{_key(etype)}", np.asarray(rows, dtype=np.float64))
+
+    def set_body_load(self, step: str, gravity=None, rotation: dict | None = None):
+        g = self.f.require_group(f"loads/{_key(step)}/body")
+        if gravity is not None:
+            g.attrs["gravity"] = json.dumps([float(x) for x in gravity])
+        if rotation is not None:
+            g.attrs["rotation"] = json.dumps(rotation)
+
+    def extraction(self) -> dict:
+        got = self.manifest().get("extraction", {})
+        return {k: {**NOT_EXTRACTED, **got.get(k, {})} for k in SETUP_ITEMS}
+
+    def set_extraction(self, item: str, status: str, source: str = "", reason: str = "", warnings: list[str] | None = None):
+        man = self.manifest()
+        man.setdefault("extraction", {})[item] = {"status": status, "source": source, "reason": reason, "warnings": warnings or []}
+        self.write_manifest(man)
+
+    def materials(self) -> list[dict]:
+        out = []
+        for name, g in (self.f.get("materials") or {}).items():
+            attrs = {k: _plain(v) for k, v in g.attrs.items() if k != "index"}
+            out.append({"name": name, **attrs})
+        return out
 
     def add_history(self, name: str, data, columns: list[str] | None = None, unit: str = ""):
         self._put(f"history/{_key(name)}", np.asarray(data), columns=json.dumps(columns or [], ensure_ascii=False), unit=unit)
@@ -150,7 +232,7 @@ class CaseH5:
         out = []
         for step, g in (self.f.get("steps") or {}).items():
             for name, ds in (g.get("fields") or {}).items():
-                out.append({"step": step, "name": name, "shape": list(ds.shape), "dtype": str(ds.dtype),
+                out.append({"step": step, "name": name, "base": _text(ds.attrs.get("base_name", name)), "shape": list(ds.shape), "dtype": str(ds.dtype),
                             "location": _text(ds.attrs.get("location", "")), "part": _text(ds.attrs.get("part", "")),
                             "unit": _text(ds.attrs.get("unit", "")), "frames": int(ds.shape[0])})
         return out
@@ -185,6 +267,7 @@ def summary(path: str | Path) -> dict:
             "params": {k[7:]: _plain(v) for k, v in (meta.attrs.items() if meta is not None else []) if k.startswith("params.")},
             "results": {k[8:]: _plain(v) for k, v in (meta.attrs.items() if meta is not None else []) if k.startswith("results.")},
             "mesh": parts, "fields": h.fields(), "history": hist, "files": files,
+            "units": h.units(), "materials": h.materials(), "extraction": h.extraction(),
             "raw": [x for x in man.get("files", []) if x.get("status") == "raw"],
             "checks": man.get("checks", {}), "packed_at": man.get("packed_at"),
         }
@@ -193,7 +276,8 @@ def summary(path: str | Path) -> dict:
 def archive_info(s: dict) -> dict:
     """summary → 케이스에 붙여 둘 짧은 정보(서버 DB·화면): 무엇이 몇 개 담겼고 원본이 얼마나 PC에 남았는지."""
     return {"ok": bool(s["checks"].get("ok")), "size": s["size"], "packed_at": s.get("packed_at"),
-            "field_names": sorted({x["name"] for x in s["fields"] if x["name"] != "coordinates"}),
+            "field_names": sorted({x["base"] for x in s["fields"] if x["base"] != "coordinates"}),
+            "extraction": {k: v["status"] for k, v in s["extraction"].items()},
             "fields": len(s["fields"]), "frames": int(sum(x["frames"] for x in s["fields"])),
             "history": len(s["history"]), "files": len(s["files"]),
             "raw": len(s["raw"]), "raw_size": int(sum(x["size"] for x in s["raw"]))}
@@ -266,12 +350,16 @@ def _npz_field(h: CaseH5, name: str, z, step_default: str):
 
 
 def pack_case(run_dir: str | Path, out: str | Path | None = None, meta: dict | None = None, text_max_mb: float = 5,
-              hash_max_mb: float = 512, compression: str = "gzip", level: int = 4, float32: bool = False) -> dict:
+              hash_max_mb: float = 512, compression: str = "gzip", level: int = 4, float32: bool = False,
+              units: dict | None = None) -> dict:
     """케이스 폴더를 case.h5로 묶는다(이미 있으면 이어서 채운다 — 추출 스크립트가 직접 쓴 내용은 그대로 둔다).
     - params.json · results.json · case.json → /meta
     - fields/*.npz, h5in/*.npz → /mesh · /steps/*/fields   ·   history/*.csv → /history
     - 작은 텍스트(로그·입력 덱) → /files   ·   그 밖의 파일(큰 바이너리 결과)은 원본을 PC에 두고 manifest에 크기·sha256을 적는다
+    - 입력 덱 → /materials · /boundary · /loads (덱은 크면 /files에 안 들어가므로 묶을 때 함께 뽑는다. 못 뽑아도 저장은 계속한다)
     그다음 다시 열어 모든 데이터를 읽어 보며 검증한다. 돌려주는 값: 요약(summary)."""
+    from .deck import extract_setup
+
     run_dir = Path(run_dir)
     out = Path(out) if out else run_dir / H5_NAME
     files: list[dict] = []
@@ -302,6 +390,9 @@ def pack_case(run_dir: str | Path, out: str | Path | None = None, meta: dict | N
                 data = None
             if data is not None and data.size:
                 h.add_history(p.stem, data, columns=cols)
+        if units:
+            h.set_units(units)
+        extract_setup(h, run_dir)
         # 케이스 폴더의 모든 파일을 목록에 남긴다 — 무엇이 h5에 담겼고 무엇이 원본으로 남았는지
         for p in sorted(x for x in run_dir.rglob("*") if x.is_file()):
             rel = p.relative_to(run_dir).as_posix()
@@ -323,7 +414,7 @@ def pack_case(run_dir: str | Path, out: str | Path | None = None, meta: dict | N
                 item.update(status="raw", sha256=_sha256(p, int(hash_max_mb * 1e6)))
             files.append(item)
         h.write_manifest({"schema": SCHEMA, "packed_at": _now(), "run_dir": str(run_dir), "files": files,
-                          "fields": packed_fields, "checks": {}})
+                          "fields": packed_fields, "checks": {}, "extraction": h.manifest().get("extraction", {})})
     checks = verify(out)
     with CaseH5(out, "a") as h:
         man = h.manifest()

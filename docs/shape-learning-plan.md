@@ -1,6 +1,25 @@
 # 형상 학습 계획: case.h5 → 학습 데이터 → GPU 서버
 
-작성: 2026-10-30. 상태: **계획. 코드는 아직 바꾸지 않았다.**
+작성: 2026-10-30. 상태: **1단계 구현 완료, 실제 툴 미검증.** 2단계부터는 계획이다.
+
+## 진행 상황
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 0. GPU 서버 확인 | 사내에서 해야 함 | 1단계와 무관하게 먼저 해도 된다 |
+| 1. 학습 데이터 | **구현함** | pytest, 실제 PC Agent 연결 점검 통과. mock 데이터로만 시험했다 |
+| 2~6 | 시작 전 | |
+
+**1단계를 만들며 계획과 달라진 점**
+- 경계조건·하중은 3자유도가 아니라 **6자유도**(N,6)로 담는다. 쉘은 ENCASTRE와 PINNED가 회전 자유도에서 갈린다.
+- 추출기 첫 툴은 **Abaqus `.inp`**로 정했다. 사내에서 가장 많이 쓰는 툴을 아직 모르고, 파일이 글자라 툴 없이 시험할 수 있다. 다른 툴이 주력이면 그 툴을 먼저 더한다.
+- MCP `build_dataset`을 2단계에서 1단계로 당겼다. 없으면 AI가 데이터셋을 만들 수 없다.
+- `read_snapshot`의 변형 좌표(4절 3번)는 고치지 않았다. Simulator의 변형 형상 표시가 이것을 쓴다. 신경망 입력인 `train.h5`만 변형 전 좌표를 쓴다.
+- 만들다 찾은 기존 버그를 고쳤다: 같은 이름의 필드가 파트·위치만 다르면 덮어써졌다. 인스턴스가 둘 이상인 Abaqus 모델은 **앞 파트의 결과가 사라지고 있었다.**
+
+**아직 하지 않은 것**
+- 고유모드의 부호·순서 정렬(MAC). 모드 해석을 학습하기 전에 필요하다.
+- 스텝별 시간 정보로 AMPLITUDE를 반영하는 일. 지금은 경고만 남긴다.
+- 실제 툴이 쓴 덱과 ODB로 확인하는 일. 통과 기준 중 이 부분은 사내에서만 할 수 있다.
 
 ## 1. 결론
 - **데이터:** `case.h5`는 손실 없는 보관본으로 두되 재료·경계조건·하중을 더한다(스키마 v2). 케이스마다 학습 전용 HDF5 `train.h5`를 따로 만든다. 큰 모델도 서버로 올릴 수 있게 하는 핵심이다.
@@ -71,9 +90,9 @@ case.h5
 │   ├── + element_material/<형식>   (M,)  요소별 재료 번호
 │   └── + thickness            쉘 두께
 ├── + materials/<id>           재료 모델 이름 · E · ν · 밀도 · 물성표(소성·고무 등)
-├── + boundary/<step>/<part>/  fixed_mask (N,3) · prescribed_u (N,3)
+├── + boundary/<step>/<part>/  fixed_mask (N,6) · prescribed_u (N,6)
 ├── + loads/<step>/
-│   ├── <part>/nodal_force     (N,3)
+│   ├── <part>/nodal_force     (N,6)
 │   ├── <part>/pressure        면 목록 + 값
 │   └── body                   중력 · 회전 속도 · 축
 ├── steps/<step>/              time · fields/<이름>
@@ -102,9 +121,9 @@ case.h5
 /geometry/normals     (N,3) float32  표면 법선
 /geometry/edges       (E,2) int32    MeshGraphNet을 쓸 때만
 /geometry/node_attrs/<이름>  (N,)    두께·파트 번호·재료 번호(요소 값을 노드로 옮긴 것)
-/inputs/fixed_mask    (N,3) uint8    고정 표시
-/inputs/prescribed_u  (N,3) float32  강제 변위
-/inputs/nodal_load    (N,3) float32  절점 하중 + 압력을 노드로 옮긴 값
+/inputs/fixed_mask    (N,6) uint8    고정 표시
+/inputs/prescribed_u  (N,6) float32  강제 변위
+/inputs/nodal_load    (N,6) float32  절점 하중 + 압력을 노드로 옮긴 값 + 모멘트
 /conditions           attrs: params.<변수>, global.<중력·회전 속도·재료 스칼라>, extraction(항목별 추출 상태)
 /targets/time         (F,)
 /targets/<표준 이름>   (F,N,C) float32  노드 기준. attrs: unit, components, source_field
@@ -180,7 +199,7 @@ case.h5
 |---|---|---|
 | **0. GPU 서버 확인** | `nvidia-smi -L`, `nvidia-smi topo -m`, 드라이버·OS·Docker, 이미지 반입(`docker save/load` 또는 사내 미러), 공식 낙하 시험 예제를 4 GPU로 실행, 노드 수별 메모리 측정, 온도 확인 | 예제 학습이 끝까지 돌고, 카드 이름·메모리·노드 한계 값이 이 문서에 적힘 |
 | **1. 학습 데이터** | `case.h5` 스키마 v2(v1 파일도 읽기), 사내에서 가장 많이 쓰는 툴 1종의 입력 덱 추출기, `train.h5` 생성기, PC Agent `case.train_sample`, 업로드 API, 표준 이름표·단위 환산, 데이터셋 manifest, 4절 1~7번 수정. `docs/cae-data-hdf5.md` 갱신, `__version__` 올림 | pytest. 실제 툴 1종의 작은 모델로 `train.h5` 생성, 최댓값·좌표가 원본과 일치, 고정 노드 수·하중 합계가 입력 덱과 일치, 추출 못 한 항목이 `not_extracted`로 표시, 500 MB 넘는 케이스도 학습 대상에 들어감 |
-| **2. 작업 기반** | 작업 테이블·API, 가짜 학습기, 진행률·취소·이어 하기, 데이터·모델 탭 표시, MCP(`build_dataset`, `train_shape_model`, `training_status`) | pytest(torch 없이), `npm run smoke -- --demo`·`--reduced`, 작업자를 죽였다 살려도 이어짐 |
+| **2. 작업 기반** | 작업 테이블·API, 가짜 학습기, 진행률·취소·이어 하기, 데이터·모델 탭 표시, MCP(`train_shape_model`, `training_status`) | pytest(torch 없이), `npm run smoke -- --demo`·`--reduced`, 작업자를 죽였다 살려도 이어짐 |
 | **3. PhysicsNeMo 학습** | HDF5 리더, 정적 해석 + 필드 하나 + 마지막 프레임부터, 앙상블, 시험 지표, PCA+GP 비교, 배포 판정 | GPU 서버에서 mock 브래킷 데이터로 학습 끝, 판정 근거가 보고서로 나옴(mock은 물리가 단순해 정확도 판단에는 쓰지 않음) |
 | **4. 예측·Simulator** | 예측 작업자, `kind`별 분기, 기존 3D 응답 형식 재사용, 메쉬 업로드, 불확실도·학습 범위 밖 경고, "예측이며 해석이 아님" 표시 | 슬라이더 응답 시간 측정, 학습 범위 밖 입력에 경고, 스모크 통과 |
 | **5. 실제 데이터 시범** | 드럼 세탁기 부품 1종, 하중 조건 1개, DOE 100~300개, 엔지니어 검토, 후보를 해석으로 다시 확인하고 학습에 추가 | 8절의 합격 기준 통과, 또는 왜 안 되는지와 필요한 케이스 수가 정리됨 |

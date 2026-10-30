@@ -1,4 +1,5 @@
 """라이선스 없이 전체 흐름을 검증하기 위한 가짜 솔버(해석함수)."""
+import json
 import math
 import time
 
@@ -138,12 +139,58 @@ def _washer(p):
     return {"vibration": vib, "floor_force": force}
 
 
+def write_bracket_fe(params: dict, run_dir, nx: int = 20, ny: int = 4, nz: int = 2):
+    """학습 데이터 연습용: 육면체 메쉬의 입력 덱(model.inp)과 ODB에서 뽑은 것과 같은 h5in/ 결과를 남긴다.
+    식은 _bracket과 같은 보 이론이라 물리가 단순하다. 데이터 경로를 시험하는 용도이고 정확도 판단에는 쓰지 않는다."""
+    t, r = params["thickness"], params["rib_height"]
+    L, W, P, E, rho = BRACKET["L"], BRACKET["W"], BRACKET["P"], BRACKET["E"], BRACKET["rho"]
+    _, zc, inertia = bracket_section(t, r)
+    h = t + r
+    ids = np.arange(1, (nx + 1) * (ny + 1) * (nz + 1) + 1)
+    index = ids.reshape(nz + 1, ny + 1, nx + 1)
+    zz, yy, xx = np.meshgrid(np.linspace(0, h, nz + 1), np.linspace(-W / 2, W / 2, ny + 1), np.linspace(0, L, nx + 1), indexing="ij")
+    pts = np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()])
+    a, b, c, d = index[:-1, :-1, :-1], index[:-1, :-1, 1:], index[:-1, 1:, 1:], index[:-1, 1:, :-1]
+    e, f, g, k = index[1:, :-1, :-1], index[1:, :-1, 1:], index[1:, 1:, 1:], index[1:, 1:, :-1]
+    conn = np.column_stack([v.ravel() for v in (a, b, c, d, e, f, g, k)])
+    element_ids = np.arange(1, len(conn) + 1)
+    x = pts[:, 0]
+    tip = ids[x >= L - 1e-9]
+    fixed = ids[x <= 1e-9]
+    node_lines = "\n".join(f"{i}, {p[0]:.9g}, {p[1]:.9g}, {p[2]:.9g}" for i, p in zip(ids, pts))
+    element_lines = "\n".join(f"{i}, " + ", ".join(str(n) for n in row) for i, row in zip(element_ids, conn))
+    set_lines = lambda s: "\n".join(", ".join(str(v) for v in s[i:i + 16]) for i in range(0, len(s), 16))  # noqa: E731
+    (run_dir / "model.inp").write_text(
+        f"*HEADING\nbracket_fe\n*NODE\n{node_lines}\n*ELEMENT, TYPE=C3D8R, ELSET=BODY\n{element_lines}\n"
+        f"*NSET, NSET=FIX\n{set_lines(fixed)}\n*NSET, NSET=TIP\n{set_lines(tip)}\n"
+        f"*MATERIAL, NAME=STEEL\n*ELASTIC\n{E}, 0.3\n*DENSITY\n{rho}\n*SOLID SECTION, ELSET=BODY, MATERIAL=STEEL\n"
+        f"*BOUNDARY\nFIX, ENCASTRE\n*STEP, NAME=Load\n*STATIC\n*CLOAD\nTIP, 3, {-P / len(tip)}\n*END STEP\n", encoding="utf-8")
+    h5in = run_dir / "h5in"
+    h5in.mkdir(exist_ok=True)
+    np.savez_compressed(h5in / "mesh__PART-1-1.npz", points=pts, node_ids=ids, elements__C3D8R=conn - 1, element_ids__C3D8R=element_ids,
+                        meta_json=json.dumps({"part": "PART-1-1", "name": "mesh"}))
+    time_values = np.array([0.5, 1.0])
+    w = P * x ** 2 * (3 * L - x) / (6 * E * inertia)
+    u = np.stack([np.column_stack([np.zeros_like(w), np.zeros_like(w), -s * w]) for s in time_values])
+    np.savez_compressed(h5in / "Load__U__PART-1-1__NODAL.npz", frames=u, time=time_values, labels=ids,
+                        meta_json=json.dumps({"name": "U", "step": "Load", "part": "PART-1-1", "location": "nodal",
+                                              "components": ["U1", "U2", "U3"], "unit": ""}))
+    cx, cz = pts[conn - 1, 0].mean(axis=1), pts[conn - 1, 2].mean(axis=1)
+    s11 = P * (L - cx) * (cz - zc) / inertia
+    s = np.zeros((2, len(conn), 6))
+    s[0, :, 0], s[1, :, 0] = 0.5 * s11, s11
+    np.savez_compressed(h5in / "Load__S__PART-1-1__INTEGRATION_POINT.npz", frames=s, time=time_values, labels=element_ids,
+                        meta_json=json.dumps({"name": "S", "step": "Load", "part": "PART-1-1", "location": "integration_point",
+                                              "components": ["S11", "S22", "S33", "S12", "S13", "S23"]}))
+
+
 FUNCTIONS = {
     "branin": (_branin, "2변수 x1∈[-5,10], x2∈[0,15], 출력 f (최소 0.398)"),
     "rosenbrock": (_rosenbrock, "n변수, 출력 f (최소 0 @ 모두 1)"),
     "beam": (_beam, "변수 width, height [mm], 출력 mass, deflection, max_stress"),
     "bracket": (_bracket, "브래킷(플레이트+리브) 변수 thickness 4~12, rib_height 5~30 [mm], 출력 mass[g], max_stress[MPa], deflection[mm]"),
     "bracket3d": (_bracket3d, "bracket과 같고 + 3D 표면 응력 필드(fields/stress.npz, 처짐 10배 확대) — 형상·필드 학습"),
+    "bracket_fe": (_bracket, "bracket과 같고 + 입력 덱(model.inp)과 육면체 메쉬의 변위·응력 — 학습 데이터(train.h5) 연습"),
     "beam3d": (_beam3d, "beam과 같고 + 3D 표면 메쉬 응력 필드(fields/stress.npz, 처짐 형상 포함) — 형상·필드 학습 연습"),
     "washer": (_washer, "드럼세탁기 탈수 진동 변수 spring_k -10~30, damper_c -10~50, balancer_m -20~20 [%], spring_pos -20~20 [mm], "
                         "rpm(선택, 기본 1200), 출력 vibration[mm], floor_force[N](바닥 전달력)"),
@@ -204,6 +251,8 @@ class MockAdapter(CaeAdapter):
             (run_dir / "fields").mkdir(exist_ok=True)
             for name, f in fields.items():
                 np.savez_compressed(run_dir / "fields" / f"{name}.npz", **f)
+        if fn_name == "bracket_fe":
+            write_bracket_fe(params, run_dir)
         if fn_name == "washer":  # 시간 이력도 케이스 폴더에 남긴다 → case.h5의 /history로 담긴다
             (run_dir / "history").mkdir(exist_ok=True)
             np.savetxt(run_dir / "history" / "tub_displacement.csv", washer_history(params, results["vibration"]),

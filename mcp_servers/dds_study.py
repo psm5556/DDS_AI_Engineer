@@ -178,6 +178,25 @@ def train_field_model(study_id: int, field: str, flow_id: int | None = None, nod
 
 
 @mcp.tool()
+def build_dataset(study_id: int, targets: list[str] | None = None, frames: str | int = "last", step: str | None = None, name: str = "",
+                  flow_id: int | None = None, node_id: str | None = None, wait_sec: int = 600) -> dict:
+    """신경망 형상 학습용 데이터셋을 만든다: 케이스마다 case.h5에서 학습 샘플(train.h5)을 뽑아 학습·검증·시험으로 나누고 통계를 낸다.
+    서버에 case.h5가 없는 큰 케이스는 그 PC Agent가 샘플만 만들어 올린다. 해석은 다시 하지 않는다.
+    targets: 표준 이름 displacement · von_mises · stress · strain · plastic_strain · temperature 또는 case.h5의 필드 이름. 비우면 있는 것 전부.
+    frames: last(마지막 프레임) | all | 등간격 프레임 수. step: 스텝 이름(비우면 원하는 출력이 가장 많은 스텝).
+    결과의 excluded(빠진 케이스와 이유)와 inputs_dropped(추출 못 한 입력)를 사용자에게 알린다.
+    단위를 알려면 스터디 adapter_config.units에 {"length":"mm","force":"N","stress":"MPa","time":"s"}를 넣어 해석해야 한다."""
+    d = api.post(f"/api/studies/{study_id}/datasets", {"name": name, "targets": targets, "frames": frames, "step": step,
+                                                        "flow_id": flow_id, "node_id": node_id})
+    t0 = time.time()
+    while d["status"] == "building" and time.time() - t0 < wait_sec:
+        time.sleep(2)
+        d = api.get(f"/api/datasets/{d['id']}")
+    return {k: d.get(k) for k in ("id", "status", "n_samples", "splits", "targets", "inputs", "inputs_dropped", "units_known", "same_mesh",
+                                  "excluded", "error", "pending")}
+
+
+@mcp.tool()
 def deploy_model(model_id: int) -> dict:
     """Surrogate 모델을 예측 Simulator로 배포한다. 웹앱 Simulator 화면에서 슬라이더로 바로 예측할 수 있다."""
     m = api.post(f"/api/models/{model_id}/deploy")

@@ -77,6 +77,12 @@ export interface ApiToken { id: number; name: string; created_at: string; last_u
 export interface Attachment { id: number; project_id: number; filename: string; size: number; sha256: string; created_at: string }
 export interface LocalEntry { name: string; path: string; dir: boolean; size: number | null; modified: string }
 export interface LocalTree { root: string; path: string; entries: LocalEntry[]; custom?: boolean }
+export interface TrainingDataset {
+  id: number; study_id: number; name: string; status: "building" | "ready" | "failed"; pending: number[];
+  excluded: { case_id: number; reason: string }[]; n_samples: number; splits: { train?: number; val?: number; test?: number };
+  targets: string[]; inputs: string[]; inputs_dropped: { name: string; reason: string }[];
+  units_known: boolean; same_mesh: boolean; size: number; error: string | null; created_at: string;
+}
 export interface FieldModel {
   id: number; study_id: number; field: string; n_nodes: number; n_train: number; shape_varies: boolean;
   info: { modes?: number; value_modes?: number; geometry_modes?: number; energy?: number; value_error?: number; geometry_error?: number };

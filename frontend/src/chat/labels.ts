@@ -24,6 +24,7 @@ const TOOL_LABEL: Record<string, string> = {
   "dds-study.suggest_next": "다음 설계점 제안",
   "dds-study.optimize": "최적화 반복",
   "dds-study.train_field_model": "형상·필드 학습",
+  "dds-study.build_dataset": "학습 데이터 만들기",
   "dds-study.deploy_model": "Simulator 배포",
   "dds-study.predict": "예측 모델로 계산",
   "dds-live.live_status": "Live Link 연결 확인",

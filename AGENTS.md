@@ -117,6 +117,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | DOE·학습·최적화 로직 | `server/app/study/*` + `server/tests` |
 | 보고서 | AI가 새로 쓰는 보고서: 자료·저장 `server/app/routers/reports.py`, Word·HTML `server/app/report.py`, 쓰는 규칙 `agent-context/INSTRUCTIONS.md` 1-0절·`mcp_servers/dds_flow.py` `write_report` |
 | 해석 데이터 저장(HDF5) | `cae_adapters/h5store.py`(case.h5 쓰기·읽기·묶기·검증) → PC Agent `executor._archive` → 서버 `/api/cases/{id}/archive` · 규약 `docs/cae-data-hdf5.md` · 툴별 전체 추출 `dyna_to_h5.py`·`op2_to_h5.py`·`abq_odb_to_npz.py` |
+| 학습 데이터(train.h5·데이터셋) | 입력 덱 추출 `cae_adapters/deck.py`(다른 툴을 더하는 곳) · 샘플 `train_h5.py`(표준 이름표 `STANDARD`) · 데이터셋 `server/app/study/dataset.py` · 규약 `docs/cae-data-hdf5.md` 8절 · 계획 `docs/shape-learning-plan.md` |
 | Output 추가 추출 | `server/app/study/service.py` `add_outputs` → PC Agent `case.extract`(`executor.py`) → 어댑터 `extract()` · 규약 `docs/skill-contract.md` 1-2절 |
 | PC Agent 설치 과정 | `scripts/install-agent.ps1`(실제 설치) · `installer/DdsAgentSetup.cs`(설치 창) · `server/app/routers/agents.py`(배포·설치 파일) |
 | Live Link 속도 개선 | `.claude/skills/live-link-speedup/SKILL.md`부터 읽는다(개발용 스킬, Agent 배포에는 들어가지 않음) |

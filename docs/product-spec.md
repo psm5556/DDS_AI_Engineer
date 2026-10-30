@@ -397,6 +397,14 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
   - `train_field_model`이 PCA+GP로 '설계변수 → 3D 형상·분포' 모델을 만든다.
   - 리메쉬된 케이스는 가장 촘촘한 메쉬 기준으로 보간한다.
 - **코드:** `study/fieldmodel.py`
+- **빠진 케이스:** 큰 `case.h5`가 PC에만 있으면 서버에서 읽을 수 없어 빠진다. 건수와 이유를 모델 정보(`info.excluded`)와 결과에 남긴다.
+
+### 4-9-1. 학습 데이터(신경망 형상 학습용)
+- **무엇을:** 케이스마다 `case.h5`에서 학습 샘플 `train.h5`를 뽑아 데이터셋으로 묶는다. 해석은 다시 하지 않는다.
+- **입력 정보:** 묶을 때 입력 덱에서 재료·경계조건·하중을 뽑는다. 지금은 Abaqus `.inp`만 읽는다. 항목마다 `ok`·`none`·`not_extracted`를 남기고, 못 뽑은 입력은 학습에서 뺀다.
+- **큰 케이스:** `case.h5`가 PC에만 있으면 그 PC Agent가 샘플만 만들어 올린다(`case.train_sample`).
+- **화면:** 데이터·모델 탭의 '학습 데이터' 구역에 상태, 샘플 수와 분할, 출력·입력, 단위 모름, 빠진 입력, 제외된 케이스와 이유를 보인다.
+- **코드:** `cae_adapters/deck.py` · `train_h5.py` · `meshops.py` · `study/dataset.py` · `routers/training.py`. 규약은 `docs/cae-data-hdf5.md` 8절.
 
 ### 4-10. Live Link(열린 CAD/CAE 조작)
 - **무엇을:** 실행 중인 툴(NX 등)에서 바로 작업한다.
@@ -432,6 +440,7 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 | studies | variables, objectives, constraints, **outputs**, adapter, adapter_config | |
 | cases | params, results, status, source, run_dir, run_by, images, fields, **archive**, error | archive는 case.h5 정보 |
 | surrogate_models · field_models | outputs, metrics, n_train, deployed / field, n_nodes, shape_varies | |
+| training_datasets | spec, status, pending, excluded, n_samples, splits, targets, inputs, inputs_dropped, units_known, same_mesh, manifest_path | 샘플 정보는 `cases.train_samples` |
 | share_links | token, model_id, expires_at, enabled, uses | |
 | agent_releases · agent_instances | 버전·파일 / 연결 PC·버전·상태 | |
 
@@ -449,7 +458,8 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 | 결과 | `GET·POST /api/projects/{p}/artifacts` · `DELETE /api/artifacts/{a}` · `POST /api/projects/{p}/files`(이미지) · `GET …/files/{path}` |
 | 보고서 | `GET /api/projects/{p}/reports` · `GET …/reports/latest` · `GET /api/reports/{r}` · `POST /api/projects/{p}/reports` · `GET …/report-context` · `GET …/report?format=docx|html&report_id=` |
 | 스터디 | `GET·POST /api/projects/{p}/studies` · `GET /api/studies/{s}`(counts·best·running·extracting) · `…/cases` · `…/doe` · `…/run` · `…/train` · `…/suggest` · `…/outputs` · `…/train_field` · `…/field-models` |
-| 케이스 데이터 | `POST /api/cases/{c}/fields` · `POST·GET /api/cases/{c}/archive` · `GET …/archive/file` |
+| 케이스 데이터 | `POST /api/cases/{c}/fields` · `POST·GET /api/cases/{c}/archive` · `GET …/archive/file` · `POST /api/cases/{c}/train_sample?spec_hash=` |
+| 학습 데이터 | `POST·GET /api/studies/{s}/datasets` · `GET /api/datasets/{d}` · `GET /api/datasets/{d}/manifest` |
 | 모델·Simulator | `GET /api/projects/{p}/models` · `GET /api/models/{m}/spec` · `POST …/deploy·predict·predict_batch` · 공유 `/api/models/{m}/shares`, `/api/shares/{t}/…` · 필드 `/api/field-models/{f}/mesh·predict` |
 | PC Agent | `/api/agent/status·diagnose·install·tools…` · `/api/projects/{p}/local/folder·tree·open` · 배포 `/api/releases…` · `/api/instances…` · `/api/setup.exe`·`/api/install.ps1` |
 
@@ -459,7 +469,7 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 - `project_updated` · `agent_event`(대화) · `agent_status`
 
 PC Agent 메시지(`/ws/agent`, `server/app/agent/link.py` 머리 주석)
-- 서버 → Agent: `session.new·load·prompt·cancel`, `permission.reply`, `case.run`, `case.extract`, `local.*`, `tools.*`, `agent.install·update`
+- 서버 → Agent: `session.new·load·prompt·cancel`, `permission.reply`, `case.run`, `case.extract`, `case.train_sample`, `local.*`, `tools.*`, `agent.install·update`
 - Agent → 서버: `hello`, `heartbeat`, `agent.event`, `agent.permission`, `case.status`(results·images·fields·archive, extract)
 
 ---
@@ -469,7 +479,7 @@ PC Agent 메시지(`/ws/agent`, `server/app/agent/link.py` 머리 주석)
 |---|---|
 | dds-flow | `propose_flow` · `get_flow` · `update_node` · `publish_artifact` · `publish_image` · `set_project_info` · `get_report_context` · `write_report` · `make_report` |
 | dds-cae | `case_contract` · `list_tools` · `project_folder` · `run_script` |
-| dds-study | `list_adapters` · `create_study`(outputs) · `add_outputs` · `generate_doe` · `run_cases` · `get_study` · `case_data` · `train_surrogate` · `suggest_next` · `optimize` · `train_field_model` · `deploy_model` · `predict` |
+| dds-study | `list_adapters` · `create_study`(outputs) · `add_outputs` · `generate_doe` · `run_cases` · `get_study` · `case_data` · `train_surrogate` · `suggest_next` · `optimize` · `train_field_model` · `build_dataset` · `deploy_model` · `predict` |
 | dds-live | `live_status` · `live_launch` · `live_info` · `live_set_params` · `live_view` · `live_undo` · `live_exec` · `live_result` · `live_capture` |
 
 툴을 더하면 `frontend/src/chat/labels.ts`에 쉬운 이름도 더한다(대화의 "작업 N건" 묶음과 실행 확인 카드에 쓰인다).

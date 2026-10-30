@@ -363,7 +363,8 @@ def _pack_on_server(job: dict, run_dir: Path) -> dict | None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         s = pack_case(run_dir, out=dest, meta={"case_id": job["case_id"], "study_id": job["study_id"],
-                                                "project_uid": job.get("project_uid", ""), "adapter": job["adapter"]})
+                                                "project_uid": job.get("project_uid", ""), "adapter": job["adapter"]},
+                      units=(job.get("adapter_config") or {}).get("units"))
     except Exception as e:  # 묶지 못해도 해석 결과(스칼라)는 그대로 둔다
         log.exception("case.h5 묶기 실패")
         return {"ok": False, "error": str(e)}
@@ -394,11 +395,15 @@ def train_field(db: Session, study: models.Study, field: str, flow_id=None, node
     from .fieldmodel import load_snapshot, train_field_rom
     names = _var_names(study)
     done = [c for c in study.cases if c.status == "complete" and _has_field(study, c, field)]
+    # 빠진 케이스를 조용히 넘기지 않는다: 큰 case.h5는 PC에만 있어 서버에서 읽을 수 없다
+    excluded = [{"case_id": c.id, "reason": "case.h5가 PC에만 있습니다" if (c.archive or {}).get("stored") == "pc" else f"'{field}' 필드가 없습니다"}
+                for c in study.cases if c.status == "complete" and c not in done]
     if len(done) < 4:
-        raise ValueError(f"'{field}' 필드가 있는 완료 케이스가 4개 이상 필요합니다 (현재 {len(done)}개)")
+        raise ValueError(f"'{field}' 필드가 있는 완료 케이스가 4개 이상 필요합니다 (현재 {len(done)}개, 제외 {len(excluded)}개)")
     snaps = [_snapshot(study, c, field, load_snapshot) for c in done]
     X = np.array([[c.params[v] for v in names] for c in done])
     rom = train_field_rom(names, field, X, snaps)
+    rom.info["excluded"] = excluded
     fm = models.FieldModel(study_id=study.id, field=field, n_nodes=rom.n_nodes, n_train=len(done),
                            shape_varies=rom.shape_varies, info=rom.info, path="")
     db.add(fm)
@@ -410,6 +415,8 @@ def train_field(db: Session, study: models.Study, field: str, flow_id=None, node
     i = rom.info
     publish_artifact(db, study.project_id, "markdown", f"[{study.name}] {field} 형상·필드 모델",
                      {"text": f"- 학습 케이스 **{i['n_train']}개**, 노드 {rom.n_nodes:,}개, 형상 변화 {'있음(형상도 예측)' if rom.shape_varies else '없음'}\n"
+                              + (f"- 제외 {len(excluded)}개: 케이스 {', '.join(str(x['case_id']) for x in excluded[:10])} ({excluded[0]['reason']} 등)\n" if excluded else "")
+                              +
                               f"- PCA 모드 **{i['modes']}개** (에너지 {i['energy'] * 100:.2f}%, 절단 오차 {i['truncation_error'] * 100:.2f}%)\n"
                               f"- 모드별 GP R²: " + ", ".join(f"{k} {v}" for k, v in i["mode_r2"].items())
                               + "\n- Simulator에서 3D로 볼 수 있습니다."}, flow_id, node_id)

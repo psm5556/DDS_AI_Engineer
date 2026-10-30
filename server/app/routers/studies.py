@@ -287,6 +287,22 @@ def _case_member(case_id: int, user, db) -> tuple[models.Case, models.Study]:
     return c, study
 
 
+async def _receive(file: UploadFile, tmp: Path, limit_mb: int, label: str) -> str:
+    """큰 파일도 메모리에 다 올리지 않고 나눠 쓴다. 돌려주는 값: sha256."""
+    limit, size = limit_mb * 1024 * 1024, 0
+    h = hashlib.sha256()
+    with open(tmp, "wb") as out:
+        while chunk := await file.read(1 << 20):
+            size += len(chunk)
+            if size > limit:
+                out.close()
+                tmp.unlink(missing_ok=True)
+                raise HTTPException(413, f"{label}은(는) {limit_mb} MB까지 올릴 수 있습니다 → PC에 그대로 둡니다")
+            h.update(chunk)
+            out.write(chunk)
+    return h.hexdigest()
+
+
 @router.post("/cases/{case_id}/archive")
 async def upload_archive(case_id: int, file: UploadFile = File(...), user=Depends(get_current_user), db: Session = Depends(get_db)):
     """PC Agent가 케이스 폴더를 묶은 case.h5를 올린다. 크기 제한(archive_max_mb)을 넘으면 PC에만 둔다."""
@@ -295,17 +311,8 @@ async def upload_archive(case_id: int, file: UploadFile = File(...), user=Depend
     c, study = _case_member(case_id, user, db)
     dest = service.archive_path(study.project_id, study.id, c.id)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp, limit, size = dest.with_suffix(".part"), settings.archive_max_mb * 1024 * 1024, 0
-    h = hashlib.sha256()
-    with open(tmp, "wb") as out:  # 큰 파일도 메모리에 다 올리지 않고 나눠 쓴다
-        while chunk := await file.read(1 << 20):
-            size += len(chunk)
-            if size > limit:
-                out.close()
-                tmp.unlink(missing_ok=True)
-                raise HTTPException(413, f"case.h5는 {settings.archive_max_mb} MB까지 올릴 수 있습니다 → PC에 그대로 둡니다")
-            h.update(chunk)
-            out.write(chunk)
+    tmp = dest.with_suffix(".part")
+    sha = await _receive(file, tmp, settings.archive_max_mb, "case.h5")
     try:
         s = summary(tmp)
         if s["format"] != FORMAT:
@@ -314,7 +321,7 @@ async def upload_archive(case_id: int, file: UploadFile = File(...), user=Depend
         tmp.unlink(missing_ok=True)
         raise HTTPException(400, f"case.h5를 읽지 못했습니다: {e}")
     tmp.replace(dest)
-    c.archive = {**(c.archive or {}), **archive_info(s), "stored": "server", "sha256": h.hexdigest()}
+    c.archive = {**(c.archive or {}), **archive_info(s), "stored": "server", "sha256": sha}
     db.commit()
     manager.publish({"type": "case_updated", "project_id": study.project_id, "data": {"id": c.id, "study_id": study.id}})
     return c.archive

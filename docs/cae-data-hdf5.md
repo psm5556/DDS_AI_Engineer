@@ -31,11 +31,16 @@
 | `ok` | 검증 통과 여부 |
 | `packed_at` | 묶은 시각 |
 
-## 2. 파일 구조 (스키마 `dds-cae-h5` v1)
+## 2. 파일 구조 (스키마 `dds-cae-h5` v2, v1 파일도 그대로 읽는다)
 ```
 case.h5
-/                              attrs: format="dds-cae-h5", schema=1, created, packed_at, case_id, study_id, project_uid, adapter, tool, host
-/meta                          attrs: params.<변수>, results.<출력>   · case_json(문자열)
+/                              attrs: format="dds-cae-h5", schema=2, created, packed_at, case_id, study_id, project_uid, adapter, tool, host
+/meta                          attrs: params.<변수>, results.<출력>, units.<종류>   · case_json(문자열)
+/materials/<이름>               attrs: index, model, E, nu, density · 물성표(plastic 등)
+/boundary/<step>/<part>/       fixed_mask (N,6) · prescribed_u (N,6)  병진 3 + 회전 3 자유도
+/loads/<step>/<part>/          nodal_force (N,6) · pressure/<형식> (P,3: 요소 행, 면 번호, 값)
+/loads/<step>/body             attrs: gravity, rotation(JSON)
+/mesh/<part>/element_material/<형식>   (M,) 요소별 재료 번호 · element_thickness/<형식> (M,) 쉘 두께
 /mesh/<part>/nodes             (N,3) 좌표
 /mesh/<part>/node_ids          (N,)  노드 번호
 /mesh/<part>/elements/<형식>    (M,k) 연결(노드 인덱스, 빈 자리 -1)
@@ -113,3 +118,57 @@ float32 = false       # true면 실수를 4바이트로(손실 있음)
 - 실제 큰 모델의 case.h5 크기·묶는 시간: 원본 대비 압축률, PC 디스크·서버 디스크 여유
 - 툴별 추출 스크립트: 사내 버전 결과 파일 읽기(lasso·pyNastran·Abaqus bulkDataBlocks)
 - 업로드 크기 기준(`upload_max_mb`)과 서버 보관 기간 정책
+- Abaqus 입력 덱 추출기: CAE가 쓴 실제 덱, 큰 덱의 시간, 적분점·위치별 응력의 노드 평균이 Abaqus 뷰어 값과 맞는지
+
+## 8. 학습 데이터 (train.h5 · 데이터셋)
+신경망 형상 학습에 쓰는 데이터다. 계획은 [shape-learning-plan.md](shape-learning-plan.md). 코드: `cae_adapters/deck.py`(입력 덱) · `train_h5.py`(샘플) · `meshops.py` · `server/app/study/dataset.py`(데이터셋).
+
+### 8-1. 재료·경계조건·하중 추출
+- `pack_case`가 묶을 때 입력 덱에서 함께 뽑는다. 큰 덱은 `/files`에 들어가지 않고, 원본이 나중에 지워질 수 있기 때문이다.
+- 지금 읽는 덱은 **Abaqus `.inp`** 하나다(플랫·파트/인스턴스, `*INCLUDE`). 다른 툴은 `not_extracted`로 표시된다.
+- 항목(`materials`·`boundary`·`loads`)마다 manifest `extraction`에 상태를 적는다.
+
+| 상태 | 뜻 | train.h5 |
+|---|---|---|
+| `ok` | 추출함 | 값을 넣는다 |
+| `none` | 덱을 읽었고 해당 조건이 없다 | 0으로 넣는다 |
+| `not_extracted` | 추출하지 못했다(이유는 `reason`) | **넣지 않는다.** 모르는 것을 0으로 두지 않는다 |
+
+- 세트 이름을 못 찾거나, `*PARAMETER` 값을 풀지 못했거나, 노드가 메쉬에 없으면 추측하지 않고 `not_extracted`로 둔다.
+- `warnings`에 담지 못한 것을 적는다: `*COUPLING`·`*TIE`·접촉 같은 구속, `AMPLITUDE`(시간에 따른 크기), 그 밖의 분포 하중.
+- 플랫폼 파이썬 스크립트는 `CaseH5.add_boundary`·`set_extraction` 등으로 직접 써도 된다. 덱이 없으면 그 내용이 유지된다.
+- 단위는 스터디 `adapter_config.units`(`{"length":"mm","force":"N","stress":"MPa","time":"s"}`)에서 받는다. 덱에는 단위가 없다.
+
+### 8-2. 학습 샘플 `train.h5` (스키마 `dds-train-h5` v1, 케이스 하나 = 샘플 하나)
+```
+/                       attrs: format, schema, case_id, study_id, project_uid, tool, step, geometry_source, units_known, length_unit, force_unit, stress_unit
+/geometry/nodes         (N,3) float32  변형 전 좌표(모든 파트를 이어 붙임)
+/geometry/surface       (T,3) int32    3D 보기용
+/geometry/normals       (N,3) float32  표면 법선, 표면이 아닌 노드는 0
+/geometry/node_attrs/   part_id · material_id · youngs_modulus · density · thickness (N,)
+/inputs/fixed_mask      (N,6) uint8    고정 표시
+/inputs/prescribed_u    (N,6) float32  강제 변위
+/inputs/nodal_load      (N,6) float32  절점 하중 + 압력을 옮긴 값 + 모멘트
+/conditions             attrs: params.*, results.*, global.gravity, global.rotation, extraction(JSON)
+/targets/time           (F,)
+/targets/<표준 이름>     (F,N,C) float32  노드 기준. attrs: unit, source_field, components
+/qc                     attrs: nodes, unmapped_rows, nan_nodes, skipped
+```
+- 압축은 float32 + gzip(4) + shuffle, 청크는 프레임 하나.
+- 형상은 항상 변형 전 좌표다. 변형 좌표(`coordinates`)가 입력에 들어가면 답이 섞인다. `read_snapshot`은 Simulator 표시를 위해 변형 좌표를 그대로 돌려준다.
+- 단위는 mm·N·MPa로 맞춘다. `adapter_config.units`가 없으면 값을 그대로 두고 `units_known=false`로 표시한다.
+- 표준 이름: `displacement`·`von_mises`·`stress`·`strain`·`plastic_strain`·`temperature`(`train_h5.STANDARD`). 그 밖의 필드는 요청하면 이름 그대로 넣는다.
+- 요소·적분점 값은 요소 평균 후 노드 평균으로 옮긴다. Mises는 성분을 평균한 뒤 계산한다.
+- 값이 없는 파트의 노드는 NaN이다. 학습기는 NaN을 손실에서 뺀다.
+- 기존 `fields/*.npz`만 있으면 노드 번호가 없어 그 좌표를 쓰고 `geometry_source="field_points"`로 표시한다. 그 좌표는 변형 형상일 수 있다.
+- **고유모드는 아직 맞추지 않는다.** 모드의 부호와 순서가 케이스마다 달라 학습 전에 MAC 정렬이 필요하다.
+
+### 8-3. 데이터셋
+- `POST /api/studies/{id}/datasets` 또는 MCP `dds-study.build_dataset`. 바로 돌아오고 `status`가 `building → ready | failed`로 바뀐다.
+- 샘플은 서버에 `case.h5`가 있으면 서버에서, PC에만 있으면 그 PC Agent(`case.train_sample`)가 만들어 올린다. 그래서 큰 케이스도 학습에 들어간다.
+- 위치: `data/training/samples/project_<p>/study_<s>/case_<c>__<조건 해시>.train.h5`, `data/training/datasets/<id>/manifest.json`.
+- 조건(`targets`·`frames`·`step`)이 같으면 샘플을 다시 쓰고, 다르면 새 파일을 만든다. 만든 데이터셋은 고치지 않는다.
+- 분할은 케이스 단위(시험 15%·검증 15%)다. 설계변수가 같은 케이스는 같은 쪽에 두고, 시험의 1/3은 설계 공간 가장자리에서 고른다.
+- 통계(`stats`: 성분별 평균·표준편차·최소·최대)는 학습 분할에서만 낸다.
+- 빠진 케이스는 `excluded`에 이유와 함께, 일부 케이스에만 있는 입력은 `inputs_dropped`에 남고 학습 입력에서 빠진다. 샘플이 4개 미만이면 `failed`다.
+- 지금은 스터디 하나 단위다. 스터디를 섞는 일은 계획의 6단계다.

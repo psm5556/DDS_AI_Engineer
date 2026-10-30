@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -37,7 +38,8 @@ class CaseExecutor:
 
     def submit(self, job: dict):
         self.queued += 1
-        self.pool.submit(self._run, self._extract if job.get("type") == "case.extract" else self._run_case, job)
+        fn = {"case.extract": self._extract, "case.train_sample": self._train_sample}.get(job.get("type"), self._run_case)
+        self.pool.submit(self._run, fn, job)
 
     def _run(self, fn: Callable[[dict], None], job: dict):
         self.queued -= 1
@@ -47,15 +49,41 @@ class CaseExecutor:
         finally:
             self.running -= 1
 
+    def _case_dir(self, job: dict) -> Path:
+        run_dir = Path(job["run_dir"]) if job.get("run_dir") else None
+        if run_dir and run_dir.is_dir():
+            return run_dir
+        # 작업 폴더를 옮겼으면 스터디 폴더에서 다시 찾는다
+        sdir = self.s.workspace.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
+                                          job.get("project_uid"))
+        found = sorted((sdir / "cases").glob(f"C{job['case_id']:04d}_*"))
+        return found[0] if found else sdir / "cases" / f"C{job['case_id']:04d}"
+
+    def _train_sample(self, job: dict):
+        """학습 데이터: case.h5에서 학습 샘플(train.h5)을 만들어 올린다. case.h5가 너무 커서 PC에만 있어도 학습에 쓸 수 있게 한다."""
+        from cae_adapters.h5store import H5_NAME
+        from cae_adapters.train_h5 import build_sample
+
+        error = None
+        try:
+            h5 = self._case_dir(job) / H5_NAME
+            if not h5.is_file():
+                raise FileNotFoundError(f"이 PC에 case.h5가 없습니다: {h5}")
+            with tempfile.TemporaryDirectory(prefix="dds_train_") as tmp:  # 케이스 폴더에 남기지 않는다(case.h5 목록에 섞인다)
+                out = Path(tmp) / "train.h5"
+                build_sample(h5, out, job.get("spec") or {})
+                self.api.upload(f"/api/cases/{job['case_id']}/train_sample?spec_hash={job['spec_hash']}", out)
+        except Exception as e:  # noqa: BLE001 — 어떤 실패든 이유를 서버로 보내 화면에 보여 준다
+            log.warning("학습 샘플 실패 C%s: %s", job["case_id"], e)
+            error = str(e)[:500]
+        self.report({"type": "case.train_sample", "dataset_id": job["dataset_id"], "case_id": job["case_id"], "ok": error is None, "error": error})
+
     def _extract(self, job: dict):
         """Output 추가: 이미 해석한 케이스 폴더에서 새 Output만 뽑아 보고한다(해석은 다시 하지 않는다)."""
         ws = self.s.workspace
         sdir = ws.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
                             job.get("project_uid"))
-        run_dir = Path(job["run_dir"]) if job.get("run_dir") else None
-        if not (run_dir and run_dir.is_dir()):  # 작업 폴더를 옮겼으면 스터디 폴더에서 다시 찾는다
-            found = sorted((sdir / "cases").glob(f"C{job['case_id']:04d}_*"))
-            run_dir = found[0] if found else sdir / "cases" / f"C{job['case_id']:04d}"
+        run_dir = self._case_dir(job)
         try:
             out = get_adapter(job["adapter"]).extract(
                 job["params"], run_dir, job.get("adapter_config") or {}, job.get("steps") or [], job.get("names") or [],
@@ -112,7 +140,7 @@ class CaseExecutor:
             s = pack_case(run_dir, meta={"case_id": job["case_id"], "study_id": job["study_id"], "adapter": job.get("adapter", ""),
                                          "project_uid": job.get("project_uid") or "", "host": os.environ.get("COMPUTERNAME", "")},
                           text_max_mb=cfg["text_max_mb"], hash_max_mb=cfg["hash_max_mb"], compression=cfg["compression"],
-                          level=cfg["level"], float32=cfg["float32"])
+                          level=cfg["level"], float32=cfg["float32"], units=(job.get("adapter_config") or {}).get("units"))
         except Exception as e:
             log.exception("case.h5 묶기 실패")
             return {"ok": False, "error": f"case.h5 묶기 실패: {e}", "stored": "pc"}

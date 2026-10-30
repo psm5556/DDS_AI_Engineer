@@ -162,6 +162,7 @@ class Case(TimestampMixin, Base):
     fields = Column(JSON, default=list)  # 업로드된 필드 이름 목록 (fields/<이름>.npz)
     # 해석 데이터 묶음(case.h5, HDF5) 정보: {stored: server|pc, size, sha256, pc_path, field_names, frames, raw, ok, packed_at}
     archive = Column(JSON)
+    train_samples = Column(JSON)  # 학습 샘플(train.h5): 조건 해시 → {path, sha256, size, nodes, frames, targets, inputs, …}
     error = Column(Text)
 
 
@@ -241,6 +242,32 @@ class Attachment(Base):
     size = Column(Integer, nullable=False)
     sha256 = Column(String(64), nullable=False)
     stored = Column(String(500), nullable=False)  # files_dir 기준 상대 경로
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class TrainingDataset(Base):
+    """학습 데이터셋: 한 스터디의 학습 샘플 묶음. 만들면 고치지 않는다(manifest.json). 조건이 바뀌면 새로 만든다."""
+    __tablename__ = "training_datasets"
+    id = Column(Integer, primary_key=True)
+    study_id = Column(Integer, ForeignKey("studies.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(200), nullable=False)
+    spec = Column(JSON, default=dict)  # {targets, frames, step}
+    status = Column(String(20), default="building", nullable=False)  # building | ready | failed
+    pending = Column(JSON, default=list)  # 아직 샘플을 기다리는 케이스
+    excluded = Column(JSON, default=list)  # [{case_id, reason}]
+    n_samples = Column(Integer, default=0, nullable=False)
+    splits = Column(JSON, default=dict)  # {train, val, test}
+    targets = Column(JSON, default=list)
+    inputs = Column(JSON, default=list)
+    inputs_dropped = Column(JSON, default=list)  # [{name, reason}]
+    units_known = Column(Boolean, default=False, nullable=False)
+    same_mesh = Column(Boolean, default=False, nullable=False)
+    size = Column(Integer, default=0, nullable=False)
+    error = Column(Text)
+    manifest_path = Column(String(500))
+    flow_id = Column(Integer)
+    node_id = Column(String(100))
+    created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=_now, nullable=False)
 
 
