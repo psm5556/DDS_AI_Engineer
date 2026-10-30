@@ -53,9 +53,9 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
       <aside className="sidebar rail" aria-label="사이드바 (접힘)">
         <button className="icon-btn rail-btn" onClick={layout.toggle} aria-label="사이드바 펼치기" title="사이드바 펼치기 (Ctrl+B)"><PanelLeftOpen size={18} /></button>
         <Link className="icon-btn rail-btn" to="/" aria-label="새 프로젝트" title="새 프로젝트"><SquarePen size={18} /></Link>
-        <Link className="icon-btn rail-btn" to="/tools" aria-label="CAD·CAE 툴" title="CAD·CAE 툴"><Wrench size={18} /></Link>
         <span className="grow" />
         <AgentStatusRow compact />
+        <Link className="icon-btn rail-btn" to="/tools" aria-label="CAD·CAE 툴" title="CAD·CAE 툴"><Wrench size={18} /></Link>
         <Link className="icon-btn rail-btn" to="/settings" aria-label="설정" title="설정"><Settings size={18} /></Link>
       </aside>
     );
@@ -106,7 +106,6 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         </div>
         <nav className="side-nav-list" aria-label="바로 가기">
           <button className="side-nav" onClick={() => nav("/")}><SquarePen size={16} />새 프로젝트</button>
-          <NavLink className="side-nav" to="/tools"><Wrench size={16} />CAD·CAE 툴</NavLink>
           <label className="side-nav side-find">
             <Search size={16} />
             <input type="search" placeholder="프로젝트 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="프로젝트 검색" />
@@ -132,6 +131,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
             </button>
             {meOpen && (
               <div className="side-me-menu" role="menu" onClick={() => setMeOpen(false)}>
+                <Link role="menuitem" to="/tools"><Wrench size={15} />CAD·CAE 툴</Link>
                 <Link role="menuitem" to="/settings"><Settings size={15} />설정</Link>
                 {user.is_admin && <Link role="menuitem" to="/admin"><Shield size={15} />관리</Link>}
                 <button role="menuitem" onClick={toggleTheme}>{theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}{themeLabel}</button>
