@@ -43,6 +43,15 @@ const step = async (label, fn) => {
 
 console.log(`UI 점검: ${BASE}${DEMO ? " (데모 전체 과정 포함)" : ""}`);
 await page.goto(BASE + "/login");
+await step("로그인 화면 테마 전환", async () => {
+  const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
+  const before = await theme();
+  const button = () => page.locator(".login-top button");
+  await button().click();
+  if ((await theme()) === before) throw new Error("테마가 바뀌지 않았습니다");
+  await button().click();
+  if ((await theme()) !== before) throw new Error("테마가 돌아오지 않았습니다");
+});
 await page.getByLabel("아이디").fill(USER);
 await page.getByLabel("PIN 1번째 자리").click();
 await page.keyboard.type(PIN);

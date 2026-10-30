@@ -364,7 +364,7 @@ def main():
         "id": "structural", "kind": "구조해석", "name": "드럼 스파이더", "method": "선형 정적 FEM", "element": "2차 사면체(C3D10)",
         "elements": int(len(tets)), "nodes": int(len(pts0)), "field": "von Mises", "unit": "MPa", "vmin": 0.0, "vmax": round(vmax, 1),
         "scale": scale, "lo": lo, "span": span, "mode": "designs", "seconds": 15, "yaw": [-1.05, 0.03], "pitch": 0.72,
-        "steps": [{**r, "maxNode": keep_index[res[3]]} for r, res in zip(rows, results)], "note": "구속부 특이점 제외",
+        "steps": [{**r, "maxNode": keep_index[res[3]]} for r, res in zip(rows, results)], "note": "구속부 특이점 제외 · 범례 상한 초과는 빨강",
         "readout": [["판 두께", "t", "mm"], ["팔 끝 폭", "w", "mm"], ["최대 응력", "sigma", "MPa"], ["질량", "mass", "g"]],
     }
     save("structural", meta, {

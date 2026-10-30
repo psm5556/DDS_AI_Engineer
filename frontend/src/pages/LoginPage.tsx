@@ -1,3 +1,4 @@
+import { Moon, Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { post } from "../api";
@@ -6,6 +7,7 @@ import { Wordmark } from "../components/AgentGlyph";
 import { HeroMesh } from "../components/HeroMesh";
 import { PinInput } from "../components/PinInput";
 import { shake } from "../motion";
+import { useTheme } from "../theme";
 
 /** 아래 띠: 일하는 흐름. 주홍 = 엔지니어가 하는 일, 청록 = AI가 하는 일(소개 자료와 같은 뜻) */
 const FLOW: [string, string, "human" | "ai"][] = [
@@ -19,7 +21,9 @@ export default function LoginPage() {
   const ret = params.get("return_to") || "/";
   const safeReturn = ret.startsWith("/") && !ret.startsWith("//") ? ret : "/";
   const { user, login } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
   const nav = useNavigate();
+  const [phase, setPhase] = useState(0); // 3D 시나리오가 지금 어느 단계인지. 아래 띠가 따라간다
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -57,7 +61,10 @@ export default function LoginPage() {
     <div className={`login-stage ${username || pin ? "quiet" : ""}`}>
       <header className="login-top">
         <Wordmark size="l" />
-        <span className="login-tag">CAE 에이전트</span>
+        <span className="login-top-right">
+          <span className="login-tag">CAE 에이전트</span>
+          <button type="button" className="small ghost" onClick={toggleTheme}>{theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}{theme === "dark" ? "밝은 화면" : "어두운 화면"}</button>
+        </span>
       </header>
       <section className="login-hero" aria-label="DDS Conversa 소개">
         <h1>
@@ -65,7 +72,7 @@ export default function LoginPage() {
           <span className="line"><span>AI가 CAD·CAE를</span></span>
           <span className="line"><span>돌립니다</span></span>
         </h1>
-        <HeroMesh />
+        <HeroMesh onPhase={setPhase} />
       </section>
       <div className="login-side">
         <form ref={form} className="login-card stack" onSubmit={(e) => { e.preventDefault(); void (mode === "login" ? doLogin() : doRegister()); }}>
@@ -94,7 +101,7 @@ export default function LoginPage() {
       </div>
       <ol className="login-flow" aria-label="일하는 흐름">
         {FLOW.map(([t, d, who], i) => (
-          <li key={t} className={who}><span className="n">{String(i + 1).padStart(2, "0")}</span><b>{t}</b><small>{d}</small></li>
+          <li key={t} className={`${who} ${i === phase ? "on" : ""}`}><span className="n">{String(i + 1).padStart(2, "0")}</span><b>{t}</b><small>{d}</small></li>
         ))}
       </ol>
     </div>

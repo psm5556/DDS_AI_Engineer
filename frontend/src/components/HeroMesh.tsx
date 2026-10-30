@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { token } from "../design/token";
 import { reducedMotion } from "../motion";
 
-/** 로그인 첫인상: 구조해석·열유동해석·낙하해석의 실제 계산 결과를 후처리기처럼 보여 준다.
+/** 로그인 첫인상: 웹앱으로 일하는 과정을 실제 해석 결과와 함께 보여 준다.
+ *  요청 → AI 계획 → 승인 → 실행 → 보고서. 실행 단계에서 모델이 설계마다 바뀌고 표의 숫자가 쌓이며, 결론은 그 숫자에서 고른다.
  *  결과는 scripts/hero/ 의 생성기가 CAD → 메쉬 → 해석으로 만든 파일이다(public/hero/). 형상·하중은 예시이며 실제 제품 데이터가 아니다.
- *  '움직임 줄이기'면 멈춘 한 장을, WebGL을 못 쓰면 CAD 윤곽선을 정지 그림으로 보인다. */
+ *  '움직임 줄이기'면 끝난 모습 한 장을, WebGL을 못 쓰면 CAD 윤곽선과 끝난 대화를 보인다. */
 const IDS = ["structural", "thermal", "drop"];
 const BANDS = 12;
 const FADE = 0.6; // 해석이 바뀔 때 흐려지는 시간(초)
+const VIEW = 1.28; // 왼쪽 대화 칸을 비우려고 모델을 조금 작게 보인다
 
 /** 후처리기의 기본 무지개 띠: 파랑(낮음) → 빨강(높음) */
 function bandColors(): [number, number, number][] {
@@ -62,18 +64,142 @@ async function loadResult(id: string): Promise<Result | null> {
   }
 }
 
-/** 시각 → 앞뒤 단계와 사이 비율 */
+type Step = Record<string, number> & { maxNode: number };
+interface Script {
+  ask: string; plan: string[]; report: string;
+  cols?: [string, string, number][]; // 표: 제목, 값 이름, 소수 자리
+  pass?: (s: Step) => boolean; limit?: string;
+  pick: (steps: Step[]) => number; // 결론이 되는 단계. 아래 숫자에서 고른다
+  sum: (b: Step, steps: Step[], i: number) => string;
+}
+const lowest = (steps: Step[], key: string, ok: (s: Step) => boolean) => steps.reduce((best, s, i) => (ok(s) && (best < 0 || s[key] < steps[best][key]) ? i : best), -1);
+const highest = (steps: Step[], key: string) => steps.reduce((best, s, i) => (s[key] > steps[best][key] ? i : best), 0);
+
+/** 사람이 웹앱에 하는 요청과, 그 결과. 숫자는 모두 해석 결과 파일에서 온다 */
+const SCRIPTS: Record<string, Script> = {
+  structural: {
+    ask: "드럼 스파이더 무게를 줄여 줘. 응력은 100 MPa 아래로.",
+    plan: ["두께·팔 폭을 설계 변수로", "설계 5개 메쉬·구조해석", "응력 조건 확인·비교", "보고서 작성"],
+    report: "스파이더 경량화 보고서",
+    cols: [["두께 mm", "t", 1], ["응력 MPa", "sigma", 1], ["질량 g", "mass", 0]],
+    pass: (x) => x.sigma <= 100, limit: "초과",
+    pick: (st) => lowest(st, "mass", (x) => x.sigma <= 100),
+    sum: (b, st, i) => `가장 가벼운 설계는 ${i + 1}번입니다. ${b.mass.toFixed(0)} g으로 기준 설계보다 ${(((st[0].mass - b.mass) / st[0].mass) * 100).toFixed(0)}% 줄었고, 응력은 ${b.sigma.toFixed(0)} MPa입니다.`,
+  },
+  thermal: {
+    ask: "칩이 85℃를 넘지 않으면서 압력 손실이 가장 작은 핀 높이를 찾아 줘.",
+    plan: ["핀 높이 3개로 형상 만들기", "공기 유동·열 해석", "온도 조건 확인·비교", "보고서 작성"],
+    report: "히트싱크 핀 높이 검토 보고서",
+    cols: [["핀 mm", "H", 0], ["최고 ℃", "max", 1], ["손실 mPa", "dp", 0]],
+    pass: (x) => x.max <= 85, limit: "초과",
+    pick: (st) => lowest(st, "dp", (x) => x.max <= 85),
+    sum: (b) => `핀 높이 ${b.H.toFixed(0)} mm가 맞습니다. 최고 온도 ${b.max.toFixed(1)}℃, 압력 손실 ${b.dp.toFixed(0)} mPa입니다.`,
+  },
+  drop: {
+    ask: "이 폰을 1 m에서 모서리로 떨어뜨리면 어디가 가장 위험해?",
+    plan: ["낙하 자세·충돌 속도 설정", "충돌 동해석", "응력이 모이는 곳 찾기", "보고서 작성"],
+    report: "모서리 낙하 검토 보고서",
+    pick: (st) => highest(st, "max"),
+    sum: (b) => `충돌한 모서리의 프레임이 가장 위험합니다. 최대 응력 ${b.max.toFixed(0)} MPa, 그 순간 바닥 접촉력은 ${b.force.toFixed(0)} N입니다.`,
+  },
+};
+
+/** 단계별 시각(초). 0 요청 → 1 계획 → 2 승인 → 3 실행 → 4 보고서 */
+function times(r: Result) {
+  const t1 = 2.8, t2 = t1 + 3.2, t3 = t2 + 1.6;
+  const t4 = t3 + (r.meta.mode === "frames" ? Math.min(r.meta.seconds, 8) : r.frames * 2);
+  return { t1, t2, t3, t4, total: t4 + 6.5 };
+}
+const phaseAt = (r: Result, local: number) => {
+  const t = times(r);
+  return local < t.t1 ? 0 : local < t.t2 ? 1 : local < t.t3 ? 2 : local < t.t4 ? 3 : 4;
+};
+const pickOf = (r: Result) => Math.max(0, SCRIPTS[r.meta.id]?.pick(r.meta.steps) ?? 0);
+
+/** 시각 → 앞뒤 단계와 사이 비율. 실행 전에는 첫 모델에 머물고, 끝나면 결론이 되는 단계에 머문다 */
 function timeline(r: Result, local: number): { a: number; b: number; f: number; rise: number } {
-  const n = r.frames, m = r.meta;
-  if (m.mode === "frames") { // 낙하: 떨어지는 구간 → 충돌 재생 → 마지막에서 잠깐 멈춤
-    const fall = m.fall ?? 0.9, play = m.seconds - fall - 1.4;
-    if (local < fall) return { a: 0, b: 0, f: 0, rise: 1 - local / fall };
-    const x = Math.min(1, (local - fall) / play) * (n - 1), a = Math.min(n - 2, Math.floor(x));
-    return { a, b: a + 1, f: x - a, rise: 0 };
+  const n = r.frames, m = r.meta, T = times(r), best = pickOf(r);
+  const frames = m.mode === "frames";
+  if (local < T.t3) return { a: 0, b: 0, f: 0, rise: frames ? 1 : 0 };
+  const t = local - T.t3, run = T.t4 - T.t3;
+  if (frames) { // 낙하: 떨어지는 구간 → 충돌 재생 → 가장 위험한 순간으로
+    const fall = m.fall ?? 0.9;
+    if (t < fall) return { a: 0, b: 0, f: 0, rise: 1 - t / fall };
+    if (t < run) {
+      const x = ((t - fall) / (run - fall)) * (n - 1), a = Math.min(n - 2, Math.floor(x));
+      return { a, b: a + 1, f: x - a, rise: 0 };
+    }
+    return { a: n - 1, b: best, f: Math.min(1, (t - run) / 0.6), rise: 0 };
   }
-  const x = (local / m.seconds) * n, a = Math.floor(x) % n, f = x - Math.floor(x); // 설계: 각 설계에 머물다 다음으로 부드럽게
-  const ease = f < 0.55 ? 0 : ((f - 0.55) / 0.45) ** 2 * (3 - 2 * ((f - 0.55) / 0.45));
-  return { a, b: (a + 1) % n, f: ease, rise: 0 };
+  if (t >= run) return { a: best, b: best, f: 0, rise: 0 };
+  const x = (t / run) * n, a = Math.min(n - 1, Math.floor(x)), g = x - a; // 설계: 각 설계에 머물다 다음으로 부드럽게
+  const ease = g < 0.55 ? 0 : ((g - 0.55) / 0.45) ** 2 * (3 - 2 * ((g - 0.55) / 0.45));
+  return { a, b: a < n - 1 ? a + 1 : best, f: ease, rise: 0 };
+}
+
+/** 왼쪽 대화 칸: 웹앱의 대화·작업 흐름·표·보고서를 그대로 줄인 모습 */
+function Scenario({ r, phase, step, typed }: { r: Result; phase: number; step: number; typed: RefObject<HTMLSpanElement> }) {
+  const sc = SCRIPTS[r.meta.id];
+  const st = r.meta.steps;
+  if (!sc) return null;
+  const best = pickOf(r), done = phase >= 4;
+  // 실행 중 어느 일을 하는지: 처음 일은 시작할 때 끝나고, 마지막 일은 보고서 단계에서 끝난다
+  const state = (i: number) => {
+    if (phase < 3) return "";
+    if (i === 0) return "ok";
+    if (phase === 3) return i === 1 ? "run" : "";
+    return "ok";
+  };
+  const shown = done ? st.length - 1 : step;
+  return (
+    <div className="hero-scn" key={r.meta.id}>
+      <div className="scn-user"><span ref={typed}>{phase > 0 ? sc.ask : ""}</span>{phase === 0 && <i className="scn-caret" />}</div>
+      {phase >= 1 && (
+        <div className="scn-ai">
+          <p>이렇게 진행할까요?</p>
+          <ol className="scn-plan">{sc.plan.map((t, i) => <li key={t} className={state(i)} style={{ animationDelay: `calc(var(--dur) * ${i})` }}>{t}</li>)}</ol>
+        </div>
+      )}
+      {phase === 2 && <span className="scn-approve">승인하고 실행</span>}
+      {phase >= 3 && sc.cols && (
+        <table className="scn-table">
+          <thead><tr><th>설계</th>{sc.cols.map(([h]) => <th key={h}>{h}</th>)}<th /></tr></thead>
+          <tbody>{st.slice(0, shown + 1).map((x, i) => {
+            const bad = sc.pass && !sc.pass(x);
+            return (
+              <tr key={i} className={done ? (i === best ? "best" : "") : i === step ? "now" : ""}>
+                <td>{i + 1}</td>{sc.cols!.map(([h, k, d]) => <td key={h}>{x[k].toFixed(d)}</td>)}
+                <td className={bad ? "bad" : ""}>{i < step || done ? (bad ? sc.limit : "✓") : ""}</td>
+              </tr>
+            );
+          })}</tbody>
+        </table>
+      )}
+      {phase >= 3 && !sc.cols && <DropTrace steps={st} step={done ? best : step} upto={done ? st.length - 1 : step} />}
+      {done && (
+        <div className="scn-ai scn-end">
+          <p>{sc.sum(st[best], st, best)}</p>
+          <span className="scn-doc"><b>{sc.report}</b><small>Word · HTML 작성 완료</small></span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 낙하: 시각·응력·접촉력과 응력이 시간에 따라 변하는 선 */
+function DropTrace({ steps, step, upto }: { steps: Step[]; step: number; upto: number }) {
+  const peak = Math.max(...steps.map((x) => x.max)) || 1, last = steps[steps.length - 1].t || 1, x = steps[step];
+  const pts = steps.slice(0, upto + 1).map((p) => `${((p.t / last) * 100).toFixed(1)},${(100 - (p.max / peak) * 94).toFixed(1)}`).join(" ");
+  return (
+    <div className="scn-trace">
+      <dl>
+        <div><dt>시각 ms</dt><dd>{x.t.toFixed(2)}</dd></div>
+        <div><dt>최대 응력 MPa</dt><dd>{x.max.toFixed(0)}</dd></div>
+        <div><dt>접촉력 N</dt><dd>{x.force.toFixed(0)}</dd></div>
+      </dl>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polyline points={pts} vectorEffect="non-scaling-stroke" /></svg>
+    </div>
+  );
 }
 
 const fmtValue = (v: number, digits = 0) => v.toFixed(digits);
@@ -102,10 +228,10 @@ attribute float aS;
 varying float vS; varying vec3 vN;
 void main() { vS = aS; vN = normalMatrix * normal; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const FRAG = `
-uniform sampler2D uBands; uniform float uOpacity;
+uniform sampler2D uBands; uniform float uOpacity; uniform float uReveal;
 varying float vS; varying vec3 vN;
 void main() {
-  vec3 base = texture2D(uBands, vec2(clamp(vS, 0.0, 0.9999), 0.5)).rgb;
+  vec3 base = mix(vec3(0.72, 0.73, 0.72), texture2D(uBands, vec2(clamp(vS, 0.0, 0.9999), 0.5)).rgb, uReveal); // 해석 전에는 회색 모델
   vec3 n = normalize(vN);
   float d = abs(dot(n, normalize(vec3(-0.25, 0.45, 0.85))));
   gl_FragColor = vec4(base * (0.62 + 0.42 * d), uOpacity);
@@ -140,15 +266,19 @@ void main() {
   gl_FragColor = vec4(base, uOpacity * smoothstep(0.05, 0.25, s) * 0.85);
 }`;
 
-export function HeroMesh() {
+export function HeroMesh({ onPhase }: { onPhase?: (phase: number) => void }) {
   const box = useRef<HTMLDivElement>(null);
-  const out = useRef<(HTMLElement | null)[]>([]);
+  const typed = useRef<HTMLSpanElement>(null);
+  const phaseCb = useRef(onPhase);
+  phaseCb.current = onPhase;
   const maxLabel = useRef<HTMLDivElement>(null);
   const maxText = useRef<HTMLElement>(null);
   const jump = useRef<(i: number) => void>(() => {});
   const [results, setResults] = useState<Result[]>([]);
   const [noGL, setNoGL] = useState(false);
   const [shown, setShown] = useState(0);
+  const [phase, setPhase] = useState(0);
+  const [step, setStep] = useState(0);
   const current = results[shown] as Result | undefined;
 
   useEffect(() => {
@@ -163,6 +293,7 @@ export function HeroMesh() {
     return () => { live = false; };
   }, []);
 
+  useEffect(() => { phaseCb.current?.(phase); }, [phase]);
   const ready = results.length > 0;
   const liveResults = useRef<Result[]>([]);
   liveResults.current = results;
@@ -174,7 +305,8 @@ export function HeroMesh() {
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     } catch {
-      setNoGL(true); // WebGL을 못 쓰는 PC
+      setNoGL(true); // WebGL을 못 쓰는 PC: 끝난 대화와 윤곽선
+      setPhase(4);
       return;
     }
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
@@ -188,7 +320,7 @@ export function HeroMesh() {
 
     const bandTex = new THREE.DataTexture(new Uint8Array(COLORS.flatMap((c) => [...c.map((v) => Math.round(v * 255)), 255])), BANDS, 1, THREE.RGBAFormat);
     bandTex.magFilter = THREE.NearestFilter; bandTex.minFilter = THREE.NearestFilter; bandTex.needsUpdate = true;
-    const uniforms = { uBands: { value: bandTex }, uOpacity: { value: 1 } };
+    const uniforms = { uBands: { value: bandTex }, uOpacity: { value: 1 }, uReveal: { value: 0 } };
     const skinMat = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     const ink = new THREE.Color(0x101014);
     const meshMat = new THREE.LineBasicMaterial({ color: ink, transparent: true, opacity: 0.16 });
@@ -197,6 +329,8 @@ export function HeroMesh() {
     const lineUniforms = { uBands: { value: bandTex }, uTime: { value: 0 }, uOpacity: { value: 1 } };
     const lineMat = new THREE.ShaderMaterial({ vertexShader: LINE_VERT, fragmentShader: LINE_FRAG, uniforms: lineUniforms, transparent: true, depthWrite: false });
     const floorMat = new THREE.LineBasicMaterial({ color: new THREE.Color(token("--ink-3")), transparent: true, opacity: 0.35 }); // 두 테마 모두 바탕 위에서 보이게
+    const themeWatch = new MutationObserver(() => floorMat.color.set(token("--ink-3"))); // 화면을 바꾸면 바닥 격자도 따라간다
+    themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
     interface Scene3D {
       r: Result; group: THREE.Group; position: THREE.BufferAttribute; scalar: THREE.BufferAttribute; skin: THREE.BufferGeometry; dispose: () => void;
@@ -287,11 +421,11 @@ export function HeroMesh() {
       if (!r) return;
       const m = r.meta;
       const w = el.clientWidth || 1, h = el.clientHeight || 1;
-      const size = m.fit ?? Math.max(...m.span) * 0.72;
+      const size = (m.fit ?? Math.max(...m.span) * 0.72) * VIEW;
       const span = size * Math.max(1, 1000 / w) * Math.max(1, (w / h) * 0.62); // 세로가 짧아도 잘리지 않게
       const high = span * h / w;
-      // 모델은 가운데보다 오른쪽 아래로: 왼쪽 위의 큰 제목과 오른쪽 범례를 피한다
-      const dx = span * 0.1, dy = high * (m.dy ?? 0.16);
+      // 모델은 오른쪽으로: 왼쪽의 제목·대화 칸과 오른쪽 범례를 피한다
+      const dx = span * 0.42, dy = high * (m.dy ?? 0.16);
       camera.left = -span - dx; camera.right = span - dx;
       camera.top = high + dy; camera.bottom = -high + dy;
       camera.updateProjectionMatrix();
@@ -314,6 +448,9 @@ export function HeroMesh() {
     const draw = (s: Scene3D, local: number) => {
       const r = s.r, m = r.meta, { a, b, f, rise } = timeline(r, local);
       const pos = s.position.array as Float32Array, sc = s.scalar.array as Float32Array;
+      const T = times(r), reveal = Math.max(0, Math.min(1, (local - T.t3 - (m.mode === "frames" ? m.fall ?? 0.9 : 0)) / 0.5)); // 해석이 돌기 시작하면 결과 색이 입혀진다
+      uniforms.uReveal.value = reveal;
+      lineUniforms.uOpacity.value = reveal;
       const key = `${a}|${b}|${f.toFixed(3)}|${rise.toFixed(3)}`;
       const moved = key !== s.key; // 한 설계에 머무는 동안은 다시 계산하지 않는다(로그인 입력을 막지 않게)
       s.key = key;
@@ -345,7 +482,7 @@ export function HeroMesh() {
         s.lineS.needsUpdate = true;
       }
       lineUniforms.uTime.value = local;
-      if (s.planeMats) s.planeMats.forEach((pm, k) => { pm.uniforms.uOpacity.value = k === a ? 1 - f : k === b ? f : 0; });
+      if (s.planeMats) s.planeMats.forEach((pm, k) => { pm.uniforms.uOpacity.value = reveal * (a === b ? (k === a ? 1 : 0) : k === a ? 1 - f : k === b ? f : 0); });
       yaw += (mx * 0.45 - yaw) * 0.05;
       pitch += (my * 0.22 - pitch) * 0.05;
       const ang = m.yaw[0] + m.yaw[1] * local + yaw, el2 = m.pitch + pitch;
@@ -353,17 +490,13 @@ export function HeroMesh() {
       camera.position.set(c[0] + Math.cos(ang) * Math.cos(el2) * far, c[1] + Math.sin(ang) * Math.cos(el2) * far, c[2] + Math.sin(el2) * far);
       camera.lookAt(c[0], c[1], c[2]);
       renderer.render(scene, camera);
-      // 값 표시와 최대값 위치
-      const near = f < 0.5 ? a : b, A = m.steps[a], B = m.steps[b];
-      m.readout.forEach(([, key], i) => {
-        const v = A[key] + (B[key] - A[key]) * f;
-        if (out.current[i]) out.current[i]!.textContent = fmtValue(v, Math.abs(v) < 20 ? (m.digits ?? 1) : 0);
-      });
+      // 최대값 위치
+      const near = f < 0.5 ? a : b, A = m.steps[near];
       if (maxLabel.current) {
         const step = m.steps[near];
         vec.set(pos[step.maxNode * 3], pos[step.maxNode * 3 + 1], pos[step.maxNode * 3 + 2]).project(camera);
         maxLabel.current.style.transform = `translate(${((vec.x + 1) / 2) * el.clientWidth}px, ${((1 - vec.y) / 2) * el.clientHeight}px)`;
-        maxLabel.current.style.opacity = rise > 0 ? "0" : "1";
+        maxLabel.current.style.opacity = rise > 0 || reveal < 1 ? "0" : "1";
         if (maxText.current) maxText.current.textContent = `${fmtValue(A.max ?? A.sigma ?? 0, 1)} ${m.unit}`;
       }
     };
@@ -377,9 +510,16 @@ export function HeroMesh() {
       start = performance.now() / 1000;
       frame();
       setShown(i);
+      setPhase(0);
+      setStep(0);
+      if (typed.current) typed.current.textContent = "";
     };
     const still = reducedMotion();
-    const drawStill = () => draw(build(liveResults.current[index]), 0.1); // 움직이지 않는 한 장
+    const drawStill = () => { // 움직이지 않는 한 장: 끝난 모습
+      const s = build(liveResults.current[index]);
+      setPhase(4);
+      draw(s, times(s.r).total - 1);
+    };
     jump.current = (i) => { show(i); if (still) drawStill(); };
 
     const ro = new ResizeObserver(() => { resize(); if (still) drawStill(); });
@@ -400,16 +540,24 @@ export function HeroMesh() {
         const list = liveResults.current;
         const s = build(list[index]);
         let local = Math.max(0, now / 1000 - start); // 프레임 시각은 탭을 바꾼 순간보다 조금 앞설 수 있다
-        if (local > s.r.meta.seconds) { show((index + 1) % list.length); local = 0; }
-        const cur = build(list[index]);
-        canvas.style.opacity = String(Math.min(1, local / FADE, (cur.r.meta.seconds - local) / FADE));
+        if (local > times(s.r).total) { show((index + 1) % list.length); local = 0; }
+        const cur = build(list[index]), T = times(cur.r);
+        canvas.style.opacity = String(Math.min(1, local / FADE, (T.total - local) / FADE));
         draw(cur, local);
+        // 화면의 대화: 단계·표는 바뀔 때만, 글자 치기는 다시 그리지 않고 바로 쓴다
+        setPhase(phaseAt(cur.r, local));
+        setStep(timeline(cur.r, local).a);
+        if (typed.current && local < T.t1) {
+          const ask = SCRIPTS[cur.r.meta.id]?.ask ?? "";
+          typed.current.textContent = ask.slice(0, Math.ceil((Math.min(1, local / (T.t1 - 0.5))) * ask.length));
+        }
       };
       raf = requestAnimationFrame(loop);
     }
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      themeWatch.disconnect();
       window.removeEventListener("pointermove", onMove);
       built.forEach((s) => s.dispose());
       skinMat.dispose(); meshMat.dispose(); edgeMat.dispose(); lineMat.dispose(); floorMat.dispose(); bandTex.dispose();
@@ -427,10 +575,11 @@ export function HeroMesh() {
   return (
     <div className="hero-mesh" aria-hidden="true">
       <div className="hero-canvas" ref={box}>{noGL && current && <StaticDrawing r={current} />}</div>
+      {current && <Scenario r={current} phase={phase} step={step} typed={typed} />}
       {m && !noGL && (
         <>
           <div className="hero-max" ref={maxLabel}><i /><span>Max <b ref={maxText} /></span></div>
-          <div className="hero-legend">
+          <div className={`hero-legend ${phase >= 3 ? "" : "off"}`}>
             <b>{m.field}</b><small>{m.unit}</small>
             <div className="bar">
               <div className="swatch">{COLORS.slice().reverse().map((c, i) => <i key={i} style={{ background: css(c) }} />)}</div>
@@ -441,14 +590,11 @@ export function HeroMesh() {
       )}
       {m && (
         <div className="hero-readout">
-          {m.readout.map(([label, key, unit], i) => (
-            <span key={label}><i>{label}</i><b ref={(n) => { out.current[i] = n; }}>{fmtValue(m.steps[0][key], Math.abs(m.steps[0][key]) < 20 ? (m.digits ?? 1) : 0)}</b> {unit}</span>
-          ))}
           <div className="hero-case">
             <span className="tabs">{results.map((r, i) => (
               <button key={r.meta.id} type="button" tabIndex={-1} className={i === shown ? "on" : ""} onClick={() => jump.current(i)}>{r.meta.kind}</button>
             ))}</span>
-            <em>{m.name} · {m.method} · {m.element} {m.elements.toLocaleString()}개{m.scale ? ` · 변형 ×${m.scale}` : ""}{m.note ? ` · ${m.note}` : ""}<br />예시 모델을 실제로 계산한 결과입니다. 제품 데이터가 아닙니다.</em>
+            <em>{m.name} · {m.method} · {m.element} {m.elements.toLocaleString()}개{m.scale ? ` · 변형 ×${m.scale}` : ""}{m.note ? ` · ${m.note}` : ""}<br />예시 모델을 실제로 계산한 결과입니다. 대화는 사용 흐름을 보여 주는 예시이고, 제품 데이터가 아닙니다.</em>
           </div>
         </div>
       )}
