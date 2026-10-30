@@ -17,7 +17,7 @@ export function AgentGlyph({ state = "idle", size = 28, label }: { state?: Glyph
   );
 }
 
-/** 글자 로고. 그라디언트 사각형 대신 이름과 파란 점으로 */
+/** 글자 로고. 그라디언트 사각형 대신 이름과 주홍 점으로 */
 export function Wordmark({ size }: { size?: "l" }) {
   return <span className={`wordmark ${size ?? ""}`} aria-label="DDS Conversa"><small aria-hidden="true">DDS</small><span aria-hidden="true">Conversa</span><i aria-hidden="true" /></span>;
 }

@@ -3,7 +3,7 @@
    - 밝은 테마: :root,  어두운 테마: :root[data-theme="dark"]  (토큰 이름은 같고 값만 바뀐다)
    - CSS 파일(styles·layout·app·agentic·modern)에는 색 값(hex)을 직접 쓰지 않는다 → server/tests/test_design_tokens.py
    - 근거와 규칙: docs/design-renewal-plan.md
-   원칙: 종이색 바탕 + 잉크 + 강조색 삼성 블루(#1428A0) 하나(주 동작·선택·링크·진행). 파랑 = 엔지니어가 하는 일, 청록 = AI가 하는 일, 호박색 = 확인할 일.
+   원칙: 종이색 바탕 + 잉크 + 강조색 주홍 하나(주 동작·선택·링크·진행). 주홍 = 엔지니어가 하는 일, 청록 = AI가 하는 일, 호박색 = 확인할 일.
    데이터 의미 색: 평균(μ) 청록 --mean · 산포(σ) 보라 --sigma · 모델 불확실성 회청 --epi.
    색만으로 뜻을 전하지 않는다 — 기호(μ, σ, ±)와 글자를 함께 쓴다.
    ============================================================================ */
@@ -98,22 +98,22 @@
   --on-brand: #ffffff;    /* 강조색 바탕 위 글자 */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); /* 종이 질감 */
   --image-bg: #ffffff;    /* 결과 이미지 바탕(투명 PNG가 어두운 테마에서도 읽히게) */
-  --sel: #d5dbf5;
-  --sel-head: #b4beee;
+  --sel: #f7d9cc;
+  --sel-head: #f0bba5;
   --err-row: #fbf1f2;
 
   /* ---------- 강조색 ---------- */
-  --brand: #1428a0;
-  --brand-hover: #0f1f80;
-  --brand-500: #2a40c4;
-  --brand-400: #5b6fe0;
-  --brand-soft: #e8ebf9;
-  --brand-100: #d5dbf5;
-  --brand-200: #b4beee;
-  --brand-solid: #1428a0;       /* 주 버튼 바탕. 어두운 테마에서는 바탕에 묻히지 않게 조금 밝게 */
-  --brand-solid-hover: #0f1f80;
-  --focus: #1428a0;
-  --focus-ring: 0 0 0 3px rgb(20 40 160 / 0.2);
+  --brand: #c2380d;
+  --brand-hover: #a92f0a;
+  --brand-500: #e0501f;
+  --brand-400: #ee7a50;
+  --brand-soft: #fbe9e1;
+  --brand-100: #f7d9cc;
+  --brand-200: #f0bba5;
+  --brand-solid: #d63f10;       /* 주 버튼 바탕 — 두 테마 같게 */
+  --brand-solid-hover: #bc350b;
+  --focus: #d63f10;
+  --focus-ring: 0 0 0 3px rgb(214 63 16 / 0.2);
 
   /* ---------- 데이터 의미 색 ---------- */
   --mean: #0d9488;  --mean-soft: #f0fdfa;  --mean-ring: #99f6e4;  --mean-ink: #0f766e;
@@ -146,9 +146,9 @@
 /* ---------- 어두운 테마: 같은 이름, 값만 ---------- */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --brand-solid: #2f4be0;
-  --brand-solid-hover: #4a63ec;
-  --focus: #8fa2ff;
+  --on-brand: #121211;
+  --brand-solid: #ff5a2b;
+  --brand-solid-hover: #ff7547;
   --paper: #121211;
   --side-bg: #0e0e0d;
   --panel: #1a1a18;
@@ -173,18 +173,18 @@
   --glass: rgb(26 26 24 / 0.9);
   --toast-bg: #2c2b28;
   --overlay: rgb(0 0 0 / 0.55);
-  --sel: rgb(47 75 224 / 0.28);
-  --sel-head: rgb(47 75 224 / 0.42);
+  --sel: rgb(255 90 43 / 0.24);
+  --sel-head: rgb(255 90 43 / 0.36);
   --err-row: rgb(239 68 68 / 0.07);
 
-  --brand: #8fa2ff;          /* 글자·링크·선택 표시는 어두운 바탕에서 읽히도록 밝게 */
-  --brand-hover: #a9b8ff;
-  --brand-500: #5c75f5;
-  --brand-400: #8fa2ff;
-  --brand-soft: rgb(47 75 224 / 0.18);
-  --brand-100: rgb(47 75 224 / 0.26);
-  --brand-200: rgb(47 75 224 / 0.42);
-  --focus-ring: 0 0 0 3px rgb(92 117 245 / 0.35);
+  --brand: #ff6a3d;          /* 글자·링크·선택 표시는 어두운 바탕에서 읽히도록 조금 밝게 */
+  --brand-hover: #ff855f;
+  --brand-500: #ff5a2b;
+  --brand-400: #ff855f;
+  --brand-soft: rgb(255 90 43 / 0.14);
+  --brand-100: rgb(255 90 43 / 0.22);
+  --brand-200: rgb(255 90 43 / 0.36);
+  --focus-ring: 0 0 0 3px rgb(255 90 43 / 0.3);
 
   --mean: #2dd4bf;  --mean-soft: rgb(45 212 191 / 0.1);   --mean-ring: rgb(45 212 191 / 0.3);   --mean-ink: #5eead4;
   --sigma: #a78bfa; --sigma-soft: rgb(167 139 250 / 0.12); --sigma-ring: rgb(167 139 250 / 0.3); --sigma-ink: #c4b5fd;
