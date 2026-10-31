@@ -1,7 +1,8 @@
 import { Marked } from "marked";
 import { useMemo } from "react";
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// 속성값(href)에도 쓰므로 따옴표까지 바꾼다. 빠지면 링크 주소의 "로 onmouseover 같은 속성을 끼워 넣을 수 있다
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 // 에이전트·아티팩트가 쓴 마크다운을 그린다. 원문 HTML은 글자로만 보이게(스크립트 주입 방지), 링크는 새 창.
 const marked = new Marked({

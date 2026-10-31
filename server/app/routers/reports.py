@@ -29,8 +29,23 @@ def _new_results(db: Session, rep: models.Report) -> int:
     return db.query(models.Artifact).filter(models.Artifact.project_id == rep.project_id, changed > rep.created_at).count()
 
 
+def _issue(db: Session, project: models.Project, rep: models.Report | None, user: models.User | None = None) -> report.Issue:
+    """틀(표지·머리글·맺음말)에 쓰는 발행 정보. 판은 프로젝트 안에서 몇 번째인지다."""
+    if rep is None:
+        return report.make_issue(project, requester=user.display_name if user else "")
+    who = db.get(models.User, rep.created_by) if rep.created_by else None
+    edition = db.query(models.Report).filter(models.Report.project_id == project.id, models.Report.id <= rep.id).count()
+    return report.make_issue(project, rep, edition, who.display_name if who else "")
+
+
 def _response(db: Session, rep: models.Report) -> dict:
-    return {**schemas.ReportResponse.model_validate(rep).model_dump(), "new_results": _new_results(db, rep)}
+    # 화면도 파일과 같은 틀을 쓰도록 발행 정보를 함께 준다. 표지에 있는 제목 줄은 본문에서 뺀 채로 준다
+    project = db.get(models.Project, rep.project_id)
+    i = _issue(db, project, rep)
+    return {**schemas.ReportResponse.model_validate(rep).model_dump(), "new_results": _new_results(db, rep),
+            "body": report.clean_body(rep.body, rep.title), "project_name": project.name, "doc_no": i.doc_no,
+            "edition": int(i.edition.removesuffix("판")), "issued_at": i.issued_at, "author": i.author,
+            "provenance": i.provenance, "colophon": i.colophon}
 
 
 @router.get("/projects/{project_id}/reports", response_model=list[schemas.ReportSummary])
@@ -118,9 +133,10 @@ def report_context(project: models.Project = Depends(get_project_for_member), db
 
 @router.get("/projects/{project_id}/report")
 def download_report(format: str = "html", flow_id: int | None = None, report_id: int | None = None,
-                    project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
+                    project: models.Project = Depends(get_project_for_member), user=Depends(get_current_user),
+                    db: Session = Depends(get_db)):
     """보고서 파일(format: html | docx). AI 보고서가 있으면 가장 최근 판(또는 report_id)을, 없으면 게시된 결과를 모은다.
-    flow_id는 AI 보고서가 없을 때 그 작업 흐름의 결과만 모은다."""
+    flow_id는 AI 보고서가 없을 때 그 작업 흐름의 결과만 모은다. 내용이 무엇이든 같은 틀(report.py)에 담긴다."""
     rep = None
     if report_id:
         rep = get_or_404(db, models.Report, report_id, "보고서")
@@ -137,9 +153,10 @@ def download_report(format: str = "html", flow_id: int | None = None, report_id:
         flow = db.query(models.Flow).filter_by(project_id=project.id).order_by(models.Flow.id.desc()).first()
     arts = q.all()
     name = f"{project.name}_보고서_{date.today():%Y%m%d}"
+    issue = _issue(db, project, rep, user)
     if format == "docx":
-        data = report.build_docx(project, arts, flow, rep)
+        data = report.build_docx(project, arts, flow, rep, issue)
         return Response(data, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.docx"})
-    return HTMLResponse(report.build_html(project, arts, flow, rep),
+    return HTMLResponse(report.build_html(project, arts, flow, rep, issue),
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.html"})

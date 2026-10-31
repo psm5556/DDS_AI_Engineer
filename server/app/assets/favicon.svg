@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 삼성 블루 바탕의 흰 D 한 글자. 작게 보여도 읽히고, 밝은·어두운 탭 모두에서 보인다 -->
+  <rect width="64" height="64" rx="14" fill="#1428A0"/>
+  <path fill="#fff" fill-rule="evenodd" d="M15 11H36Q52 11 52 27V37Q52 53 36 53H15ZM27 23H35Q40 23 40 28V36Q40 41 35 41H27Z"/>
+</svg>

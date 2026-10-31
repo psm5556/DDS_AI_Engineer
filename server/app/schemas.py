@@ -230,6 +230,14 @@ class ReportResponse(ORM):
     body: str
     created_at: datetime
     new_results: int = 0  # 이 판을 쓴 뒤 새로 생기거나 바뀐 결과 수(다시 쓸지 판단)
+    # 보고서 틀(표지·맺음말): 파일(report.py)과 웹 화면이 같은 글을 쓰도록 서버가 만들어 준다
+    project_name: str = ""
+    doc_no: str = ""  # DDS-P0012-R003
+    edition: int = 1  # 프로젝트 안에서 몇 번째 판인지
+    issued_at: str = ""  # 발행 일시 'YYYY-MM-DD HH:MM'
+    author: str = ""
+    provenance: str = ""  # 표지의 발행처·작성 방식 한 줄
+    colophon: str = ""  # 맺음말
 
 
 class ReportSummary(ORM):

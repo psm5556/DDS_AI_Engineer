@@ -953,7 +953,6 @@ td.r { font-family: var(--font-mono); font-size: var(--fs-12); }
 .report-kicker { font-family: var(--font-mono); font-size: var(--fs-11); letter-spacing: var(--track-label); color: var(--ink-3); word-spacing: -.28em; }
 .report-doc .report-cover h1 { margin: 0; font-size: var(--fs-28); line-height: 1.15; font-weight: 650; letter-spacing: var(--track-display); }
 @container (min-width: 640px) { .report-doc .report-cover h1 { font-size: var(--fs-40); } }
-.report-cover + .md > p:first-child { font-size: var(--fs-16); line-height: 1.6; color: var(--ink); }
 .report-doc .md h2 { margin: var(--sp-6) 0 var(--sp-2); padding: var(--sp-3) 0 0; border-bottom: none; border-top: 1px solid var(--line); font-size: var(--fs-20); letter-spacing: var(--track-title); }
 .report-doc .md h3 { font-size: var(--fs-14); }
 .rep-fig { margin: var(--sp-5) 0; padding: 0; background: transparent; border-radius: 0; }
@@ -993,7 +992,6 @@ td.r { font-family: var(--font-mono); font-size: var(--fs-12); }
 .status-cell .st.run i { background: var(--brand-solid); }
 .status-cell .st.pulse i { animation: dot-breathe var(--dur-pulse) ease-in-out infinite; }
 @keyframes dot-breathe { 50% { opacity: .3; } }
-.report-cover + .md > h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }
 
 /* ---------- Simulator 탭: 패널 안에서 바로 예측한다. 패널 폭에 맞춰 한 줄/두 줄로 바뀐다 ---------- */
 .sim-tab { display: flex; flex-direction: column; gap: var(--sp-3); }
@@ -1105,3 +1103,43 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .cv-tool-head .t { overflow-wrap: anywhere; }
 .cv-tool-body { min-width: 0; overflow-wrap: anywhere; }
 .cv-tool-body pre { overflow-x: auto; }
+
+/* ---------- 보고서 틀: 표지·목차·맺음말 (파일 server/app/report.py와 같은 구성) ---------- */
+.report-doc .report-cover h1 { word-break: keep-all; overflow-wrap: anywhere; }
+.report-cover .wordmark { align-self: flex-start; }
+.report-project { margin: 0; font-size: var(--fs-16); color: var(--ink-2); }
+.report-issue { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3) var(--sp-5); margin: var(--sp-3) 0 0; }
+.report-issue dt { font-size: var(--fs-12); color: var(--ink-3); }
+.report-issue dd { margin: 0; font-size: var(--fs-13); font-weight: 500; color: var(--ink); }
+.report-no { font-family: var(--font-mono); }
+.report-provenance { margin: var(--sp-2) 0 0; padding-left: var(--sp-3); border-left: 2px solid var(--brand); font-size: var(--fs-13); color: var(--ink-2); }
+.report-layout { display: grid; grid-template-columns: minmax(0, 1fr); }
+.report-toc { margin-bottom: var(--sp-5); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-m); scroll-margin-top: var(--sp-2); }
+.report-toc-title { margin: 0 0 var(--sp-2); font-size: var(--fs-12); font-weight: 600; letter-spacing: var(--track-label); color: var(--ink-3); }
+.report-toc ol { list-style: none; margin: 0; padding: 0; }
+.report-toc button { display: block; width: 100%; min-height: 0; height: auto; padding: var(--sp-1) var(--sp-2); border: none; border-left: 2px solid var(--line-2); border-radius: 0; background: none; color: var(--ink-2); font-size: var(--fs-13); font-weight: 400; line-height: 1.4; text-align: left; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; }
+.report-toc .l3 button { padding-left: var(--sp-5); font-size: var(--fs-12); color: var(--ink-3); }
+.report-toc button:hover:not(:disabled) { background: none; color: var(--ink); border-left-color: var(--ink-4); }
+.report-toc button[aria-current] { color: var(--brand); border-left-color: var(--brand); font-weight: 600; }
+.report-body .md > :is(h1, h2, h3) { scroll-margin-top: var(--sp-3); }
+.report-doc .md h1 { margin: var(--sp-6) 0 var(--sp-2); padding: var(--sp-3) 0 0; border-top: 1px solid var(--line); font-size: var(--fs-20); letter-spacing: var(--track-title); }
+.report-body > .md:first-child > :is(h1, h2):first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.report-body > .md:first-child > p:first-child { font-size: var(--fs-16); line-height: 1.6; color: var(--ink); }
+.report-colophon { display: flex; gap: var(--sp-3); margin-top: var(--sp-7); padding-top: var(--sp-4); border-top: 1px solid var(--ink); font-size: var(--fs-13); color: var(--ink-2); }
+.report-colophon .dds-logo { width: 32px; height: 32px; }
+.report-colophon p { margin: 0 0 var(--sp-1); }
+/* bottom: 패널 안쪽 여백(.canvas-body 16px)만큼 내려야 띠 아래로 글이 비치지 않는다 */
+.report-toc-dock { position: sticky; bottom: -16px; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-top: var(--sp-3); padding: var(--sp-2) 0; background: var(--paper) var(--grain); border-top: 1px solid var(--line); }
+.report-toc-dock > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.report-toc-dock > button { flex: none; }
+@container (min-width: 600px) { .report-issue { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* 패널이 넓으면 목차를 왼쪽에 고정한다. 본문 쪽 폭(720px)은 그대로 둔다 */
+@container (min-width: 960px) {
+  .report-view .report-bar, .report-view .report-note, .report-view .report-doc { max-width: 960px; }
+  .report-layout { grid-template-columns: 208px minmax(0, 720px); gap: var(--sp-6); }
+  .report-layout.solo { grid-template-columns: minmax(0, 720px); }
+  .report-toc { position: sticky; top: var(--sp-2); align-self: start; max-height: calc(100vh - 140px); overflow-y: auto; margin-bottom: 0; padding: 0; border: none; border-radius: 0; }
+  .report-toc-dock { display: none; }
+}
+.report-doc .md :is(h1, h2, h3) { word-break: keep-all; overflow-wrap: anywhere; }
+.report-doc .md blockquote { margin: var(--sp-3) 0; padding-left: var(--sp-3); border-left: 2px solid var(--line); color: var(--ink-2); }

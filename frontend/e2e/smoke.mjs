@@ -109,6 +109,19 @@ await step("프로젝트", async () => {
   for (const t of ["작업 흐름", "보고서", "데이터", "파일"]) {
     await step(`탭 ${t}`, async () => { await page.getByRole("tab", { name: t }).first().click({ timeout: 5000 }); await shot(`tab-${t}`); });
   }
+  await step("보고서 목차", async () => {
+    await page.getByRole("tab", { name: "보고서" }).first().click({ timeout: 5000 });
+    await page.waitForTimeout(800);
+    const links = page.locator(".report-toc button");
+    if (!(await links.count())) { console.log("  (목차가 있는 보고서가 없어 건너뜀)"); return; }
+    if (!(await page.locator(".report-cover .wordmark").count()) || !(await page.locator(".report-colophon").count())) throw new Error("보고서 틀(표지·맺음말)이 없습니다");
+    const top = () => page.locator(".canvas-body").evaluate((el) => el.scrollTop);
+    await links.last().click();
+    await page.waitForTimeout(1000);
+    if ((await top()) <= 0) throw new Error("목차를 눌러도 패널이 움직이지 않습니다");
+    if (await page.evaluate(() => location.hash)) throw new Error("목차가 주소를 바꿨습니다");
+    await shot("report-toc-jump");
+  });
   await step("대화 전환 메뉴", async () => { await page.locator(".ws-conv .ws-crumb").click(); await shot("conv-menu"); await page.keyboard.press("Escape"); });
   await step("Simulator 탭", async () => {
     await page.getByRole("tab", { name: "Simulator" }).click();
