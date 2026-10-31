@@ -103,6 +103,7 @@ class Flow(TimestampMixin, Base):
     # review(검토) → approved → in_progress(진행) → complete(완료) | failed | rejected
     status = Column(String(20), default="review", nullable=False)
     version = Column(Integer, default=1, nullable=False)
+    approved_by = Column(Integer, ForeignKey("users.id"))  # 승인한 사람. 다른 멤버의 스크립트를 내 PC에서 돌리려면 내가 승인한 흐름이어야 한다
 
 
 class Artifact(Base):
@@ -148,8 +149,18 @@ class Study(TimestampMixin, Base):
     adapter = Column(String(50), nullable=False, default="mock")
     adapter_config = Column(JSON, default=dict)
     version = Column(Integer, default=1, nullable=False)
+    # 불러온 데이터의 출처: {kind: table|folders, source, fixed: {고정값}, table_hash, cloned_from, report(마지막 검증 요약)}
+    import_info = Column(JSON)
+    # 케이스를 돌린 PC가 알린 안내 {by: 사용자, text}. 그 사람에게만 보이고, 그 PC의 다음 케이스가 문제없이 끝나면 지운다
+    pc_notice = Column(JSON)
+    flow_id = Column(Integer)  # 이 스터디를 마지막으로 쓴 작업 흐름. "지난번 흐름대로 다시"에서 흐름 → 스터디를 찾는다
+    recipe = Column(JSON)  # 서버에 올린 스크립트 묶음 정보. 스크립트가 없는 멤버 PC가 내려받아 이어 쓴다 (study/recipe.py)
 
     cases = relationship("Case", cascade="all, delete-orphan", order_by="Case.id")
+
+    @property
+    def has_recipe(self) -> bool:
+        return bool(self.recipe)
 
 
 class Case(TimestampMixin, Base):
@@ -160,15 +171,42 @@ class Case(TimestampMixin, Base):
     results = Column(JSON, default=dict)
     # pending | running | complete | failed | dry_run
     status = Column(String(20), default="pending", nullable=False)
-    source = Column(String(20), default="doe")  # doe | bo | al | manual
+    source = Column(String(20), default="doe")  # doe | bo | al | manual | import
     run_dir = Column(String(500))  # 실행한 PC 기준 경로
     run_by = Column(Integer, ForeignKey("users.id"))
+    # 중지한 사람. 꺼진 PC는 며칠 뒤에 돌아올 수 있으므로 서버가 다시 시작해도 남아야 한다. 있으면 돌아온 PC의 솔버를 끝내고 늦은 결과를 받지 않는다
+    stopped_by = Column(Integer, ForeignKey("users.id"))
     images = Column(JSON, default=list)  # 서버 files 경로 목록
     fields = Column(JSON, default=list)  # 업로드된 필드 이름 목록 (fields/<이름>.npz)
     # 해석 데이터 묶음(case.h5, HDF5) 정보: {stored: server|pc, size, sha256, pc_path, field_names, frames, raw, ok, packed_at}
     archive = Column(JSON)
     train_samples = Column(JSON)  # 학습 샘플(train.h5): 조건 해시 → {path, sha256, size, nodes, frames, targets, inputs, …}
+    # 불러온 행의 출처: {hash: 행 해시(다시 불러와도 중복 없게), row: 파일의 행 번호, label: 폴더·행 이름, source: 파일 이름}
+    origin = Column(JSON)
+    # 완료된 케이스를 다시 돌리는 동안 지켜 두는 이전 결과. 다시 돌리기가 실패해도 값을 잃지 않는다
+    previous = Column(JSON)
     error = Column(Text)
+
+
+class TableJob(TimestampMixin, Base):
+    """표 → 등록 → 학습 → 배포를 한 번에 하는 서버 작업. 화면을 닫아도 계속되고 돌아오면 상태를 읽는다 (study/table_job.py)."""
+    __tablename__ = "table_jobs"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"))  # 첫 화면에서 시작하면 표를 받은 뒤에 정해진다
+    study_id = Column(Integer, ForeignKey("studies.id", ondelete="SET NULL"))
+    model_id = Column(Integer, ForeignKey("surrogate_models.id", ondelete="SET NULL"))
+    name = Column(String(200), nullable=False)
+    outputs = Column(JSON)
+    status = Column(String(20), default="running", nullable=False)  # running | done | failed
+    phase = Column(String(20), default="import", nullable=False)  # import | train | deploy | done
+    phase_at = Column(DateTime, default=_now)
+    finished_at = Column(DateTime)
+    rows = Column(Integer, default=0)
+    excluded_count = Column(Integer, default=0)
+    reused = Column(Boolean, default=False)
+    error = Column(Text)
+    seen = Column(Boolean, default=False, nullable=False)  # 끝난 결과를 사용자가 확인했다
 
 
 class SurrogateModel(Base):
@@ -187,6 +225,8 @@ class SurrogateModel(Base):
     created_by = Column(Integer, ForeignKey("users.id"))
     deployed_at = Column(DateTime)
     field_models = Column(JSON)  # 이 버전의 3D 모델 {필드: 모델 id}. 되돌리면 3D도 그때 것으로 돌아간다
+    # 모델 품질: {level: good|fair|poor, label, warnings, by_output, excluded, excluded_count, rows_total, sampled, data_hash}
+    quality = Column(JSON)
     created_at = Column(DateTime, default=_now, nullable=False)
 
 

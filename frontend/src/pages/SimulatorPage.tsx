@@ -1,25 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Copy, FolderOpen, Link2, RotateCcw, Share2, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Copy, FolderOpen, Link2, RotateCcw, Share2, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { del, get, post } from "../api";
 import { Field3DPanel } from "../components/Field3DPanel";
 import { Modal } from "../components/Modal";
+import { ModelTrust } from "../components/ModelTrust";
 import { baseLayout, chartColors, Plot, plotConfig } from "../components/Plot";
 import { Skeleton } from "../components/Skeleton";
 import { copyText, fmt, when } from "../format";
 import { useTheme } from "../theme";
 import { useToast } from "../toast";
-import type { Objective, SurrogateModel, Variable } from "../types";
+import type { DataSource, Objective, SurrogateModel, Variable } from "../types";
 
 interface Spec {
   model: SurrogateModel; variables: Variable[]; objectives: Objective[]; study_name: string;
   project_id?: number; project_name?: string; shared_by?: string; note?: string; current_model_id?: number | null;
+  data_source?: Partial<DataSource> | null;
 }
 interface Pred { mean: Record<string, number>; std: Record<string, number> }
 interface Batch { mean: Record<string, number[]>; std: Record<string, number[]> }
-interface Share { id: number; token: string; note: string; enabled: boolean; uses: number; expires_at: string | null; created_at: string }
+interface Share { id: number; token: string; note: string; enabled: boolean; uses: number; expires_at: string | null; created_at: string; warning?: string | null }
 const SWEEP_N = 41;
+const MANY_VARS = 6; // 이보다 많으면 민감도 변수는 목록으로 고르고 예측 결과를 슬라이더 위에 둔다. 표로 시작하면 입력이 수십 개일 수 있다
 
 /** 이 버전이 쓰는 3D 모델 목록(되돌리면 3D도 그때 것으로 돌아간다) */
 export const memberFieldList = (modelId: number) => (s: Spec) => `/api/studies/${s.model.study_id}/field-models?model_id=${modelId}`;
@@ -81,6 +84,27 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
   const v = spec.variables.find((q) => q.name === sweepVar);
   const c = chartColors(); // 디자인 토큰 색(테마가 바뀌면 다시 그릴 때 새 값)
   const grid = c.grid, txt = c.text;
+  const many = spec.variables.length > MANY_VARS;
+  const outside = spec.variables.filter((q) => x[q.name] !== undefined && (x[q.name] < q.lower || x[q.name] > q.upper));
+  const results = (
+    <section className="block sim-results">
+      <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted">± 예측 불확실도</span></div>
+      <ul className={`sim-out ${stale ? "stale" : ""}`}>
+        {outs.map((o) => {
+          const obj = spec.objectives.find((q) => q.name === o);
+          return (
+            <li key={o}>
+              <span className="n">{o}{obj && <small>{obj.goal === "min" ? "최소화 목표" : "최대화 목표"}</small>}</span>
+              <b>{pred ? fmt(pred.mean[o], 4) : "…"}</b>
+              <small className="u">{pred ? `± ${fmt(2 * pred.std[o], 2)}` : ""}</small>
+            </li>
+          );
+        })}
+      </ul>
+      {/* 숫자 칸에는 범위 밖 값을 적을 수 있다. 외삽한 값을 믿지 않게 알린다 */}
+      {outside.length > 0 && <div className="notice warn sim-outside" role="status"><AlertTriangle size={14} /><span>이 버전을 학습한 범위 밖입니다({outside.slice(0, 3).map((q) => q.name).join(", ")}). 예측을 믿기 어렵습니다 → 범위 안으로 되돌리거나 그 범위의 데이터를 더해 다시 학습하세요</span></div>}
+    </section>
+  );
 
   return (
     <div className={embedded ? "sim-page sim-embed" : "page sim-page"}>
@@ -88,7 +112,8 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
         {/* 이동은 경로 글자가 아니라 버튼으로: 눌러서 어디로 가는지 한눈에 보이게 한다 */}
         <nav className="sim-nav" aria-label="이동">
           <Link className="btn small" to="/simulators"><ArrowLeft size={14} />Simulator 목록</Link>
-          {spec.project_id && <Link className="btn small" to={`/projects/${spec.project_id}`} title="이 Simulator를 만든 프로젝트의 대화와 결과를 엽니다"><FolderOpen size={14} />프로젝트 열기: {spec.project_name || "프로젝트"}</Link>}
+          {spec.project_id && <Link className="btn small" to={`/projects/${spec.project_id}`} state={{ canvasTab: "simulator", studyId: spec.model.study_id, modelId: spec.model.id }}
+            title="이 Simulator를 만든 프로젝트를 열고, 지금 보는 버전의 Simulator 탭을 보여 줍니다"><FolderOpen size={14} />프로젝트 열기: {spec.project_name || "프로젝트"}</Link>}
         </nav>
         <div className="sim-head">
           <div className="grow"><h1>{spec.study_name} Simulator</h1>
@@ -99,15 +124,19 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
         </div>
       </>}
 
+      <ModelTrust model={spec.model} source={spec.data_source} />
+
       {/* 왼쪽: 입력(설계변수)과 출력(예측값)을 붙여 둔다 · 오른쪽: 3D 형상·필드와 민감도 */}
       <div className="sim2">
-        <div className="sim-side">
+        <div className={`sim-side ${many ? "many" : ""}`}>
+          {/* 변수가 많으면 슬라이더 아래의 결과는 화면 밖에 있다. 위에 붙여 값을 바꾸며 함께 본다 */}
+          {many && results}
           <section className="block sim-inputs">
             <div className="block-head"><h3>설계변수</h3><span className="grow" />
               <button className="small ghost" onClick={() => setX(mid0)} title="모든 변수를 범위 가운데로"><RotateCcw size={13} />가운데로</button></div>
             {spec.variables.map((q) => (
               <div key={q.name} className="sim-var">
-                <div className="sim-var-top"><span title={q.name}>{q.name}</span>
+                <div className="sim-var-top"><span title={q.name}>{q.name}{q.unit && <small className="sim-var-unit"> [{q.unit}]</small>}</span>
                   <input type="number" inputMode="decimal" value={x[q.name] !== undefined ? Number(x[q.name].toPrecision(5)) : ""}
                     min={q.lower} max={q.upper} onChange={(e) => setX({ ...x, [q.name]: Number(e.target.value) })} aria-label={`${q.name} 값`} /></div>
                 <input type="range" min={q.lower} max={q.upper} step={(q.upper - q.lower) / 200} value={x[q.name] ?? q.lower}
@@ -116,28 +145,15 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
               </div>
             ))}
           </section>
-          <section className="block">
-            <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted">± 예측 불확실도</span></div>
-            <ul className={`sim-out ${stale ? "stale" : ""}`}>
-              {outs.map((o) => {
-                const obj = spec.objectives.find((q) => q.name === o);
-                return (
-                  <li key={o}>
-                    <span className="n">{o}{obj && <small>{obj.goal === "min" ? "최소화 목표" : "최대화 목표"}</small>}</span>
-                    <b>{pred ? fmt(pred.mean[o], 4) : "…"}</b>
-                    <small className="u">{pred ? `± ${fmt(2 * pred.std[o], 2)}` : ""}</small>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+          {!many && results}
         </div>
 
         <div className="sim-main">
           <Field3DPanel listUrl={fieldList(spec)} baseUrl={fieldBase} params={x} />
           <section className="block">
             <div className="block-head"><h3>민감도</h3><span className="small muted">한 변수만 바꿀 때의 변화 · 주홍 점이 지금 설계</span><span className="grow" />
-              {spec.variables.length > 1 && <span className="seg">{spec.variables.map((q) => <button key={q.name} className={sweepVar === q.name ? "on" : ""} onClick={() => setSweepVar(q.name)}>{q.name}</button>)}</span>}</div>
+              {many ? <select className="sim-sweep" value={sweepVar ?? ""} aria-label="민감도를 볼 변수" onChange={(e) => setSweepVar(e.target.value)}>{spec.variables.map((q) => <option key={q.name} value={q.name}>{q.name}</option>)}</select>
+                : spec.variables.length > 1 && <span className="seg">{spec.variables.map((q) => <button key={q.name} className={sweepVar === q.name ? "on" : ""} title={q.name} onClick={() => setSweepVar(q.name)}>{q.name}</button>)}</span>}</div>
             <div className="sim-plots">
               {sweep && v && outs.map((o) => {
                 const xs = Array.from({ length: SWEEP_N }, (_, i) => v.lower + ((v.upper - v.lower) * i) / (SWEEP_N - 1));
@@ -169,12 +185,13 @@ export function ShareModal({ modelId, onClose }: { modelId: number; onClose: () 
   const toast = useToast();
   const [note, setNote] = useState("");
   const [days, setDays] = useState<string>("90");
+  const [warning, setWarning] = useState<string | null>(null);
   const key = ["shares", modelId];
   const { data: shares } = useQuery({ queryKey: key, queryFn: () => get<Share[]>(`/api/models/${modelId}/shares`) });
   const url = (t: string) => `${location.origin}/s/${t}`;
   const create = useMutation({
     mutationFn: () => post<Share>(`/api/models/${modelId}/shares`, { note, expires_days: days ? Number(days) : null }),
-    onSuccess: async (s) => { qc.invalidateQueries({ queryKey: key }); setNote(""); toast((await copyText(url(s.token))) ? "링크를 만들고 복사했습니다" : "링크를 만들었습니다"); },
+    onSuccess: async (s) => { qc.invalidateQueries({ queryKey: key }); setNote(""); setWarning(s.warning ?? null); toast((await copyText(url(s.token))) ? "링크를 만들고 복사했습니다" : "링크를 만들었습니다"); },
     onError: (e: Error) => toast(e.message, true),
   });
   const stop = useMutation({
@@ -185,6 +202,7 @@ export function ShareModal({ modelId, onClose }: { modelId: number; onClose: () 
   return (
     <Modal title="Simulator 공유" wide onClose={onClose}>
       <p className="small muted" style={{ marginBottom: 12 }}>링크를 받은 사내 사용자는 로그인만 하면 프로젝트 멤버가 아니어도 이 Simulator로 예측할 수 있습니다. 처음 열면 그 사람의 Simulator 목록에 들어옵니다. 링크는 항상 현재 버전을 보여 주고, 프로젝트의 대화·데이터·모델 파일은 보이지 않습니다.</p>
+      {warning && <div className="notice warn share-warning" role="status"><span>{warning}</span></div>}
       <div className="row" style={{ marginBottom: 16 }}>
         <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="메모 (예: 설계팀 공유)" style={{ flex: 1 }} aria-label="공유 메모" />
         <select value={days} onChange={(e) => setDays(e.target.value)} style={{ width: "auto" }} aria-label="공유 기간">

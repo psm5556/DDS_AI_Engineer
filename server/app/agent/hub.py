@@ -447,7 +447,9 @@ class AgentHub:
                 with SessionLocal() as db:
                     recap = _recap(db, st.chat_id, before_id=msg_id)
                 context = (f"[DDS 컨텍스트] project_id={st.project_id}. "
-                           "dds-* MCP 툴과 스킬을 사용하고 작업 규칙(작업 전 Flow 제안 → 승인 후 실행, 데이터는 로컬 폴더 규칙대로)을 따르세요.\n\n"
+                           "dds-* MCP 툴과 스킬을 사용하고 작업 규칙을 따르세요. 사용자가 가진 것에서 시작합니다(표·해석 폴더·모델이 있으면 해석부터 하지 않습니다). "
+                           "해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 일만 Flow 승인 후 실행하고, "
+                           "조회·후처리·기존 데이터로 학습·Simulator 배포·보고서는 승인 없이 바로 합니다. 데이터는 로컬 폴더 규칙대로 둡니다.\n\n"
                            + recap)
             payload = {"type": "session.prompt", "turn_id": turn_id, "chat_id": st.chat_id, "session_id": sid, "agent": st.agent,
                        "text": context + text, "attachments": attachments, "started_at": st.started_at}

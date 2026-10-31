@@ -866,40 +866,74 @@ class Workspace:
         return d
 
     def write_study(self, study_dir: Path, meta: dict):
-        old = _read_json(study_dir / "study.json")
-        _write_json(study_dir / "study.json", {**old, **meta, "updated": _now(), "created": old.get("created", _now())})
+        with _lock:  # 동시에 도는 케이스가 같은 임시 파일을 바꿔치기하면 뒤엣것이 실패한다
+            old = _read_json(study_dir / "study.json")
+            _write_json(study_dir / "study.json", {**old, **meta, "updated": _now(), "created": old.get("created", _now())})
 
-    def record_case(self, study_dir: Path, case_dir: Path, case: dict):
-        """케이스 폴더의 case.json과 스터디의 cases.csv(전 케이스 한 표)를 갱신한다."""
+    @staticmethod
+    def is_external(study_dir: Path, case_dir: Path) -> bool:
+        """스터디 폴더 밖의 케이스 폴더(사용자가 불러온 원본 해석 폴더)인가."""
+        return Path(study_dir).resolve() not in Path(case_dir).resolve().parents
+
+    @staticmethod
+    def read_case(case_dir: Path) -> dict:
+        """이 PC에 남은 케이스 기록. 없거나 못 읽으면 빈 값이다."""
+        return _read_json(Path(case_dir) / "case.json")
+
+    def record_case(self, study_dir: Path, case_dir: Path, case: dict) -> bool:
+        """케이스 폴더의 case.json과 스터디의 cases.csv(전 케이스 한 표)를 갱신한다. 돌려주는 값: cases.csv까지 갱신했는가.
+        case.json을 쓰지 못하면(폴더 없음·디스크 부족) 예외를 그대로 낸다. 케이스 기록의 원본이기 때문이다.
+        케이스 폴더가 스터디 폴더 밖이면 사용자의 원본이다. 거기에는 쓰지 않고 스터디 폴더 쪽 작업 폴더에 기록한다."""
+        if self.is_external(study_dir, case_dir):
+            if case.get("case_id") is None:
+                raise ValueError(f"원본 폴더의 케이스를 기록하려면 case_id가 필요합니다: {case_dir}")
+            case = {"source_dir": str(case_dir), **case}
+            case_dir = self.case_dir(study_dir, int(case["case_id"]), case.get("source") or "import")
         old = _read_json(case_dir / "case.json")
-        info = {**old, **case, "folder": str(case_dir.relative_to(study_dir)), "updated": _now()}
+        info = {**old, **case, "folder": str(Path(case_dir).resolve().relative_to(Path(study_dir).resolve())), "updated": _now()}
         _write_json(case_dir / "case.json", info)
-        with _lock:
-            path = study_dir / "cases.csv"
-            rows: dict[str, dict] = {}
-            if path.exists():
-                with open(path, encoding="utf-8-sig", newline="") as f:
-                    rows = {r["case_id"]: r for r in csv.DictReader(f)}
-            row = {"case_id": str(info.get("case_id")), "source": info.get("source", ""), "status": info.get("status", ""),
-                   "folder": info["folder"], "updated": info["updated"]}
-            row.update({f"in:{k}": v for k, v in (info.get("params") or {}).items()})
-            row.update({f"out:{k}": v for k, v in (info.get("results") or {}).items()})
-            if info.get("error"):
-                row["error"] = str(info["error"]).splitlines()[0][:200]
-            rows[row["case_id"]] = {**rows.get(row["case_id"], {}), **row}
-            cols = ["case_id", "source", "status"]
-            for r in rows.values():
-                cols += [k for k in r if k not in cols and k.startswith("in:")]
-            for r in rows.values():
-                cols += [k for k in r if k not in cols and k.startswith("out:")]
-            cols += [k for k in ("error", "folder", "updated") if k not in cols]
-            tmp = path.with_suffix(".tmp")
-            with open(tmp, "w", encoding="utf-8-sig", newline="") as f:  # utf-8-sig: 엑셀에서 한글이 깨지지 않게
-                w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
-                w.writeheader()
-                for k in sorted(rows, key=lambda x: int(x) if x.isdigit() else 0):
-                    w.writerow(rows[k])
-            tmp.replace(path)
+        return self._refresh_csv(study_dir)
+
+    @staticmethod
+    def _refresh_csv(study_dir: Path) -> bool:
+        """cases.csv는 사람이 보려고 만드는 사본이다. 엑셀로 열어 잠겼거나 보안 프로그램이 암호화했어도 해석을 막지 않는다.
+        그래서 읽어 오지 않고 케이스마다의 case.json에서 매번 다시 만든다. 못 쓴 줄은 다음 케이스 때 함께 맞춰진다."""
+        path = study_dir / "cases.csv"
+        tmp = path.with_suffix(".tmp")
+        try:
+            with _lock:
+                rows: dict[str, dict] = {}
+                for d in sorted((study_dir / "cases").glob("C*")):
+                    info = _read_json(d / "case.json")
+                    if info.get("case_id") is None:
+                        continue
+                    row = {"case_id": str(info["case_id"]), "source": info.get("source", ""), "status": info.get("status", ""),
+                           "folder": info.get("folder") or str(Path("cases") / d.name), "updated": info.get("updated", "")}
+                    row.update({f"in:{k}": v for k, v in (info.get("params") or {}).items()})
+                    row.update({f"out:{k}": v for k, v in (info.get("results") or {}).items()})
+                    if info.get("error"):
+                        row["error"] = str(info["error"]).splitlines()[0][:200]
+                    rows[row["case_id"]] = row
+                cols = ["case_id", "source", "status"]
+                for r in rows.values():
+                    cols += [k for k in r if k not in cols and k.startswith("in:")]
+                for r in rows.values():
+                    cols += [k for k in r if k not in cols and k.startswith("out:")]
+                cols += [k for k in ("error", "folder", "updated") if k not in cols]
+                with open(tmp, "w", encoding="utf-8-sig", newline="") as f:  # utf-8-sig: 엑셀에서 한글이 깨지지 않게
+                    w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
+                    w.writeheader()
+                    for k in sorted(rows, key=lambda x: int(x) if x.isdigit() else 0):
+                        w.writerow(rows[k])
+                tmp.replace(path)
+            return True
+        except Exception as e:  # noqa: BLE001 — 어떤 이유든 사본 때문에 결과를 잃지 않는다
+            log.warning("cases.csv를 갱신하지 못했습니다 %s: %s", path, e)
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return False
 
     # ---------- 탐색 ----------
     def resolve(self, project_id: int, rel: str, project_name: str | None = None, project_uid: str | None = None) -> Path:

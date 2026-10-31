@@ -55,28 +55,69 @@ export interface AgentStatus {
   info: { hostname?: string; version?: string; agents?: AgentCli[]; default_agent?: string; workspace?: string; tools_rev?: string } | null;
 }
 
-export interface Variable { name: string; lower: number; upper: number }
+export interface Variable { name: string; lower: number; upper: number; unit?: string }
 export interface Objective { name: string; goal: "min" | "max" }
-export interface OutputDef { name: string; note?: string }
+export interface OutputDef { name: string; note?: string; unit?: string }
 export interface Study {
   id: number; project_id: number; name: string; variables: Variable[]; objectives: Objective[];
   constraints?: { name: string; upper?: number; lower?: number }[] | null;
   outputs?: OutputDef[] | null;
   adapter: string; adapter_config: Record<string, unknown>; version: number; created_at: string;
+  import_info?: { kind?: string; source?: string; fixed?: Record<string, unknown> } | null;
+  flow_id?: number | null; has_recipe?: boolean;
 }
 export interface Case {
   id: number; study_id: number; params: Record<string, number>; results: Record<string, number>;
-  status: string; source: string; run_dir: string | null; run_by: number | null; images: string[] | null; error: string | null;
+  status: string; source: string; run_dir: string | null; run_by: number | null; stopped_by?: number | null; images: string[] | null; error: string | null;
   fields?: string[] | null;
   /** 해석 데이터 묶음(case.h5, HDF5) — docs/cae-data-hdf5.md */
   archive?: { stored?: "server" | "pc"; size?: number; ok?: boolean; error?: string; pc_path?: string; field_names?: string[];
     fields?: number; frames?: number; history?: number; raw?: number; raw_size?: number; upload_error?: string } | null;
+  /** 불러온 행의 출처(파일·행 번호·폴더 이름) */
+  origin?: { row?: number; source?: string; label?: string } | null;
 }
-export interface StudyStatus { study: Study; counts: Record<string, number>; best: Case | null; running: boolean; extracting?: number[] }
+/** 학습 데이터가 어디서 왔는가. 링크로 받은 사람에게는 source(파일 이름)가 오지 않는다 */
+export interface DataSource { kind: "solver" | "table" | "folders"; label: string; rows: number; total: number; source?: string }
+export interface StudyStatus { study: Study; counts: Record<string, number>; best: Case | null; running: boolean; stalled?: number; stalled_by?: string[]; extracting?: number[]; pc_notice?: { by: number; text: string } | null; data_source?: DataSource | null }
+export type QualityLevel = "good" | "fair" | "poor";
+export interface ModelQuality {
+  level: QualityLevel; label: string; warnings: string[]; method?: string;
+  by_output: Record<string, { level: QualityLevel; r2: number | null }>;
+  excluded_count?: number; rows_total?: number; sampled?: { from: number; to: number } | null;
+}
 export interface SurrogateModel {
   id: number; study_id: number; name: string; algo: string; outputs: string[];
   metrics: Record<string, { r2: number; rmse: number }>; n_train: number; deployed: boolean; created_at: string;
-  version: number | null; deployed_at: string | null;
+  version: number | null; deployed_at: string | null; quality?: ModelQuality | null;
+}
+/** 표 → 등록 → 학습 → 배포 서버 작업. 화면을 닫아도 이어지고 돌아오면 이것을 읽는다 */
+export interface TableJob {
+  id: number; project_id: number | null; study_id: number | null; model_id: number | null; name: string;
+  status: "running" | "done" | "failed"; phase: "import" | "train" | "deploy" | "done"; rows: number; excluded_count: number;
+  reused: boolean; error: string | null; seen: boolean; phase_sec: number; elapsed_sec: number;
+}
+export interface TrainJob {
+  job_id: string; study_id: number; status: "running" | "done" | "failed"; outputs: string[]; rows: number;
+  elapsed_sec: number; reused: boolean; model: SurrogateModel | null; error: string | null; message: string;
+}
+
+/** 표 파일 미리보기. 아무것도 저장하지 않는다 */
+export type ColumnRole = "input" | "output" | "fixed" | "exclude";
+export interface TableColumn {
+  name: string; raw: string; unit: string; kind: "numeric" | "constant" | "categorical" | "id" | "empty"; role: ColumnRole; role_reason: string;
+  n_numeric: number; n_missing: number; n_text: number; n_nonfinite: number; unique: number; min: number | null; max: number | null;
+  values?: string[]; value?: string | number; warnings: string[]; looks_output?: boolean;
+}
+export interface TablePreview {
+  source: string; header_row: number | null; skipped_rows: number; n_rows: number;
+  columns: TableColumn[]; warnings: string[]; outputs: string[];
+}
+/** 불러오기 보고: 무엇을 등록했고 무엇을 왜 뺐는가 */
+export interface ImportReport {
+  study_id: number; study_name: string; reused: boolean; received: number; registered: number; duplicates: number;
+  excluded_count: number; excluded: { row: number; reason: string; kind: string }[]; excluded_by_reason: Record<string, number>;
+  partial_count: number; fixed: Record<string, unknown>; removed_columns: { name: string; reason: string }[];
+  variables: Variable[]; outputs: OutputDef[]; warnings: string[]; updated?: number; filled_pending?: number; ignored_columns?: string[];
 }
 
 export interface AgentRelease { id: number; version: string; filename: string; sha256: string; size: number; notes: string; is_latest: boolean; created_at: string }

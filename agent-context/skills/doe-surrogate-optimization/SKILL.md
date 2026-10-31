@@ -5,6 +5,10 @@ description: DOE 설계, 케이스 반복 실행, Gaussian Process Surrogate 학
 
 # DOE → Surrogate → 최적화/능동학습 → Simulator
 
+사용자가 이미 표나 해석 결과를 가졌으면 DOE부터 돌리지 않습니다. `existing-data-to-simulator` 스킬을 봅니다. 지난 스터디를 이어 가면 `list_studies`로 찾고, 신규 모델로 같은 흐름을 다시 하면 `clone_study`를 씁니다.
+
+해석을 새로 돌리는 DOE·최적화는 Flow 승인을 받은 뒤 시작합니다. 기존 데이터로 학습하고 Simulator로 배포하는 일은 승인 없이 바로 합니다.
+
 ## 1. 스터디 만들기
 ```
 dds-study.create_study(
@@ -26,6 +30,8 @@ dds-study.create_study(
   - 페널티 방식: 스크립트에서 `mass_penalized = mass + 1e3*max(0, stress-250)`처럼 계산해 목적함수로 둡니다.
   - 최적화 뒤 표로 제약 만족 여부를 보고합니다.
 - 해석 없이 흐름을 검증할 때는 `adapter="mock"`, `adapter_config={"function": "beam"}`을 씁니다(외팔보: width, height → mass, deflection, max_stress).
+- 불러온 표·해석 결과로 만든 스터디는 `adapter="data"`입니다. 돌릴 수 없고, 나중에 `set_study_adapter`로 해석 방법을 연결하면 이어 갑니다.
+- DOE 계획만 필요하면 `generate_doe` 뒤 `export_doe`로 CSV를 넘깁니다. 스크립트는 케이스가 처음 끝날 때 PC Agent가 서버에 자동으로 올려 다른 멤버가 쓸 수 있습니다. 스크립트가 쓰는 파일이 더 있으면 `save_recipe(files=…)`로 더합니다.
 
 ## 2. DOE 크기
 | 변수 수 | 초기 DOE (LHS) | BO 반복 |
@@ -38,12 +44,12 @@ dds-study.create_study(
 - 실패한 케이스는 `recent_failures`에서 오류를 보고 스크립트를 고친 뒤 다시 실행합니다(`run_cases(case_ids=[...])`).
 
 ## 3. 학습 품질 판단
-- `train_surrogate`가 돌려주는 교차검증 R²를 봅니다.
+- `train_surrogate`가 돌려주는 교차검증 R²와 `quality`·`warnings`를 봅니다. `status: "running"`이면 실패가 아닙니다. 같은 인자로 다시 부릅니다.
   - **0.9 이상**: 최적화 진행
-  - **0.7~0.9**: 능동학습 `optimize(mode="al", iterations=5~10)`으로 보강한 뒤 다시 확인
+  - **0.7~0.9**: 해석 방법이 있으면 능동학습 `optimize(mode="al", iterations=5~10)`으로 보강한 뒤 다시 확인. 불러온 데이터 스터디(솔버 없음)는 돌릴 수 없으니 행을 더 달라고 합니다.
   - **0.7 미만**: 변수 범위, 결과 추출 오류, 노이즈를 점검합니다(케이스 표 아티팩트에서 이상치를 확인).
 
 ## 4. 최적화와 배포
-- `optimize(mode="bo", iterations=N)`은 제안 → 실행 → 재학습을 반복하고 수렴 그래프를 게시합니다.
+- `optimize(mode="bo", iterations=N)`은 제안 → 실행 → 재학습을 반복하고 수렴 그래프를 게시합니다. 불러온 데이터 스터디에서는 해석 없이 모델로만 후보를 찾습니다(`verified=false`). 해석으로 확인되지 않은 예측이라고 말합니다.
 - 끝나면 `deploy_model(model_id)`를 호출합니다. 웹앱 Simulator 화면에서 슬라이더로 즉시 예측(± 불확실도)할 수 있습니다.
 - 마지막에 `publish_artifact(kind="markdown")`로 요약을 게시합니다. 요약에는 최적 변수, 목적값, 확인 해석(최적점에서 실제 해석 1회 권장), R²를 넣습니다.

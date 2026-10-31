@@ -29,8 +29,9 @@
                               ├─ CAD/CAE 툴 실행(스킬 스크립트) · 케이스 실행(로컬/HPC) · 결과 업로드
                               └─ 작업 폴더(프로젝트마다, 사용자가 정할 수 있음)
 ```
-- AI CLI와 CAD/CAE 툴은 **사용자 PC**에서 돈다. 서버에는 숫자 결과·이미지·3D 필드·보고서만 올라간다.
-- 무거운 원본(odb·d3plot 등)은 PC에 남는다.
+- AI CLI와 CAD/CAE 툴은 **사용자 PC**에서 돈다. 예측 모델 학습과 Simulator는 서버에서 돌아 PC Agent가 없어도 된다(표로 바로 Simulator).
+- 서버에는 숫자 결과·이미지·3D 필드·보고서·모델 외에 **대화 첨부 원본(1 GB 이하)과 `case.h5`(500 MB 이하)**도 올라가고, 프로젝트 멤버가 받을 수 있다. 전체 목록은 [docs/local-data.md](docs/local-data.md), 멤버 권한은 [docs/product-spec.md](docs/product-spec.md) 4-1절.
+- 그보다 큰 `case.h5`와 무거운 원본(odb·d3plot 등)은 PC에 남는다.
 - 사용자마다 PC Agent는 1개만 연결된다(마지막 연결 우선). 서버 컴퓨터에 PC Agent를 띄우면 작업이 서버에서 돌게 되니 운영에서는 하지 않는다.
 
 ## 2. 개발 환경 (사내: 인터넷 없음, pip·npm 사내 미러)
@@ -51,11 +52,11 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `server/app/` | FastAPI. `main.py`(앱·정적 파일), `models.py`(SQLAlchemy), `schemas.py`, `config.py`(포트·data_dir) |
 | `server/app/routers/` | `auth` 계정·PIN · `projects` 프로젝트·멤버 · `sessions` 대화·첨부·내 PC 폴더 · `flows` 작업 흐름·결과 · `studies` DOE·케이스·모델·Simulator·공유 · `agents` PC Agent 배포·설치·모니터링 |
 | `server/app/agent/` | `hub.py` 대화 턴·세션 관리(ACP 이벤트 → 메시지) · `link.py` PC Agent WebSocket 연결과 요청/응답 |
-| `server/app/study/` | `doe`(LHS/Sobol) · `surrogate`(GP) · `bayesopt`(EI·제약) · `fieldmodel`(3D 형상·필드 PCA+GP) · `thumbnail`(Simulator 카드 그림) · `service` |
+| `server/app/study/` | `doe`(LHS/Sobol) · `surrogate`(GP) · `bayesopt`(EI·제약) · `fieldmodel`(3D 형상·필드 PCA+GP) · `thumbnail`(Simulator 카드 그림) · `service` · `importer`(표·폴더 등록) · `table_job`(표 → 학습 → 배포 서버 작업) · `recipe`(스크립트 묶음) |
 | `server/app/report.py`·`report_md.py`·`assets/` | Word·HTML 보고서와 공통 틀 · 본문 markdown 해석 · 로고·파비콘 사본 |
 | `agent/dds_agent/` | PC Agent. `main.py`(서버 메시지 처리 `handle()`) · `acp_runner.py`(AI CLI) · `executor.py`(케이스 실행) · `workspace.py`(로컬 폴더 규칙·직접 지정 폴더) · `job_runner.py`(로컬/HPC) · `demo_agent.py` · `installer.py`·`updater.py`·`tray.py` |
 | `mcp_servers/` | AI CLI가 쓰는 MCP 툴: `dds_flow`(작업 흐름·결과 게시·보고서) · `dds_cae`(스크립트·툴 실행, `list_tools`) · `dds_study`(DOE·학습·BO·배포) · `dds_live`(실행 중인 CAD/CAE와 Live Link) |
-| `cae_adapters/` | `catalog.py`(지원 툴 29종 단일 목록·기본 설치 경로·설치 흔적 단어) · `tool_commands.py`(실행 명령 키) · `script.py`(케이스 스크립트 실행) · `mock.py`(연습용 솔버) |
+| `cae_adapters/` | `catalog.py`(지원 툴 29종 단일 목록·기본 설치 경로·설치 흔적 단어) · `tool_commands.py`(실행 명령 키) · `script.py`(케이스 스크립트 실행) · `mock.py`(연습용 솔버) · `tabular.py`(표 읽기) · `result_scan.py`(해석 폴더 찾기) · `recipe_bundle.py`(스크립트 묶음) |
 | `agent-context/` | AI CLI에게 주는 작업 규칙(`INSTRUCTIONS.md`)과 툴별 스킬(`skills/<툴>/SKILL.md`·`scripts/`). PC Agent가 프로젝트 폴더로 동기화하고(`agent/dds_agent/context.py`), DDS만 만든 항목은 탐색기에서 숨긴다. 사용자 규칙 파일은 표시 구간만 고친다(`docs/local-data.md`) |
 | `frontend/src/` | React+TS. `pages/`(첫 화면·작업 공간·툴·Simulator·설정·관리) · `chat/`(대화·입력창) · `canvas/`(오른쪽 패널 탭) · `components/`(`HeroMesh` 로그인 3D, `AgentGlyph` 에이전트 기호·글자 로고, `Skeleton`) · `motion.ts`(움직임 도구) · `modern.css`(최종 디자인 층) |
 | `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없거나 소스가 새로우면 자동 빌드). 색은 `tokens.css` 값을 쓴다 |
@@ -69,8 +70,9 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 |---|---|---|
 | Python(서버·Agent·MCP·스킬 규약) | `.venv\Scripts\python -m pytest server/tests agent/tests -q` | 모두 passed |
 | 프론트엔드 | `cd frontend; npm run build` | TypeScript 오류 없음 |
-| 화면·흐름 | 서버를 띄운 뒤 `cd frontend; npm run smoke` (흐름까지: `npm run smoke -- --demo`) | 마지막 줄 `PASS`, `frontend\e2e\shots\` 스크린샷을 직접 열어 확인 |
+| 화면·흐름 | 서버를 띄운 뒤 `cd frontend; npm run smoke` (흐름까지: `npm run smoke -- --demo`). 표 화면을 고쳤으면 `node e2e/table_layout.mjs`(열 60개·긴 이름·막는 문구)·`node e2e/table_job.mjs`(만드는 중 입력창·새로고침 뒤 알림) | 마지막 줄 `PASS`, `frontend\e2e\shots\` 스크린샷을 직접 열어 확인 |
 | ACP·MCP 실제 프로세스 | `.venv\Scripts\python scripts\e2e_demo.py` | 시나리오 완료 |
+| 표·기존 결과 등 진입 경로(E0~E16) | `.venv\Scripts\python scripts\e2e_scenarios.py [--only E1,E3]` (규칙은 [docs/entry-points.md](docs/entry-points.md)) | 마지막 줄 `전부 통과` |
 | 세션 유지·대기 표시 | `.venv\Scripts\python scripts\e2e_sessions.py` (실제 서버·Agent + 가짜 CLI `agent/tests/fake_acp.py`, 창 없는 브라우저) | 마지막 줄 `E2E 통과`, 스크린샷 `frontend\e2e\shots\sessions\` |
 | 설치·자동 업데이트 | `.venv\Scripts\python scripts\e2e_install.py` | 설치→연결→새 버전→업데이트 |
 | 스킬 스크립트 | `python -m py_compile <파일>` · 툴 목록 일관성은 pytest의 `test_tool_catalog_consistent` | — |
@@ -117,6 +119,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | MCP 툴 추가 | `mcp_servers/dds_*.py`(FastMCP 데코레이터) → 서버 API(필요 시) → `agent-context/INSTRUCTIONS.md`에 사용법 |
 | 대화 흐름(승인·권한·결과 카드) | `frontend/src/chat/ChatView.tsx` · 서버 `server/app/agent/hub.py` |
 | 오른쪽 패널 탭 | `frontend/src/canvas/CanvasPanel.tsx` · `views.tsx`(작업 흐름: 흐름도 고정 + 'N단계' 결과 스크롤 · 데이터: 입력/출력·학습 데이터·케이스) · `ReportView.tsx`(보고서) · `SimulatorTab.tsx`(Simulator·모델 버전) · 단계 번호 `frontend/src/flow/order.ts` |
+| 표로 바로 Simulator | 표는 **붙여넣기로만** 받는다(회사 파일은 보안 프로그램으로 암호화됨) · 화면 `frontend/src/canvas/TableImport.tsx`(입력창·붙여넣기 창이 함께 쓴다, 묻는 것은 출력 열뿐) · 파서 `cae_adapters/tabular.py` `read_pasted` · 등록 `server/app/study/importer.py` · 라우트 `routers/studies.py` `/tables/preview/text`·`/projects/{p}/studies/import/text` · 시험 `server/tests/test_entry_points.py`·`npm run smoke` |
 | Simulator | 화면 `frontend/src/pages/SimulatorPage.tsx`(`SimulatorView`를 탭과 넓은 화면이 함께 쓴다) · 목록 `SimulatorsPage.tsx` · 버전·3D 묶기 `server/app/study/service.py` `deploy_version`·`field_models_for` · 목록·공유 `server/app/routers/studies.py` · 규칙 `docs/product-spec.md` 3-7절 |
 | DOE·학습·최적화 로직 | `server/app/study/*` + `server/tests` |
 | 보고서 | AI가 새로 쓰는 보고서: 자료·저장 `server/app/routers/reports.py`, 틀(표지·목차·맺음말·머리글)과 Word·HTML `server/app/report.py`, 본문 해석 `server/app/report_md.py`, 로고·파비콘 사본 `server/app/assets/`(`frontend/public`과 같아야 한다), 웹 탭 `frontend/src/canvas/ReportView.tsx`, 쓰는 규칙(AI는 제목과 본문만, `##`부터) `agent-context/INSTRUCTIONS.md` 1-0절·`mcp_servers/dds_flow.py` `write_report`, 검사 `server/tests/test_report_template.py` |

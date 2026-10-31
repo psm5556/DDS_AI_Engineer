@@ -540,6 +540,16 @@ def _up_to_date(project_dir: Path, stamp: str, state: dict | None) -> bool:
     return all((project_dir / d).is_dir() for d in SKILL_DIRS)
 
 
+def _copy_failed(project_dir: Path, src: Path, dst: Path, err: OSError) -> str:
+    """Windows는 경로 260자를 넘으면 복사가 실패한다. 스킬 폴더는 작업 폴더보다 수십 자 더 깊다."""
+    deepest = max((len(str(dst / p.relative_to(src))) for p in src.rglob("*")), default=len(str(dst)))
+    if deepest >= 260:
+        return (f"작업 폴더 경로가 너무 길어 AI 작업 규칙을 복사하지 못했습니다(가장 긴 경로 {deepest}자, Windows 한도 260자): {project_dir} "
+                "→ 작업 폴더를 더 짧은 경로(예: C:\\DDS)로 바꾼 뒤 다시 요청하세요")
+    first = (err.args[0][0][2] if isinstance(err, shutil.Error) and err.args and err.args[0] else str(err))[:200]
+    return f"AI 작업 규칙을 작업 폴더로 복사하지 못했습니다: {project_dir} ({first}) → 폴더 쓰기 권한과 남은 디스크 용량을 확인한 뒤 다시 요청하세요"
+
+
 def sync_project_context(project_dir: Path) -> bool:
     """복사했으면 True, 내용이 그대로라 건너뛰었으면 False. 세션마다 파일 수백 개를 복사하면 보안 검사에 걸려 대화 시작이 늦어진다."""
     # 세션 시작이 스레드에서 돌아 같은 폴더를 동시에 맞출 수 있다. 복사가 겹치면 파일 공유 위반이 난다
@@ -570,8 +580,11 @@ def _sync(project_dir: Path) -> bool:
         for name in gone:
             shutil.rmtree(dst / name, ignore_errors=True)
         for name in names:
-            shutil.copytree(skills_src / name, dst / name, dirs_exist_ok=True, copy_function=_copy_file,
-                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            try:
+                shutil.copytree(skills_src / name, dst / name, dirs_exist_ok=True, copy_function=_copy_file,
+                                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            except OSError as e:  # shutil.Error도 OSError다. 그대로 두면 실패한 경로 수백 개가 대화에 "에이전트 오류"로 쏟아진다
+                raise RuntimeError(_copy_failed(project_dir, skills_src / name, dst / name, e)) from e
     _write_bytes(marker, json.dumps(names, ensure_ascii=False).encode("utf-8"))
     body = (CONTEXT_DIR / "INSTRUCTIONS.md").read_text(encoding="utf-8")
     body += _skill_index(project_dir / ".claude" / "skills")

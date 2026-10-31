@@ -10,7 +10,7 @@ from .. import models, schemas
 from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, require_member
-from ..study.service import publish_artifact
+from ..study.service import flow_summaries, publish_artifact
 from ..ws import manager
 
 router = APIRouter(prefix="/api", tags=["flows"])
@@ -30,6 +30,12 @@ def _changed(f: models.Flow):
 @router.get("/projects/{project_id}/flows", response_model=list[schemas.FlowResponse])
 def list_flows(project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
     return db.query(models.Flow).filter_by(project_id=project.id).order_by(models.Flow.id.desc()).all()
+
+
+@router.get("/projects/{project_id}/flows/summary", response_model=list[schemas.FlowSummary])
+def flow_summary(project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
+    """지난 흐름 찾기: 흐름마다 단계 이름과 연결된 스터디·모델을 짧게 돌려준다."""
+    return flow_summaries(db, project.id)
 
 
 @router.post("/projects/{project_id}/flows", response_model=schemas.FlowResponse)
@@ -61,6 +67,8 @@ def set_flow_status(flow_id: int, body: schemas.FlowStatusUpdate, user=Depends(g
     if f.version != body.version:
         raise HTTPException(409, "다른 사용자가 수정했습니다. 새로고침 후 다시 시도하세요.")
     f.status = body.status
+    if body.status == "approved":
+        f.approved_by = user.id
     f.version += 1
     db.commit()
     _changed(f)

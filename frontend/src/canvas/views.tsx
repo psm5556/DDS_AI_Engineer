@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Database, FolderOpen, Loader2, Plus, Square, Trash2 } from "lucide-react";
+import { Copy, Database, Download, FolderOpen, Loader2, Plus, RotateCcw, Square, Table2, Trash2 } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { del, download, get, post, put } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
@@ -7,14 +7,16 @@ import { useAuth } from "../auth";
 import { AgentGlyph } from "../components/AgentGlyph";
 import { Confirm } from "../components/Modal";
 import { Skeleton } from "../components/Skeleton";
+import { dataSourceText } from "../components/ModelTrust";
 import { FlowCanvas } from "../flow/FlowCanvas";
-import { FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_LABEL, sendToAgent, when } from "../format";
+import { copyText, FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_LABEL, sendToAgent, when } from "../format";
 import { orderNodes } from "../flow/order";
 import { flash, scrollMode } from "../motion";
 import { useCanvas } from "./CanvasContext";
 import { relFromRunDir, useOpenLocal } from "./LocalFiles";
+import { TableAddRows } from "./TableImport";
 import { useToast } from "../toast";
-import type { Artifact, Case, Flow, Project, StudyStatus, Study, TrainingDataset, User } from "../types";
+import type { AgentStatus, Artifact, Case, Flow, Project, StudyStatus, Study, TrainingDataset, User } from "../types";
 
 /** 캔버스에 들어가는 화면들: 작업 흐름(단계별 결과) · 데이터(입력·출력, 학습 데이터, 케이스) · 멤버. 보고서는 ReportView, Simulator는 SimulatorTab.
  *  대화(가운데)에서 에이전트가 일하면 해당 화면이 실시간으로 갱신된다. */
@@ -49,6 +51,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
   const [rm, setRm] = useState<Artifact | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
+  const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status") });
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/artifacts/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["artifacts", pid] }); toast("삭제했습니다"); },
@@ -72,12 +75,20 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
   };
 
   if (!flows) return <Skeleton rows={5} />;
+  const removeDialog = rm && <Confirm title="결과 삭제" message={`'${rm.title}'을(를) 삭제할까요?`} confirmLabel="삭제" danger
+    onConfirm={() => remove.mutate(rm.id)} onClose={() => setRm(null)} />;
   if (!flow) {
+    // 표에서 바로 만든 Simulator나 보고서는 작업 흐름 없이 생긴다. 그 결과가 빈 화면 뒤에 숨으면 안 된다
+    const loose = [...arts].sort((a, b) => a.id - b.id);
     return (
-      <div className="empty-hero">
-        <AgentGlyph size={32} />
-        <b>아직 작업 흐름이 없습니다</b>
-        <p>대화창에 하고 싶은 일을 말하면, 에이전트가 CAD → 해석 → 결과 추출 → DOE·예측 모델까지 작업 흐름을 먼저 그려 여기에 보여 줍니다.</p>
+      <div className="flow-tab flow-none">
+        <div className="empty-hero">
+          <AgentGlyph size={32} />
+          <b>{loose.length ? "작업 흐름 없이 만든 결과입니다" : "아직 작업 흐름이 없습니다"}</b>
+          <p>해석을 새로 돌리거나 내 모델을 바꾸는 일은 에이전트가 작업 흐름을 먼저 그려 여기에 보여 주고, 승인하면 실행합니다. 조회·후처리, 가진 데이터로 예측 모델·Simulator 만들기, 보고서는 작업 흐름 없이 바로 합니다.</p>
+        </div>
+        {loose.length > 0 && <div className="step-list" aria-label="결과"><div className="art-grid">{loose.map((a) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} />)}</div></div>}
+        {removeDialog}
       </div>
     );
   }
@@ -108,6 +119,14 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
           <div className="small muted">{flow.goal || "목표 미기재"} · 단계 {done}/{flow.nodes.length} 완료 · {when(flow.updated_at)}</div>
         </div>
         {flow.status === "review" && <span className="notice-inline warn">대화의 카드에서 승인하거나 반려하세요</span>}
+        {flow.status !== "review" && flow.status !== "rejected" && (
+          <button className="small" title="입력창에 요청을 채웁니다. 새 모델 파일을 첨부해 보내면 옛 결과는 그대로 두고 새 스터디로 진행합니다"
+            onClick={() => {
+              if (!agent?.connected) { toast("PC Agent가 연결되어 있어야 다시 진행할 수 있습니다 → 설정에서 연결 상태를 확인하세요", true); return; }
+              prefillAgent(`지난 작업 흐름 '${flow.title}'(#${flow.id})을 새 모델로 다시 진행해 줘. 옛 스터디·모델·Simulator는 그대로 두고, 새 모델에서 달라진 점(부품·면 이름, 변수 범위, 단위)을 먼저 알려 줘. 바뀐 점: `,
+                "새 모델 파일을 첨부해 주세요. 파일이 내 PC에 이미 있으면 경로를 요청에 적어도 됩니다.");
+            }}><RotateCcw size={13} />이 흐름을 새 모델로 다시</button>
+        )}
       </div>
       <div className="pbar" aria-label="진행률"><i style={{ width: `${(done / Math.max(1, flow.nodes.length)) * 100}%` }} /></div>
       <FlowCanvas flow={flow} selected={sel} onSelect={goStep} artifactCount={count} compact />
@@ -142,30 +161,35 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
           </section>
         )}
       </div>
-      {rm && <Confirm title="결과 삭제" message={`'${rm.title}'을(를) 삭제할까요?`} confirmLabel="삭제" danger
-        onConfirm={() => remove.mutate(rm.id)} onClose={() => setRm(null)} />}
+      {removeDialog}
     </div>
   );
 }
 
 /* ---------- 데이터 ---------- */
+const TABLE_START_HINT = "엑셀에서 복사한 표를 붙여 넣으면 해석 없이 예측 모델을 학습해 Simulator로 배포합니다. AI와 PC Agent가 없어도 됩니다";
+
 export function StudiesView({ pid }: { pid: number }) {
   const c = useCanvas();
+  const [adding, setAdding] = useState(false);
   const { data: studies } = useQuery({ queryKey: ["studies", pid], queryFn: () => get<Study[]>(`/api/projects/${pid}/studies`) });
   const cur = studies?.find((s) => s.id === c.studyId)?.id ?? studies?.[0]?.id ?? null;
   if (!studies) return <Skeleton rows={5} />;
   if (!studies.length) {
-    return <div className="empty-hero"><AgentGlyph size={32} /><b>아직 스터디가 없습니다</b>
-      <p>에이전트가 DOE를 시작하면 케이스 데이터가 여기에 쌓입니다.</p></div>;
+    return <div className="empty-hero"><AgentGlyph size={32} /><b>아직 데이터가 없습니다</b>
+      <p>에이전트가 해석을 돌리거나 가진 결과를 등록하면 케이스가 여기에 쌓입니다. 엑셀 표가 있으면 붙여 넣어 지금 바로 Simulator를 만들 수 있습니다.</p>
+      <button className="primary" title={TABLE_START_HINT} onClick={() => c.setTableOpen(true)}><Table2 size={14} />표로 바로 Simulator</button></div>;
   }
   return (
     <>
-      {studies.length > 1 && (
-        <div className="row" style={{ marginBottom: 16 }}>
-          <span className="seg">{studies.map((s) => <button key={s.id} className={cur === s.id ? "on" : ""} onClick={() => c.setStudyId(s.id)}>{s.name}</button>)}</span>
-        </div>
-      )}
+      <div className="row study-bar">
+        {studies.length > 1 && <span className="seg">{studies.map((s) => <button key={s.id} className={cur === s.id ? "on" : ""} onClick={() => c.setStudyId(s.id)}>{s.name}</button>)}</span>}
+        <span className="grow" />
+        {cur && <button className="small" title="이 스터디에 표의 행이나 출력 열을 더합니다. AI와 PC Agent가 없어도 됩니다" onClick={() => setAdding(true)}><Plus size={13} />행 추가</button>}
+        <button className="small" title={TABLE_START_HINT} onClick={() => c.setTableOpen(true)}><Table2 size={13} />표로 바로 Simulator</button>
+      </div>
       {cur && <StudyDetail pid={pid} id={cur} />}
+      {adding && cur && studies.find((x) => x.id === cur) && <TableAddRows pid={pid} study={studies.find((x) => x.id === cur)!} onClose={() => setAdding(false)} />}
     </>
   );
 }
@@ -202,17 +226,19 @@ ${what}`}>PC · {bytes(a.size)}</span>;
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** 케이스 표 한 줄. 케이스가 수백 건이어도 바뀐 줄만 다시 그린다(React Query가 바뀌지 않은 케이스 객체를 그대로 둔다) */
-const CaseRow = memo(function CaseRow({ c, vars, outs, best, extracting, pulse, name, pid }: {
-  c: Case; vars: string[]; outs: string[]; best: boolean; extracting: boolean; pulse: boolean; name: string; pid: number;
+const CaseRow = memo(function CaseRow({ c, vars, outs, best, extracting, pulse, name, pid, onDelete }: {
+  c: Case; vars: string[]; outs: string[]; best: boolean; extracting: boolean; pulse: boolean; name: string; pid: number; onDelete?: (c: Case) => void;
 }) {
   const { user } = useAuth();
+  const toast = useToast();
   const open = useOpenLocal(pid);
-  const rel = relFromRunDir(c.run_dir);
+  const imported = c.source === "import";
+  const rel = imported ? null : relFromRunDir(c.run_dir); // 불러온 케이스의 폴더는 작업 폴더 밖 원본이라 웹앱에서 열 수 없다
   const mine = c.run_by === user?.id;
   const state = c.status === "complete" ? "done" : c.status === "failed" ? "fail" : c.status === "running" ? `run ${pulse ? "pulse" : ""}` : "";
   return (
     <tr className={best ? "best-row" : ""} title={c.error ?? undefined}>
-      <td>{c.id}</td><td>{({ doe: "DOE", bo: "최적화", al: "능동학습", manual: "직접" } as Record<string, string>)[c.source] ?? c.source}</td>
+      <td>{c.id}</td><td className="nowrap" title={c.origin?.source ? `${c.origin.source}${c.origin.row ? ` ${c.origin.row}행` : ""}${c.origin.label ? ` · ${c.origin.label}` : ""}` : undefined}>{({ doe: "DOE", bo: "최적화", al: "능동학습", manual: "직접", import: "불러옴" } as Record<string, string>)[c.source] ?? c.source}</td>
       <td className="status-cell"><span className={`st ${state}`}><i />{CASE_STATUS[c.status]?.[0] ?? c.status}</span></td>
       {vars.map((v) => <td key={v} className="r col-in">{fmt(c.params[v])}</td>)}
       {outs.map((o) => (
@@ -224,7 +250,10 @@ const CaseRow = memo(function CaseRow({ c, vars, outs, best, extracting, pulse, 
         <button className="icon-btn" disabled={!mine} aria-label={`케이스 ${c.id} 폴더 열기`}
           title={mine ? `내 PC에서 케이스 폴더 열기 — ${rel}` : "다른 멤버의 PC에서 실행된 케이스입니다"}
           onClick={() => open.mutate({ path: rel })}><FolderOpen size={13} /></button>
-      ) : null}</td>
+      ) : imported && c.run_dir ? (
+        <button className="icon-btn" aria-label={`케이스 ${c.id} 원본 폴더 경로 복사`} title={`원본 폴더 경로 복사 — ${c.run_dir}`}
+          onClick={async () => toast((await copyText(c.run_dir!)) ? "경로를 복사했습니다" : "복사하지 못했습니다", false)}><Copy size={13} /></button>
+      ) : null}{(imported || c.origin) && onDelete && <button className="icon-btn danger" aria-label={`케이스 ${c.id} ${imported ? "지우기" : "값 비우기"}`} title={imported ? "잘못 넣은 행을 지웁니다. 배포 중인 Simulator는 다시 학습할 때까지 그대로입니다" : "표로 채운 값을 비우고 이 DOE 점을 대기로 돌립니다"} onClick={() => onDelete(c)}><Trash2 size={13} /></button>}</td>
     </tr>
   );
 }, (a, b) => a.c === b.c && a.best === b.best && a.extracting === b.extracting && a.pulse === b.pulse && a.name === b.name && a.pid === b.pid
@@ -273,6 +302,8 @@ function DatasetsBlock({ s, done }: { s: Study; done: number }) {
   );
 }
 
+const CASE_ROWS_STEP = 200;
+
 function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const { data: st } = useQuery({ queryKey: ["study", id], queryFn: () => get<StudyStatus>(`/api/studies/${id}`) });
   const { data: cases } = useQuery({ queryKey: ["study", id, "cases"], queryFn: () => get<Case[]>(`/api/studies/${id}/cases`) });
@@ -280,13 +311,21 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [askStop, setAskStop] = useState(false);
+  const [shownRows, setShownRows] = useState(CASE_ROWS_STEP); // 불러온 표는 수천 행일 수 있다. 표를 한 번에 다 그리면 화면이 멈춘다
   // 해석 창이 사용자 화면에 없으므로 웹앱에서 멈출 수 있어야 한다
   const stop = useMutation({
-    mutationFn: () => post<{ stopping: number; others: number }>(`/api/studies/${id}/stop`),
+    mutationFn: () => post<{ stopping: number; others: number; released?: number; note?: string }>(`/api/studies/${id}/stop`),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["study", id] });
-      toast(r.others ? `${r.stopping}건을 중지합니다. 다른 멤버의 PC에서 도는 ${r.others}건은 그대로 둡니다` : `${r.stopping}건을 중지합니다`);
+      const head = r.note || `${r.stopping}건을 중지합니다`;
+      toast(r.others ? `${head} 다른 멤버의 PC에서 도는 ${r.others}건은 그대로 둡니다` : head);
     },
+    onError: (e: Error) => toast(e.message, true),
+  });
+  const [askDelete, setAskDelete] = useState<Case | null>(null);
+  const removeCase = useMutation({
+    mutationFn: (c: Case) => del(`/api/studies/${id}/cases/${c.id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["study", id] }); qc.invalidateQueries({ queryKey: ["artifacts", pid] }); toast("행을 지웠습니다. 다시 학습해 배포하면 Simulator에 반영됩니다"); },
     onError: (e: Error) => toast(e.message, true),
   });
   // 최적값이 바뀌었을 때만 잠깐 강조한다(화면을 처음 열 때는 그대로)
@@ -317,6 +356,10 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
     return "";
   };
   const note = (o: string) => s.outputs?.find((x) => x.name === o)?.note ?? "";
+  const planned = (cases ?? []).some((c) => c.source === "doe"); // 밖에서 해석하려고 받아 갈 DOE 점이 있을 때만
+  const source = dataSourceText(st.data_source);
+  const toolName = s.adapter === "data" ? (source || "불러온 데이터") : `${s.adapter}${s.adapter_config?.tool ? `/${String(s.adapter_config.tool)}` : ""}`;
+  const fixed = Object.entries(s.import_info?.fixed ?? {});
   return (
     <div className="stack">
       <section className="block">
@@ -326,13 +369,14 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
             {vars.map((v) => <div key={v}><span>{v}</span><b>{fmt(st.best!.params[v], 4)}</b></div>)}
             {obj && <div><span>{obj.name}</span><b style={{ color: "var(--brand)" }}>{fmt(st.best.results[obj.name], 4)}</b></div>}
           </div>
-        ) : <p className="small muted" style={{ marginTop: 10 }}>{st.counts.complete && cons ? "제약을 만족하는 케이스가 아직 없습니다." : "완료된 케이스가 아직 없습니다."}</p>}
+        ) : <p className="small muted" style={{ marginTop: 10 }}>{st.counts.complete && !obj ? "목적(최소·최대로 할 값)을 정하지 않아 최적 케이스를 고르지 않았습니다. 대화로 목적을 알려 주면 찾아 드립니다."
+          : st.counts.complete && cons ? "제약을 만족하는 케이스가 아직 없습니다." : "완료된 케이스가 아직 없습니다."}</p>}
         <div className="study-progress">
           <div className="pbar" aria-label="케이스 진행률"><i style={{ width: `${total ? ((st.counts.complete ?? 0) / total) * 100 : 0}%` }} /></div>
           <span className="small muted">
             케이스 {st.counts.complete ?? 0}/{total} 완료
             {Object.entries(st.counts).filter(([k, n]) => k !== "complete" && n).map(([k, n]) => ` · ${CASE_STATUS[k]?.[0] ?? k} ${n}`).join("")}
-            {` · ${s.adapter}${s.adapter_config?.tool ? `/${String(s.adapter_config.tool)}` : ""}`}
+            {` · ${toolName}`}
           </span>
           {st.running && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />실행 중</span>}
           {extracting.size > 0 && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />Output 추출 중 {extracting.size}건</span>}
@@ -340,12 +384,21 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
             <button className="small" disabled={stop.isPending} onClick={() => setAskStop(true)}><Square size={12} />중지</button>
           )}
         </div>
+        {!!st.stalled && <div className="notice warn" role="status"><span>{myRunning + myQueued > 0
+          ? `내 PC와 연결이 끊겨 케이스 ${st.stalled}건이 실행 중으로 남아 있습니다. 잠깐 끊긴 것이면 해석은 계속 돌고, 다시 연결되면 결과가 들어옵니다 → 기다리지 않으려면 '중지'를 누르세요.`
+          : `${st.stalled_by?.join(", ")}님의 PC와 연결이 끊겨 케이스 ${st.stalled}건이 실행 중으로 남아 있습니다. 잠깐 끊긴 것이면 해석은 계속 돌고, 다시 연결되면 결과가 들어옵니다. 중지는 실행한 사람만 할 수 있습니다. 결과는 그대로 볼 수 있습니다.`}</span></div>}
+        {st.pc_notice && st.pc_notice.by === user?.id && <div className="notice warn" role="status"><span>{st.pc_notice.text}</span></div>}
         {askStop && <Confirm title="해석 중지" danger confirmLabel="중지"
           message={[myRunning ? `실행 중인 해석 ${myRunning}건을 끝냅니다. 끝낸 해석의 결과는 남지 않습니다.` : "",
             myQueued ? `대기 중인 ${myQueued}건은 시작하지 않습니다.` : "",
             myExtracting ? `Output 추출 ${myExtracting}건을 멈춥니다.` : "",
+            st.stalled ? "연결이 끊긴 PC의 해석은 다시 연결될 때 끝냅니다. 이전 결과가 있으면 그대로 둡니다." : "",
             "다시 돌리려면 대화로 요청하세요."].filter(Boolean).join(" ")}
           onConfirm={() => stop.mutate()} onClose={() => setAskStop(false)} />}
+        {askDelete && <Confirm title={askDelete.source === "import" ? "행 지우기" : "값 비우기"} danger confirmLabel={askDelete.source === "import" ? "지우기" : "비우기"}
+          message={askDelete.source === "import" ? `케이스 ${askDelete.id}을(를) 지웁니다. 되돌릴 수 없습니다. 배포 중인 Simulator는 다시 학습해 배포할 때까지 그대로입니다.`
+            : `케이스 ${askDelete.id}에 표로 채운 값을 비우고 대기로 돌립니다. 되돌릴 수 없습니다. 배포 중인 Simulator는 다시 학습해 배포할 때까지 그대로입니다.`}
+          onConfirm={() => removeCase.mutate(askDelete)} onClose={() => setAskDelete(null)} />}
         {(() => {
           const saved = (cases ?? []).filter((c) => c.archive && c.archive.ok !== false);
           if (!saved.length) return null;
@@ -364,7 +417,8 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
         <div className="io-col">
           <div className="io-head"><span className="io-tag in">입력 · Input</span><span className="cnt">{vars.length}개</span></div>
           <ul className="io-list">{s.variables.map((v) => (
-            <li key={v.name}><b>{v.name}</b><span className="io-meta">{fmt(v.lower)} ~ {fmt(v.upper)}</span></li>))}</ul>
+            <li key={v.name}><b>{v.name}</b><span className="io-meta">{fmt(v.lower)} ~ {fmt(v.upper)}{v.unit ? ` ${v.unit}` : ""}</span></li>))}</ul>
+          {fixed.length > 0 && <p className="small muted io-fixed" title="모든 행의 값이 같아 변수로 쓰지 않은 열입니다">고정값: {fixed.map(([k, v]) => `${k}=${String(v)}`).join(", ")}</p>}
         </div>
         <div className="io-col">
           <div className="io-head">
@@ -382,10 +436,16 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
         </div>
       </section>
 
-      <DatasetsBlock s={s} done={done.length} />
+      {/* 신경망 형상 학습 데이터는 해석 필드가 있어야 만든다. 표만 불러온 스터디에는 만들 것이 없다 */}
+      {(s.adapter !== "data" || done.some((c) => c.fields?.length || c.archive)) && <DatasetsBlock s={s} done={done.length} />}
 
       <section className="block">
-        <div className="block-head"><h3>케이스</h3><span className="cnt">{cases?.length ?? 0}건</span></div>
+        <div className="block-head"><h3>케이스</h3><span className="cnt">{cases?.length ?? 0}건</span><span className="grow" />
+          {planned && (
+            <button className="small" title="실험계획(DOE) 점을 CSV로 받습니다. 대기 중인 점이 있으면 그 점만 받습니다. 밖에서 해석한 뒤 출력 칸을 채워 대화로 넘기면 그 점이 채워집니다"
+              onClick={() => download(`/api/studies/${id}/doe.csv`, `${s.name}_DOE.csv`).catch((e: Error) => toast(e.message, true))}><Download size={13} />DOE 계획표 받기(CSV)</button>
+          )}
+        </div>
         <div className="table-wrap case-table"><table>
           <thead>
             <tr className="io-group">
@@ -397,10 +457,14 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
             <tr><th>ID</th><th>출처</th><th>상태</th>{vars.map((v) => <th key={v} className="r col-in">{v}</th>)}{outs.map((o) => <th key={o} className="r col-out">{o}</th>)}
               <th title="해석 데이터(case.h5, HDF5)">HDF5</th><th /></tr>
           </thead>
-          <tbody>{(cases ?? []).map((c) => (
-            <CaseRow key={c.id} c={c} vars={vars} outs={outs} best={st.best?.id === c.id} extracting={extracting.has(c.id)}
+          <tbody>{(cases ?? []).slice(0, shownRows).map((c) => (
+            <CaseRow key={c.id} c={c} vars={vars} outs={outs} best={st.best?.id === c.id} extracting={extracting.has(c.id)} onDelete={setAskDelete}
               pulse={(st.counts.running ?? 0) <= 20} name={s.name} pid={pid} />))}</tbody>
         </table></div>
+        {(cases?.length ?? 0) > shownRows && (
+          <div className="row case-more"><span className="small muted grow">{cases!.length.toLocaleString("ko-KR")}건 중 앞 {shownRows.toLocaleString("ko-KR")}건을 보여 줍니다</span>
+            <button className="small" onClick={() => setShownRows((n) => n + CASE_ROWS_STEP * 5)}>{(CASE_ROWS_STEP * 5).toLocaleString("ko-KR")}건 더 보기</button></div>
+        )}
       </section>
     </div>
   );
@@ -424,6 +488,7 @@ export function MembersPanel({ p }: { p: Project }) {
   return (
     <div className="members">
       <p className="small muted">멤버는 작업 흐름·결과·대화를 함께 보고, 자기 PC Agent로 작업을 요청할 수 있습니다 · 내 권한: {ROLE_LABEL[p.user_role ?? "member"]}</p>
+      <p className="small muted">서버에 있는 결과·모델·Simulator는 내 PC가 꺼져 있어도 멤버가 이어서 씁니다. 해석 원본 파일(odb·d3plot 등)은 해석한 사람의 PC에만 있어, 그 파일이 필요한 일은 그 사람의 PC가 켜져 있어야 합니다.</p>
       {isMaster && (
         <div className="row members-add">
           <select value={add} onChange={(e) => setAdd(e.target.value ? Number(e.target.value) : "")} aria-label="추가할 사용자">

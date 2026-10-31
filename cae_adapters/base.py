@@ -5,6 +5,7 @@ DOE/최적화/에이전트 MCP 툴에서 바로 쓸 수 있다.
 from __future__ import annotations
 
 import json
+import math
 import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -59,7 +60,8 @@ def read_results(path: Path) -> dict[str, float]:
     if not path.exists():
         raise FileNotFoundError(f"결과 파일이 생성되지 않았습니다: {path}")
     data = json.loads(path.read_text(encoding="utf-8"))
-    return {k: float(v) for k, v in data.items() if isinstance(v, (int, float))}
+    # NaN·Inf는 해석 값이 아니다. 그대로 올리면 서버 응답(JSON)과 학습이 깨진다
+    return {k: float(v) for k, v in data.items() if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)}
 
 
 def read_results_if_any(path: Path) -> dict[str, float]:

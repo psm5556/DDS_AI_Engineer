@@ -46,6 +46,19 @@ export function fmt(v: unknown, digits = 4): string {
   return Number(v.toPrecision(digits)).toString();
 }
 
+/** 붙여 넣은 표의 한도. 서버의 paste_max_mb와 같다. 넘으면 올리기 전에 알린다 */
+export const PASTE_MAX_BYTES = 50 * 1024 * 1024;
+export const PASTE_TOO_BIG = "붙여 넣은 표가 너무 큽니다. 50MB까지 받습니다 → 필요한 행과 열만 골라 다시 복사해 주세요";
+
+/** 붙여 넣은 글이 표인가: 탭으로 나뉜 칸이 두 개 이상인 줄이 대부분이고 두 줄 이상이다(엑셀 복사). 앞에 탭이 있는 코드는 칸이 하나라 걸리지 않는다 */
+export function looksLikeTable(text: string): { rows: number; cols: number } | null {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return null;
+  const cells = lines.map((l) => l.split("\t").filter((c) => c.trim()).length);
+  if (cells.filter((n) => n >= 2).length / lines.length < 0.8) return null;
+  return { rows: lines.length, cols: Math.max(...cells) };
+}
+
 export async function copyText(text: string): Promise<boolean> {
   try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
 }
@@ -53,6 +66,8 @@ export async function copyText(text: string): Promise<boolean> {
 /** 화면 어디서든 에이전트 채팅에 메시지를 보낸다 (예: 플로우 승인 후 "진행하세요") */
 export const AGENT_SEND = "dds:agent-send";
 export const sendToAgent = (text: string) => window.dispatchEvent(new CustomEvent(AGENT_SEND, { detail: text }));
-/** 보내지 않고 입력창만 채운다(사용자가 이어서 쓰게) — 예: "Output 추가: " */
+/** 보내지 않고 입력창만 채운다(사용자가 이어서 쓰게) — 예: "Output 추가: ". askFile이 있으면 입력창 위에 파일을 달라는 안내를 띄운다 */
 export const AGENT_PREFILL = "dds:agent-prefill";
-export const prefillAgent = (text: string) => window.dispatchEvent(new CustomEvent(AGENT_PREFILL, { detail: text }));
+export interface Prefill { text: string; askFile?: string }
+export const prefillAgent = (text: string, askFile?: string) =>
+  window.dispatchEvent(new CustomEvent<Prefill>(AGENT_PREFILL, { detail: { text, askFile } }));

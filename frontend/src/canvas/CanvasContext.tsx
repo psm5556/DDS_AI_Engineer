@@ -28,18 +28,31 @@ interface Ctx {
   /** 데이터·Simulator 탭이 함께 보는 스터디(탭을 옮겨도 같은 스터디) */
   studyId: number | null;
   setStudyId: (id: number | null) => void;
+  /** 그 스터디의 Simulator 탭을 연다(캔버스가 닫혀 있어도). modelId를 주면 그 버전을 고른다 */
+  openSimulator: (studyId: number, modelId?: number) => void;
+  /** Simulator 탭이 골라야 할 버전. 탭이 읽고 비운다(다시 들어올 때마다 같은 버전으로 돌아가지 않게) */
+  simModel: number | null;
+  clearSimModel: () => void;
+  /** 표 붙여넣기 창. 창은 탭 밖에 있다: 학습 중에 탭이 자동으로 바뀌어도 창이 닫히지 않게 */
+  tableOpen: boolean;
+  setTableOpen: (v: boolean) => void;
 }
 const CanvasCtx = createContext<Ctx | null>(null);
 
-export function CanvasProvider({ children }: { children: ReactNode }) {
-  const [tab, setTabState] = useState<CanvasTab>("flow");
+export interface CanvasArrival { tab: CanvasTab; studyId?: number; modelId?: number }
+
+export function CanvasProvider({ children, initial }: { children: ReactNode; initial?: CanvasArrival | null }) {
+  const [tab, setTabState] = useState<CanvasTab>(initial?.tab ?? "flow");
   const [flowId, setFlowId] = useState<number | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
   const [follow, setFollow] = useState(true);
-  const [openRequest, setOpenRequest] = useState(0);
+  const [openRequest, setOpenRequest] = useState(initial?.tab ? 1 : 0); // 첫 화면에서 넘어왔으면 캔버스를 연다
   const [reportAsk, setReportAsk] = useState<ReportAsk | null>(null);
-  const [studyId, setStudyId] = useState<number | null>(null);
-  const manualAt = useRef(0);
+  const [studyId, setStudyId] = useState<number | null>(initial?.studyId ?? null);
+  const [simModel, setSimModel] = useState<number | null>(initial?.modelId ?? null);
+  const [tableOpen, setTableOpen] = useState(false);
+  const clearSimModel = useCallback(() => setSimModel(null), []);
+  const manualAt = useRef(initial?.tab ? Date.now() : 0);
 
   const setTab = useCallback((t: CanvasTab) => { manualAt.current = Date.now(); setTabState(t); }, []);
   const showArtifact = useCallback((id: number, fid: number | null) => {
@@ -48,6 +61,9 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
   }, []);
   const showFlow = useCallback((id: number) => {
     setTabState("flow"); setFlowId(id); setOpenRequest((n) => n + 1); manualAt.current = Date.now();
+  }, []);
+  const openSimulator = useCallback((id: number, modelId?: number) => {
+    setTabState("simulator"); setStudyId(id); setSimModel(modelId ?? null); setOpenRequest((n) => n + 1); manualAt.current = Date.now();
   }, []);
   const autoShow = useCallback((t: CanvasTab, o?: { flowId?: number | null; artifactId?: number }) => {
     if (!follow || Date.now() - manualAt.current < 8000) return;
@@ -58,7 +74,8 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({
     tab, setTab, flowId, setFlowId, focus, showArtifact, showFlow, follow, setFollow, autoShow, openRequest, reportAsk, setReportAsk, studyId, setStudyId,
-  }), [tab, setTab, flowId, focus, showArtifact, showFlow, follow, autoShow, openRequest, reportAsk, studyId]);
+    openSimulator, simModel, clearSimModel, tableOpen, setTableOpen,
+  }), [tab, setTab, flowId, focus, showArtifact, showFlow, follow, autoShow, openRequest, reportAsk, studyId, openSimulator, simModel, clearSimModel, tableOpen]);
   return <CanvasCtx.Provider value={value}>{children}</CanvasCtx.Provider>;
 }
 

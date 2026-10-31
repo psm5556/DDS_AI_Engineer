@@ -1,9 +1,11 @@
 ---
 name: workflow-planning
-description: CAD/CAE 자동화 요청을 작업 흐름(Flow) 그래프로 설계하는 방법. 사용자가 자동화·DOE·최적화·Simulator를 요청해 dds-flow.propose_flow를 호출하기 전에 사용.
+description: 해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 요청을 작업 흐름(Flow) 그래프로 설계하는 방법. dds-flow.propose_flow를 호출하기 전에 사용. 조회·후처리·기존 데이터로 학습·Simulator 배포·보고서에는 Flow를 쓰지 않는다.
 ---
 
 # 작업 흐름(Flow) 설계
+
+Flow 승인은 **해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 일**, 다른 멤버가 만든 스크립트를 돌리는 일에만 받습니다. 조회·후처리·기존 데이터로 학습·Simulator 배포·보고서는 승인 없이 바로 합니다(이미 가진 데이터는 `existing-data-to-simulator` 스킬).
 
 ## 1. 요청을 단계로 쪼개기
 | 노드 type | 의미 | 예시 label | tool |
@@ -22,6 +24,9 @@ description: CAD/CAE 자동화 요청을 작업 흐름(Flow) 그래프로 설계
   - 그래프에서는 단계별 노드로 보여 줍니다.
   - detail에 "케이스마다 반복"이라고 적습니다.
 - 첫 노드 앞에 **스크립트 시험 실행** 노드(`task`, "1회 시험 실행")를 두면 사용자가 안심합니다.
+- 모델 구조를 읽는 inspect 스크립트는 제안 전에 돌려도 됩니다. 알아낸 부품·면 이름과 범위를 노드 detail에 적습니다.
+- 지난 흐름을 신규 모델로 다시 하면 `list_flows`로 찾아 같은 단계로 제안합니다. 옛 모델과 달라진 점을 detail에 적고, `clone_study`로 새 스터디를 만듭니다. 옛 결과는 건드리지 않습니다.
+- 다른 멤버가 만든 스크립트를 돌리면 detail에 "○○님이 만든 스크립트"라고 적습니다(`restore_recipe` 결과의 `created_by_name`).
 
 ## 2. 예시
 ```json

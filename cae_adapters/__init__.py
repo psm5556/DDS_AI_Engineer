@@ -1,8 +1,9 @@
 from .base import CaeAdapter, CaseOutcome
+from .data import DataAdapter
 from .mock import MockAdapter
 from .script import ScriptAdapter
 
-REGISTRY: dict[str, CaeAdapter] = {a.name: a for a in (MockAdapter(), ScriptAdapter())}
+REGISTRY: dict[str, CaeAdapter] = {a.name: a for a in (MockAdapter(), ScriptAdapter(), DataAdapter())}
 
 
 def get_adapter(name: str) -> CaeAdapter:

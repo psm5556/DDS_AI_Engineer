@@ -49,7 +49,7 @@ class LocalRunner(JobRunner):
             p = run_hidden(command, cwd=cwd, env=env, timeout=timeout, stop=self.stop)
             res = JobResult(command, str(cwd), p.returncode, _tail(decode_output(p.stdout)), _tail(decode_output(p.stderr)))
         except FileNotFoundError as e:
-            res = JobResult(command, str(cwd), None, "", f"실행 파일을 찾을 수 없습니다: {e}")
+            res = JobResult(command, str(cwd), None, "", f"실행 파일을 찾을 수 없습니다: {command[0] if command else ''} ({e}) → 웹앱 'CAD·CAE 툴' 화면에서 그 툴의 실행 파일을 고르거나, 이 PC에 설치한 뒤 다시 실행하세요")
         except RunStopped as e:
             res = JobResult(command, str(cwd), None, _tail(decode_output(e.stdout)), STOPPED_MESSAGE)
         except subprocess.TimeoutExpired as e:

@@ -17,9 +17,8 @@ import sys
 import time
 from pathlib import Path
 
-from _common import ROOT, api, resolve_pid, settings
+from _common import ROOT, DdsMCP, api, resolve_pid, settings
 from cae_adapters.hidden import spawn_gui_detached
-from mcp.server import MCPServer
 
 LIVE_DIR = ROOT / "agent-context" / "live"
 NX_OPS_DIR = LIVE_DIR / "nx"
@@ -43,7 +42,7 @@ TOOLS = {
     "nx": {"port": None, "lang": "python (NXOpen: session, work_part)", "window": "NX", "label": "NX / Simcenter 3D (대기열 방식)"},
 }
 
-mcp = MCPServer(
+mcp = DdsMCP(
     "dds-live",
     instructions=(
         "사용자가 열어 둔 CAD/CAE 화면에서 함께 모델링할 때 쓴다(형상 만들기, 재료·하중·경계조건·메쉬 설정, 해석 모델 준비). "

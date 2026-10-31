@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { del, get, put } from "../api";
 import { useAuth } from "../auth";
-import { CanvasProvider } from "../canvas/CanvasContext";
+import { CanvasProvider, useCanvas, type CanvasArrival, type CanvasTab } from "../canvas/CanvasContext";
 import { CanvasPanel } from "../canvas/CanvasPanel";
+import { TableImportHost } from "../canvas/TableImport";
 import { MembersPanel } from "../canvas/views";
 import { ChatView } from "../chat/ChatView";
 import { Skeleton } from "../components/Skeleton";
@@ -37,6 +38,16 @@ export default function WorkspacePage() {
     const st = loc.state as { prompt?: string; attachmentIds?: number[] } | null;
     return st?.prompt || st?.attachmentIds?.length ? { text: st.prompt ?? "", attachmentIds: st.attachmentIds ?? [] } : null;
   });
+  // '표로 바로 Simulator'나 넓은 Simulator 화면에서 넘어오면 그 Simulator 탭부터 연다.
+  // 주소 이력의 state는 새로고침에도 남으므로 읽자마자 지운다. 평범한 프로젝트 주소로 다시 와도 탭을 강제하지 않게
+  const [arrival, setArrival] = useState(() => arrivalFrom(loc.state));
+  useEffect(() => {
+    const a = arrivalFrom(loc.state);
+    if (!a) return;
+    setArrival(a);
+    const { canvasTab: _t, studyId: _s, modelId: _m, ...rest } = loc.state as Record<string, unknown>;
+    nav(loc.pathname + loc.search, { replace: true, state: Object.keys(rest).length ? rest : null });
+  }, [loc.state, loc.pathname, loc.search, nav]);
   const isNew = loc.pathname.endsWith("/new");
   const { data: p, error } = useQuery({ queryKey: ["project", pid], queryFn: () => get<Project>(`/api/projects/${pid}`) });
   const { data: sessions } = useQuery({ queryKey: ["sessions", pid], queryFn: () => get<ChatSession[]>(`/api/projects/${pid}/sessions`) });
@@ -53,7 +64,9 @@ export default function WorkspacePage() {
   const canvasOn = !canvasLayout.collapsed;
 
   return (
-    <CanvasProvider>
+    <CanvasProvider initial={arrival}>
+      <ApplyArrival arrival={arrival} />
+      <TableImportHost pid={pid} />
       <div className={`workspace ${canvasOn ? "" : "canvas-collapsed"}`} style={{ "--canvas-w": `${canvasLayout.width}px` } as React.CSSProperties}>
         <div className="ws-main">
           <header className="ws-head">
@@ -82,6 +95,21 @@ export default function WorkspacePage() {
       )}
     </CanvasProvider>
   );
+}
+
+function arrivalFrom(state: unknown): CanvasArrival | null {
+  const st = state as { canvasTab?: CanvasTab; studyId?: number; modelId?: number } | null;
+  return st?.canvasTab ? { tab: st.canvasTab, studyId: st.studyId, modelId: st.modelId } : null;
+}
+
+/** 이 화면이 이미 떠 있을 때 도착한 이동(처음 뜰 때는 CanvasProvider의 initial이 맡는다) */
+function ApplyArrival({ arrival }: { arrival: CanvasArrival | null }) {
+  const { openSimulator } = useCanvas();
+  const first = useRef(arrival);
+  useEffect(() => {
+    if (arrival && arrival !== first.current && arrival.tab === "simulator" && arrival.studyId) openSimulator(arrival.studyId, arrival.modelId);
+  }, [arrival, openSimulator]);
+  return null;
 }
 
 function useNarrow() {

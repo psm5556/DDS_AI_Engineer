@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { TableJobsBar } from "./canvas/TableImport";
 import { RequireAuth } from "./auth";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
@@ -34,6 +35,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="app-main">
         <div key={section} className="page-fade"><RouteBoundary>{children}</RouteBoundary></div>
       </div>
+      <TableJobsBar />
     </div>
   );
 }

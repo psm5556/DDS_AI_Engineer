@@ -51,7 +51,25 @@ python3 scripts/pc_verify.py run my_check.py                  # 궁금한 것을
 | `deploy` | 지금 코드 배포 → 바로 업데이트 → 다시 연결될 때까지 대기. 개발용 실행(`dev_live`)은 업데이트하지 않는다 |
 | `chat "요청" --agent claude` | 웹앱과 똑같이 대화. 작업 흐름 승인·권한 허용까지 자동으로 하고 진행을 출력한다. **토큰 계정의 PC**에서 돈다 |
 
-제한 시간은 `--timeout 초`(기본 600, 최대 7200), 대상 지정은 `--user-id`다. 옵션은 명령 앞에 쓴다.
+제한 시간은 `--timeout 초`(기본 600, 최대 7200), 대상 지정은 `--user-id`다. 이 둘은 명령 앞에 쓴다.
+
+### `chat`의 옵션과 합격 판정
+자동 승인은 AI가 돌아가는 경로를 숨길 수 있다. 그래서 승인·허용 횟수와 호출한 도구를 재고, 기대를 어기면 종료 코드 1로 끝낸다. 측정값은 저장 폴더의 `metrics.json`, 대화 전문은 `messages.json`이다.
+
+| 옵션 | 뜻 |
+|---|---|
+| `--attach 파일` | 대화에 첨부한다. 여러 번 쓸 수 있다 |
+| `--session N` | 그 대화를 이어서 요청한다. 세션 재사용·후속 요청을 시험한다 |
+| `--no-approve` | 작업 흐름을 승인하지 않는다. 승인 없이 끝나야 하는 요청을 볼 때 쓴다 |
+| `--expect 항목,항목` | 합격 기준. 아래 항목 |
+| `--max-first-reply 초` | 첫 응답까지 허용하는 시간 |
+| `--allow-errors` | 대화의 오류 안내만으로는 불합격으로 치지 않는다 |
+
+`--expect` 항목: `deployed`, `no_cases_run`, `no_errors`, `finished`, `flows=0`, `flows_approved=0`, `permissions<=2`, `questions=0`, `models>=1`, `cases_run>=20`, `first_reply_sec<=300`, `tool:이름`, `no_tool:이름`, `reply~글자`, `no_reply~글자`. 모르는 항목과 재지 못한 값은 불합격이다. `finished`와 `no_errors`는 항상 본다.
+
+- 승인은 **이 대화가 제안한 Flow만** 한다. `--project`로 같이 쓰는 프로젝트의 다른 대화 Flow는 건드리지 않는다.
+- `questions`는 답에 물음표가 든 횟수로 어림한 값이다. 정확한 되물음 횟수가 아니다.
+- 진입 시나리오별 명령은 [entry-points.md](entry-points.md) 4절.
 
 ## 4. 시험할 때 지킬 것
 - **작은 모델로** 한다. 사용자가 PC를 함께 쓰고 있다. 열려 있는 모델을 바꾸는 시험(`live set`·`exec`)은 시험용 파일을 연 뒤에 한다.

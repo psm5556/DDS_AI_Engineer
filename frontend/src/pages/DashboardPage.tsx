@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, Box, ChevronDown, ChevronRight, Cpu, FolderSearch, Loader2, Rocket, SlidersHorizontal, Target, Workflow, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowRight, Box, ChevronDown, ChevronRight, Cpu, FolderInput, FolderSearch, Loader2, Rocket, SlidersHorizontal, Table2, Target, Workflow, Wrench } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { get, post, put, uploadFile } from "../api";
 import { useAuth } from "../auth";
+import { TablePasteDialog } from "../canvas/TableImport";
 import { Composer, type Outgoing } from "../chat/Composer";
 import { AgentGlyph } from "../components/AgentGlyph";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
@@ -19,6 +20,9 @@ const STARTERS = [
   { icon: Cpu, t: "DOE·예측 모델", p: "두께 2~6mm, 리브 높이 5~20mm로 DOE를 돌려 데이터를 쌓고, 질량·응력 예측 모델을 만들어 Simulator로 배포해 줘" },
   { icon: Target, t: "최적 설계 찾기", p: "응력 250MPa 이하에서 질량이 최소가 되는 설계를 베이지안 최적화로 찾아 줘" },
 ];
+/** 이미 해석을 마친 사람의 시작점. 어디서 시작하든 받아 준다는 것을 첫 화면에서 보여 준다 */
+const FOLDER_PROMPT = "이 폴더에 이미 해석한 케이스들이 있어. 해석은 다시 돌리지 말고 결과를 모아 예측 모델을 만들어 Simulator로 배포해 줘. 폴더: ";
+const TABLE_PROMPT = "붙여 넣은 표의 입력·출력으로 예측 모델을 만들어 Simulator로 배포하고, 정확도를 알려 줘";
 
 class FolderError extends Error {}
 
@@ -35,6 +39,8 @@ export default function DashboardPage() {
   const [folderErr, setFolderErr] = useState("");
   const [picking, setPicking] = useState(false);
   const [opts, setOpts] = useState(false);
+  const [tableOpen, setTableOpen] = useState(false);
+  const openSimulator = (pid: number, studyId: number, modelId: number) => nav(`/projects/${pid}`, { state: { canvasTab: "simulator", studyId, modelId } });
   const showOpts = opts || !!folderErr; // 폴더 오류가 나면 펼쳐서 보여 준다
   const folderRef = useRef<HTMLInputElement>(null);
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
@@ -90,12 +96,12 @@ export default function DashboardPage() {
         <p className="muted">모델링부터 해석, 예측 모델, 보고서까지 말로 요청하면 이어서 합니다.</p>
         {agent && !connected && (
           <div className="notice warn" style={{ textAlign: "left" }}><AlertTriangle size={16} />
-            <span className="grow">에이전트와 CAD/CAE 툴은 내 PC에서 실행됩니다. 먼저 <b>PC Agent</b>를 설치해 주세요.</span>
+            <span className="grow">에이전트와 CAD/CAE 툴은 내 PC에서 실행됩니다. 먼저 <b>PC Agent</b>를 설치해 주세요. 표를 붙여 넣어 Simulator를 만드는 일은 설치 없이 됩니다.</span>
             <Link to="/settings" className="btn small primary">설치하기</Link></div>
         )}
 
         <div className="np-card">
-          <Composer big autoFocus typing suggestions={STARTERS.map((x) => x.p)} seed={seed} busy={start.isPending}
+          <Composer big autoFocus typing onSimulator={openSimulator} suggestions={[...STARTERS.map((x) => x.p), TABLE_PROMPT, FOLDER_PROMPT]} seed={seed} busy={start.isPending}
             onSend={(o) => start.mutateAsync(o).then(() => true, () => false)}
             leftBar={<AgentPicker value={resolveAgent(agent, preferred) ?? ""} onChange={setPreferred} disabled={!connected} />}
             placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘" />
@@ -140,6 +146,13 @@ export default function DashboardPage() {
             <button key={t} className="starter" onClick={() => setSeed({ text: p, n: Date.now() })} title={p}><Icon size={16} /><span>{t}</span></button>
           ))}
         </div>
+        <div className="starters-data" aria-label="이미 가진 데이터로 시작">
+          <span className="starters-data-label">이미 결과가 있다면</span>
+          <button type="button" className="starter-data" title="엑셀에서 복사한 표를 붙여 넣으면 해석 없이 예측 모델을 학습해 Simulator로 배포합니다. AI와 PC Agent가 없어도 됩니다"
+            onClick={() => setTableOpen(true)}><Table2 size={15} /><span><b>표로 바로 Simulator</b><small>엑셀에서 복사해 붙여 넣으면 바로 만듭니다</small></span></button>
+          <button type="button" className="starter-data" title={FOLDER_PROMPT} onClick={() => setSeed({ text: FOLDER_PROMPT, n: Date.now() })}>
+            <FolderInput size={15} /><span><b>해석 폴더로 Simulator</b><small>에이전트가 케이스 결과를 모아 만듭니다</small></span></button>
+        </div>
         <ToolsHint connected={connected} />
       </div>
 
@@ -162,6 +175,7 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+      {tableOpen && <TablePasteDialog pid={null} onClose={() => setTableOpen(false)} onOpen={openSimulator} />}
     </div>
   );
 }

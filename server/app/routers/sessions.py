@@ -2,6 +2,7 @@ import hashlib
 import re
 import uuid
 
+from cae_adapters.tabular import SNIFF_BYTES, TableEncrypted, TableNotATable, sniff_table_file
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -213,6 +214,14 @@ async def upload_attachment(file: UploadFile = File(...), project: models.Projec
                 raise HTTPException(413, f"{settings.max_upload_mb}MB보다 큰 파일은 올릴 수 없습니다")
             h.update(chunk)
             f.write(chunk)
+    # 표 파일이면 앞부분을 본다. 암호화된 표를 그대로 받으면 AI가 시작될 때까지 몇 분 기다린 뒤에야 읽을 수 없다는 말을 듣는다
+    with open(dest, "rb") as f:
+        head = f.read(SNIFF_BYTES)
+    try:
+        sniff_table_file(head, name)
+    except (TableEncrypted, TableNotATable) as e:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(400, str(e))
     a = models.Attachment(project_id=project.id, user_id=user.id, filename=name, size=size, sha256=h.hexdigest(), stored=rel)
     db.add(a)
     db.commit()

@@ -17,7 +17,7 @@ import { clockOf, WaitingBubble, type TurnClock } from "./WaitingBubble";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
 import { clip, readableArgs, toolLabel } from "./labels";
 import { Skeleton } from "../components/Skeleton";
-import { AGENT_PREFILL, AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, localIso } from "../format";
+import { AGENT_PREFILL, AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, localIso, type Prefill } from "../format";
 import { useLive, useServerDown } from "../live";
 import { useToast } from "../toast";
 import { orderNodes } from "../flow/order";
@@ -70,6 +70,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   const { user } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
+  const canvas = useCanvas();
   const [preferred, setPreferred] = usePreferredAgent();
   // 진행 중인 턴(없으면 null). 새 대화를 보내면 주소가 바뀌며 이 화면이 다시 만들어지므로, 보낸 쪽이 캐시에 남긴 것으로 이어 받는다
   const [clock, setClock] = useState<TurnClock | null>(() => (sid ? qc.getQueryData<TurnClock>(["turn", sid]) ?? null : null));
@@ -93,7 +94,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   const pieces = useRef(new Map<number, { off: number; text: string }[]>()); // 이 턴에 받은 글자 조각(메시지별)
   const bodyRef = useRef<HTMLDivElement>(null);
   const sentInitial = useRef(false);
-  const [seed, setSeed] = useState<{ text: string; n: number; attachments?: Attachment[] } | undefined>();
+  const [seed, setSeed] = useState<{ text: string; n: number; attachments?: Attachment[]; askFile?: string } | undefined>();
 
   const { data: agent } = useQuery({
     queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status"),
@@ -394,7 +395,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   }, [send]);
   // 보내지 않고 입력창만 채우기(예: 데이터 탭의 'Output 추가')
   useEffect(() => {
-    const h = (e: Event) => setSeed((s) => ({ text: (e as CustomEvent<string>).detail, n: (s?.n ?? 0) + 1 }));
+    const h = (e: Event) => setSeed((s) => ({ ...(e as CustomEvent<Prefill>).detail, n: (s?.n ?? 0) + 1 }));
     window.addEventListener(AGENT_PREFILL, h);
     return () => window.removeEventListener(AGENT_PREFILL, h);
   }, []);
@@ -445,6 +446,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
           {offline && !timeline.length && mine?.length === 0 ? (
             <div className="chat-empty"><AlertTriangle size={28} /><b>내 PC Agent가 설치되어 있지 않습니다</b>
               <p>에이전트(Gemini·Claude·Codex)와 CAD/CAE 툴은 내 PC에서 실행됩니다. 설치 파일 하나로 준비됩니다.</p>
+              <p>입력·출력 표가 있으면 PC Agent 없이도 오른쪽 데이터 탭에서 표를 붙여 넣어 바로 Simulator를 만들 수 있습니다.</p>
               <Link className="btn primary" to="/settings">PC Agent 설치·연결</Link></div>
           ) : !sid && pendingFirst ? (
             <div className="tl-item enter"><Message m={{ id: 0, session_id: 0, role: "user", content: pendingFirst, meta: null, created_at: "" }} /></div>
@@ -455,7 +457,8 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
           ) : !sid || !timeline.length ? (
             <div className="chat-empty">
               <AgentGlyph size={32} /><b>무엇을 자동화할까요?</b>
-              <p>CAD 변경, 해석 설정·실행, 결과 추출, DOE·예측 모델·최적화를 말로 요청하세요. 에이전트가 작업 흐름을 먼저 그려 보여 주고, 승인하면 실행합니다.</p>
+              <p>CAD 변경, 해석, 결과 추출, 예측 모델·최적화를 말로 요청하세요. 엑셀 표를 여기에 붙여 넣거나 해석 결과 폴더를 알려 주어 시작해도 됩니다.</p>
+              <p>해석을 새로 돌리거나 내 모델을 바꾸는 일은 작업 흐름을 먼저 보여 주고 승인을 받습니다. 조회·후처리, 가진 데이터로 예측 모델·Simulator 만들기, 보고서는 바로 합니다.</p>
               {!disabled && !busy && statusKnown && <div className="chat-suggest">{CHAT_SUGGEST.map((s) => <button key={s} onClick={() => void send(s)}>{s}</button>)}</div>}
             </div>
           ) : timeline.map((it) => {
@@ -481,12 +484,12 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
 
       <div className="chat-composer">
         <div className="chat-col">
-          <Composer projectId={pid} suggestions={suggestions} busy={busy && !readOnly} stopping={!!clock?.turn.cancelling} onStop={cancel}
+          <Composer projectId={pid} onSimulator={(_, s, m) => canvas.openSimulator(s, m)} suggestions={suggestions} busy={busy && !readOnly} stopping={!!clock?.turn.cancelling} onStop={cancel}
             disabled={disabled || !statusKnown} seed={seed}
             onSend={(o) => send(o.text, o.attachmentIds)}
             placeholder={readOnly ? "다른 멤버의 대화입니다. 보내면 내 새 대화로 시작합니다" : busy ? "진행 중입니다. 끝나면 이어서 요청할 수 있습니다"
               : !statusKnown ? "대화를 불러오는 중입니다" : agent?.connected && !agentKnown ? "PC Agent가 준비되는 중입니다"
-              : disabled ? "PC Agent 연결 후 사용할 수 있습니다" : "무엇이든 요청하세요"}
+              : disabled ? "PC Agent 연결 후 요청할 수 있습니다. 표는 지금 붙여 넣어 Simulator를 만들 수 있습니다" : "무엇이든 요청하세요"}
             leftBar={readOnly ? <span className="chip">{session ? agentLabel(session.agent) : ""} · 읽기 전용</span>
               : <AgentPicker value={session?.agent ?? chosen ?? ""} onChange={(n) => void switchAgent(n)} disabled={disabled || busy} />} />
         </div>

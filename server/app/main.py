@@ -6,7 +6,9 @@ import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import models
@@ -16,7 +18,7 @@ from .config import ROOT
 from .database import Base, SessionLocal, engine, ensure_columns
 from .deps import user_from_token
 from .routers import agents, auth, devtest, flows, projects, reports, sessions, studies, training
-from .study import dataset, service
+from .study import dataset, service, table_job
 from .ws import manager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -60,6 +62,8 @@ def _backfill_model_versions():
 def _on_agent_hello(conn: AgentConnection, msg: dict):
     try:
         hub.on_hello(conn, msg)
+        if "active_cases" in msg:  # 옛 Agent는 보내지 않는다. 없다고 모두 끝난 것으로 치면 돌고 있는 해석을 지운다
+            service.reconcile_cases(conn, msg["active_cases"], can_settle=bool(msg.get("settles_cases")))
     finally:  # 대화 상태를 먼저 맞춘다. 아래가 알리는 '연결됨'을 보고 화면이 다시 읽을 때 되살린 턴이 있어야 한다
         agents.record_instance(conn, msg)
 
@@ -85,10 +89,11 @@ async def lifespan(app: FastAPI):
             return
         lp.default_exception_handler(ctx)
     loop.set_exception_handler(quiet_resets)
-    registry.on("case.status", lambda conn, m: service.on_case_status(m))
+    registry.on("case.status", lambda conn, m: service.on_case_status(m, conn.user_id))
     registry.on("case.train_sample", lambda conn, m: dataset.on_sample_status(m))
     registry.on("hello", _on_agent_hello)
     registry.on("heartbeat", agents.record_instance)
+    table_job.resume_after_restart()
     with SessionLocal() as db:  # 서버 재시작 시 연결 상태 초기화
         db.query(models.AgentInstance).update({models.AgentInstance.connected: False})
         db.commit()
@@ -96,6 +101,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="DDS Conversa", lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request, exc: RequestValidationError):
+    # 기본 처리는 잘못된 입력값을 응답에 되돌려 주는데, 그 값이 JSON의 NaN이면 응답을 만들다 500이 된다
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder([{k: e[k] for k in ("type", "loc", "msg") if k in e} for e in exc.errors()])})
 
 
 @app.middleware("http")

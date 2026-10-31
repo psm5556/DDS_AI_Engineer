@@ -3,7 +3,7 @@
 binout / d3plot 결과 추출 (tool 키: python, 플랫폼 venv)
   ** lasso-python 이 플랫폼 venv 에 설치돼 있어야 한다:  pip install lasso-python  (numpy 포함) **
 
-  python dyna_lasso_extract.py [--list] [--nodes 1001,1002] [--parts 3,4] [--no-d3plot]
+  python dyna_lasso_extract.py [--list] [--nodes 1001,1002] [--parts 3,4] [--no-d3plot] [--dir 결과폴더]
 
 출력 키 (results.json 에 합쳐 씀)
   binout : final_kinetic_energy, final_internal_energy, max_kinetic_energy,
@@ -37,11 +37,12 @@ def von_mises(s):
 
 
 # ------------------------------------------------------------------ binout
-def binout_results(nodes, do_list):
-    files = glob.glob("binout*")
+def binout_results(nodes, do_list, where="."):
+    pattern = os.path.join(where, "binout*")
+    files = glob.glob(pattern)
     if not files:
         return {}
-    b = Binout("binout*")
+    b = Binout(pattern)
     top = b.read()
     res = {}
     if do_list:
@@ -82,10 +83,11 @@ def binout_results(nodes, do_list):
 
 
 # ------------------------------------------------------------------ d3plot
-def d3plot_results(parts, do_list):
-    if not os.path.exists("d3plot"):
+def d3plot_results(parts, do_list, where="."):
+    path = os.path.join(where, "d3plot")
+    if not os.path.exists(path):
         return {}
-    d3 = D3plot("d3plot")     # d3plot01, 02 ... 자동으로 이어 읽음
+    d3 = D3plot(path)     # d3plot01, 02 ... 자동으로 이어 읽음
     arrs = d3.arrays
     if do_list:
         for k, v in arrs.items():
@@ -134,13 +136,15 @@ def main():
     ap.add_argument("--nodes", default="")
     ap.add_argument("--parts", default="")
     ap.add_argument("--no-d3plot", action="store_true")
+    # 이미 해석한 폴더에서 읽을 때: 원본은 --dir로 가리키고 results.json은 현재 폴더에 쓴다(원본에 쓰지 않는다)
+    ap.add_argument("--dir", default=".", help="binout/d3plot이 있는 폴더 (기본: 현재 폴더)")
     a = ap.parse_args()
     nodes = [int(x) for x in a.nodes.split(",") if x.strip()]
     parts = [int(x) for x in a.parts.split(",") if x.strip()]
 
-    res = binout_results(nodes, a.list)
+    res = binout_results(nodes, a.list, a.dir)
     if not a.no_d3plot:
-        res.update(d3plot_results(parts, a.list))
+        res.update(d3plot_results(parts, a.list, a.dir))
     if a.list:
         log("partial results: " + json.dumps(res, sort_keys=True))
         return 0

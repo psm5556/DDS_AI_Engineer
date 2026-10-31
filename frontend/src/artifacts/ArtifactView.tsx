@@ -62,7 +62,7 @@ function Chart({ a, height = 300 }: { a: Artifact; height?: number }) {
 }
 
 function Table({ a, maxRows }: { a: Artifact; maxRows?: number }) {
-  const p = a.payload as { columns?: string[]; rows?: unknown[][] };
+  const p = a.payload as { columns?: string[]; rows?: unknown[][]; truncated?: { shown: number; total: number } };
   const rows = maxRows ? (p.rows ?? []).slice(0, maxRows) : (p.rows ?? []);
   const toast = useToast();
   const tsv = () => [p.columns ?? [], ...(p.rows ?? [])].map((r) => r.map((c) => (c ?? "")).join("\t")).join("\n");
@@ -81,6 +81,7 @@ function Table({ a, maxRows }: { a: Artifact; maxRows?: number }) {
         </table>
       </div>
       {maxRows && (p.rows?.length ?? 0) > maxRows && <p className="small muted" style={{ marginTop: 6 }}>… {p.rows!.length - maxRows}행 더 (캔버스에서 전체 보기)</p>}
+      {p.truncated && <p className="small muted" style={{ marginTop: 6 }}>전체 {p.truncated.total.toLocaleString("ko-KR")}행 중 앞 {p.truncated.shown.toLocaleString("ko-KR")}행만 담았습니다. 전체는 데이터 탭에서 볼 수 있습니다.</p>}
     </>
   );
 }

@@ -6,13 +6,12 @@ import time
 import uuid
 from pathlib import Path
 
-from _common import ROOT, api, fresh_tools, resolve_pid, settings, tool_wait_limit
-from mcp.server import MCPServer
+from _common import ROOT, DdsMCP, api, fresh_tools, resolve_pid, settings, tool_wait_limit
 
 from agent.dds_agent.job_runner import get_runner
 from cae_adapters.tool_commands import DEFAULT_TOOL_COMMANDS, DEFAULT_TOOL_PATHS, build_command, tool_env
 
-mcp = MCPServer(
+mcp = DdsMCP(
     "dds-cae",
     instructions=(
         "CAD/CAE 툴(NX, Simcenter 3D, Abaqus, LS-DYNA, Ansys, Altair, STAR-CCM+, Amesim)을 배치로 실행한다. "

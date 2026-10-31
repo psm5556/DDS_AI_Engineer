@@ -13,6 +13,8 @@
   python scripts/pc_verify.py fetch <PC 경로>         PC의 파일 받기(시험·작업·Agent 폴더만)
   python scripts/pc_verify.py deploy                 지금 코드를 배포하고 PC가 새 버전으로 뜰 때까지 기다림
   python scripts/pc_verify.py chat "요청" --agent claude  웹앱 대화와 똑같이 AI에게 시킨다
+      --attach 파일 · --session N(같은 대화 이어서) · --no-approve · --expect deployed,no_cases_run,flows=0 · --max-first-reply 초
+      측정값(metrics.json)을 저장하고 합격을 판정한다. 기대를 어기면 종료 코드 1
 
 결과 전문은 data/pc_verify/<시각>/ 에 저장하고 요약을 출력한다. 시험이 실패하면 종료 코드가 1이다.
 """
@@ -22,10 +24,12 @@ import argparse
 import base64
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +48,20 @@ class Api:
         req.add_header("Content-Type", "application/json")
         if self.token:
             req.add_header("Authorization", f"Bearer {self.token}")
+        return self._send(req, path, timeout)
+
+    def upload(self, path: str, file: Path, timeout: float = 600):
+        """파일 하나를 multipart로 올린다. 표준 라이브러리만 쓴다."""
+        boundary = f"----ddsverify{uuid.uuid4().hex}"
+        head = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{file.name}"\r\n'
+                "Content-Type: application/octet-stream\r\n\r\n").encode("utf-8")
+        req = urllib.request.Request(self.server + path, data=head + file.read_bytes() + f"\r\n--{boundary}--\r\n".encode(), method="POST")
+        req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+        if self.token:
+            req.add_header("Authorization", f"Bearer {self.token}")
+        return self._send(req, path, timeout)
+
+    def _send(self, req, path: str, timeout: float):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 raw = r.read().decode("utf-8")
@@ -56,6 +74,10 @@ class Api:
             raise SystemExit(f"서버 오류 {e.code} ({path}): {text}")
         except urllib.error.URLError as e:
             raise SystemExit(f"서버에 연결할 수 없습니다({self.server}): {e.reason} → --server 또는 DDS_SERVER_URL을 확인하세요")
+        except TimeoutError:  # 응답을 기다리다 넘긴 시간 초과는 URLError로 싸이지 않는다. 그대로 두면 스택 트레이스로 끝난다
+            raise SystemExit(f"서버가 {timeout:.0f}초 안에 답하지 않았습니다 ({path}) → 서버 상태를 확인하거나 --timeout을 늘리세요")
+        except OSError as e:  # 응답 도중 끊김(서버 재시작 등)
+            raise SystemExit(f"서버 연결이 끊겼습니다 ({path}): {e} → 서버 상태를 확인하세요")
         return json.loads(raw) if raw else None
 
 
@@ -68,7 +90,8 @@ def load_token(args) -> str:
 
 
 def out_dir() -> Path:
-    d = ROOT / "data" / "pc_verify" / time.strftime("%Y%m%d_%H%M%S")
+    base = Path(os.environ["DDS_VERIFY_OUT"]) if os.environ.get("DDS_VERIFY_OUT") else ROOT / "data" / "pc_verify"
+    d = base / time.strftime("%Y%m%d_%H%M%S")
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -224,41 +247,209 @@ def cmd_deploy(args, api) -> int:
     return 1
 
 
+def _tool_name(m: dict) -> str:
+    return str((m.get("meta") or {}).get("title") or m.get("content") or "")
+
+
+def chat_flow_ids(msgs: list[dict]) -> tuple[set[int], int]:
+    """이 대화가 제안한 Flow id와 propose_flow 호출 수. 프로젝트의 Flow에는 대화 표시가 없어 도구 출력에서 찾는다."""
+    ids, calls = set(), 0
+    for m in msgs:
+        if m.get("role") == "tool" and "propose_flow" in _tool_name(m):
+            calls += 1
+            found = re.search(r'"?flow_id"?\s*[:=]\s*(\d+)', str((m.get("meta") or {}).get("output") or ""))
+            if found:
+                ids.add(int(found.group(1)))
+    return ids, calls
+
+
+def own_review_flows(flows: list[dict], msgs: list[dict], known_before: set[int]) -> list[dict]:
+    """승인할 Flow: 이 대화가 제안한 것만. --project로 함께 쓰는 프로젝트의 다른 대화 Flow를 멋대로 승인하지 않는다.
+    도구 출력이 잘려 id를 못 읽었으면, 이 대화가 propose_flow를 불렀고 시작 뒤에 새로 생긴 것으로 본다."""
+    ids, calls = chat_flow_ids(msgs)
+    mine = [f for f in flows if f["id"] in ids or (calls > len(ids) and f["id"] not in known_before)]
+    return [f for f in mine if f.get("status") == "review"]
+
+
+def is_note(text: str) -> bool:
+    """오류가 아닌 시스템 안내(CLI 세션을 새로 열었다는 알림 등)."""
+    return "새 세션" in text
+
+
+EXPECT_NUMBER = re.compile(r"^(\w+)\s*(>=|<=|=)\s*(-?\d+(?:\.\d+)?)$")
+
+
+def judge(expects: list[str], metrics: dict) -> list[dict]:
+    """--expect 항목을 측정값과 맞춘다.
+    deployed · no_cases_run · no_errors · finished / 숫자: flows=0 models>=1 flows_approved=0 permissions<=2 questions=0 first_reply_sec<=300 /
+    tool:이름 · no_tool:이름 · reply~글자 · no_reply~글자. 모르는 항목은 실패로 친다(오타가 조용히 통과하지 않게)."""
+    out = []
+    reply = metrics.get("reply") or ""
+    tools = metrics.get("tools") or []
+    for e in expects:
+        e = e.strip()
+        if not e:
+            continue
+        actual: object = None
+        ok = False
+        num = EXPECT_NUMBER.match(e)
+        if e == "deployed":
+            actual, ok = metrics.get("deployed_models", 0), metrics.get("deployed_models", 0) > 0
+        elif e == "no_cases_run":
+            actual, ok = metrics.get("cases_run", 0), metrics.get("cases_run", 0) == 0 and not any("run_cases" in t for t in tools)
+        elif e == "no_errors":
+            actual, ok = metrics.get("errors") or [], not metrics.get("errors")
+        elif e == "finished":
+            actual, ok = metrics.get("finished"), bool(metrics.get("finished"))
+        elif e.startswith("tool:"):
+            actual, ok = tools, any(e[5:] in t for t in tools)
+        elif e.startswith("no_tool:"):
+            actual, ok = tools, not any(e[8:] in t for t in tools)
+        elif e.startswith("reply~"):
+            actual, ok = reply[-300:], e[6:] in reply
+        elif e.startswith("no_reply~"):
+            actual, ok = reply[-300:], e[9:] not in reply
+        elif num and isinstance(metrics.get(num.group(1)), (int, float)):
+            actual = metrics[num.group(1)]
+            want = float(num.group(3))
+            ok = {"=": actual == want, ">=": actual >= want, "<=": actual <= want}[num.group(2)]
+        else:
+            actual = "측정값 없음"  # 오타이거나 첫 응답이 오지 않았다
+        out.append({"expect": e, "actual": actual, "ok": ok})
+    return out
+
+
+def _project_of_session(api, sid: int) -> int:
+    for p in api.call("GET", "/api/projects"):
+        if any(s["id"] == sid for s in api.call("GET", f"/api/projects/{p['id']}/sessions")):
+            return p["id"]
+    raise SystemExit(f"대화 {sid}를 찾지 못했습니다 → 이 토큰 계정이 만든 대화인지 확인하세요")
+
+
+def _run_cases_total(api, pid: int) -> int:
+    """이 프로젝트에서 해석으로 끝난 케이스 수(불러온 값 제외). 요청 전후를 비교해 해석을 돌렸는지 잰다."""
+    total = 0
+    for s in api.call("GET", f"/api/projects/{pid}/studies"):
+        total += sum(c["status"] == "complete" and c.get("source") != "import" for c in api.call("GET", f"/api/studies/{s['id']}/cases"))
+    return total
+
+
+def _steady(api, method: str, path: str, body: dict | None = None, *, seconds: float = 120, timeout: float = 60):
+    """폴링은 서버가 잠깐 안 보여도 판정을 망치지 않게 기다린다. 넘으면 오류를 그대로 낸다."""
+    end = time.time() + seconds
+    while True:
+        try:
+            return api.call(method, path, body, timeout=timeout)
+        except SystemExit:
+            if time.time() > end:
+                raise
+            time.sleep(3)
+
+
+def _send_prompt(api, sid: int, text: str, attachment_ids: list[int], until: float):
+    """요청을 보낸다. 앞 턴이 아직 돌면 서버가 409를 주므로 끝나기를 기다린다. POST는 CLI 시작을 기다리지 않고 바로 돌아오지만
+    사내 서버가 바쁠 수 있어 제한을 넉넉히 둔다(예전 120초는 느린 환경에서 검증 자체를 끝내 버렸다)."""
+    while True:
+        try:
+            return api.call("POST", f"/api/sessions/{sid}/prompt", {"text": text, "attachment_ids": attachment_ids}, timeout=600)
+        except SystemExit as e:
+            if "409" not in str(e) or time.time() > until:
+                raise
+            time.sleep(3)
+
+
 def cmd_chat(args, api) -> int:
-    """사용자가 웹앱에서 하는 것과 똑같이: 프로젝트·대화를 만들고 요청하고 승인·허용까지 한다. 토큰 계정의 PC에서 돈다."""
-    pid = args.project or api.call("POST", "/api/projects", {"name": f"연동 검증 {time.strftime('%m%d_%H%M%S')}"})["id"]
-    sid = api.call("POST", f"/api/projects/{pid}/sessions", {"agent": args.agent})["id"]
+    """사용자가 웹앱에서 하는 것과 똑같이: 프로젝트·대화를 만들고 요청하고 승인·허용까지 한다. 토큰 계정의 PC에서 돈다.
+    자동 승인이 돌아가는 경로를 숨기지 않게 승인·허용 횟수와 호출한 도구를 재고, --expect로 합격을 판정한다."""
+    if args.session:
+        sid = args.session
+        pid = args.project or _project_of_session(api, sid)
+    else:
+        pid = args.project or api.call("POST", "/api/projects", {"name": f"연동 검증 {time.strftime('%m%d_%H%M%S')}"})["id"]
+        sid = api.call("POST", f"/api/projects/{pid}/sessions", {"agent": args.agent})["id"]
     print(f"프로젝트 {pid} · 대화 {sid} · 에이전트 {args.agent}")
-    api.call("POST", f"/api/sessions/{sid}/prompt", {"text": args.text}, timeout=120)
-    t0, idle, last = time.time(), 0, 0
+    attachment_ids = []
+    for p in args.attach or []:
+        if not Path(p).is_file():
+            raise SystemExit(f"첨부할 파일이 없습니다: {p} → 경로를 확인하세요")
+        attachment_ids.append(api.upload(f"/api/projects/{pid}/attachments", Path(p))["id"])
+    before = api.call("GET", f"/api/sessions/{sid}/messages")
+    start, last = len(before), len(before)
+    known_flows = {f["id"] for f in api.call("GET", f"/api/projects/{pid}/flows")}
+    cases_before = _run_cases_total(api, pid)
+    t0 = time.time()
+    _send_prompt(api, sid, args.text, attachment_ids, t0 + args.timeout)
+    idle, finished, first_reply, approvals, permissions = 0, False, None, [], []
+    msgs = before
     while time.time() - t0 < args.timeout:
-        time.sleep(2)
-        st = api.call("GET", f"/api/sessions/{sid}/status")
+        time.sleep(args.poll)
+        st = _steady(api, "GET", f"/api/sessions/{sid}/status")
         for p in st.get("pending_permissions") or []:
             options = p.get("options") or []
             allow = next((o for o in options if "allow" in str(o.get("kind", "")) or "allow" in str(o.get("optionId", ""))), options[0] if options else None)
             if allow:
                 api.call("POST", f"/api/sessions/{sid}/permission", {"request_id": p["request_id"], "option_id": allow.get("optionId")})
+                permissions.append(p.get("title") or p["request_id"])
                 print(f"허용: {p.get('title') or p['request_id']}")
+        msgs = _steady(api, "GET", f"/api/sessions/{sid}/messages")
         approved = False
-        for f in [] if st.get("busy") else api.call("GET", f"/api/projects/{pid}/flows"):
-            if f.get("status") == "review":  # 웹앱의 [승인하고 실행]과 같게: 상태를 바꾸고 에이전트에게 알린다(useFlowDecision)
+        if not st.get("busy") and not args.no_approve:
+            for f in own_review_flows(api.call("GET", f"/api/projects/{pid}/flows"), msgs, known_flows):
+                # 웹앱의 [승인하고 실행]과 같게: 상태를 바꾸고 에이전트에게 알린다(useFlowDecision)
                 api.call("PUT", f"/api/flows/{f['id']}/status", {"status": "approved", "version": f.get("version")})
-                api.call("POST", f"/api/sessions/{sid}/prompt", {"text": f"작업 흐름 '{f.get('title')}'(#{f['id']})을 승인했습니다. 계획대로 진행해 주세요."}, timeout=120)
+                _send_prompt(api, sid, f"작업 흐름 '{f.get('title')}'(#{f['id']})을 승인했습니다. 계획대로 진행해 주세요.", [], t0 + args.timeout)
+                approvals.append(f["id"])
                 print(f"작업 흐름 승인: {f.get('title') or f['id']}")
                 approved = True
-        msgs = api.call("GET", f"/api/sessions/{sid}/messages")
         for m in msgs[last:]:
             text = (m.get("content") or "").strip()
             if text:
                 print(f"[{m.get('role')}] {text[:800]}")
         last = len(msgs)
+        if first_reply is None and any(m["role"] == "agent" and (m.get("content") or "").strip() for m in msgs[start:]):
+            first_reply = round(time.time() - t0, 1)
         idle = 0 if st.get("busy") or approved or st.get("pending_permissions") else idle + 1
         if idle >= args.settle:  # 턴이 끝나고 더 이어지지 않으면 끝이다
-            print(f"끝남 ({int(time.time() - t0)}초). 결과는 웹앱 프로젝트 {pid}에서 볼 수 있습니다")
-            return 0
-    print(f"{args.timeout}초 안에 끝나지 않았습니다")
-    return 1
+            finished = True
+            break
+    msgs = _steady(api, "GET", f"/api/sessions/{sid}/messages")
+    new = msgs[start:]
+    flows = api.call("GET", f"/api/projects/{pid}/flows")
+    ids, calls = chat_flow_ids(new)
+    models = api.call("GET", f"/api/projects/{pid}/models")
+    replies = [m["content"] for m in new if m["role"] == "agent"]
+    metrics = {
+        "project": pid, "session": sid, "agent": args.agent, "finished": finished, "seconds": round(time.time() - t0, 1),
+        "first_reply_sec": first_reply,
+        "flows": calls, "flow_ids": sorted(ids), "flows_in_project": len(flows), "flow_status": {f["id"]: f["status"] for f in flows if f["id"] in ids},
+        "flows_approved": len(approvals), "permissions": len(permissions), "permission_titles": permissions,
+        "questions": sum(("?" in r or "？" in r) for r in replies),  # 사용자에게 되물은 답. 표·질문 요청에서 0이어야 한다
+        "tools": [_tool_name(m) for m in new if m["role"] == "tool"],
+        "tools_failed": [_tool_name(m) for m in new if m["role"] == "tool" and (m.get("meta") or {}).get("status") == "failed"],
+        "errors": [m["content"] for m in new if m["role"] == "system" and not is_note(m["content"])],
+        "notes": [m["content"] for m in new if m["role"] == "system" and is_note(m["content"])],
+        "models": len(models), "deployed_models": sum(bool(m.get("deployed")) for m in models),
+        "cases_run": _run_cases_total(api, pid) - cases_before, "reply": "\n".join(replies),
+    }
+    expects = ["finished", *([] if args.allow_errors else ["no_errors"])]
+    for e in args.expect or []:
+        expects += e.split(",")
+    if args.max_first_reply is not None:
+        expects.append(f"first_reply_sec<={args.max_first_reply}")
+    checks = judge(expects, metrics)
+    passed = all(c["ok"] for c in checks)
+    d = out_dir()
+    (d / "metrics.json").write_text(json.dumps({"request": args.text, "attachments": args.attach or [], "passed": passed, "checks": checks, **metrics},
+                                               ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    (d / "messages.json").write_text(json.dumps(new, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    print(json.dumps({k: v for k, v in metrics.items() if k != "reply"}, ensure_ascii=False, indent=1))
+    for c in checks:
+        print(f"{'통과' if c['ok'] else '실패'}: {c['expect']}" + ("" if c["ok"] else f" (실제 {c['actual']})"))
+    print(f"--- 저장: {d}")
+    if not finished:
+        print(f"{args.timeout}초 안에 끝나지 않았습니다")
+    print(f"--- 대화 {sid}: {'합격' if passed else '불합격'} ({metrics['seconds']}초). 이어서 시험하려면 --session {sid}")
+    return 0 if passed else 1
 
 
 def main() -> int:
@@ -283,7 +474,15 @@ def main() -> int:
     p = sub.add_parser("fetch"); p.add_argument("path"); p.set_defaults(fn=cmd_fetch)
     sub.add_parser("deploy").set_defaults(fn=cmd_deploy)
     p = sub.add_parser("chat"); p.add_argument("text"); p.add_argument("--agent", default="claude"); p.add_argument("--project", type=int)
-    p.add_argument("--settle", type=int, default=5, help="몇 번 연속 조용하면 끝으로 볼지(2초 단위)"); p.set_defaults(fn=cmd_chat)
+    p.add_argument("--settle", type=int, default=5, help="몇 번 연속 조용하면 끝으로 볼지(--poll 단위)")
+    p.add_argument("--poll", type=float, default=2.0, help="상태를 확인하는 간격(초)")
+    p.add_argument("--attach", action="append", help="대화에 첨부할 파일(여러 번 쓸 수 있다)")
+    p.add_argument("--session", type=int, help="이 대화를 이어서 요청한다(세션 재사용·후속 요청 시험)")
+    p.add_argument("--no-approve", action="store_true", help="작업 흐름을 자동으로 승인하지 않는다(승인 없이 끝나는지 볼 때)")
+    p.add_argument("--expect", action="append", help="합격 기준, 쉼표로 여럿. 예: deployed,no_cases_run,flows=0,tool:import_table,no_tool:run_cases,reply~Simulator")
+    p.add_argument("--max-first-reply", type=float, help="첫 응답까지 허용하는 시간(초)")
+    p.add_argument("--allow-errors", action="store_true", help="대화의 오류 안내가 있어도 그것만으로 실패로 치지 않는다")
+    p.set_defaults(fn=cmd_chat)
 
     args = ap.parse_args()
     api = Api(args.server, None if args.cmd == "token" else load_token(args))

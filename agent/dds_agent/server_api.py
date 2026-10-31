@@ -32,11 +32,16 @@ class ServerApi:
     def get(self, path: str, **params) -> Any:
         return self._check(self.client.get(path, params=params or None))
 
-    def post(self, path: str, body: dict | None = None) -> Any:
-        return self._check(self.client.post(path, json=body or {}))
+    def post(self, path: str, body: dict | None = None, timeout: float | None = None) -> Any:
+        # timeout: 행이 많은 등록처럼 60초를 넘을 수 있는 호출만 늘린다
+        kw = {"timeout": timeout} if timeout else {}
+        return self._check(self.client.post(path, json=body or {}, **kw))
 
     def put(self, path: str, body: dict | None = None) -> Any:
         return self._check(self.client.put(path, json=body or {}))
+
+    def delete(self, path: str) -> Any:
+        return self._check(self.client.delete(path))
 
     def upload_image(self, project_id: int, file: Path, subdir: str = "images") -> str:
         with open(file, "rb") as f:
@@ -47,6 +52,22 @@ class ServerApi:
     def upload(self, path: str, file: Path) -> dict:
         with open(file, "rb") as f:
             return self._check(self.client.post(path, files={"file": (file.name, f)}, timeout=600))
+
+    def upload_form(self, path: str, files: dict[str, Path | tuple[str, bytes]], data: dict[str, str] | None = None, timeout: float = 600) -> Any:
+        """파일 여러 개와 폼 값을 함께 올린다. 파일은 경로 또는 (이름, 내용)."""
+        opened, parts = [], {}
+        try:
+            for key, f in files.items():
+                if isinstance(f, tuple):
+                    parts[key] = f
+                else:
+                    fh = open(f, "rb")
+                    opened.append(fh)
+                    parts[key] = (Path(f).name, fh)
+            return self._check(self.client.post(path, files=parts, data=data or {}, timeout=timeout))
+        finally:
+            for fh in opened:
+                fh.close()
 
     def download(self, path: str, dest: Path) -> str:
         """파일을 받아 저장하고 sha256을 돌려준다."""

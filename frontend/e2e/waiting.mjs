@@ -49,7 +49,7 @@ const send = async (text) => {
 };
 const idle = async (timeout = 90000) => {
   await bubble().waitFor({ state: "detached", timeout });
-  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.disabled, undefined, { timeout: 10000 });
+  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 10000 });
 };
 
 try {
@@ -62,11 +62,12 @@ try {
   // 1. 새 대화의 첫 메시지: 재마운트돼도 말풍선·중지 버튼·경과 시간이 이어진다
   await page.goto(`${BASE}/projects/${PID}/new`);
   await input().waitFor();
-  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.disabled, undefined, { timeout: 30000 });
+  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 30000 });
   await send("느린 시작을 확인해 주세요");
   await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 15000 });
   await page.locator(".waiting-bubble", { hasText: "시작하는 중" }).waitFor({ timeout: 15000 });
-  if (!(await input().isDisabled())) fail("기다리는 동안 입력창이 막혀야 합니다");
+  // 표를 붙여 넣을 수 있게 disabled가 아니라 readOnly로 막는다. 글자는 넣을 수 없고 보내기 대신 중지 버튼이 보인다
+  await page.waitForFunction(() => document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 5000 }).catch(() => fail("기다리는 동안 입력창이 막혀야 합니다"));
   await page.getByRole("button", { name: "중지" }).waitFor({ timeout: 5000 });
   if (!(await bubble().innerText()).includes("멈춘 것이 아닙니다")) fail("보안 검사 안내가 없습니다");
   const t1 = await clockSec();
@@ -91,6 +92,16 @@ try {
   // 3. 생각하는 중: 경과 시간이 흐른다
   await send("[quiet 5] 후속 요청");
   await page.locator(".waiting-bubble", { hasText: "생각하는 중" }).waitFor({ timeout: 15000 });
+  // AI가 일하는 중에도 표를 받는다. 지금 할 수 있는 일과 나중에 할 일을 말한다
+  await input().evaluate((el) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", "두께\t폭\t응력\n1\t2\t3\n2\t3\t5\n3\t5\t8\n");
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await page.getByRole("button", { name: "Simulator 만들기" }).waitFor({ timeout: 5000 });
+  const note = await input().getAttribute("placeholder");
+  if (!note?.startsWith("AI가 일하는 중입니다. 지금은 위 버튼으로 바로 만들 수 있고")) throw new Error(`표를 받았을 때 안내가 다릅니다: ${note}`);
+  await page.getByRole("button", { name: "취소" }).click();
   await page.waitForTimeout(2200);
   await shot("thinking");
   await idle();
@@ -122,7 +133,7 @@ try {
   await page.unroute("**/api/sessions/*/messages");
   await bubble().waitFor({ timeout: 8000 });
   await page.getByRole("button", { name: "중지" }).waitFor({ timeout: 3000 });
-  if (!(await input().isDisabled())) fail("답이 흐르는 중 새로고침 뒤 입력창이 열렸습니다");
+  if (await input().isEditable()) fail("답이 흐르는 중 새로고침 뒤 입력창이 열렸습니다");
   await shot("streaming-reload");
   // 4-2. 다른 화면에 다녀와도 그사이 글자가 비지 않는다
   await page.locator('a[href="/settings"]').first().click();
@@ -198,7 +209,7 @@ try {
   // 4-6. 새 대화의 첫 요청이 서버에 닿기 전: 내 메시지가 보이고, 중지하면 받자마자 멈춘다
   await page.route("**/api/sessions/*/prompt", async (r) => { await new Promise((res) => setTimeout(res, 2000)); await r.continue(); }, { times: 1 });
   await page.goto(`${BASE}/projects/${PID}/new`);
-  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.disabled, undefined, { timeout: 30000 });
+  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 30000 });
   await send("[wait] 보내자마자 중지");
   await page.locator(".chat-msg.user .bubble", { hasText: "보내자마자 중지" }).waitFor({ timeout: 1500 });
   if (await page.getByText("무엇을 자동화할까요?").count()) fail("보내는 중에 빈 새 대화 화면이 보입니다");
@@ -228,15 +239,15 @@ try {
   await page.reload();
   await input().waitFor();
   await page.waitForTimeout(500);
-  if (!(await input().isDisabled())) fail("쓸 에이전트를 모르는데 입력창이 열렸습니다");
+  if (await input().isEditable()) fail("쓸 에이전트를 모르는데 입력창이 열렸습니다");
   const picked = await page.locator(".agent-pick-btn").innerText();
   if (/gemini/i.test(picked)) fail(`고르지 않은 에이전트가 보입니다: ${picked}`);
   await page.unroute("**/api/agent/status");
-  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.disabled, undefined, { timeout: 10000 });
+  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 10000 });
 
   // 5. 멈춘 도구: 중지해도 답이 없으면 30초 뒤 다시 시작 버튼이 나온다. 긴 대화에서 스크롤 없이 보여야 한다
   await page.goto(`${BASE}/projects/${PID}/new`);
-  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.disabled, undefined, { timeout: 30000 });
+  await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 30000 });
   await send("첫 번째 긴 요청 " + "내용을 길게 적습니다 ".repeat(300));
   await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 15000 });
   await idle();

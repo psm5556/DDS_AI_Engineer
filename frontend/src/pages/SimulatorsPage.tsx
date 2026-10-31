@@ -4,16 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, del, get, optionalBlob } from "../api";
 import { AgentGlyph } from "../components/AgentGlyph";
+import { dataSourceText } from "../components/ModelTrust";
 import { Skeleton } from "../components/Skeleton";
 import { when } from "../format";
 import { useFreshKeys } from "../motion";
 import { useToast } from "../toast";
+import type { DataSource, QualityLevel } from "../types";
 
 interface Item {
   study_id: number; study_name: string; model_id: number; version: number | null; outputs: string[]; n_variables: number; n_train: number; url: string;
   thumbnail_url: string | null;
   source: "mine" | "project" | "link"; status: "active" | "stopped" | "expired"; project_id: number | null; project_name: string | null;
   shared_by: string | null; note: string; share_id: number | null; updated_at: string | null;
+  quality?: QualityLevel | null; data_source?: Partial<DataSource> | null;
 }
 type ViewMode = "cards" | "list";
 const OFF = { stopped: "공유가 중지되었습니다", expired: "공유 기간이 끝났습니다" } as const;
@@ -26,7 +29,7 @@ function savedView(): ViewMode {
 
 function meta(x: Item): string {
   const who = x.source === "link" ? `${x.shared_by ?? "다른 사용자"}님이 공유` : x.source === "project" ? `${x.shared_by ?? "멤버"}님이 배포` : "";
-  return [who, x.project_name, x.note].filter(Boolean).join(" · ");
+  return [who, x.project_name, x.note, dataSourceText(x.data_source)].filter(Boolean).join(" · ");
 }
 
 /** 찾는 대상은 화면에 보이는 글자다. 공유가 끊긴 줄은 이름·공유한 사람·메모만 보이므로 출력 이름으로는 찾지 않는다 */
@@ -196,6 +199,7 @@ export default function SimulatorsPage() {
       <>
         <b>{x.study_name}{meta(x) && <small className="sim-row-meta">{meta(x)}</small>}</b>
         <span className="small sim-row-out" title={x.outputs.join(", ")}>{x.outputs.join(", ")}</span>
+        {x.quality === "poor" && <span className="chip err" title="예측 정확도(R²)가 낮습니다. 열어서 경고를 확인하세요">정확도 낮음</span>}
         {x.version != null && <span className="chip">v{x.version}</span>}
         <span className="small">{x.updated_at ? when(x.updated_at) : ""}</span>
       </>
@@ -233,7 +237,7 @@ export default function SimulatorsPage() {
         <Link to={x.url} className="sim-card-link">
           <Thumb x={x} />
           <div className="sim-card-body">
-            <div className="sim-card-title"><b title={x.study_name}>{x.study_name}</b>{x.version != null && <span className="chip">v{x.version}</span>}</div>
+            <div className="sim-card-title"><b title={x.study_name}>{x.study_name}</b>{x.quality === "poor" && <span className="chip err" title="예측 정확도(R²)가 낮습니다. 열어서 경고를 확인하세요">정확도 낮음</span>}{x.version != null && <span className="chip">v{x.version}</span>}</div>
             {x.outputs.length > 0 && (
               <div className="sim-card-outs" title={x.outputs.join(", ")}>
                 {x.outputs.slice(0, CARD_OUTPUTS).map((o) => <span key={o}>{o}</span>)}

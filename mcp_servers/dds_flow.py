@@ -2,15 +2,15 @@
 from pathlib import Path
 from typing import Any, Literal
 
-from _common import api, resolve_pid, settings
-from mcp.server import MCPServer
+from _common import DdsMCP, api, resolve_pid, settings
 
-mcp = MCPServer(
+mcp = DdsMCP(
     "dds-flow",
     instructions=(
-        "사용자의 자동화 요청을 실행하기 전에 반드시 propose_flow로 작업 흐름을 제안하고, "
-        "사용자가 웹앱에서 승인할 때까지 실행하지 마세요. 실행 중에는 update_node로 각 단계의 상태를 갱신하고, "
-        "결과는 publish_artifact / publish_image로 게시하세요(flow_id·node_id를 꼭 넣으면 웹앱 작업 흐름 탭에서 그 단계 아래에 보입니다). "
+        "해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 일은 propose_flow로 제안하고 사용자가 웹앱에서 승인한 뒤에 실행하세요. "
+        "조회·후처리·기존 데이터로 학습·Simulator 배포·보고서는 Flow와 승인 없이 바로 합니다. 실행 중에는 update_node로 각 단계의 상태를 갱신하고, "
+        "결과는 publish_artifact / publish_image로 게시하세요(Flow가 있으면 flow_id·node_id를 꼭 넣어야 웹앱 작업 흐름 탭에서 그 단계 아래에 보입니다). "
+        "지난번 흐름을 다시 하려면 list_flows로 찾습니다. "
         "보고서는 get_report_context로 자료를 읽고 write_report로 새로 씁니다."
     ),
 )
@@ -21,7 +21,9 @@ NodeType = Literal["cad", "pre", "solve", "post", "doe", "train", "optimize", "d
 @mcp.tool()
 def propose_flow(title: str, nodes: list[dict[str, Any]], edges: list[dict[str, str]], goal: str = "",
                  project_id: int | None = None) -> dict:
-    """작업 흐름 그래프를 제안한다(상태: 검토). 웹앱 캔버스에 표시되고 사용자가 승인해야 실행할 수 있다.
+    """작업 흐름 그래프를 제안한다(상태: 검토). 웹앱 캔버스에 표시되고 사용자가 승인한 뒤에 실행한다.
+    해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 일, 다른 멤버가 만든 스크립트를 돌리는 일에만 쓴다.
+    조회·후처리·기존 데이터로 학습·Simulator 배포·보고서에는 쓰지 않고 승인 없이 바로 한다.
 
     nodes: [{"id": "cad", "label": "NX 형상 변경", "type": "cad|pre|solve|post|doe|train|optimize|deploy|task",
              "tool": "nx|simcenter|abaqus|lsdyna|ansys|altair|starccm|amesim|mock|python", "detail": "설명"}]
@@ -33,6 +35,17 @@ def propose_flow(title: str, nodes: list[dict[str, Any]], edges: list[dict[str, 
     pid = resolve_pid(project_id)
     f = api.post(f"/api/projects/{pid}/flows", {"title": title, "goal": goal, "nodes": nodes, "edges": edges})
     return {"flow_id": f["id"], "status": f["status"], "message": "사용자 승인을 기다리세요. 승인되면 실행을 이어가라는 메시지가 옵니다."}
+
+
+@mcp.tool()
+def list_flows(project_id: int | None = None, limit: int = 20) -> dict:
+    """프로젝트의 지난 작업 흐름 목록(최신이 앞): 제목·목표·상태·단계, 연결된 스터디(study_id, 케이스 수, 최신·배포 모델, 스크립트 묶음 유무).
+    "지난번처럼 다시"에서 flow_id를 몰라도 찾을 수 있다. 읽기만 하므로 승인이 필요 없다."""
+    pid = resolve_pid(project_id)
+    flows = api.get(f"/api/projects/{pid}/flows/summary")
+    return {"project_id": pid, "total": len(flows), "flows": [
+        {"flow_id": f["id"], "title": f["title"], "goal": f["goal"], "status": f["status"], "created_at": f["created_at"],
+         "steps": [n.get("label") for n in f["nodes"]], "studies": f["studies"]} for f in flows[:max(1, limit)]]}
 
 
 @mcp.tool()
@@ -89,11 +102,15 @@ def publish_image(path: str, title: str, caption: str = "", flow_id: int | None 
 
 
 @mcp.tool()
-def set_project_info(name: str | None = None, description: str | None = None, project_id: int | None = None) -> dict:
-    """프로젝트 이름(20자 안팎)·설명(한 줄)을 작업 내용에 맞게 정한다. 첫 화면에서 시작한 프로젝트는 요청문 앞부분이 임시 이름이므로,
-    첫 응답 때 알아보기 쉬운 이름(예: "브래킷 경량화 DOE")으로 바꿔 준다."""
+def set_project_info(name: str | None = None, description: str | None = None, project_id: int | None = None, force: bool = False) -> dict:
+    """프로젝트 이름(20자 안팎)·설명(한 줄)을 작업 내용에 맞게 정한다. 첫 화면에서 막 시작한 프로젝트는 요청문 앞부분이 임시 이름이므로,
+    첫 응답 때 알아보기 쉬운 이름(예: "브래킷 경량화 DOE")으로 바꿔 준다.
+    스터디·작업 흐름이 이미 있는 프로젝트는 바꾸지 않는다. 멤버 모두가 쓰는 이름이다. 사용자가 이름을 바꿔 달라고 했을 때만 force=True."""
     pid = resolve_pid(project_id)
     p = api.get(f"/api/projects/{pid}")
+    if not force and (api.get(f"/api/projects/{pid}/studies") or api.get(f"/api/projects/{pid}/flows/summary")):
+        return {"project_id": pid, "name": p["name"], "description": p["description"], "skipped": True,
+                "note": "이미 쓰고 있는 프로젝트라 이름을 바꾸지 않았습니다. 사용자가 바꿔 달라고 하면 force=True로 부른다."}
     body = {"version": p["version"]}
     if name:
         body["name"] = name[:60]

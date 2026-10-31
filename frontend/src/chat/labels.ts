@@ -17,6 +17,7 @@ const TOOL_LABEL: Record<string, string> = {
   "dds-study.list_adapters": "실행 방식 확인",
   "dds-study.create_study": "스터디 만들기",
   "dds-study.add_outputs": "Output 추가·추출",
+  "dds-study.delete_case": "불러온 행 지우기",
   "dds-study.generate_doe": "DOE 설계점 만들기",
   "dds-study.run_cases": "케이스 해석 실행",
   "dds-study.get_study": "스터디 진행 확인",

@@ -19,6 +19,9 @@
                   (Output 추가 — 해석 없이 추출 단계만 실행, case.status {extract: true, results: 새 값만}로 답한다)
   case.cancel     {case_ids, extract_ids}              (사용자가 중지. 대기는 시작하지 않고 실행 중이면 솔버 트리를 끝낸다.
                   case.status {status: "cancelled"}로 답한다. 추출은 case.status {extract: true, error}로 답한다)
+  case.settle     {cases:[{case_id, study_id, project_id, run_dir, adapter, adapter_config, …}]}
+                  (hello의 settles_cases가 있을 때. 그 PC에서 돌고 있지 않은 케이스를 묻는다. case.json이 끝났다고 하면 그 결과를,
+                  아니면 cancelled를 case.status로 답한다. 답이 올 때까지 서버는 상태를 바꾸지 않는다)
   case.train_sample {dataset_id, case_id, study_id, project_id, run_dir, spec, spec_hash}
                   (학습 샘플을 만들어 POST /api/cases/{id}/train_sample로 올리고 case.train_sample {ok, error}로 답한다)
   agent.release   {version, sha256}                    (새 버전 배포. 자동 업데이트가 켜져 있으면 유휴 시 설치)

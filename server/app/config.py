@@ -21,6 +21,9 @@ class Settings:
     allow_server_mock: bool = True
     max_upload_mb: int = 1024  # 대화 첨부 파일 최대 크기(CAD·해석 입력 파일)
     archive_max_mb: int = 4096  # 케이스 해석 데이터(case.h5, HDF5) 한 개의 최대 크기 — 넘으면 PC에만 둔다
+    table_max_mb: int = 200  # API로 올리는 표 파일(CSV·XLSX)의 최대 크기
+    paste_max_mb: int = 50  # 붙여 넣은 표의 최대 크기(엑셀 복사 글). 약 20만 행 × 10열
+    train_max_rows: int = 500  # 예측 모델 학습에 쓰는 최대 행 수. 넘으면 고르게 줄이고 알린다(측정: 400행 93초)
     # 사내 웹 CAE 뷰어: 결과 파일을 새 창으로 여는 URL 템플릿. {path}=파일 절대경로(그 PC 기준), {host}=PC 이름,
     # {project_id}, {rel}=프로젝트 폴더 기준 상대경로. 예) "http://cae-viewer.corp/open?host={host}&file={path}"
     web_viewer_url: str = ""

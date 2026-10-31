@@ -91,7 +91,7 @@ class Agent:
         self._name_tried: dict[int, float] = {}
         self._names_at = 0.0
         self._lock = threading.Lock()
-        self.executor = CaseExecutor(self.s, self.send_threadsafe)
+        self.executor = CaseExecutor(self.s, self._reliable)  # 해석은 연결과 상관없이 끝난다. 끊긴 사이의 결과를 잃지 않게 outbox로 보낸다
         self.api = ServerApi(self.s)
         self.boot = uuid.uuid4().hex  # 이 프로세스 표시. 서버가 "같은 Agent인데 턴을 모른다"와 "Agent가 다시 시작했다"를 가린다
         self.outbox = Outbox(self.boot)
@@ -257,6 +257,8 @@ class Agent:
                 "agents": self.s.available_agents(), "default_agent": self.s.default_agent,
                 "workspace": str(self.s.workspace_dir), "tools": sorted(self.s.tools), "tools_rev": self.s.tools_rev,
                 "boot": self.boot, "live_sessions": self.live_sessions(), "active_turns": turns,
+                "active_cases": sorted({*self.executor.active_cases(), *self.outbox.pending_cases()}),  # 전하지 못한 결과도 '끝나지 못한 케이스'가 아니다
+                "settles_cases": True,  # 돌지 않는 케이스를 물으면 case.json으로 답한다(case.settle)
                 "running_agents": self.running_agents(), "start_times": self.state.start_times()}
 
     def mcp_servers(self, project_id: int, agent: str | None = None, cwd: str | None = None, uid: str | None = None) -> list[dict]:
@@ -982,6 +984,8 @@ class Agent:
         # case.extract: Output 추가 — 해석한 케이스에서 새 Output만 뽑는다 · case.train_sample: 학습 샘플을 만들어 올린다
         elif t in ("case.run", "case.extract", "case.train_sample"):
             self.executor.submit(msg)
+        elif t == "case.settle":
+            self.executor.settle(msg.get("cases") or [])
         elif t == "case.cancel":  # 창이 없으니 사용자가 웹앱에서 해석을 멈출 수 있는 유일한 길이다
             self.executor.cancel(msg.get("case_ids") or [], msg.get("extract_ids"))
         elif t in ("agent.release", "agent.update"):

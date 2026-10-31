@@ -1,14 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Maximize2, Share2 } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, ChevronRight, Loader2, Maximize2, Share2 } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { get, post } from "../api";
 import { AgentGlyph } from "../components/AgentGlyph";
 import { Skeleton } from "../components/Skeleton";
-import { sendToAgent, when } from "../format";
+import { when } from "../format";
 import { memberFieldList, ShareModal, SimulatorView } from "../pages/SimulatorPage";
 import { useToast } from "../toast";
-import type { Study, SurrogateModel } from "../types";
+import type { Study, SurrogateModel, TrainJob } from "../types";
 import { useCanvas } from "./CanvasContext";
 
 /** Simulator 탭: 대화와 결과를 그대로 둔 채 패널 안에서 바로 예측한다. Simulator는 스터디 하나이고, 모델은 그 버전이다 */
@@ -19,7 +19,7 @@ export function SimulatorTab({ pid }: { pid: number }) {
   if (!studies || !models) return <Skeleton rows={5} />;
   if (!studies.length) {
     return <div className="empty-hero"><AgentGlyph size={32} /><b>아직 Simulator가 없습니다</b>
-      <p>에이전트가 해석 데이터로 예측 모델을 만들면 여기에서 바로 예측할 수 있습니다.</p></div>;
+      <p>예측 모델을 만들면 여기에서 바로 예측할 수 있습니다. 엑셀 표가 있으면 데이터 탭의 '표로 바로 Simulator'로 지금 만들 수 있고, 해석 결과가 있으면 대화로 요청하세요.</p></div>;
   }
   const cur = studies.find((s) => s.id === c.studyId) ?? studies[0];
   return (
@@ -42,6 +42,29 @@ function StudySimulator({ pid, study, versions }: { pid: number; study: Study; v
   const [listOpen, setListOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
   const shown = versions.find((m) => m.id === picked) ?? live ?? versions[0] ?? null;
+  // 넓은 화면에서 돌아오면 보던 버전을 그대로 고른다. 읽고 비워 두어 탭을 다시 열 때 그 버전으로 되돌아가지 않게 한다
+  const { simModel, clearSimModel } = useCanvas();
+  useLayoutEffect(() => {
+    if (simModel != null && versions.some((m) => m.id === simModel)) { setPicked(simModel); clearSimModel(); }
+  }, [simModel, versions, clearSimModel]);
+  // AI 없이 서버에서 학습한다. 데이터가 이미 있으면 PC Agent가 꺼져 있어도 모델을 만들 수 있어야 한다
+  const [training, setTraining] = useState<TrainJob | null>(null);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const train = useMutation({
+    mutationFn: async () => {
+      let job = await post<TrainJob>(`/api/studies/${study.id}/train/start`, {});
+      while (job.status === "running" && alive.current) {
+        setTraining(job);
+        await new Promise((r) => setTimeout(r, 1500));
+        job = await get<TrainJob>(`/api/train-jobs/${job.job_id}`);
+      }
+      if (job.status === "failed") throw new Error(job.error ?? "학습하지 못했습니다 → 다시 시도해 주세요");
+      return job;
+    },
+    onSettled: () => { setTraining(null); qc.invalidateQueries({ queryKey: ["models", pid] }); },
+    onError: (e: Error) => toast(e.message, true),
+  });
   const deploy = useMutation({
     mutationFn: (m: SurrogateModel) => post<SurrogateModel>(`/api/models/${m.id}/deploy`, {}),
     onSuccess: (m) => { qc.invalidateQueries({ queryKey: ["models", pid] }); setPicked(null); toast(`현재 버전: v${m.version}. 공유 링크도 이 버전을 보여 줍니다`); },
@@ -50,8 +73,10 @@ function StudySimulator({ pid, study, versions }: { pid: number; study: Study; v
 
   if (!shown) {
     return (
-      <div className="row"><span className="small muted grow">아직 예측 모델이 없습니다. 케이스가 쌓이면 학습할 수 있습니다.</span>
-        <button className="small" onClick={() => sendToAgent(`스터디 '${study.name}'(#${study.id})의 완료된 케이스로 예측 모델을 학습해 줘`)}>학습 요청</button></div>
+      <div className="row"><span className="small muted grow">{train.isPending
+        ? `${training?.rows ?? ""}${training ? "행으로 " : ""}학습 중입니다. 멈춘 것이 아닙니다. 행이 많으면 몇 분 걸립니다.`
+        : "아직 예측 모델이 없습니다. 완료된 케이스가 3건 이상이면 학습할 수 있습니다."}</span>
+        <button className="small" disabled={train.isPending} onClick={() => train.mutate()}>{train.isPending && <Loader2 size={13} className="spin" />}예측 모델 학습</button></div>
     );
   }
   const preview = !live || shown.id !== live.id;

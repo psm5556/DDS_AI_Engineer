@@ -1,4 +1,4 @@
-"""서버로 꼭 전해야 하는 메시지(대화 이벤트·턴 끝·권한 요청)를 답을 받을 때까지 쥐고 있는 상자.
+"""서버로 꼭 전해야 하는 메시지(대화 이벤트·턴 끝·권한 요청·케이스 결과)를 답을 받을 때까지 쥐고 있는 상자.
 
 연결이 끊겨도 PC의 CLI는 계속 돈다. 그동안의 출력과 턴 끝을 버리면 화면이 "중단"으로 남고 사용자는 멀쩡한 작업을 다시 시킨다.
 그래서 서버가 ack할 때까지 지우지 않고, 다시 연결되면 순서대로 처음부터 보낸다(서버는 boot·seq로 중복을 거른다).
@@ -28,6 +28,7 @@ class _Item:
     type: str
     session_id: str | None
     turn: dict | None = None  # agent.turn_end의 턴 정보(hello에 함께 알린다)
+    case_id: int | None = None  # case.status의 케이스(서버가 받기 전에는 hello에 함께 알린다)
 
 
 class Outbox:
@@ -48,7 +49,8 @@ class Outbox:
             turn = None
             if msg.get("type") == "agent.turn_end":
                 turn = {k: msg.get(k) for k in ("turn_id", "chat_id", "session_id", "agent", "started_at")}
-            self._items.append(_Item(self._seq, text, msg.get("type", ""), msg.get("session_id"), turn))
+            case_id = msg.get("case_id") if msg.get("type") == "case.status" else None
+            self._items.append(_Item(self._seq, text, msg.get("type", ""), msg.get("session_id"), turn, case_id))
             self._bytes += len(text)
             if self._bytes > self.max_bytes:
                 self._trim()
@@ -73,6 +75,11 @@ class Outbox:
         with self._lock:
             while self._items and self._items[0].seq <= seq:
                 self._bytes -= len(self._items.popleft().text)
+
+    def pending_cases(self) -> list[int]:
+        """결과를 아직 서버에 전하지 못한 케이스."""
+        with self._lock:
+            return sorted({it.case_id for it in self._items if it.case_id is not None})
 
     def after(self, seq: int) -> list[tuple[int, str]]:
         """seq보다 뒤의 메시지(순서대로)."""
@@ -184,6 +191,11 @@ def fit_message(msg: dict) -> dict:
     if size <= MAX_ITEM_BYTES:
         return msg
     log.warning("서버로 보낼 메시지가 너무 커서 줄입니다: %s, %d바이트", msg.get("type"), size)
+    if msg.get("type") == "case.status":  # 결과를 잘라 보내면 값 일부만 완료로 남는다. 어느 케이스가 왜 안 됐는지 알린다
+        why = "결과가 너무 커서 서버로 보내지 못했습니다 → results.json에는 숫자 결과만 쓰고 큰 데이터는 케이스 폴더에 파일로 두세요"
+        if msg.get("extract"):
+            return {"type": "case.status", "case_id": msg.get("case_id"), "status": "complete", "extract": True, "results": {}, "error": f"Output 추출 실패: {why}"}
+        return {"type": "case.status", "case_id": msg.get("case_id"), "status": "failed", "error": why}
     small = _cut_deep(msg)
     if len(json.dumps(small, ensure_ascii=False, default=str).encode("utf-8")) <= MAX_ITEM_BYTES:
         return small
