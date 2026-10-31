@@ -74,7 +74,9 @@ def level_counts(U: np.ndarray, max_levels: int = 7) -> list[int | None]:
 
 def doe_stats(U: np.ndarray, levels: list[int | None] | None = None) -> dict:
     """U: [0,1]로 맞춘 점들 (n, d). 변수별 가장 빈 구간, 전체 고른 정도(CD), 최소 거리, 상관.
-    거리 계산이 n²이라 많은 점은 부르는 쪽에서 줄여서 넘긴다."""
+    거리 계산이 n²이라 많은 점은 부르는 쪽에서 줄여서 넘긴다.
+    범위를 나중에 좁혔거나 표에 범위 밖 행이 있으면 경계로 잘라 잰다. 그 한 행 때문에 판단 전체가 실패하면 안 된다."""
+    U = np.clip(U, 0.0, 1.0)
     n, d = U.shape
     gaps = [largest_gap(U[:, i], bool(levels and levels[i])) for i in range(d)]
     out = {"n": n, "d": d, "gaps": gaps, "cd": float(qmc.discrepancy(U, method="CD")) if n >= 2 else None,

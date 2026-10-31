@@ -947,10 +947,20 @@ def coverage(ctx: Ctx) -> dict:
     else:
         U, used_ids = pts, ids
     # 격자·요인 배치: 수준 사이가 비는 것은 설계이고, 고른 정도(CD) 비교는 뜻이 없다
-    levels = calc.level_counts(pts, int(T_["level_max"]))
+    # 값이 고정된 변수(하한=상한)는 살필 범위가 없다. 빼고 재야 없는 빈 구간을 말하지 않고 고른 정도도 흐려지지 않는다
+    moving = [i for i in range(d) if s.hi[i] > s.lo[i]]
+    if not moving:
+        return _section("coverage", "unknown", say("cov_none", n=n, d=d, need=ctx.need, rec=ctx.rec), facts=facts, charts=charts, next_=None, basis=basis)
+    levels = calc.level_counts(pts[:, moving], int(T_["level_max"]))
     leveled, grid = any(levels), all(levels)
-    st = calc.doe_stats(U, levels)
-    base = calc.doe_baseline(len(U), d)
+    st = calc.doe_stats(U[:, moving], levels)
+    base = calc.doe_baseline(len(U), len(moving))
+    # 아래 문장은 변수 번호로 이름을 찾으므로 원래 번호로 되돌린다
+    st["corr"].update(a=moving[st["corr"]["a"]], b=moving[st["corr"]["b"]])
+    all_gaps = [{"gap": 0.0, "lo": 0.0, "hi": 0.0} for _ in range(d)]
+    for i, g in zip(moving, st["gaps"]):
+        all_gaps[i] = g
+    st["gaps"] = all_gaps
     names = [ctx.label(v) for v in s.names]
     nu = len(U)
     verdicts: list[tuple[str, str, dict]] = []

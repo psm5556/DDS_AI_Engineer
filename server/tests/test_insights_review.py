@@ -603,6 +603,29 @@ def test_spec_gives_the_unit_written_in_note(client):
     assert not variables["balancer_m"].get("unit")
 
 
+def _spread(n=30, seed=3):
+    return [_row(i + 1, {"a": float(u[0]), "b": float(u[1]), "fix": 3.0}, {"y": float(u[0])}) for i, u in enumerate(qmc.LatinHypercube(d=2, seed=seed).random(n))]
+
+
+def test_fixed_variable_is_not_reported_as_an_unseen_range():
+    """하한과 상한이 같은 변수는 살필 범위가 없다. 'fix의 3~3 구간을 보지 않았다'고 하면 안 되고, 고른 정도 판단도 흐리면 안 된다."""
+    variables = [("a", 0, 1), ("b", 0, 1), ("fix", 3, 3)]
+    sec = insights.coverage(Ctx(_snap(variables, _spread(), outputs=[{"name": "y"}]), True))
+    assert "fix" not in sec["sentence"]
+    moved = insights.coverage(Ctx(_snap(V2, _spread(), outputs=[{"name": "y"}]), True))
+    assert sec["state"] == moved["state"]
+    assert sec["sentence"] == moved["sentence"] or "3~3" not in sec["sentence"]
+
+
+def test_case_outside_the_bounds_does_not_break_coverage():
+    """사용자가 범위를 나중에 좁혔거나 표에 범위 밖 행이 있어도 판단이 통째로 실패하면 안 된다."""
+    rows = _spread() + [_row(99, {"a": 1.4, "b": -0.2, "fix": 3.0}, {"y": 1.0})]
+    sec = insights.coverage(Ctx(_snap(V2, rows, outputs=[{"name": "y"}]), True))
+    assert sec["state"] in ("good", "fair", "caution")
+    for g in calc.doe_stats(np.array([[1.4, -0.2], [0.2, 0.3], [0.8, 0.9]]))["gaps"]:
+        assert 0 <= g["lo"] <= g["hi"] <= 1
+
+
 def test_all_review_templates_are_plain():
     for key in ("tr_hole", "tr_measuring", "al_unsure", "al_scope", "inf_tie", "inf_moving", "opt_unlearned", "q_goal_none", "q_goal_missing"):
         assert key in insights.T
