@@ -204,9 +204,11 @@ def _table_job(job_id: int, user, db: Session) -> models.TableJob:
 
 @router.get("/table-jobs", response_model=list[schemas.TableJobResponse])
 def table_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """화면이 돌아와 읽는 목록: 도는 작업과, 끝났지만 아직 확인하지 않은 작업."""
-    rows = (db.query(models.TableJob).filter(models.TableJob.user_id == user.id, (models.TableJob.status == "running") | models.TableJob.seen.is_(False))
-            .order_by(models.TableJob.id.desc()).limit(20).all())
+    """화면이 돌아와 읽는 목록: 도는 작업과, 끝났지만 아직 확인하지 않은 작업.
+    프로젝트를 지운 뒤의 완료는 뺀다. 만든 Simulator가 함께 사라져 '만들었습니다 [열기]'가 거짓이 된다."""
+    j = models.TableJob
+    rows = (db.query(j).filter(j.user_id == user.id, (j.status == "running") | (j.seen.is_(False) & ((j.status != "done") | j.project_id.isnot(None))))
+            .order_by(j.id.desc()).limit(20).all())
     return [table_job.view(j) for j in rows]
 
 

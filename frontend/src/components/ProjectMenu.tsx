@@ -37,7 +37,11 @@ export function ProjectMenu({ p, at, onClose }: { p: Project; at: { x: number; y
   });
   const remove = useMutation({
     mutationFn: () => del(`/api/projects/${p.id}`),
-    onSuccess: () => { refresh(); toast("프로젝트를 삭제했습니다 (내 PC의 작업 폴더는 그대로 남아 있습니다)"); onClose(); nav("/"); },
+    onSuccess: () => {
+      refresh();
+      qc.invalidateQueries({ queryKey: ["table-jobs"] }); // 이 프로젝트의 'Simulator를 만들었습니다' 알림이 남지 않게
+      toast("프로젝트를 삭제했습니다 (내 PC의 작업 폴더는 그대로 남아 있습니다)"); onClose(); nav("/");
+    },
     onError: err,
   });
   const openLocal = useMutation({

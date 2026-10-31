@@ -42,6 +42,21 @@ def _fail(db: Session, job: models.TableJob, error: str):
     db.commit()
 
 
+def _stopped_by_delete(db: Session, job: models.TableJob) -> bool:
+    """돌던 중에 사용자가 프로젝트를 지웠으면 조용히 끝낸다. 일부러 지운 일을 '다시 시도하라'고 알리면 안 된다."""
+    db.refresh(job)
+    if job.project_id is not None:
+        return False
+    job.seen = True  # 알림 칸에 띄우지 않는다. 질문 화면이 아직 보고 있으면 이 이유를 읽는다
+    _fail(db, job, "프로젝트를 삭제해 Simulator 만들기를 멈췄습니다")
+    return True
+
+
+def _fail_after_import(db: Session, job: models.TableJob, error: str):
+    if not _stopped_by_delete(db, job):
+        _fail(db, job, error)
+
+
 def _finish(db: Session, job: models.TableJob, model_id: int, reused: bool = False):
     job.status, job.phase, job.model_id, job.reused, job.finished_at = "done", "done", model_id, reused, datetime.now()
     db.commit()
@@ -59,7 +74,7 @@ def start(db: Session, user: models.User, name: str, project_id: int | None, out
 
 
 def _run(job_id: int, register: Register):
-    created = None
+    has_project = False  # 이 뒤로 project_id가 비면 사용자가 프로젝트를 지운 것이다
     try:
         with SessionLocal() as db:
             job = db.get(models.TableJob, job_id)
@@ -69,15 +84,16 @@ def _run(job_id: int, register: Register):
                 db.add(project)
                 db.flush()
                 db.add(models.ProjectMember(project_id=project.id, user_id=user.id, role="master"))
-                job.project_id = created = project.id
+                job.project_id, job.made_project = project.id, True
                 db.commit()
+            has_project = True
             try:
                 rep = register(db, job, user)
             except HTTPException as e:
-                _reject(db, job, str(e.detail), created)
+                _reject(db, job, str(e.detail))
                 return
             except importer.ImportRejected as e:
-                _reject(db, job, str(e), created)
+                _reject(db, job, str(e))
                 return
             job.study_id, job.rows, job.excluded_count = rep["study_id"], rep.get("registered") or rep.get("duplicates") or 0, rep.get("excluded_count") or 0
             db.commit()
@@ -92,18 +108,34 @@ def _run(job_id: int, register: Register):
         log.exception("표 작업 실패 %s", job_id)
         with SessionLocal() as db:
             job = db.get(models.TableJob, job_id)
-            if job is not None and job.status == "running":
+            if job is not None and job.status == "running" and not (has_project and _stopped_by_delete(db, job)):
+                if not job.study_id:
+                    _drop_own_project(db, job)
                 _fail(db, job, f"표로 Simulator를 만들지 못했습니다({e.__class__.__name__}) → 다시 시도하고, 계속되면 관리자에게 서버 로그를 확인해 달라고 하세요")
 
 
-def _reject(db: Session, job: models.TableJob, why: str, created: int | None):
-    if created is not None:  # 표를 못 받았으면 빈 프로젝트를 남기지 않는다
-        project = db.get(models.Project, created)
-        job.project_id = None
+# 하나라도 있으면 사용자가 쓰기 시작한 프로젝트다. 작업이 만든 프로젝트라도 지우지 않는다
+_PROJECT_CONTENT = (models.Study, models.ChatSession, models.Flow, models.Artifact, models.Report, models.Attachment)
+
+
+def _drop_own_project(db: Session, job: models.TableJob):
+    """표를 못 받았으면 작업이 만든 빈 프로젝트를 남기지 않는다. 다시 붙여 넣으면 프로젝트가 또 생겨 이름이 같은 빈 프로젝트가 쌓인다."""
+    if not job.made_project or job.project_id is None:
+        return
+    pid = job.project_id
+    if any(db.query(kind.id).filter_by(project_id=pid).first() for kind in _PROJECT_CONTENT):
+        return
+    project = db.get(models.Project, pid)
+    job.project_id = None
+    db.commit()
+    if project is not None:
+        db.delete(project)
         db.commit()
-        if project is not None:
-            db.delete(project)
-            db.commit()
+
+
+def _reject(db: Session, job: models.TableJob, why: str):
+    db.rollback()  # 거절되기 전까지 쌓인 것을 버린다. 남아 있으면 빈 프로젝트로 보이지 않는다
+    _drop_own_project(db, job)
     _fail(db, job, why)
 
 
@@ -116,14 +148,14 @@ def _train_and_deploy(job_id: int):
             # 고른 출력을 그대로 넘긴다. 비우면 일부 행이 빈 출력은 서버가 빼는데, 사용자가 고른 열이 모델에서 사라지면 안 된다
             train = service.start_train(db, study, job.outputs, None, None, job.user_id)
         except ValueError as e:
-            _fail(db, job, f"표는 등록했지만 예측 모델을 만들지 못했습니다. {e}")
+            _fail_after_import(db, job, f"표는 등록했지만 예측 모델을 만들지 못했습니다. {e}")
             return
         job_view = train
         while job_view["status"] == "running":
             time.sleep(POLL_SEC)
             job_view = service.train_job(train["job_id"]) or {"status": "failed", "error": "학습 작업을 잃었습니다 → 다시 시도해 주세요"}
         if job_view["status"] != "done" or not job_view.get("model_id"):
-            _fail(db, job, f"표는 등록했지만 예측 모델을 만들지 못했습니다. {job_view.get('error') or '다시 시도해 주세요'}")
+            _fail_after_import(db, job, f"표는 등록했지만 예측 모델을 만들지 못했습니다. {job_view.get('error') or '다시 시도해 주세요'}")
             return
         _phase(db, job, "deploy")
         db.expire_all()
@@ -135,10 +167,11 @@ def _train_and_deploy(job_id: int):
 def resume_after_restart():
     """서버가 다시 시작되면 돌던 스레드가 없다. 등록을 마친 작업은 이어 가고, 등록 전이면 표 글자가 없어 다시 붙여 넣어 달라고 한다."""
     with SessionLocal() as db:
-        for job in db.query(models.TableJob).filter_by(status="running"):
+        for job in db.query(models.TableJob).filter_by(status="running").all():
             if job.study_id:
                 _pool.submit(_resume, job.id)
             else:
+                _drop_own_project(db, job)
                 _fail(db, job, "서버가 다시 시작되어 표를 등록하지 못했습니다 → 표를 다시 붙여 넣어 주세요")
 
 
@@ -150,4 +183,4 @@ def _resume(job_id: int):
         with SessionLocal() as db:
             job = db.get(models.TableJob, job_id)
             if job is not None and job.status == "running":
-                _fail(db, job, f"표는 등록했지만 예측 모델을 만들지 못했습니다({e.__class__.__name__}) → 데이터 탭에서 다시 학습해 주세요")
+                _fail_after_import(db, job, f"표는 등록했지만 예측 모델을 만들지 못했습니다({e.__class__.__name__}) → 데이터 탭에서 다시 학습해 주세요")

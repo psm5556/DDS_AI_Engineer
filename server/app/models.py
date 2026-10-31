@@ -194,7 +194,8 @@ class TableJob(TimestampMixin, Base):
     __tablename__ = "table_jobs"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"))  # 첫 화면에서 시작하면 표를 받은 뒤에 정해진다
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"))  # 첫 화면에서 시작하면 작업이 표를 받기 전에 만든다
+    made_project = Column(Boolean, default=False)  # 작업이 만든 프로젝트다. 등록 중 서버가 다시 시작되어도 빈 프로젝트를 지울 수 있게
     study_id = Column(Integer, ForeignKey("studies.id", ondelete="SET NULL"))
     model_id = Column(Integer, ForeignKey("surrogate_models.id", ondelete="SET NULL"))
     name = Column(String(200), nullable=False)

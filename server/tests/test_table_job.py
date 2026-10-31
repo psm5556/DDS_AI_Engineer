@@ -120,6 +120,75 @@ def test_restart_resumes_registered_jobs_and_explains_the_others(client):  # noq
     assert resumed["status"] == "done" and resumed["model_id"]
     gone = client.get(f"/api/table-jobs/{ids[1]}", headers=h).json()
     assert gone["status"] == "failed" and "다시 붙여 넣어" in gone["error"]
+    assert client.get(f"/api/projects/{pid}", headers=h).status_code == 200  # 사용자가 고른 프로젝트는 지우지 않는다
+
+
+def _job_in_import(me, name, **kw):
+    with SessionLocal() as db:
+        p = models.Project(name=name, description="", owner_id=me["id"])
+        db.add(p)
+        db.flush()
+        db.add(models.ProjectMember(project_id=p.id, user_id=me["id"], role="master"))
+        job = models.TableJob(user_id=me["id"], project_id=p.id, name=name, status="running", phase="import", **kw)
+        db.add(job)
+        db.commit()
+        return p.id, job.id
+
+
+def test_restart_during_import_leaves_no_empty_project(client):  # noqa: F811
+    h, me = _auth(client, "admin")
+    pid, jid = _job_in_import(me, "등록 중 재시작", made_project=True)
+    table_job.resume_after_restart()
+    job = client.get(f"/api/table-jobs/{jid}", headers=h).json()
+    assert job["status"] == "failed" and "다시 붙여 넣어" in job["error"] and job["project_id"] is None
+    assert client.get(f"/api/projects/{pid}", headers=h).status_code == 404
+
+
+def test_restart_during_import_keeps_a_project_the_user_started_using(client):  # noqa: F811
+    h, me = _auth(client, "admin")
+    pid, jid = _job_in_import(me, "그 사이 대화 시작", made_project=True)
+    with SessionLocal() as db:
+        db.add(models.ChatSession(project_id=pid, user_id=me["id"], agent="demo"))
+        db.commit()
+    table_job.resume_after_restart()
+    assert client.get(f"/api/table-jobs/{jid}", headers=h).json()["project_id"] == pid
+    assert client.get(f"/api/projects/{pid}", headers=h).status_code == 200
+
+
+def test_unexpected_error_from_first_screen_leaves_no_empty_project(client, monkeypatch):  # noqa: F811
+    h, _ = _auth(client, "admin")
+    before = len(client.get("/api/projects", headers=h).json())
+    monkeypatch.setattr(table_job.importer, "import_new", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("뜻밖의 오류")))
+    failed = _wait(client, _start(client, h, text=_text(seed=14), name="뜻밖의 오류")["id"], h)
+    assert failed["status"] == "failed" and "→" in failed["error"] and failed["project_id"] is None
+    assert len(client.get("/api/projects", headers=h).json()) == before
+
+
+def test_finished_job_is_not_announced_after_its_project_is_deleted(client):  # noqa: F811
+    h, _ = _auth(client, "admin")
+    pid = client.post("/api/projects", json={"name": "끝나고 지움"}, headers=h).json()["id"]
+    done = _wait(client, _start(client, h, text=_text(seed=15), project_id=pid)["id"], h)
+    assert any(j["id"] == done["id"] for j in client.get("/api/table-jobs", headers=h).json())
+    assert client.delete(f"/api/projects/{pid}", headers=h).status_code == 200
+    # 'Simulator를 만들었습니다 [열기]'를 보여 주면 열기가 /projects/null로 간다
+    assert all(j["id"] != done["id"] for j in client.get("/api/table-jobs", headers=h).json())
+
+
+@pytest.mark.parametrize("error", [ValueError("값이 극단적입니다"), RuntimeError("외래 키 오류")])
+def test_deleting_project_during_training_does_not_ask_to_retry(client, monkeypatch, error):  # noqa: F811
+    h, _ = _auth(client, "admin")
+    pid = client.post("/api/projects", json={"name": "학습 중 지움"}, headers=h).json()["id"]
+
+    def delete_then_fail(*a, **k):  # 지운 뒤 학습이 저장하려다 실패하는 순서를 그대로 만든다
+        with SessionLocal() as db:
+            db.delete(db.get(models.Project, pid))
+            db.commit()
+        raise error
+
+    monkeypatch.setattr(table_job.service, "start_train", delete_then_fail)
+    job = _wait(client, _start(client, h, text=_text(seed=17), project_id=pid)["id"], h)
+    assert job["status"] == "failed" and "삭제" in job["error"] and "다시 시도" not in job["error"]
+    assert job["seen"] and all(j["id"] != job["id"] for j in client.get("/api/table-jobs", headers=h).json())
 
 
 # ---------- 표인지 아닌지
