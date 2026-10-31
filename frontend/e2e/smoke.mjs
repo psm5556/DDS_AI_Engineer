@@ -491,13 +491,14 @@ await step("프로젝트", async () => {
 await step("사이드바 순서", async () => {
   await page.goto(BASE + "/");
   await page.locator(".side-nav-list").waitFor();
-  const label = (e) => (e.tagName === "HR" ? "구분선" : e.getAttribute("aria-label") || e.querySelector("input")?.placeholder || e.textContent.trim());
+  // 마켓의 '확인할 일' 숫자는 이름이 아니므로 뺀다. 검토 대기가 남은 서버에서 돌려도 순서만 본다
+  const label = (e) => (e.tagName === "HR" ? "구분선" : e.getAttribute("aria-label") || e.querySelector("input")?.placeholder || e.textContent.trim().replace(/\d+$/, ""));
   const order = await page.locator(".side-nav-list > *").evaluateAll((els, f) => els.map(new Function("e", `return (${f})(e)`)), label.toString());
-  if (order.join(",") !== "Simulator,구분선,새 프로젝트,프로젝트 검색") throw new Error(`순서가 다릅니다: ${order}`);
+  if (order.join(",") !== "Simulator,마켓,구분선,새 프로젝트,프로젝트 검색") throw new Error(`순서가 다릅니다: ${order}`);
   await page.getByRole("button", { name: "사이드바 접기" }).click();
   const rail = await page.locator(".sidebar.rail > *").evaluateAll((els, f) => els.map(new Function("e", `return (${f})(e)`)), label.toString());
   const at = rail.indexOf("Simulator");
-  if (at < 0 || rail[at + 1] !== "구분선" || rail[at + 2] !== "새 프로젝트") throw new Error(`접은 사이드바 순서가 다릅니다: ${rail}`);
+  if (at < 0 || rail[at + 1] !== "마켓" || rail[at + 2] !== "구분선" || rail[at + 3] !== "새 프로젝트") throw new Error(`접은 사이드바 순서가 다릅니다: ${rail}`);
   await shot("sidebar-rail");
   await page.getByRole("button", { name: "사이드바 펼치기" }).click();
 });
