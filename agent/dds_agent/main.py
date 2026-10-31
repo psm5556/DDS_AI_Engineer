@@ -356,7 +356,7 @@ class Agent:
         for d in moved:  # 저장소 안이면 제외 목록을 새 경로로 맞춘다. 스킬 복사가 길 수 있어 다른 프로젝트의 시작을 막지 않게 잠금 밖에서 한다
             try:
                 sync_project_context(d)
-            except OSError as e:
+            except (OSError, RuntimeError) as e:  # 복사 실패는 대화에 보이도록 RuntimeError로 온다. 여기는 파일 탭·폴더 열기 안이라 막지 않는다
                 log.info("이름을 바꾼 폴더의 규칙 동기화 실패(다음 세션에 다시 한다): %s", e)
 
     def _settle_quietly(self):

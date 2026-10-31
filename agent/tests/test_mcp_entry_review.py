@@ -20,6 +20,15 @@ def _case(root: Path, name: str, params: dict, results: dict):
     (d / "results.json").write_text(json.dumps(results), encoding="utf-8")
 
 
+# ---------- 말 사전: AI가 전하는 말과 서버가 거절하는 말이 같아야 한다
+def test_copy_to_my_pc_wording_is_the_only_one():
+    root = Path(__file__).resolve().parents[2]
+    hits = [str(p.relative_to(root)) for d in ("agent-context", "mcp_servers", "agent/dds_agent", "frontend/src", "server/app", "docs") for p in (root / d).rglob("*")
+            if p.suffix in (".md", ".py", ".ts", ".tsx") and "내 PC에서 이어서" in p.read_text(encoding="utf-8", errors="ignore")]
+    assert hits == []
+    assert "내 PC로 복사해서 하기" in INSTRUCTIONS.read_text(encoding="utf-8")
+
+
 # ---------- 입구가 달라도 같은 표
 def test_pasted_table_reads_the_same_through_inspect_and_import(env):
     d = env.project_dir() / "inputs"

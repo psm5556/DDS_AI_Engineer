@@ -1295,6 +1295,34 @@ def test_rename_message_order_last_wins(agent, tmp_path):
     assert not (tmp_path / "ws" / "P0025_하나").exists()
 
 
+def test_rule_copy_failure_after_rename_waits_for_next_session(agent, tmp_path, monkeypatch):
+    # Agent 업데이트 직후 규칙 사본이 낡았고, 이름이 길어져 260자를 넘거나 파일이 잠겨 복사가 실패하는 경우
+    monkeypatch.setattr(M, "sync_project_context", context.sync_project_context)
+    dirs = [agent.s.workspace.project_dir(p, "시작", f"u{p}") for p in (25, 26)]
+    for d in dirs:
+        context.sync_project_context(d)
+        (d / context.STAMP).unlink()
+    real_copy = context.shutil.copytree
+
+    def boom(src, dst, *a, **k):
+        if "P0025" in str(dst):
+            raise shutil.Error([("a", "b", "경로가 너무 깁니다")])
+        return real_copy(src, dst, *a, **k)
+
+    monkeypatch.setattr(context.shutil, "copytree", boom)
+    agent._note_name({"project_id": 25, "project_uid": "u25", "project_name": "새 이름"})
+    agent._note_name({"project_id": 26, "project_uid": "u26", "project_name": "다른 이름"})
+    # 파일 탭이 부르는 곳. 규칙 복사 실패로 파일 목록까지 실패하면 안 된다
+    assert agent._local_tree(25, "새 이름", "", "u25")["entries"] is not None
+    root = tmp_path / "ws"
+    assert any(x.name.startswith("P0025_새") for x in root.iterdir())
+    # 앞 폴더가 실패해도 뒤 폴더는 맞춘다. 전체를 한 번에 맞추는 호출로 잰다
+    agent._note_name({"project_id": 25, "project_uid": "u25", "project_name": "또 새 이름"})
+    agent._settle_names()
+    moved = next(x for x in root.iterdir() if x.name.startswith("P0026_다른"))
+    assert (moved / context.STAMP).exists()
+
+
 def test_live_session_gets_alias_then_real_after_exit(agent, tmp_path):
     root = tmp_path / "ws"
     d = agent.s.workspace.project_dir(25, "시작", "u25")
