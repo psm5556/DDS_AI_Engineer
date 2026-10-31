@@ -310,6 +310,41 @@ await step("넓은 Simulator에서 프로젝트로 돌아오기", async () => {
   await page.getByRole("tab", { name: "작업 흐름" }).waitFor({ timeout: 15000 });
   await page.waitForTimeout(800);
   if ((await page.getByRole("tab", { name: "작업 흐름" }).getAttribute("aria-selected")) !== "true") throw new Error(`새로고침해도 Simulator 탭이 강제됩니다: ${here}`);
+
+  // 대화가 있는 프로젝트는 최근 대화 주소로 한 번 더 옮겨 간다. 그래도 Simulator 탭을 잃지 않는다
+  const req = (method, url, body) => page.evaluate(async ([m, u, b]) => {
+    const r = await fetch(u, { method: m, headers: { Authorization: `Bearer ${localStorage.getItem("dds.token")}`, "Content-Type": "application/json" }, body: b ? JSON.stringify(b) : undefined });
+    return { status: r.status, json: await r.json().catch(() => null) };
+  }, [method, url, body]);
+  const chat = await req("POST", `/api/projects/${bracket.project_id}/sessions`, {});
+  if (chat.status >= 400) { console.log(`  (대화를 만들지 못해 건너뜀: ${chat.status})`); return; }
+  const arrivedOnChat = async (what) => {
+    await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 15000 });
+    await page.locator(".sim-tab .sim-var").first().waitFor({ timeout: 15000 });
+    await page.waitForTimeout(800); // 옮겨 간 뒤에 탭이 바뀌지 않는지 본다
+    if ((await page.getByRole("tab", { name: "Simulator" }).getAttribute("aria-selected")) !== "true") throw new Error(`${what}: Simulator 탭이 아닙니다`);
+    if (!(await page.locator(".sim-tab .sim-var").count())) throw new Error(`${what}: Simulator 입력이 없습니다`);
+  };
+  await page.goto(`${BASE}/simulator/${v2.id}`);
+  await back.click();
+  await arrivedOnChat("프로젝트 열기");
+  await shot("simulator-back-with-chat");
+  const again = await page.locator(".sim-ver-toggle b").innerText();
+  if (again !== `v${v2.version}`) throw new Error(`대화가 있는 프로젝트에서 다른 버전이 골라졌습니다: ${again}`);
+  await page.reload();
+  await page.getByRole("tab", { name: "작업 흐름" }).waitFor({ timeout: 15000 });
+  await page.waitForTimeout(800);
+  if ((await page.getByRole("tab", { name: "작업 흐름" }).getAttribute("aria-selected")) !== "true") throw new Error("대화가 있는 프로젝트에서 새로고침해도 Simulator 탭이 강제됩니다");
+  // 끝난 표 작업 알림의 '열기'도 같은 길이다. 다른 화면에서 끝난 작업을 띄워 누른다
+  const rows = ["얇기\t너비\t수명", ...Array.from({ length: 14 }, (_, i) => `${1 + i * 0.3}\t${10 + ((i * 7) % 11)}\t${(100 + 9 * i + ((i * 7) % 11) * 4).toFixed(1)}`)].join("\n");
+  const job = await req("POST", "/api/table-jobs", { project_id: bracket.project_id, text: rows, name: "수명 예측", outputs: [{ name: "수명" }] });
+  if (job.status >= 400) throw new Error(`표 작업을 시작하지 못했습니다: ${JSON.stringify(job.json)}`);
+  await page.goto(BASE + "/simulators");
+  const opener = page.locator(".table-job.done").filter({ hasText: "수명 예측" }).getByRole("button", { name: "열기" });
+  await opener.waitFor({ timeout: 60000 });
+  await opener.click();
+  await arrivedOnChat("알림의 열기");
+  await req("DELETE", `/api/sessions/${chat.json.id}`); // 뒤의 단계는 대화 없는 프로젝트를 본다
 });
 
 await step("입력창에 표 붙여넣기", async () => {

@@ -43,8 +43,8 @@
 | E16 | 다른 멤버가 내 PC 없이 이어받기 | 아래 3절 | `test_e16_*`, `test_recipe_*`, `test_other_members_script_*` | `test_e16_*`, `test_recipe_*`, `test_demo_takeover_*`, `test_script_is_shared_*` |
 | E16b | 실행 중에 내 PC가 꺼짐 | 실행 중으로 남은 이유가 보이고(`stalled`), 멤버의 중지·넘겨받기는 403. 잠깐 끊겨도 솔버가 끝나지 않고 끊긴 사이의 결과까지 받는다. 실행한 사람이 중지하면 다시 연결될 때 솔버를 끝내고 정리된 상태 유지. 다시 돌리기가 실패해도 이전 값 유지, 다른 사람의 스크립트는 내가 승인한 흐름 없이 돌지 않음 | `test_cases_on_a_dead_pc_*`, `test_reconnecting_agent_*`, `test_failed_rerun_keeps_previous_results`, `test_case_stop.py` | `test_case_link_drop.py` |
 | PV | `pc_verify chat` 자체 | 첨부, 같은 대화 이어 가기, 합격 판정과 종료 코드, 측정값 저장, 다른 대화의 Flow를 승인하지 않음, `--no-approve` | — | `test_pc_verify_*` |
-| E1c | 표로 Simulator를 만드는 동안 | 등록·학습·배포는 서버 작업 하나다. 새로고침해도 끝까지 가고 돌아온 화면에 '만드는 중'·'만들었습니다 [열기]'가 보인다. 그동안 입력창은 AI로 보내지 않고 이유를 말한다. 둘째 표는 받지 않았다고 말하고 끝난 뒤 바로 묻는다. AI가 일하는 중에 붙여 넣으면 지금 할 수 있는 일을 말한다 | `server/tests/test_table_job.py` | `frontend/e2e/table_job.mjs`, `frontend/e2e/waiting.mjs` |
-| UI | 브라우저, PC Agent 없음 | 표를 받는 파일 선택이 없다. 첫 화면·데이터 탭의 붙여넣기 창, 입력창 붙여넣기(요청 글에 행이 들어가지 않음)로 Simulator까지. 묻는 것은 출력 칩뿐. 넓은 Simulator의 **프로젝트 열기**가 같은 스터디·버전의 Simulator 탭을 열고 새로고침 뒤에는 강제하지 않는다. 공유 링크에는 그 버튼이 없다 | `frontend/e2e/smoke.mjs` | — |
+| E1c | 표로 Simulator를 만드는 동안 | 등록·학습·배포는 서버 작업 하나다. 새로고침해도 끝까지 가고 돌아온 화면에 '만드는 중'·'만들었습니다 [열기]'가 보인다. 그동안 입력창은 AI로 보내지 않고 이유를 말한다. 둘째 표는 받지 않았다고 말하고 끝난 뒤 바로 묻는다. AI가 일하는 중에 붙여 넣으면 지금 할 수 있는 일을 말한다. 프로젝트를 지우면 그 작업의 알림이 사라지고 다시 시도하라고 하지 않는다. 등록 중에 서버가 다시 시작되면 작업이 만든 프로젝트가 비어 있을 때 지운다 | `server/tests/test_table_job.py` | `frontend/e2e/table_job.mjs`, `frontend/e2e/waiting.mjs` |
+| UI | 브라우저, PC Agent 없음 | 표를 받는 파일 선택이 없다. 첫 화면·데이터 탭의 붙여넣기 창, 입력창 붙여넣기(요청 글에 행이 들어가지 않음)로 Simulator까지. 묻는 것은 출력 칩뿐. 넓은 Simulator의 **프로젝트 열기**와 끝난 표 작업 알림의 **열기**가 같은 스터디·버전의 Simulator 탭을 열고(대화가 있는 프로젝트도) 새로고침 뒤에는 강제하지 않는다. 공유 링크에는 그 버튼이 없다 | `frontend/e2e/smoke.mjs` | — |
 | UId | 브라우저 + 실제 Agent·데모 CLI | 전체 과정(CAD→보고서), 입력창의 표를 AI로 보내 Simulator까지, DOE CSV 받기 | `frontend/e2e/smoke.mjs --demo` | — |
 
 ## 3. E16: 내 PC가 꺼져 있을 때 멤버가 할 수 있는 일

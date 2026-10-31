@@ -52,10 +52,12 @@ export default function WorkspacePage() {
   const { data: p, error } = useQuery({ queryKey: ["project", pid], queryFn: () => get<Project>(`/api/projects/${pid}`) });
   const { data: sessions } = useQuery({ queryKey: ["sessions", pid], queryFn: () => get<ChatSession[]>(`/api/projects/${pid}/sessions`) });
 
-  // 대화를 고르지 않았으면 가장 최근 대화로
+  // 대화를 고르지 않았으면 가장 최근 대화로. 주소가 바뀌면 화면이 새로 뜨므로 도착 정보를 함께 넘긴다. 안 넘기면 대화가 있는 프로젝트에서 Simulator 탭을 잃는다
   useEffect(() => {
-    if (!sidS && !isNew && sessions?.length) nav(`/projects/${pid}/c/${sessions[0].id}`, { replace: true });
-  }, [sidS, isNew, sessions, pid, nav]);
+    if (!sidS && !isNew && sessions?.length) {
+      nav(`/projects/${pid}/c/${sessions[0].id}`, { replace: true, state: arrival && { canvasTab: arrival.tab, studyId: arrival.studyId, modelId: arrival.modelId } });
+    }
+  }, [sidS, isNew, sessions, pid, nav, arrival]);
   const onSession = useCallback((id: number) => nav(`/projects/${pid}/c/${id}`, { replace: true }), [nav, pid]);
   const sid = sidS ? Number(sidS) : null;
 
