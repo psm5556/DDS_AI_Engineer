@@ -116,7 +116,7 @@ function StudySimulator({ pid, study, versions }: { pid: number; study: Study; v
         </div>
       )}
 
-      <SimulatorView key={shown.id} embedded onMore={() => { askInsightFocus("trust"); c.setTab("data"); }} base={`/api/models/${shown.id}`} specPath={`/api/models/${shown.id}/spec`}
+      <SimulatorView key={shown.id} embedded onMore={() => { askInsightFocus("trust", shown.study_id); c.setTab("flow"); }} base={`/api/models/${shown.id}`} specPath={`/api/models/${shown.id}/spec`}
         fieldList={memberFieldList(shown.id)} fieldBase={(id) => `/api/field-models/${id}`} />
       {sharing && live && <ShareModal modelId={live.id} onClose={() => setSharing(false)} />}
     </div>

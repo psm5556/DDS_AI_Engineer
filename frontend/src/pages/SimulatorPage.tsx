@@ -164,7 +164,7 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
       )}
 
       <TrustLine url={`${base}/trust-line`} onMore={onMore} moreTo={!onMore && spec.project_id ? `/projects/${spec.project_id}` : undefined}
-        moreState={{ canvasTab: "data", studyId: spec.model.study_id }} onMoreLink={() => askInsightFocus("trust")} />
+        moreState={{ canvasTab: "flow", studyId: spec.model.study_id }} onMoreLink={() => askInsightFocus("trust", spec.model.study_id)} />
 
       {/* 왼쪽: 입력(설계변수)과 출력(예측값)을 붙여 둔다 · 오른쪽: 3D 형상·필드와 민감도 */}
       <div className="sim2">

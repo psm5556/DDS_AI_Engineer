@@ -13,7 +13,7 @@ import { copyText, FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_
 import { orderNodes } from "../flow/order";
 import { flash, scrollMode } from "../motion";
 import { useCanvas } from "./CanvasContext";
-import { StudyInsights } from "./StudyInsights";
+import { insightFocusStudy, JudgementList, NextStep, useFlowJudgements } from "./StudyInsights";
 import { relFromRunDir, useOpenLocal } from "./LocalFiles";
 import { TableAddRows } from "./TableImport";
 import { useToast } from "../toast";
@@ -59,7 +59,14 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
     onError: (e: Error) => toast(e.message ?? "삭제하지 못했습니다", true),
   });
   const flow = flows?.find((f) => f.id === fid) ?? flows?.[0];
+  const judge = useFlowJudgements(pid, flows, flow);
   useEffect(() => { setSel(null); }, [flow?.id]);
+  // Simulator의 '자세히'로 왔으면 그 스터디가 쓰인 흐름을 연다. 지금 고른 흐름이 다른 일일 수 있다
+  useEffect(() => {
+    const study = insightFocusStudy();
+    const target = study != null ? judge.studies.find((s) => s.id === study)?.flow_id : null;
+    if (target && flows?.some((f) => f.id === target)) setFid(target);
+  }, [judge.studies, flows, setFid]);
   // 대화에서 결과를 누르면(또는 에이전트가 새 결과를 올리면) 그 결과로 스크롤
   useEffect(() => {
     if (!focus) return;
@@ -85,10 +92,16 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
       <div className="flow-tab flow-none">
         <div className="empty-hero">
           <AgentGlyph size={32} />
-          <b>{loose.length ? "작업 흐름 없이 만든 결과입니다" : "아직 작업 흐름이 없습니다"}</b>
+          <b>{loose.length || judge.outside.length ? "작업 흐름 없이 만든 결과입니다" : "아직 작업 흐름이 없습니다"}</b>
           <p>해석을 새로 돌리거나 내 모델을 바꾸는 일은 에이전트가 작업 흐름을 먼저 그려 여기에 보여 주고, 승인하면 실행합니다. 조회·후처리, 가진 데이터로 예측 모델·Simulator 만들기, 보고서는 작업 흐름 없이 바로 합니다.</p>
         </div>
-        {loose.length > 0 && <div className="step-list" aria-label="결과"><div className="art-grid">{loose.map((a) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} />)}</div></div>}
+        <NextStep j={judge} />
+        {(loose.length > 0 || judge.outside.length > 0) && (
+          <div className="step-list" aria-label="결과">
+            <JudgementList items={judge.outside} />
+            {loose.length > 0 && <div className="art-grid">{loose.map((a) => <ArtifactCard key={a.id} a={a} onDelete={() => setRm(a)} />)}</div>}
+          </div>
+        )}
         {removeDialog}
       </div>
     );
@@ -132,6 +145,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
       <div className="pbar" aria-label="진행률"><i style={{ width: `${(done / Math.max(1, flow.nodes.length)) * 100}%` }} /></div>
       <FlowCanvas flow={flow} selected={sel} onSelect={goStep} artifactCount={count} compact />
       <p className="small muted flow-hint">단계를 누르면 그 단계의 결과로 이동합니다 · 결과 {mine.length + outside.length}개</p>
+      <NextStep j={judge} />
 
       {/* 흐름도는 고정, 결과만 이 안에서 스크롤 */}
       <div className="step-list" aria-label="단계별 결과">
@@ -150,15 +164,17 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
                 )}
               </header>
               {n.detail && <p className="small muted step-detail">{n.detail}</p>}
+              <JudgementList items={judge.byNode[n.id]} />
               {list.length ? <div className="art-grid">{list.map(card)}</div>
-                : <p className="small muted step-empty">{n.status === "pending" ? "아직 시작하지 않았습니다" : n.status === "in_progress" ? "진행 중입니다. 결과가 나오면 여기에 쌓입니다" : "이 단계에서 게시된 결과가 없습니다"}</p>}
+                : !judge.byNode[n.id]?.length && <p className="small muted step-empty">{n.status === "pending" ? "아직 시작하지 않았습니다" : n.status === "in_progress" ? "진행 중입니다. 결과가 나오면 여기에 쌓입니다" : "이 단계에서 게시된 결과가 없습니다"}</p>}
             </section>
           );
         })}
-        {outside.length > 0 && (
+        {(outside.length > 0 || judge.outside.length > 0) && (
           <section className="step-sec" id="step-outside" aria-label="단계 밖 결과">
             <header className="step-head"><span className="step-no muted">기타</span><b className="step-label">단계에 묶이지 않은 결과</b></header>
-            <div className="art-grid">{outside.map(card)}</div>
+            <JudgementList items={judge.outside} />
+            {outside.length > 0 && <div className="art-grid">{outside.map(card)}</div>}
           </section>
         )}
       </div>
@@ -412,8 +428,6 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
           );
         })()}
       </section>
-
-      <StudyInsights id={id} />
 
       {/* 입력(설계 변수)과 출력(해석에서 뽑는 값)을 나눠 보여 준다. Output은 대화로 언제든 늘릴 수 있다 */}
       <section className="block io-block" aria-label="입력과 출력">

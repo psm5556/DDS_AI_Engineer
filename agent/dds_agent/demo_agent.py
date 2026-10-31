@@ -882,9 +882,10 @@ class DemoAgent:
         await self._generic_report(s)
         files = await s.tool("dds-flow", "make_report", {"formats": ["docx", "html"], "flow_id": fid})
         await node("report", "complete", f"보고서 탭 · Word·HTML {len(files['files'])}개 저장")
-        lines = [f"- **{by[k]['question']}** {by[k]['state']}. {by[k]['sentence']}" for k in ("pareto", "active", "convergence") if k in by]
+        # 화면과 같은 규칙: 아직 판단하지 못한 항목은 말하지 않는다
+        lines = [f"- **{by[k]['question']}** {by[k]['state']}. {by[k]['sentence']}" for k in ("pareto", "active", "convergence") if k in by and by[k]["state"] != "아직 판단 못 함"]
         await s.say("두 목표 최적화와 능동학습을 마쳤습니다.\n\n" + "\n".join(lines)
-                    + "\n\n값은 예시 식으로 만든 것입니다. 자세한 판단은 오른쪽 **데이터** 탭에 있습니다.")
+                    + "\n\n값은 예시 식으로 만든 것입니다. 자세한 판단은 오른쪽 **작업 흐름** 탭의 단계마다 있습니다.")
 
     async def _washer(self, s, fid, node):
         """드럼세탁기 탈수 진동: 해석 모델 → DOE 60·해석 → 진동 예측 모델 → 베이지안 최적화 → Simulator → 보고서."""

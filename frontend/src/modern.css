@@ -1324,12 +1324,6 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .sim-out li b.none { font-size: var(--fs-14); font-weight: 400; color: var(--ink-3); }
 .sim-var input:disabled { background: var(--panel-2); color: var(--ink-3); }
 /* ---------- 스터디 판단 도우미: 첫 줄만 읽어도 판단할 수 있게. 작업대라 상태가 바뀔 때의 짧은 움직임만 쓴다 ---------- */
-.insights { display: flex; flex-direction: column; gap: var(--sp-2); }
-.insight-summary { display: flex; flex-direction: column; gap: var(--sp-1); padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
-.insight-summary h3 { margin: 0; font-size: var(--fs-14); font-weight: 600; }
-.insight-facts { color: var(--ink-3); font-size: var(--fs-12); }
-.insight-next { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--fs-13); }
-.insight-next b { font-weight: 600; }
 .insight-sec { border-bottom: 1px solid var(--line); }
 .insight-sec:last-child { border-bottom: none; }
 .insight-head { white-space: normal; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: var(--sp-1) var(--sp-2); width: 100%; padding: var(--sp-2) 0; border: none; border-radius: 0; background: none; color: inherit; text-align: left; font: inherit; cursor: pointer; align-items: start; height: auto; box-shadow: none; }
@@ -1341,8 +1335,6 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .insight-q { font-size: var(--fs-13); font-weight: 600; transition: color var(--dur-fast); }
 .insight-q small { margin-left: var(--sp-1); font-size: var(--fs-11); font-weight: 400; color: var(--ink-3); }
 .insight-say { grid-column: 2 / -1; font-size: var(--fs-13); font-weight: 400; line-height: 1.55; color: var(--ink-2); word-break: keep-all; overflow-wrap: anywhere; }
-.insight-sec.low .insight-q { font-weight: 400; color: var(--ink-3); }
-.insight-sec.low .insight-say { color: var(--ink-3); font-size: var(--fs-12); }
 .insight-body { display: flex; flex-direction: column; gap: var(--sp-2); padding: 0 0 var(--sp-3) 22px; min-width: 0; }
 .insight-notes { margin: 0; padding-left: var(--sp-4); font-size: var(--fs-12); color: var(--ink-2); line-height: 1.55; word-break: keep-all; }
 .insight-notes li + li { margin-top: 2px; }
@@ -1370,11 +1362,16 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .insight-bars.weak .insight-bar > span:first-child { color: var(--ink-3); }
 .insight-fold { display: flex; flex-direction: column; gap: var(--sp-2); align-items: stretch; }
 .insight-fold > button { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--sp-1); }
-.insight-watch { display: flex; align-items: baseline; gap: var(--sp-1); flex-wrap: wrap; color: var(--ink-2); }
-.insight-watch .trust-more { font-size: inherit; }
 /* 글이 긴 칸은 줄을 바꾼다. 결론이 패널 밖으로 잘리지 않게 */
 .art-table td.art-long { min-width: 9em; height: auto; padding-top: var(--sp-1); padding-bottom: var(--sp-1); white-space: normal; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.5; }
 
 /* 패널 안의 믿음 한 줄: 폭이 좁으니 질문·상태·자세히를 첫 줄에, 문장을 둘째 줄에 둔다 */
 .sim-embed .trust-line > span:not(.chip) { order: 1; flex-basis: 100%; }
 .sim-embed .trust-line > .trust-more { margin-left: auto; }
+
+/* 판단: 그 단계의 결과 곁에 놓는다. 상자를 더하지 않고 선으로 나눈다. 머리글이 위에 붙으므로 그만큼 띄워 멈춘다 */
+.step-judge { display: flex; flex-direction: column; margin-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
+.step-judge .insight-sec { scroll-margin-top: 48px; }
+/* 다음 할 일: 흐름도 아래 한 곳. 결과를 스크롤해도 보인다 */
+.flow-next { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-2); padding: var(--sp-2) 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: var(--fs-13); }
+.flow-next b { font-weight: 600; margin-right: var(--sp-1); }

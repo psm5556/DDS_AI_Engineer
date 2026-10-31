@@ -1,13 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { get } from "../api";
 import { baseLayout, chartColors, Plot, plotConfig } from "../components/Plot";
 import { fmt, sendToAgent } from "../format";
 import { useTheme } from "../theme";
-import type { InsightChart, InsightPick, InsightSection, InsightVariant, StudyInsightsData } from "../types";
+import type { Flow, InsightChart, InsightNext, InsightPick, InsightSection, InsightVariant, Study, StudyInsightsData } from "../types";
+import { pickNext, placeSections, studiesForFlow } from "./judgement";
 
-/** 스터디 판단 도우미: 전문 지식이 없어도 첫 줄만 읽고 판단하도록 질문 → 답(상태 말) → 한 문장 → 할 일 순서로 보여 준다.
+/** 스터디 판단: 그 판단이 읽은 단계의 결과 곁에서 질문 → 답(상태 말) → 한 문장을 보여 준다. 놓는 자리는 judgement.ts가 정한다.
  *  그림은 눌러서 펼칠 때만 그린다. 계산과 문장은 모두 서버(study/insights.py)에 있어 대화·보고서와 숫자가 같다. */
 const CHIP: Record<string, string> = { good: "ok", fair: "warn", caution: "err", unknown: "" };
 const usePlot = () => { const { theme } = useTheme(); return useMemo(() => chartColors(), [theme]); }; // eslint-disable-line react-hooks/exhaustive-deps
@@ -16,9 +17,13 @@ const Word = createContext("해석");
 /** 값의 출처가 숫자를 읽는 법을 바꾸는 항목에만 적는다. 입력 위치만 보여 주는 항목에 '해석으로 확인한 값'이라고 쓰면 틀린 말이다 */
 const SHOW_BASIS = new Set(["influence", "trust", "optimum", "pareto", "active"]);
 
-/** Simulator의 '자세히'가 데이터 탭을 열면서 어느 항목을 펼칠지 남긴다. 탭이 바뀌어야 이 화면이 그려지므로 값으로 넘긴다 */
-let focusKey: string | null = null;
-export function askInsightFocus(key: string) { focusKey = key; }
+/** Simulator의 '자세히'가 작업 흐름 탭을 열면서 어느 항목을 펼칠지 남긴다. 탭이 바뀌어야 이 화면이 그려지므로 값으로 넘긴다.
+ *  항목은 계산이 끝나야 나타나고 판단할 수 없으면 끝내 나타나지 않는다. 한참 뒤에 저절로 펼쳐지지 않게 시간을 둔다 */
+const FOCUS_MS = 30000;
+let focus: { key: string; study: number; at: number } | null = null;
+const liveFocus = () => (focus && Date.now() - focus.at < FOCUS_MS ? focus : null);
+export function askInsightFocus(key: string, study: number) { focus = { key, study, at: Date.now() }; }
+export const insightFocusStudy = () => liveFocus()?.study ?? null;
 
 function Chart({ data, layout, height = 260 }: { data: Record<string, unknown>[]; layout?: Record<string, unknown>; height?: number }) {
   const t = usePlot();
@@ -402,7 +407,6 @@ function PairPicker({ id, first, choices, sameAs }: { id: number; first: Insight
           {!repeat && <Notes notes={data.notes} />}
           {charts.map((c, i) => <ChartView key={i} c={c} />)}
           <p className="small insight-how"><b>읽는 법</b> {data.how_to_read}</p>
-          {data.next && !repeat && <div><button className="small" onClick={() => sendToAgent(data.next!.request)}>{data.next.label}</button></div>}
         </>
       )}
     </>
@@ -413,24 +417,30 @@ function Notes({ notes }: { notes: string[] }) {
   return notes.length ? <ul className="insight-notes">{notes.map((n, i) => <li key={i}>{n}</li>)}</ul> : null;
 }
 
-function Section({ id, s, open, toggle }: { id: number; s: InsightSection; open: boolean; toggle: () => void }) {
+function Section({ study, name, s }: { study: number; name?: string; s: InsightSection }) {
   const variants = s.variants ?? [];
+  const [open, setOpen] = useState(false);
   const [pick, setPick] = useState<string | null>(null);
+  const box = useRef<HTMLElement>(null);
+  // Simulator의 '자세히'로 왔으면 펼치고 그 자리로 간다. 계산이 끝나 이 줄이 나타난 뒤에야 할 수 있다
+  useEffect(() => {
+    const f = liveFocus();
+    if (!f || f.study !== study || f.key !== s.key) return;
+    focus = null;
+    setOpen(true);
+    window.setTimeout(() => box.current?.scrollIntoView({ block: "start" }), 50);
+  }, [study, s.key]);
   const v: InsightVariant | undefined = variants.find((q) => q.name === pick);
   const shown = { state: v?.state ?? s.state, label: v?.state_label ?? s.state_label, sentence: v?.sentence ?? s.sentence, notes: v?.notes ?? s.notes, charts: v?.charts ?? s.charts };
-  const next = v ? v.next : s.next;
-  const nextAbove = v ? v.next_shown_above : s.next_shown_above;
-  const pending = !!s.pending;
-  const low = !!s.collapsed || pending;
-  const expandable = !pending && (shown.charts.length > 0 || shown.notes.length > 0 || variants.length > 1 || !!s.pair_choices);
+  const expandable = shown.charts.length > 0 || shown.notes.length > 0 || variants.length > 1 || !!s.pair_choices;
   // 세 목표 이상: 그림은 고른 짝을 그리는 아래 선택기가 맡는다. 같은 그림을 두 번 그리지 않는다
   const charts = s.pair_default ? shown.charts.filter((c) => c.kind !== "pareto") : shown.charts;
   return (
-    <section id={`insight-${s.key}`} className={`insight-sec ${low ? "low" : ""}`} aria-label={s.title}>
-      <button className="insight-head" aria-expanded={open && expandable} disabled={!expandable} onClick={toggle}>
+    <section ref={box} className="insight-sec" data-insight={s.key} data-study={study} aria-label={s.title}>
+      <button className="insight-head" aria-expanded={open && expandable} disabled={!expandable} onClick={() => setOpen(!open)}>
         {expandable ? (open ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : <span />}
-        <span className="insight-q">{s.title}<small>({s.term})</small></span>
-        <span className={`chip ${pending ? "info" : CHIP[shown.state] ?? ""}`}>{shown.label}</span>
+        <span className="insight-q">{s.title}<small>({s.term}){name ? ` · ${name}` : ""}</small></span>
+        <span className={`chip ${CHIP[shown.state] ?? ""}`}>{shown.label}</span>
         <span className="insight-say">{shown.sentence}</span>
       </button>
       {open && expandable && (
@@ -441,66 +451,85 @@ function Section({ id, s, open, toggle }: { id: number; s: InsightSection; open:
           )}
           <Notes notes={shown.notes} />
           {charts.map((c, i) => <ChartView key={`${pick}-${c.kind}-${i}`} c={c} />)}
-          {s.pair_first && s.pair_choices && <PairPicker id={id} first={s.pair_first} choices={s.pair_choices} sameAs={s.pair_default} />}
+          {s.pair_first && s.pair_choices && <PairPicker id={study} first={s.pair_first} choices={s.pair_choices} sameAs={s.pair_default} />}
           {s.how_to_read && !s.pair_first && <p className="insight-how"><b>읽는 법</b> {s.how_to_read}</p>}
           {SHOW_BASIS.has(s.key) && <p className="small muted">값의 출처: {s.basis_note ?? s.basis_label}</p>}
           {s.bench && <p className="insight-bench">{s.bench}</p>}
-          {next && (nextAbove
-            ? <p className="small muted">할 일은 위쪽 버튼에 있습니다.</p>
-            : <div><button className="small" onClick={() => sendToAgent(next.request)}>{next.label}</button></div>)}
         </div>
       )}
     </section>
   );
 }
 
-export function StudyInsights({ id }: { id: number }) {
-  const { data, error } = useQuery({
-    queryKey: ["study", id, "insights"], queryFn: () => get<StudyInsightsData>(`/api/studies/${id}/insights`),
-    refetchInterval: (q) => (q.state.data?.status === "computing" ? 2500 : false),
+/** 단계에 놓인 판단 하나 */
+export interface PlacedJudgement { study: number; name?: string; word: string; section: InsightSection }
+export interface FlowJudgements {
+  studies: Study[]; byNode: Record<string, PlacedJudgement[]>; outside: PlacedJudgement[];
+  next: InsightNext | null; nextOf?: string; computing: boolean; problem: string | null;
+}
+
+/** 이 흐름에 보여 줄 판단을 모은다. 흐름이 없으면 모두 단계 밖이다 */
+export function useFlowJudgements(pid: number, flows: Flow[] | undefined, flow: Flow | null | undefined): FlowJudgements {
+  const { data: studies } = useQuery({ queryKey: ["studies", pid], queryFn: () => get<Study[]>(`/api/projects/${pid}/studies`) });
+  const all = studies ?? [];
+  const known = flows ?? [];
+  const { onSteps, loose } = studiesForFlow(all, known, flow);
+  const list = [...onSteps, ...loose];
+  const results = useQueries({
+    queries: list.map((s) => ({
+      queryKey: ["study", s.id, "insights"], queryFn: () => get<StudyInsightsData>(`/api/studies/${s.id}/insights`),
+      refetchInterval: (q: { state: { data?: StudyInsightsData } }) => (q.state.data?.status === "computing" ? 2500 : false as const),
+    })),
   });
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  const reveal = (key: string) => {
-    setOpen((o) => ({ ...o, [key]: true }));
-    window.setTimeout(() => document.getElementById(`insight-${key}`)?.scrollIntoView({ block: "start" }), 50);
-  };
-  const ready = !!data;
-  useEffect(() => {
-    if (ready && focusKey) { reveal(focusKey); focusKey = null; }
-  }, [ready]);
-  if (error) return <section className="block"><p className="small" style={{ color: "var(--err-ink)" }}>{(error as Error).message} → 잠시 뒤 다시 열어 보세요</p></section>;
-  if (!data) return null;
-  const f = data.overview.facts;
-  const nx = data.overview.next;
-  const word = data.overview.word ?? "해석";
-  const mix = [f.base ? `${word === "해석" ? "처음 계획" : "처음 있던 데이터"} ${f.base}` : "", f.bo ? `최적화 ${f.bo}` : "", f.al ? `정확도 높이기 ${f.al}` : ""].filter(Boolean);
-  const done = `${word === "해석" ? `해석 ${f.complete}건 완료` : `데이터 ${f.complete}건`}${mix.length > 1 ? `(${mix.join(" + ")})` : ""}`;
-  const parts = [done, f.failed ? `실패 ${f.failed}건` : "", f.waiting ? `대기 ${f.waiting}건` : "", f.run_text ? `해석 시간 합계 ${f.run_text}` : ""].filter(Boolean);
-  const watch = data.overview.watch ?? [];
+  const many = list.length > 1;
+  const byNode: Record<string, PlacedJudgement[]> = {};
+  const outside: PlacedJudgement[] = [];
+  const candidates: { next: InsightNext | null | undefined; name: string; onStep: boolean; id: number }[] = [];
+  let computing = false, problem: string | null = null;
+  list.forEach((s, i) => {
+    const r = results[i];
+    if (r?.error) problem ??= `${(r.error as Error).message} → 잠시 뒤 다시 열어 보세요`;
+    const d = r?.data;
+    if (!d) return;
+    if (d.error) problem ??= `${d.error} 잠시 뒤 다시 계산합니다.`;
+    const onStep = onSteps.includes(s);
+    const word = d.overview.word ?? "해석";
+    const put = (section: InsightSection): PlacedJudgement => ({ study: s.id, name: many ? s.name : undefined, word, section });
+    const placed = placeSections(d.sections, onStep ? flow?.nodes ?? [] : []);
+    // 흐름 순서대로 읽도록 서버의 항목 순서를 그대로 둔다
+    Object.entries(placed.byNode).forEach(([node, secs]) => { (byNode[node] ??= []).push(...secs.map(put)); });
+    outside.push(...placed.outside.map(put));
+    const shows = Object.keys(placed.byNode).length > 0 || placed.outside.length > 0;
+    if (d.status === "computing" && shows) computing = true; // 보이는 값이 곧 바뀔 수 있다는 뜻일 때만 알린다
+    candidates.push({ next: d.overview.next, name: s.name, onStep, id: s.id });
+  });
+  // 이 흐름이 쓰는 스터디 → 최근에 만든 것 순서
+  candidates.sort((a, b) => Number(b.onStep) - Number(a.onStep) || b.id - a.id);
+  const chosen = pickNext(candidates, known);
+  return { studies: all, byNode, outside, next: chosen?.next ?? null, nextOf: many ? chosen?.name : undefined, computing, problem };
+}
+
+/** 단계 머리글 아래, 그 단계의 결과 바로 위에 놓는다 */
+export function JudgementList({ items }: { items?: PlacedJudgement[] }) {
+  if (!items?.length) return null;
   return (
-    <section className="block insights" aria-label="판단 도우미">
-      <div className="insight-summary">
-        <div className="insight-row">
-          <h3 className="grow">지금 어디까지 왔나요?</h3>
-          {data.status === "computing" && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />새 결과로 계산 중</span>}
-        </div>
-        <span className="insight-facts">{parts.join(" · ")}</span>
-        {data.error && <span className="small" style={{ color: "var(--warn-ink)" }}>{data.error} 잠시 뒤 다시 계산합니다.</span>}
-        {watch.length > 0 && (
-          <div className="insight-watch small"><span>바로 확정하기 전에 볼 것:</span>
-            {watch.map((w, i) => <span key={w.key}>{i > 0 && " · "}<button className="trust-more" onClick={() => reveal(w.key)}>{w.text}</button></span>)}
-          </div>
-        )}
-        {nx && (
-          <div className="insight-next">
-            <span className="grow"><b>다음 할 일</b> {nx.text}</span>
-            {nx.label && nx.request && <button className="small primary" onClick={() => sendToAgent(nx.request)}>{nx.label}</button>}
-          </div>
-        )}
-      </div>
-      <Word.Provider value={word}>
-        {data.sections.map((s) => <Section key={s.key} id={id} s={s} open={!!open[s.key]} toggle={() => setOpen((o) => ({ ...o, [s.key]: !o[s.key] }))} />)}
-      </Word.Provider>
-    </section>
+    <div className="step-judge" aria-label="이 단계의 판단">
+      {items.map((p) => <Word.Provider key={`${p.study}-${p.section.key}`} value={p.word}><Section study={p.study} name={p.name} s={p.section} /></Word.Provider>)}
+    </div>
+  );
+}
+
+/** 다음 할 일. 작업 흐름 탭의 이 줄 하나뿐이다 */
+export function NextStep({ j }: { j: FlowJudgements }) {
+  const nx = j.next;
+  if (!nx && !j.computing && !j.problem) return null;
+  return (
+    <div className="flow-next" aria-label="다음 할 일">
+      {nx && <span className="grow"><b>다음 할 일</b> {j.nextOf ? `${j.nextOf}: ` : ""}{nx.text}</span>}
+      {!nx && <span className="grow" />}
+      {j.problem && <span className="small" style={{ color: "var(--warn-ink)" }}>{j.problem}</span>}
+      {j.computing && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />새 결과로 판단 계산 중</span>}
+      {nx?.label && nx.request && <button className="small primary" onClick={() => sendToAgent(nx.request)}>{nx.label}</button>}
+    </div>
   );
 }
