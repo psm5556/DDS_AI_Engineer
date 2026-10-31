@@ -9,7 +9,7 @@ from .. import models, schemas
 from ..agent.hub import hub
 from ..agent.link import AgentError, registry
 from ..database import get_db
-from ..deps import effective_admin, get_current_user, get_or_404, get_project_for_member, member_role, require_master
+from ..deps import effective_admin, get_current_user, get_or_404, get_project_for_member, member_role, require_jwt, require_master
 from ..study import insights
 from ..ws import manager
 
@@ -107,7 +107,7 @@ async def update_project(project_id: int, body: schemas.ProjectUpdate, user: mod
 
 
 @router.delete("/{project_id}")
-async def delete_project(project_id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def delete_project(project_id: int, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
     p = get_or_404(db, models.Project, project_id, "프로젝트")
     require_master(project_id, user, db)
     await manager.broadcast({"type": "project_updated", "project_id": p.id, "data": {"id": p.id, "deleted": True}})
@@ -140,7 +140,7 @@ def remove_favorite(project_id: int, user: models.User = Depends(get_current_use
 # ---------- 멤버(공유) ----------
 @router.put("/{project_id}/members/{user_id}", response_model=schemas.ProjectResponse)
 async def upsert_member(project_id: int, user_id: int, body: schemas.MemberUpsert,
-                        user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+                        user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
     p = get_or_404(db, models.Project, project_id, "프로젝트")
     require_master(project_id, user, db)
     get_or_404(db, models.User, user_id, "사용자")
@@ -156,7 +156,7 @@ async def upsert_member(project_id: int, user_id: int, body: schemas.MemberUpser
 
 
 @router.delete("/{project_id}/members/{user_id}", response_model=schemas.ProjectResponse)
-async def remove_member(project_id: int, user_id: int, user: models.User = Depends(get_current_user),
+async def remove_member(project_id: int, user_id: int, user: models.User = Depends(require_jwt),
                         db: Session = Depends(get_db)):
     p = get_or_404(db, models.Project, project_id, "프로젝트")
     require_master(project_id, user, db)

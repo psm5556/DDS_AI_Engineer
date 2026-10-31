@@ -84,7 +84,7 @@ def create_token(body: schemas.ApiTokenCreate, user: models.User = Depends(requi
 
 
 @router.delete("/tokens/{token_id}")
-def delete_token(token_id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_token(token_id: int, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
     t = db.query(models.ApiToken).filter_by(id=token_id, user_id=user.id).first()
     if not t:
         raise HTTPException(404, "토큰을 찾을 수 없습니다")

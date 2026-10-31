@@ -391,8 +391,9 @@ def template_zip(name: str, user=Depends(get_current_user)):
 @router.post("/submissions", response_model=schemas.MarketSubmission)
 def submit(file: UploadFile | None = File(None), files: list[UploadFile] = File(default=[]), paths: str = Form(""), name_hint: str = Form(""),
            source: str = Form("web"), capture_id: str = Form(""), evidence: str = Form(""), notes: str = Form(""),
-           user=Depends(get_current_user), db: Session = Depends(get_db)):
+           user=Depends(require_jwt), db: Session = Depends(get_db)):
     """zip 하나 또는 폴더의 파일들. 결과는 항상 초안이다. 공개 범위를 정하는 것은 사람이다.
+    등록도 사람만 한다: AI가 사람 이름으로 올린 초안이 그 사람의 목록에 섞이면 안 된다. 토큰을 쓰는 호출자는 아직 없다.
     검사에 걸리면 400이고 아무것도 저장하지 않는다. 자산화 제출도 source=capture로 이 길을 지난다."""
     _require_on(db)
     if source not in SOURCES:

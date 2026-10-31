@@ -13,7 +13,7 @@ from ..agent.hub import hub
 from ..agent.link import AgentError, registry
 from ..config import settings
 from ..database import get_db
-from ..deps import effective_admin, get_current_user, get_or_404, get_project_for_member, member_role, require_ai_can_work, require_member
+from ..deps import effective_admin, get_current_user, get_or_404, get_project_for_member, member_role, require_ai_can_work, require_jwt, require_member
 
 router = APIRouter(prefix="/api", tags=["agent"])
 
@@ -111,15 +111,20 @@ def force_restart(session_id: int, user: models.User = Depends(get_current_user)
     return {"ok": True}
 
 
-@router.post("/sessions/{session_id}/permission")
-def permission(session_id: int, body: schemas.PermissionReply, user: models.User = Depends(get_current_user),
-               db: Session = Depends(get_db)):
+def reply_permission(session_id: int, body: schemas.PermissionReply, user: models.User, db: Session) -> dict:
     _session_for_owner(session_id, user, db)
     try:
         hub.respond_permission(session_id, body.request_id, body.option_id)
     except AgentError as e:
         raise HTTPException(409, str(e))
     return {"ok": True}
+
+
+@router.post("/sessions/{session_id}/permission")
+def permission(session_id: int, body: schemas.PermissionReply, user: models.User = Depends(require_jwt),
+               db: Session = Depends(get_db)):
+    """AI가 물은 권한에 답하는 것은 사람이다. 토큰으로 되면 AI가 자기 질문에 스스로 답한다."""
+    return reply_permission(session_id, body, user, db)
 
 
 @router.get("/sessions/{session_id}/status")
@@ -183,7 +188,7 @@ def rename_session(session_id: int, body: schemas.SessionUpdate, user: models.Us
 
 
 @router.delete("/sessions/{session_id}")
-def delete_session(session_id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_session(session_id: int, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
     chat = _session_for_editor(session_id, user, db)
     if hub.status(session_id)["busy"]:
         raise HTTPException(409, "에이전트가 작업 중인 대화는 지울 수 없습니다. 먼저 중지하세요")

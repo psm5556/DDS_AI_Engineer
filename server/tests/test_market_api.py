@@ -74,9 +74,12 @@ def _names(client, headers, **params):  # noqa: F811
 
 
 # ---------- 등록 ----------
-def test_submission_is_always_draft_and_agent_token_can_submit(client, users):  # noqa: F811
+def test_submission_is_always_draft_and_agent_token_cannot_submit(client, users):  # noqa: F811
     name = _name()
-    sub = _submit(client, users["kim_token"], name, source="chat")
+    r = client.post("/api/market/submissions", files={"file": ("x.zip", _zip({f"{name}/SKILL.md": _md(name)}))}, data={"source": "chat"}, headers=users["kim_token"])
+    assert r.status_code == 403 and "→" in r.json()["detail"]  # AI가 사람 이름으로 초안을 올리지 못한다
+    assert name not in [p["name"] for p in client.get("/api/market/packages?mine=true", headers=users["kim"]).json()["items"]]
+    sub = _submit(client, users["kim"], name, source="chat")
     assert sub["package"]["status"] == "draft" and sub["version"] == "1.0.0"
     assert sub["package"]["versions"][0]["provenance"]["source"] == "chat"
     assert sub["report"]["passed"] is True
@@ -95,7 +98,7 @@ def test_folder_upload_uses_paths_and_filters_junk(client, users):  # noqa: F811
 def test_capture_seam_keeps_provenance_and_evidence(client, users):  # noqa: F811
     """자산화 제출은 나중에 같은 API로 들어온다. 초안으로만 들어오고 자동 공개 경로가 없다."""
     name = _name()
-    sub = _submit(client, users["kim_token"], name, source="capture", capture_id="c-1", evidence=json.dumps({"tool": "Abaqus 2024"}))
+    sub = _submit(client, users["kim"], name, source="capture", capture_id="c-1", evidence=json.dumps({"tool": "Abaqus 2024"}))
     row = sub["package"]["versions"][0]
     assert row["status"] == "draft" and row["provenance"] == {"source": "capture", "projectId": None, "captureId": "c-1"} and row["evidence"] == {"tool": "Abaqus 2024"}
     assert client.post("/api/market/submissions", files={"file": ("x.zip", _zip({f"{name}/SKILL.md": _md(name)}))}, data={"source": "mars"}, headers=users["kim"]).status_code == 400
@@ -706,8 +709,8 @@ def test_rows_already_broken_in_the_database_are_skipped(client, users):  # noqa
 # ---------- 사람이 본 내용에만 결정이 적용된다 ----------
 def test_draft_swapped_after_the_person_looked_is_refused(client, users):  # noqa: F811
     name = _name()
-    seen = _submit(client, users["kim_token"], name)  # 토큰이 깨끗한 초안을 올리고 사람이 본다
-    swapped = _submit(client, users["kim_token"], name, {f"{name}/s.py": "import socket\n"})  # 같은 번호로 바꿔치기
+    seen = _submit(client, users["kim"], name)  # 깨끗한 초안을 올리고 본다
+    swapped = _submit(client, users["kim"], name, {f"{name}/s.py": "import socket\n"})  # 다른 창에서 같은 번호로 다시 올림
     assert seen["version"] == swapped["version"]
     r = client.post(f"{_base(seen)}/private", json={"fingerprint": seen["fingerprint"]}, headers=users["kim"])
     assert r.status_code == 409 and "다시 열어" in r.json()["detail"]
@@ -719,7 +722,7 @@ def test_draft_swapped_after_the_person_looked_is_refused(client, users):  # noq
 def test_admin_approve_needs_the_content_the_admin_saw(client, users):  # noqa: F811
     name = _name()
     seen = _submit(client, users["admin"], name)
-    swapped = _submit(client, users["admin_token"], name, {f"{name}/r.md": "바꿈"})
+    swapped = _submit(client, users["admin"], name, {f"{name}/r.md": "바꿈"})
     r = client.post(f"{_base(seen)}/approve", json={"pin": PIN, "fingerprint": seen["fingerprint"]}, headers=users["admin"])
     assert r.status_code == 409
     assert client.post(f"{_base(swapped)}/approve", json={"pin": PIN, "fingerprint": swapped["fingerprint"]}, headers=users["admin"]).status_code == 200

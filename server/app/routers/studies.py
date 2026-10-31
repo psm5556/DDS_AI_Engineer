@@ -23,7 +23,7 @@ from .. import models, schemas
 from ..agent.link import AgentError
 from ..config import settings
 from ..database import get_db
-from ..deps import get_current_user, get_or_404, get_project_for_member, require_ai_can_work, require_member
+from ..deps import get_current_user, get_or_404, get_project_for_member, require_ai_can_work, require_jwt, require_member
 from ..study import importer, recipe, service, table_job, thumbnail
 from ..ws import manager
 
@@ -385,7 +385,7 @@ def download_recipe(study_id: int, user=Depends(get_current_user), db: Session =
 
 
 @router.delete("/studies/{study_id}/recipe")
-def delete_recipe(study_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_recipe(study_id: int, user=Depends(require_jwt), db: Session = Depends(get_db)):
     s = _study(study_id, user, db)
     recipe.recipe_path(s).unlink(missing_ok=True)
     s.recipe = None
@@ -610,7 +610,7 @@ def _share_model(sh: models.ShareLink, db: Session) -> models.SurrogateModel:
 
 
 @router.post("/models/{model_id}/shares", response_model=schemas.ShareResponse)
-def create_share(model_id: int, body: schemas.ShareCreate, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def create_share(model_id: int, body: schemas.ShareCreate, user=Depends(require_jwt), db: Session = Depends(get_db)):
     m = _model(model_id, user, db)
     if not m.deployed:
         raise HTTPException(400, "배포된 현재 버전의 Simulator만 공유할 수 있습니다")
@@ -631,7 +631,7 @@ def list_shares(model_id: int, user=Depends(get_current_user), db: Session = Dep
 
 
 @router.delete("/shares/{token}")
-def stop_share(token: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def stop_share(token: str, user=Depends(require_jwt), db: Session = Depends(get_db)):
     sh = db.query(models.ShareLink).filter_by(token=token).first()
     if not sh:
         raise HTTPException(404, "없는 링크입니다")
@@ -780,7 +780,7 @@ async def share_thumbnail(token: str, request: Request, user=Depends(get_current
 
 
 @router.delete("/simulators/shared/{share_id}")
-def hide_shared(share_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def hide_shared(share_id: int, user=Depends(require_jwt), db: Session = Depends(get_db)):
     """공유받은 목록에서 뺀다. 내 목록에서만 빠지고, 링크를 다시 열면 돌아온다."""
     row = db.get(models.ShareAccess, (share_id, user.id))
     if row is None:

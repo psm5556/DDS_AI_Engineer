@@ -82,16 +82,13 @@ class Api:
         return json.loads(raw) if raw else None
 
 
-def load_token(args) -> str:
-    # chat은 웹앱과 똑같이 일반 API를 쓰므로 AI와 같은 agent 토큰을, 나머지는 /api/devtest만 되는 토큰을 쓴다
-    env, path = ("DDS_VERIFY_CHAT_TOKEN", CHAT_TOKEN_FILE) if args.cmd == "chat" else ("DDS_VERIFY_TOKEN", TOKEN_FILE)
+def load_token(chat: bool = False) -> str:
+    # chat의 요청은 웹앱과 똑같이 일반 API로 가므로 AI와 같은 agent 토큰을, 나머지와 chat의 승인·허용은 /api/devtest만 되는 토큰을 쓴다
+    env, path = ("DDS_VERIFY_CHAT_TOKEN", CHAT_TOKEN_FILE) if chat else ("DDS_VERIFY_TOKEN", TOKEN_FILE)
     if os.environ.get(env):
         return os.environ[env]
     if path.exists():
         return path.read_text(encoding="utf-8").strip()
-    # 환경변수 하나로 토큰을 주는 쪽(시험 시나리오 등)도 chat을 쓸 수 있게 한다. devtest 토큰이면 서버가 403과 할 일을 알린다
-    if args.cmd == "chat" and os.environ.get("DDS_VERIFY_TOKEN"):
-        return os.environ["DDS_VERIFY_TOKEN"]
     raise SystemExit("토큰이 없습니다 → python scripts/pc_verify.py token")
 
 
@@ -360,7 +357,9 @@ def _send_prompt(api, sid: int, text: str, attachment_ids: list[int], until: flo
 
 def cmd_chat(args, api) -> int:
     """사용자가 웹앱에서 하는 것과 똑같이: 프로젝트·대화를 만들고 요청하고 승인·허용까지 한다. 토큰 계정의 PC에서 돈다.
-    자동 승인이 돌아가는 경로를 숨기지 않게 승인·허용 횟수와 호출한 도구를 재고, --expect로 합격을 판정한다."""
+    자동 승인이 돌아가는 경로를 숨기지 않게 승인·허용 횟수와 호출한 도구를 재고, --expect로 합격을 판정한다.
+    승인·허용은 사람 전용이라 일반 API로 되지 않는다. 원격 시험을 허용한 동안만 되는 /api/devtest 길을 쓴다."""
+    decide = Api(args.server, load_token())
     if args.session:
         sid = args.session
         pid = args.project or _project_of_session(api, sid)
@@ -388,7 +387,7 @@ def cmd_chat(args, api) -> int:
             options = p.get("options") or []
             allow = next((o for o in options if "allow" in str(o.get("kind", "")) or "allow" in str(o.get("optionId", ""))), options[0] if options else None)
             if allow:
-                api.call("POST", f"/api/sessions/{sid}/permission", {"request_id": p["request_id"], "option_id": allow.get("optionId")})
+                decide.call("POST", f"/api/devtest/sessions/{sid}/permission", {"request_id": p["request_id"], "option_id": allow.get("optionId")})
                 permissions.append(p.get("title") or p["request_id"])
                 print(f"허용: {p.get('title') or p['request_id']}")
         msgs = _steady(api, "GET", f"/api/sessions/{sid}/messages")
@@ -396,7 +395,7 @@ def cmd_chat(args, api) -> int:
         if not st.get("busy") and not args.no_approve:
             for f in own_review_flows(api.call("GET", f"/api/projects/{pid}/flows"), msgs, known_flows):
                 # 웹앱의 [승인하고 실행]과 같게: 상태를 바꾸고 에이전트에게 알린다(useFlowDecision)
-                api.call("PUT", f"/api/flows/{f['id']}/status", {"status": "approved", "version": f.get("version")})
+                decide.call("PUT", f"/api/devtest/flows/{f['id']}/status", {"status": "approved", "version": f.get("version")})
                 _send_prompt(api, sid, f"작업 흐름 '{f.get('title')}'(#{f['id']})을 승인했습니다. 계획대로 진행해 주세요.", [], t0 + args.timeout)
                 approvals.append(f["id"])
                 print(f"작업 흐름 승인: {f.get('title') or f['id']}")
@@ -485,7 +484,7 @@ def main() -> int:
     p.set_defaults(fn=cmd_chat)
 
     args = ap.parse_args()
-    api = Api(args.server, None if args.cmd == "token" else load_token(args))
+    api = Api(args.server, None if args.cmd == "token" else load_token(args.cmd == "chat"))
     return args.fn(args, api)
 
 

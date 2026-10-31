@@ -19,7 +19,7 @@
 python3 scripts/pc_verify.py targets            # 시험할 수 있는 PC 확인
 ```
 - 서버 주소가 7014 기본값과 다르면 `--server http://...` 또는 `DDS_SERVER_URL`. 서버가 기본이 아닌 데이터 폴더를 쓰면 `token --data <폴더>`(개발용 실행은 `data/dev`). 토큰을 만든 뒤 서버에서 받는지 바로 확인한다.
-- 토큰은 둘이다. `data/pc_verify.token`은 `/api/devtest/*`만 된다(`deploy`도 이 안의 API를 쓴다). `chat`은 웹앱과 똑같이 일반 API를 쓰므로 `data/pc_verify_chat.token`을 쓴다. 관리자 권한은 어느 쪽에도 없고, 원격 시험 허용도 사람이 웹에서 켠다. 예전에 만든 토큰이면 `token`을 다시 실행한다.
+- 토큰은 둘이다. `data/pc_verify.token`은 `/api/devtest/*`만 된다(`deploy`도 이 안의 API를 쓴다). `chat`의 요청은 웹앱과 똑같이 일반 API로 가므로 `data/pc_verify_chat.token`을 쓴다. 작업 흐름 승인·권한 허용은 사람 전용 경로라 일반 토큰으로 되지 않아서, `chat`도 이때는 `/api/devtest/flows`·`/api/devtest/sessions`를 `data/pc_verify.token`으로 부른다. 원격 시험을 허용한 동안, 멤버인 프로젝트와 자기 대화에서만 되고 내역이 남는다. 관리자 권한은 어느 쪽에도 없고, 원격 시험 허용도 사람이 웹에서 켠다. 예전에 만든 토큰이면 `token`을 다시 실행한다.
 - `targets`가 비어 있으면 위 1~2번이 안 된 것이다. 이때만 사람에게 그 두 가지를 부탁한다.
 
 ## 2. 고치고 시험하는 순서
@@ -50,7 +50,7 @@ python3 scripts/pc_verify.py run my_check.py                  # 궁금한 것을
 | `logs [--lines N]` | Agent·launcher 로그 |
 | `fetch 경로` | PC 파일 받기. 시험·작업·Agent 폴더 안만, 토큰 파일은 안 된다 |
 | `deploy` | 지금 코드 배포 → 바로 업데이트 → 다시 연결될 때까지 대기. 개발용 실행(`dev_live`)은 업데이트하지 않는다 |
-| `chat "요청" --agent claude` | 웹앱과 똑같이 대화. 작업 흐름 승인·권한 허용까지 자동으로 하고 진행을 출력한다. **토큰 계정의 PC**에서 돈다 |
+| `chat "요청" --agent claude` | 웹앱과 똑같이 대화. 작업 흐름 승인·권한 허용까지 자동으로 하고(원격 시험 허용 중에만) 진행을 출력한다. **토큰 계정의 PC**에서 돈다 |
 
 제한 시간은 `--timeout 초`(기본 600, 최대 7200), 대상 지정은 `--user-id`다. 이 둘은 명령 앞에 쓴다.
 

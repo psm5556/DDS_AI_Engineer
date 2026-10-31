@@ -784,7 +784,7 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 ## 6. 서버 API (주요)
 | 분류 | 경로 |
 |---|---|
-| 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin`(웹 로그인만, 로그인과 같은 잠금) · `GET·POST·DELETE /api/tokens`(발급은 웹 로그인만) · `GET·PUT /api/users` · 관리자 API는 웹 로그인만 된다. 관리자의 AI도 멤버인 프로젝트에서만 일한다 |
+| 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin`(웹 로그인만, 로그인과 같은 잠금) · `GET·POST·DELETE /api/tokens`(발급은 웹 로그인만) · `GET·PUT /api/users` · 관리자 API는 웹 로그인만 된다. 관리자의 AI도 멤버인 프로젝트에서만 일한다. **사람 전용(웹 로그인만):** 작업 흐름 승인·반려, 권한 허용, 프로젝트·대화·결과·스크립트 묶음 삭제, 멤버 변경, Simulator 공유, 토큰 발급·폐기, PIN, 자동 업데이트 설정, 마켓 등록·공개·설치. 토큰은 403이고 상태가 바뀌지 않는다. 개발 AI의 원격 검증만 `/api/devtest`의 좁은 길로 승인·허용한다(허용 중, 내역 남음) |
 | 프로젝트 | `GET·POST /api/projects` · `GET·PUT·DELETE /api/projects/{p}` · 즐겨찾기 · 멤버 |
 | 대화 | `GET·POST /api/projects/{p}/sessions` · `PUT·DELETE /api/sessions/{s}` · `POST …/prompt·cancel·permission·force-restart` · `GET …/messages·status`(busy·stage·stage_detail·started_at·elapsed_sec·typical_start_sec·link·pending_permissions) · 첨부 |
 | 작업 흐름 | `GET·POST /api/projects/{p}/flows` · `GET /api/flows/{f}` · `PUT …/status` · `PUT …/nodes/{n}` |
@@ -842,7 +842,7 @@ PC Agent 메시지(`/ws/agent`, `server/app/agent/link.py` 머리 주석)
 | 항목 | 요구 |
 |---|---|
 | 사내망 | 외부 인터넷 없이 동작한다. 의존성은 사내 미러에서 받을 수 있는 것만 쓰고 버전을 고정한다(`requirements-*.txt`, `package-lock.json`) |
-| 보안 | PIN·토큰은 해시로 저장한다. 비밀값과 `data/`는 커밋하지 않는다. 사용자 PC 실행은 확인 카드(허용/거부)를 거친다. 다른 사람의 PC 폴더는 열 수 없다 |
+| 보안 | PIN·토큰은 해시로 저장한다. 비밀값과 `data/`는 커밋하지 않는다. AI CLI 환경에는 토큰을 넣지 않고 MCP가 `agent.toml`에서 읽는다(파일은 숨길 수 없으므로 진짜 방어선은 서버의 사람 전용 경로다). 사용자 PC 실행은 확인 카드(허용/거부)를 거친다. 다른 사람의 PC 폴더는 열 수 없다 |
 | 데이터 위치 | 큰 원본 결과는 PC에 둔다. 서버에는 숫자·이미지·필드·case.h5(크기 제한)·보고서만 둔다 |
 | 성능 | 케이스 수백 건, 표·그래프 실시간 갱신. 이벤트마다 쿼리를 무효화한다(너무 잦으면 묶기를 검토한다) |
 | 호환 | 서버는 Windows·Linux, PC Agent는 Windows(포터블 Python), 브라우저는 Edge·Chrome |

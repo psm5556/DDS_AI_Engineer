@@ -179,7 +179,7 @@ def test_every_is_admin_read_is_accounted_for():
     """호출자 권한을 is_admin으로 직접 보면 토큰이 관리자가 된다. 새로 쓰면 이 표를 고치면서 대상 계정인지 호출자인지 따져 본다."""
     expected = {
         "deps.py": 4,  # effective_admin, require_admin·require_devtest_admin의 관리자 아님 구분, require_member의 안내 문구 고르기
-        "routers/agents.py": 1,  # settings_message: 대상 계정의 설정(토큰과 무관)
+        "routers/agents.py": 2,  # settings_message: 대상 계정의 설정(토큰과 무관), project_names_message: 대상 계정 PC의 폴더 이름 맞추기
         "routers/auth.py": 1,  # update_user의 body.is_admin
         "routers/devtest.py": 1,  # _allowed: 대상 PC의 계정
     }
@@ -309,10 +309,109 @@ def test_devtest_deploy_publishes_and_tells_the_pc(client, monkeypatch):  # noqa
 
 
 def test_pc_verify_chat_token_is_ordinary_and_devtest_is_narrow(client):  # noqa: F811
-    """pc_verify chat은 웹앱과 똑같이 일반 API를 쓰므로 agent 토큰, 나머지는 devtest 토큰을 쓴다."""
+    """pc_verify chat의 요청은 웹앱과 똑같이 일반 API로 가므로 agent 토큰, 나머지와 chat의 승인·허용은 devtest 토큰을 쓴다."""
     text = (ROOT / "scripts" / "pc_verify.py").read_text(encoding="utf-8")
     assert "/api/agent/releases/from-server" not in text and "/api/agent/instances" not in text and "/api/auth/me" not in text
     assert 'scope=SCOPE_DEVTEST' in text and 'scope=SCOPE_AGENT' in text
+    assert 'f"/api/flows/{f' not in text and 'f"/api/sessions/{sid}/permission"' not in text  # 사람 전용 경로를 부르지 않는다
+    assert "/api/devtest/flows/" in text and "/api/devtest/sessions/" in text
+
+
+# ---------- 사람만 하는 일 ----------
+def _human_only_world(client):  # noqa: F811
+    """승인 대기 흐름·결과·공유 링크·대화·멤버가 있는 프로젝트. 김의 토큰(AI)이 건드릴 수 있는 것을 전부 만든다."""
+    admin, _ = _auth(client, "admin")
+    kim, kim_user = _auth(client, "sc_human_kim", admin)
+    _, lee_user = _auth(client, "sc_human_lee", admin)
+    pid = client.post("/api/projects", json={"name": "사람 전용"}, headers=kim).json()["id"]
+    assert client.put(f"/api/projects/{pid}/members/{lee_user['id']}", json={"role": "member"}, headers=kim).status_code == 200
+    flow = client.post(f"/api/projects/{pid}/flows", headers=kim, json={"title": "t", "nodes": [{"id": "a", "label": "a", "type": "cad"}], "edges": []}).json()
+    art = client.post(f"/api/projects/{pid}/artifacts", headers=kim, json={"kind": "table", "title": "t", "payload": {"rows": []}}).json()
+    sid = client.post(f"/api/projects/{pid}/sessions", json={"agent": "claude"}, headers=kim).json()["id"]
+    study = client.post(f"/api/projects/{pid}/studies", headers=kim, json={
+        "name": "s", "adapter": "mock", "variables": [{"name": "x", "lower": 0, "upper": 1}], "objectives": [{"name": "f", "direction": "minimize"}]}).json()
+    return SimpleNamespace(kim=kim, kim_user=kim_user, lee_user=lee_user, pid=pid, flow=flow, art=art, sid=sid, study=study, tok=_issued(client, kim)[0], admin=admin)
+
+
+def test_ai_token_cannot_approve_share_delete_or_change_members(client):  # noqa: F811
+    """AI가 자기 토큰으로 승인·삭제·공유하면 다른 관문이 모두 뜻을 잃는다(5절 self-approve, self-delete, self-share). 막히고 상태도 그대로여야 한다."""
+    w = _human_only_world(client)
+    calls = [
+        ("PUT", f"/api/flows/{w.flow['id']}/status", {"json": {"status": "approved", "version": w.flow["version"]}}),
+        ("POST", f"/api/sessions/{w.sid}/permission", {"json": {"request_id": "x:1", "option_id": "allow"}}),
+        ("DELETE", f"/api/projects/{w.pid}", {}),
+        ("PUT", f"/api/projects/{w.pid}/members/{w.lee_user['id']}", {"json": {"role": "master"}}),
+        ("DELETE", f"/api/projects/{w.pid}/members/{w.lee_user['id']}", {}),
+        ("DELETE", f"/api/artifacts/{w.art['id']}", {}),
+        ("DELETE", f"/api/sessions/{w.sid}", {}),
+        ("DELETE", f"/api/studies/{w.study['id']}/recipe", {}),
+        ("POST", "/api/models/1/shares", {"json": {}}),
+        ("DELETE", "/api/shares/아무값", {}),
+        ("DELETE", "/api/simulators/shared/1", {}),
+        ("DELETE", "/api/tokens/1", {}),
+        ("PUT", "/api/agent/settings", {"json": {"auto_update": False}}),
+        ("POST", "/api/market/submissions", {"files": {"file": ("x.zip", _zip("a/SKILL.md"))}}),
+    ]
+    for method, path, kw in calls:
+        r = client.request(method, path, headers=w.tok, **kw)
+        assert r.status_code == 403, f"{method} {path}: {r.status_code} {r.text[:200]}"
+        assert "→" in r.json()["detail"]  # 원인과 할 일
+
+    assert client.get(f"/api/flows/{w.flow['id']}", headers=w.kim).json()["status"] == w.flow["status"]
+    assert client.get(f"/api/projects/{w.pid}", headers=w.kim).status_code == 200
+    assert {m["user_id"]: m["role"] for m in client.get(f"/api/projects/{w.pid}", headers=w.kim).json()["members"]}[w.lee_user["id"]] == "member"
+    assert w.art["id"] in [a["id"] for a in client.get(f"/api/projects/{w.pid}/artifacts", headers=w.kim).json()]
+    assert w.sid in [s["id"] for s in client.get(f"/api/projects/{w.pid}/sessions", headers=w.kim).json()]
+
+    # 사람은 같은 일을 할 수 있다
+    r = client.put(f"/api/flows/{w.flow['id']}/status", json={"status": "approved", "version": w.flow["version"]}, headers=w.kim)
+    assert r.status_code == 200 and r.json()["status"] == "approved"
+    assert client.delete(f"/api/projects/{w.pid}/members/{w.lee_user['id']}", headers=w.kim).status_code == 200
+    assert client.delete(f"/api/artifacts/{w.art['id']}", headers=w.kim).status_code == 200
+
+
+def test_mcp_never_calls_a_human_only_route():
+    """AI의 도구가 사람 전용 경로를 부르면 그 도구는 늘 실패한다. 경로를 좁히거나 도구를 새로 만들 때 이 시험이 알려 준다."""
+    called = []
+    for f in sorted((ROOT / "mcp_servers").glob("*.py")):
+        for method, path in re.findall(r"api\.(get|post|put|delete|patch)\(\s*f?[\"']([^\"']+)[\"']", f.read_text(encoding="utf-8")):
+            called.append((method.upper(), re.sub(r"{[^}]*}", "1", path).split("?")[0]))
+    assert len(called) > 30
+    human = set()
+    for guard in (require_jwt, require_admin):
+        human |= set(_guarded_routes(guard))
+    assert not [c for c in called if c in human]
+    # 흐름 승인은 위 목록이 놓치면 안 되는 대표 경로다
+    assert ("PUT", "/api/flows/1/status") in human and ("POST", "/api/sessions/1/permission") in human and ("POST", "/api/market/submissions") in human
+
+
+def test_devtest_token_decides_only_while_allowed_and_within_own_work(client):  # noqa: F811
+    """개발 AI의 원격 검증이 사람 대신 승인하는 유일한 길. 허용한 동안, 멤버인 프로젝트에서만 되고 내역이 남는다."""
+    admin, me = _auth(client, "admin")
+    kim, _ = _auth(client, "sc_devtest_kim", admin)
+    tok = _db_token(me["id"], "devtest")
+    flow_body = {"title": "t", "nodes": [{"id": "a", "label": "a", "type": "cad"}], "edges": []}
+    pid = client.post("/api/projects", json={"name": "원격 검증"}, headers=admin).json()["id"]
+    flow = client.post(f"/api/projects/{pid}/flows", headers=admin, json=flow_body).json()
+    body = {"status": "approved", "version": flow["version"]}
+    url = f"/api/devtest/flows/{flow['id']}/status"
+
+    assert client.put(url, json=body, headers=tok).status_code == 403  # 허용 전
+    assert client.get(f"/api/flows/{flow['id']}", headers=admin).json()["status"] == flow["status"]
+    assert client.put(url, json=body, headers=_issued(client, admin)[0]).status_code == 403  # AI의 토큰은 이 길도 못 쓴다
+
+    client.put("/api/devtest/permission", json={"allow": True}, headers=admin)
+    try:
+        other = client.post("/api/projects", json={"name": "남의 것"}, headers=kim).json()["id"]
+        theirs = client.post(f"/api/projects/{other}/flows", headers=kim, json=flow_body).json()
+        r = client.put(f"/api/devtest/flows/{theirs['id']}/status", json={"status": "approved", "version": theirs["version"]}, headers=tok)
+        assert r.status_code == 403 and "멤버" in r.json()["detail"]  # 관리자라고 넓어지지 않는다
+
+        r = client.put(url, json=body, headers=tok)
+        assert r.status_code == 200 and r.json()["status"] == "approved"
+        assert client.get("/api/devtest/history", headers=admin).json()[0]["op"] == "flow"
+    finally:
+        client.put("/api/devtest/permission", json={"allow": False}, headers=admin)
 
 
 # ---------- WebSocket ----------

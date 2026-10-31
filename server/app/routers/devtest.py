@@ -10,7 +10,7 @@ from .. import models, schemas
 from ..agent.link import AgentError, registry
 from ..database import get_db
 from ..deps import get_current_user, require_admin, require_devtest_admin
-from . import agents
+from . import agents, flows, sessions
 from .agents import settings_message
 
 router = APIRouter(prefix="/api/devtest", tags=["devtest"])
@@ -64,6 +64,27 @@ def _pick(user_id: int | None, db: Session) -> tuple[models.User, object]:
     if len(found) > 1:
         raise HTTPException(409, "시험할 수 있는 PC가 여럿입니다 → user_id를 지정하세요: " + ", ".join(f"{u.id}({u.username})" for u in found))
     return found[0], registry.get(found[0].id)
+
+
+def _decide(admin: models.User, op: str, note: str, db: Session, act):
+    """개발 AI가 사람 대신 승인·허용하는 유일한 길. PC 주인이 원격 시험을 허용한 동안, 서버 파일에 쓸 수 있는 사람이 만든 토큰으로만 되고 내역이 남는다.
+    범위는 평소 경로와 같다(멤버인 프로젝트, 자기 대화). 관리자라고 넓어지지 않는다."""
+    if not _allowed(admin):
+        raise HTTPException(403, "원격 시험이 허용되어 있지 않아 승인할 수 없습니다 → 관리자 계정으로 웹앱 설정에서 원격 시험을 허용하세요")
+    res = act()
+    db.add(models.DevTestRecord(by_user_id=admin.id, target_user_id=admin.id, op=op, ok=True, note=note[:300], created_at=datetime.now()))
+    db.commit()
+    return res
+
+
+@router.put("/flows/{flow_id}/status", response_model=schemas.FlowResponse)
+def decide_flow(flow_id: int, body: schemas.FlowStatusUpdate, admin=Depends(require_devtest_admin), db: Session = Depends(get_db)):
+    return _decide(admin, "flow", f"작업 흐름 {flow_id}: {body.status}", db, lambda: flows.apply_flow_status(flow_id, body, admin, db))
+
+
+@router.post("/sessions/{session_id}/permission")
+def decide_permission(session_id: int, body: schemas.PermissionReply, admin=Depends(require_devtest_admin), db: Session = Depends(get_db)):
+    return _decide(admin, "permission", f"대화 {session_id}: {body.option_id}", db, lambda: sessions.reply_permission(session_id, body, admin, db))
 
 
 @router.post("/run")

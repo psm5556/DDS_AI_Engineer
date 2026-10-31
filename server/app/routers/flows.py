@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..config import settings
 from ..database import get_db
-from ..deps import get_current_user, get_or_404, get_project_for_member, require_member
+from ..deps import get_current_user, get_or_404, get_project_for_member, require_jwt, require_member
 from ..study.service import flow_summaries, publish_artifact
 from ..ws import manager
 
@@ -60,9 +60,7 @@ def get_flow(flow_id: int, user=Depends(get_current_user), db: Session = Depends
     return _flow_for_member(flow_id, user, db)
 
 
-@router.put("/flows/{flow_id}/status", response_model=schemas.FlowResponse)
-def set_flow_status(flow_id: int, body: schemas.FlowStatusUpdate, user=Depends(get_current_user),
-                    db: Session = Depends(get_db)):
+def apply_flow_status(flow_id: int, body: schemas.FlowStatusUpdate, user: models.User, db: Session) -> models.Flow:
     f = _flow_for_member(flow_id, user, db)
     if f.version != body.version:
         raise HTTPException(409, "다른 사용자가 수정했습니다. 새로고침 후 다시 시도하세요.")
@@ -73,6 +71,12 @@ def set_flow_status(flow_id: int, body: schemas.FlowStatusUpdate, user=Depends(g
     db.commit()
     _changed(f)
     return f
+
+
+@router.put("/flows/{flow_id}/status", response_model=schemas.FlowResponse)
+def set_flow_status(flow_id: int, body: schemas.FlowStatusUpdate, user=Depends(require_jwt), db: Session = Depends(get_db)):
+    """승인·반려는 사람만 한다. 개발 AI의 원격 검증은 /api/devtest/flows의 좁은 길을 쓴다."""
+    return apply_flow_status(flow_id, body, user, db)
 
 
 @router.put("/flows/{flow_id}/nodes/{node_id}", response_model=schemas.FlowResponse)
@@ -116,7 +120,7 @@ def create_artifact(body: schemas.ArtifactCreate, project: models.Project = Depe
 
 
 @router.delete("/artifacts/{artifact_id}")
-def delete_artifact(artifact_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_artifact(artifact_id: int, user=Depends(require_jwt), db: Session = Depends(get_db)):
     a = get_or_404(db, models.Artifact, artifact_id, "아티팩트")
     require_member(a.project_id, user, db)
     db.delete(a)

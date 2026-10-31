@@ -26,6 +26,7 @@ if os.environ.get("DDS_AGENT_CONFIG"):
 class AgentSettings:
     server_url: str = "http://127.0.0.1:7014"
     token: str = ""  # 웹앱 > 설정 > PC Agent 토큰에서 발급
+    token_in_file: bool = False  # 토큰이 agent.toml에 있어 MCP가 스스로 읽을 수 있다. 환경 변수로만 받았으면 False(개발·시험)
     workspace_dir: Path = Path.home() / "DDS_Workspace"
     # 사용할 수 있는 에이전트 CLI(모두 ACP로 구동). 대화를 만들 때 사용자가 고른다.
     # [agents.<이름>] label, command(목록) 로 추가/변경. 구버전 Gemini CLI는 "--experimental-acp".
@@ -118,8 +119,10 @@ class AgentSettings:
 def load_settings(path: Path | None = None) -> AgentSettings:
     s = AgentSettings()
     path = path or CONFIG_PATH
+    file_token = ""
     if path.exists():
         data = tomllib.loads(path.read_text(encoding="utf-8"))
+        file_token = data.get("token") or ""
         s.config_tools = set(data.get("tools") or {})
         for key, value in data.items():
             if key in ("tools", "tool_commands", "tool_env", "agents", "viewers"):
@@ -129,6 +132,7 @@ def load_settings(path: Path | None = None) -> AgentSettings:
     for env, key in (("DDS_SERVER_URL", "server_url"), ("DDS_TOKEN", "token"), ("DDS_DEFAULT_AGENT", "default_agent")):
         if os.environ.get(env):
             setattr(s, key, os.environ[env])
+    s.token_in_file = bool(file_token) and s.token == file_token
     if os.environ.get("DDS_WORKSPACE"):
         s.workspace_dir = Path(os.environ["DDS_WORKSPACE"])
     s.workspace_dir = s.workspace_dir.expanduser().resolve()  # ACP session/new는 절대경로 cwd만 받는다

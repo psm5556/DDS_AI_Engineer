@@ -272,6 +272,17 @@ class World:
         return (self.tmp / "server.log").read_text(encoding="utf-8", errors="replace")
 
 
+DEVTEST_TOKEN_CODE = ("import sys\n"
+                      "from server.app import models\n"
+                      "from server.app.database import SessionLocal\n"
+                      "from server.app.deps import SCOPE_DEVTEST, new_api_token\n"
+                      "raw, hashed = new_api_token()\n"
+                      "with SessionLocal() as db:\n"
+                      "    db.add(models.ApiToken(user_id=int(sys.argv[1]), name='시험', token_hash=hashed, scope=SCOPE_DEVTEST))\n"
+                      "    db.commit()\n"
+                      "print(raw)\n")
+
+
 # ---------- 대화 ----------
 @dataclass
 class Turn:
@@ -1247,7 +1258,13 @@ def pv(w: World, tmp: Path, c: Check):
     a = tmp / "붙여넣은_표_400001.tsv"
     a.write_text(paste_tsv(design(12, seed=21)), encoding="utf-8")
     out = tmp / "pv_out"
-    env = {**w.env, "DDS_VERIFY_TOKEN": o.token, "DDS_VERIFY_OUT": str(out), "PYTHONUTF8": "1"}
+    # 승인·허용은 사람 전용이다. pc_verify는 원격 시험을 허용한 동안만 되는 devtest 토큰으로 한다
+    made = subprocess.run([sys.executable, "-c", DEVTEST_TOKEN_CODE, str(o.id)], cwd=ROOT, env=w.env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+                          stdin=subprocess.DEVNULL, **hidden_kwargs())
+    c(made.returncode == 0, f"devtest 토큰 만들기: {made.stderr[-300:]}")
+    devtest_token = made.stdout.strip().splitlines()[-1]
+    o.c.put("/api/devtest/permission", json={"allow": True}).raise_for_status()
+    env = {**w.env, "DDS_VERIFY_CHAT_TOKEN": o.token, "DDS_VERIFY_TOKEN": devtest_token, "DDS_VERIFY_OUT": str(out), "PYTHONUTF8": "1"}
 
     def run(*args):
         return subprocess.run([sys.executable, str(ROOT / "scripts" / "pc_verify.py"), "--server", w.base, "--timeout", "300", "chat", *args, "--agent", "demo", "--project", str(pid), "--poll", "0.5", "--settle", "6"],

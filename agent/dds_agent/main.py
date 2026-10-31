@@ -76,8 +76,9 @@ class Agent:
         self.s = load_settings()
         self.loop: asyncio.AbstractEventLoop | None = None
         self.ws = None
-        self.env = {**os.environ, "PYTHONIOENCODING": "utf-8", "DDS_SERVER_URL": self.s.server_url,
-                    "DDS_TOKEN": self.s.token}
+        # AI CLI와 그 안의 셸에는 토큰을 주지 않는다. MCP는 agent.toml에서 스스로 읽는다(mcp_servers/_common.py).
+        # 파일은 숨길 수 없으므로 진짜 방어선은 서버의 사람 전용 경로이고, 이것은 실수로 새는 길을 줄인다
+        self.env = {**{k: v for k, v in os.environ.items() if k.upper() != "DDS_TOKEN"}, "PYTHONIOENCODING": "utf-8", "DDS_SERVER_URL": self.s.server_url}
         self.env.setdefault("MCP_TIMEOUT", str(MCP_START_MS))
         self.env.setdefault("MCP_TOOL_TIMEOUT", str(MCP_TOOL_MS))
         self.runners: dict[str, AgentRunner] = {}  # 에이전트 이름 → 러너(상주 프로세스)
@@ -314,10 +315,15 @@ class Agent:
     def mcp_servers(self, project_id: int, agent: str | None = None, cwd: str | None = None, uid: str | None = None) -> list[dict]:
         """ACP session/new에 넘길 MCP 서버 정의. 세션별로 DDS_PROJECT_ID를 고정한다.
         MCP의 cwd는 프로젝트 폴더다. 설정·작업 공간을 절대 경로로 주어 Agent와 다른 곳에 폴더를 만들지 않게 한다.
-        Codex는 환경변수를 골라 넘기므로 물려받기를 믿지 않고 여기에 적는다."""
-        env = {"DDS_PROJECT_ID": str(project_id), "DDS_SERVER_URL": self.s.server_url, "DDS_TOKEN": self.s.token,
+        Codex는 환경변수를 골라 넘기므로 물려받기를 믿지 않고 여기에 적는다.
+        토큰은 적지 않는다. 이 정의는 CLI 안으로 들어가고, CLI에 따라 명령줄에 실려 프로세스 목록에 보일 수 있다."""
+        env = {"DDS_PROJECT_ID": str(project_id), "DDS_SERVER_URL": self.s.server_url,
                "PYTHONPATH": str(REPO_ROOT), "PYTHONIOENCODING": "utf-8",
                "DDS_AGENT_CONFIG": str(CONFIG_PATH), "DDS_WORKSPACE": str(self.s.workspace_dir)}
+        # 토큰을 환경 변수로만 받은 Agent(개발·시험)는 읽을 파일이 없다. 설치본은 이 길을 타지 않는다.
+        # 파일에 있는지 모르면 넘긴다: 대화 도구가 전부 인증 실패하는 쪽이 더 나쁘다
+        if not getattr(self.s, "token_in_file", False):
+            env["DDS_TOKEN"] = self.s.token
         if cwd:
             env["DDS_PROJECT_DIR"] = str(cwd)
         if uid:

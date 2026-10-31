@@ -140,7 +140,8 @@ def get_current_user(request: Request, cred: HTTPAuthorizationCredentials | None
 
 
 def require_jwt(user: models.User = Depends(get_current_user)) -> models.User:
-    """사람이 웹에 로그인했을 때만. 토큰 발급·PIN 변경처럼 AI나 PC의 코드가 스스로 하면 안 되는 일에 쓴다."""
+    """사람이 웹에 로그인했을 때만. 승인·허용, 공유, 멤버, 삭제, 토큰, PIN, 마켓 등록처럼 AI나 PC의 코드가 스스로 하면 안 되는 일에 쓴다.
+    토큰은 AI 곁에 있다. AI가 스스로 승인할 수 있으면 다른 모든 관문이 뜻을 잃는다."""
     if user.auth_via != AUTH_JWT:
         raise HTTPException(403, "PC Agent·AI 토큰으로는 할 수 없습니다 → 웹앱에 로그인해서 하세요")
     return user

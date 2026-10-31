@@ -20,7 +20,7 @@ from .. import models, schemas
 from ..agent.link import AgentConnection, registry
 from ..config import ROOT, settings
 from ..database import SessionLocal, get_db
-from ..deps import effective_admin, get_current_user, require_admin
+from ..deps import effective_admin, get_current_user, require_admin, require_jwt
 from ..ws import manager
 
 router = APIRouter(prefix="/api/agent", tags=["agent-releases"])
@@ -201,7 +201,7 @@ def get_agent_settings(user=Depends(get_current_user)):
 
 
 @router.put("/settings", response_model=schemas.AgentSettings)
-def set_agent_settings(body: schemas.AgentSettings, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def set_agent_settings(body: schemas.AgentSettings, user=Depends(require_jwt), db: Session = Depends(get_db)):
     """저장은 서버에 한다: PC가 꺼져 있어도 바꿀 수 있고, 연결할 때 다시 알린다."""
     me = db.get(models.User, user.id)
     me.agent_auto_update = body.auto_update
