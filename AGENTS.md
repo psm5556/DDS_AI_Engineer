@@ -52,7 +52,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `server/app/` | FastAPI. `main.py`(앱·정적 파일), `models.py`(SQLAlchemy), `schemas.py`, `config.py`(포트·data_dir) |
 | `server/app/routers/` | `auth` 계정·PIN · `projects` 프로젝트·멤버 · `sessions` 대화·첨부·내 PC 폴더 · `flows` 작업 흐름·결과 · `studies` DOE·케이스·모델·Simulator·공유 · `agents` PC Agent 배포·설치·모니터링 |
 | `server/app/agent/` | `hub.py` 대화 턴·세션 관리(ACP 이벤트 → 메시지) · `link.py` PC Agent WebSocket 연결과 요청/응답 |
-| `server/app/study/` | `doe`(LHS/Sobol) · `surrogate`(GP) · `bayesopt`(EI·제약) · `fieldmodel`(3D 형상·필드 PCA+GP) · `thumbnail`(Simulator 카드 그림) · `service` · `importer`(표·폴더 등록) · `table_job`(표 → 학습 → 배포 서버 작업) · `recipe`(스크립트 묶음) |
+| `server/app/study/` | `doe`(LHS/Sobol) · `surrogate`(GP) · `bayesopt`(EI·제약) · `fieldmodel`(3D 형상·필드 PCA+GP) · `thumbnail`(Simulator 카드 그림) · `service` · `importer`(표·폴더 등록) · `table_job`(표 → 학습 → 배포 서버 작업) · `recipe`(스크립트 묶음) · `insights_calc`·`insights`(판단 도우미) |
 | `server/app/report.py`·`report_md.py`·`assets/` | Word·HTML 보고서와 공통 틀 · 본문 markdown 해석 · 로고·파비콘 사본 |
 | `agent/dds_agent/` | PC Agent. `main.py`(서버 메시지 처리 `handle()`) · `acp_runner.py`(AI CLI) · `executor.py`(케이스 실행) · `workspace.py`(로컬 폴더 규칙·직접 지정 폴더) · `job_runner.py`(로컬/HPC) · `demo_agent.py` · `installer.py`·`updater.py`·`tray.py` |
 | `mcp_servers/` | AI CLI가 쓰는 MCP 툴: `dds_flow`(작업 흐름·결과 게시·보고서) · `dds_cae`(스크립트·툴 실행, `list_tools`) · `dds_study`(DOE·학습·BO·배포) · `dds_live`(실행 중인 CAD/CAE와 Live Link) |
@@ -125,6 +125,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 보고서 | AI가 새로 쓰는 보고서: 자료·저장 `server/app/routers/reports.py`, 틀(표지·목차·맺음말·머리글)과 Word·HTML `server/app/report.py`, 본문 해석 `server/app/report_md.py`, 로고·파비콘 사본 `server/app/assets/`(`frontend/public`과 같아야 한다), 웹 탭 `frontend/src/canvas/ReportView.tsx`, 쓰는 규칙(AI는 제목과 본문만, `##`부터) `agent-context/INSTRUCTIONS.md` 1-0절·`mcp_servers/dds_flow.py` `write_report`, 검사 `server/tests/test_report_template.py` |
 | 해석 데이터 저장(HDF5) | `cae_adapters/h5store.py`(case.h5 쓰기·읽기·묶기·검증) → PC Agent `executor._archive` → 서버 `/api/cases/{id}/archive` · 규약 `docs/cae-data-hdf5.md` · 툴별 전체 추출 `dyna_to_h5.py`·`op2_to_h5.py`·`abq_odb_to_npz.py` |
 | 학습 데이터(train.h5·데이터셋) | 입력 덱 추출 `cae_adapters/deck.py`(다른 툴을 더하는 곳) · 샘플 `train_h5.py`(표준 이름표 `STANDARD`) · 데이터셋 `server/app/study/dataset.py` · 규약 `docs/cae-data-hdf5.md` 8절 · 계획 `docs/shape-learning-plan.md` |
+| 판단 도우미(공간 충진성·영향도·수렴·파레토·능동학습 문장) | 계산 `server/app/study/insights_calc.py` · 판단값 `THRESHOLDS`·문장 `T`·캐시 `insights.py` · API `routers/insights.py` · 화면 `frontend/src/canvas/StudyInsights.tsx`·`components/TrustLine.tsx` · 규칙 `docs/product-spec.md` 4-6-1절 |
 | Output 추가 추출 | `server/app/study/service.py` `add_outputs` → PC Agent `case.extract`(`executor.py`) → 어댑터 `extract()` · 규약 `docs/skill-contract.md` 1-2절 |
 | PC Agent 설치 과정 | `scripts/install-agent.ps1`(실제 설치) · `installer/DdsAgentSetup.cs`(설치 창) · `server/app/routers/agents.py`(배포·설치 파일) |
 | Live Link 속도 개선 | `.claude/skills/live-link-speedup/SKILL.md`부터 읽는다(개발용 스킬, Agent 배포에는 들어가지 않음) |

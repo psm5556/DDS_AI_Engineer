@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, del, get, post } from "../api";
 import { Field3DPanel } from "../components/Field3DPanel";
+import { TrustLine, useTrustLine } from "../components/TrustLine";
 import { Modal } from "../components/Modal";
 import { ModelTrust } from "../components/ModelTrust";
 import { baseLayout, chartColors, Plot, plotConfig } from "../components/Plot";
@@ -43,8 +44,8 @@ export function SharedSimulatorPage() {
 }
 
 /** 해석 없이 설계변수를 바꿔 결과를 실시간 예측 (± 불확실도) + 민감도 곡선. embedded면 캔버스 탭 안에 넣는다(제목·버전은 탭이 보여 준다) */
-export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, embedded }: {
-  base: string; specPath: string; modelId?: number; fieldList: (s: Spec) => string; fieldBase: (id: number) => string; embedded?: boolean;
+export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, embedded, onMore }: {
+  base: string; specPath: string; modelId?: number; fieldList: (s: Spec) => string; fieldBase: (id: number) => string; embedded?: boolean; onMore?: () => void;
 }) {
   const [sharing, setSharing] = useState(false);
   const { data: spec, error } = useQuery({ queryKey: ["sim-spec", specPath], queryFn: () => get<Spec>(specPath) });
@@ -57,6 +58,7 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
   const [failure, setFailure] = useState<{ reason: string; closed: boolean } | null>(null); // 옛 숫자를 그대로 두면 영향이 없는 줄 알고 판단한다
   const closed = !!failure?.closed;
   const seq = useRef(0);
+  const trust = useTrustLine(`${base}/trust-line`);
   useTheme(); // 테마를 바꾸면 민감도 그래프 색도 다시 그린다
   useEffect(() => { if (spec) { setX(mid0); setSweepVar(spec.variables[0]?.name ?? null); } }, [spec, mid0]);
   useEffect(() => { setFailure(null); }, [base]); // 탭에서 다른 버전으로 바꾸면 지난 버전의 오류를 들고 가지 않는다
@@ -99,15 +101,18 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
   const outside = spec.variables.filter((q) => x[q.name] !== undefined && (x[q.name] < q.lower || x[q.name] > q.upper));
   const results = (
     <section className="block sim-results">
-      <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted">± 예측 불확실도</span></div>
+      <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted">{trust?.outputs && Object.values(trust.outputs).some((q) => q.p80 != null) ? "± 지난 해석으로 맞춰 본 오차(10번 중 8번)" : "± 예측 불확실도"}</span></div>
       <ul className={`sim-out ${stale ? "stale" : ""}`}>
         {outs.map((o) => {
           const obj = spec.objectives.find((q) => q.name === o);
+          // 값 옆의 ±는 실제로 맞춰 본 오차다. AI가 스스로 짐작한 폭은 훨씬 좁게 나오기도 해 믿을 숫자로 보이지 않게 툴팁에 둔다
+          const t = trust?.outputs?.[o];
+          const guess = pred ? `AI가 스스로 짐작한 폭입니다: ± ${fmt(2 * pred.std[o], 2)}` : undefined;
           return (
             <li key={o}>
-              <span className="n">{o}{obj && <small>{obj.goal === "min" ? "최소화 목표" : "최대화 목표"}</small>}</span>
+              <span className="n" title={o}>{t && t.label !== o ? `${t.label} (${o})` : o}{obj && <small>{obj.goal === "min" ? "최소화 목표" : "최대화 목표"}</small>}</span>
               <b className={!pred && failure ? "none" : undefined}>{pred ? fmt(pred.mean[o], 4) : failure ? "없음" : "…"}</b>
-              <small className="u">{pred ? `± ${fmt(2 * pred.std[o], 2)}` : ""}</small>
+              <small className="u" title={guess}>{pred ? (t?.p80 != null ? `± ${fmt(t.p80, 2)}${t.unit ? ` ${t.unit}` : ""}` : `± ${fmt(2 * pred.std[o], 2)}`) : ""}</small>
             </li>
           );
         })}
@@ -144,6 +149,8 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
             : `예측하지 못해 값을 지웠습니다. ${failure.reason} → 입력을 바꾸거나 잠시 뒤 다시 시도하세요.`}</span></div>
       )}
 
+      <TrustLine url={`${base}/trust-line`} onMore={onMore} moreTo={!onMore && spec.project_id ? `/projects/${spec.project_id}` : undefined} />
+
       {/* 왼쪽: 입력(설계변수)과 출력(예측값)을 붙여 둔다 · 오른쪽: 3D 형상·필드와 민감도 */}
       <div className="sim2">
         <div className={`sim-side ${many ? "many" : ""}`}>
@@ -154,7 +161,7 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
               <button className="small ghost" disabled={closed} onClick={() => setX(mid0)} title="모든 변수를 범위 가운데로"><RotateCcw size={13} />가운데로</button></div>
             {spec.variables.map((q) => (
               <div key={q.name} className="sim-var">
-                <div className="sim-var-top"><span title={q.name}>{q.name}{q.unit && <small className="sim-var-unit"> [{q.unit}]</small>}</span>
+                <div className="sim-var-top"><span title={q.name}>{q.note ? `${q.note.replace(/\s*\[[^\]]*\]\s*/g, "") || q.name} (${q.name})` : q.name}{q.unit && <small className="sim-var-unit"> [{q.unit}]</small>}</span>
                   <input type="number" inputMode="decimal" value={x[q.name] !== undefined ? Number(x[q.name].toPrecision(5)) : ""}
                     min={q.lower} max={q.upper} disabled={closed} onChange={(e) => setX({ ...x, [q.name]: Number(e.target.value) })} aria-label={`${q.name} 값`} /></div>
                 <input type="range" min={q.lower} max={q.upper} step={(q.upper - q.lower) / 200} value={x[q.name] ?? q.lower} disabled={closed}

@@ -47,6 +47,7 @@ class Surrogate:
     outputs: list[str]
     models: dict = field(default_factory=dict)
     bounds: tuple[list[float], list[float]] | None = None
+    cv: dict = field(default_factory=dict)  # 출력별 교차검증 예측. 판단 도우미가 최악 케이스와 쉬운 오차를 찾는 데 쓴다
 
     def fit(self, X: np.ndarray, Y: dict[str, np.ndarray]) -> dict[str, dict[str, float]]:
         """학습 후 교차검증 지표(R², RMSE)를 돌려준다."""
@@ -65,6 +66,7 @@ class Surrogate:
                     "actual": y.tolist(),
                 }
             self.models[name] = _make_gp(X.shape[1]).fit(Xo, y)
+        self.cv = metrics
         return metrics
 
     def predict(self, X: np.ndarray) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:

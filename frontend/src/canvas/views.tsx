@@ -13,6 +13,7 @@ import { copyText, FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_
 import { orderNodes } from "../flow/order";
 import { flash, scrollMode } from "../motion";
 import { useCanvas } from "./CanvasContext";
+import { StudyInsights } from "./StudyInsights";
 import { relFromRunDir, useOpenLocal } from "./LocalFiles";
 import { TableAddRows } from "./TableImport";
 import { useToast } from "../toast";
@@ -363,7 +364,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
   return (
     <div className="stack">
       <section className="block">
-        <div className="lbl">{obj ? `현재 최적 · ${obj.name} ${obj.goal === "min" ? "최소" : "최대"}${cons ? ` · ${cons}` : ""}` : s.name}</div>
+        <div className="lbl">{obj ? `현재 최적${s.objectives.length > 1 ? "(첫 번째 목표 기준)" : ""} · ${obj.name} ${obj.goal === "min" ? "최소" : "최대"}${cons ? ` · ${cons}` : ""}` : s.name}</div>
         {st.best ? (
           <div className="cond-big" ref={bestBox}>
             {vars.map((v) => <div key={v}><span>{v}</span><b>{fmt(st.best!.params[v], 4)}</b></div>)}
@@ -411,6 +412,8 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
           );
         })()}
       </section>
+
+      <StudyInsights id={id} />
 
       {/* 입력(설계 변수)과 출력(해석에서 뽑는 값)을 나눠 보여 준다. Output은 대화로 언제든 늘릴 수 있다 */}
       <section className="block io-block" aria-label="입력과 출력">

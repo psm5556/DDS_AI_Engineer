@@ -10,6 +10,7 @@ import { memberFieldList, ShareModal, SimulatorView } from "../pages/SimulatorPa
 import { useToast } from "../toast";
 import type { Study, SurrogateModel, TrainJob } from "../types";
 import { useCanvas } from "./CanvasContext";
+import { askInsightFocus } from "./StudyInsights";
 
 /** Simulator 탭: 대화와 결과를 그대로 둔 채 패널 안에서 바로 예측한다. Simulator는 스터디 하나이고, 모델은 그 버전이다 */
 export function SimulatorTab({ pid }: { pid: number }) {
@@ -37,6 +38,7 @@ export function SimulatorTab({ pid }: { pid: number }) {
 function StudySimulator({ pid, study, versions }: { pid: number; study: Study; versions: SurrogateModel[] }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const c = useCanvas();
   const live = versions.find((m) => m.deployed) ?? null;
   const [picked, setPicked] = useState<number | null>(null); // 다른 버전을 미리 보는 중이면 그 id
   const [listOpen, setListOpen] = useState(false);
@@ -114,7 +116,7 @@ function StudySimulator({ pid, study, versions }: { pid: number; study: Study; v
         </div>
       )}
 
-      <SimulatorView key={shown.id} embedded base={`/api/models/${shown.id}`} specPath={`/api/models/${shown.id}/spec`}
+      <SimulatorView key={shown.id} embedded onMore={() => { askInsightFocus("trust"); c.setTab("data"); }} base={`/api/models/${shown.id}`} specPath={`/api/models/${shown.id}/spec`}
         fieldList={memberFieldList(shown.id)} fieldBase={(id) => `/api/field-models/${id}`} />
       {sharing && live && <ShareModal modelId={live.id} onClose={() => setSharing(false)} />}
     </div>

@@ -5,6 +5,7 @@
 //   npm run smoke                        # 화면 둘러보기 (로그인 → 첫 화면 → 표로 바로 Simulator → 툴 → 프로젝트 탭들 → 사이드바 순서·프로젝트 보기 → Simulator 카드·목록·검색 → 설정 → 관리)
 //   npm run smoke -- --demo              # + 데모 에이전트로 전체 과정(CAD→보고서)을 실제로 돌려 승인·실행·완료까지 확인 (3~5분)
 //   npm run smoke -- --reduced           # '움직임 줄이기' 설정으로 점검(애니메이션 0개여야 통과)
+//   npm run smoke -- --insights          # + 데모로 두 목표·능동학습을 돌린 뒤 판단 도우미를 펼쳐 점검(1~2분)
 //   환경변수: DDS_URL(기본 http://127.0.0.1:7014) · DDS_USER(admin) · DDS_PIN(123456) · DDS_SHOTS(스크린샷 폴더, 기본 e2e/shots) · DDS_THEME(light|dark)
 //   Edge가 없으면 DDS_BROWSER=chrome
 import { chromium } from "playwright-core";
@@ -17,6 +18,7 @@ const PIN = process.env.DDS_PIN ?? "123456";
 const OUT = process.env.DDS_SHOTS ?? path.join(import.meta.dirname, "shots");
 const DEMO = process.argv.includes("--demo");
 const REDUCED = process.argv.includes("--reduced"); // '움직임 줄이기'로 점검: 도는 애니메이션이 하나도 없어야 한다
+const INSIGHTS = process.argv.includes("--insights");
 const THEME = process.env.DDS_THEME === "dark" ? "dark" : "light";
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -370,6 +372,37 @@ await step("입력창에 표 붙여넣기", async () => {
   await shot("composer-table-in-project");
   await page.locator(".composer-table").getByRole("button", { name: "취소" }).click();
 });
+
+if (INSIGHTS) {
+  await step("판단 도우미", async () => {
+    await page.goto(BASE + "/");
+    await page.getByTitle("사용할 AI 에이전트").click();
+    await page.getByRole("option", { name: /데모/ }).click();
+    const input = page.getByLabel("에이전트에게 요청");
+    await input.fill("세탁기 진동과 바닥 전달력을 두 목표로 능동학습까지 해서 보고서를 써 줘");
+    await input.press("Enter");
+    await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 30000 });
+    await page.getByRole("button", { name: /승인하고 실행/ }).first().click({ timeout: 90000 });
+    await page.getByRole("button", { name: "허용" }).click({ timeout: 90000 });
+    await page.getByText("두 목표 최적화와 능동학습을 마쳤습니다").waitFor({ timeout: 420000 });
+    await page.getByRole("tab", { name: "데이터" }).first().click();
+    for (const q of ["지금 어디까지 왔나요?", "설계 범위를 고르게 살폈나요?", "무엇이 결과를 좌우하나요?", "이 예측을 믿어도 되나요?", "더 돌리면 좋아질까요?", "두 목표를 함께 좋게 할 수 있나요?", "정확도를 높이려고 더 돌린 해석이 효과가 있었나요?"]) {
+      await page.getByText(q, { exact: false }).first().waitFor({ timeout: 20000 });
+    }
+    await page.locator(".insight-sec .chip", { hasText: "계산 중" }).first().waitFor({ state: "detached", timeout: 60000 }).catch(() => {});
+    await shot("insights-closed");
+    const heads = page.locator(".insight-head:not([disabled])");
+    for (let i = 0; i < (await heads.count()); i++) {
+      await heads.nth(i).click();
+      const name = (await heads.nth(i).getAttribute("aria-expanded")) === "true" ? i : `${i}-closed`;
+      await page.waitForTimeout(500);
+      await heads.nth(i).scrollIntoViewIfNeeded();
+      await shot(`insights-open-${name}`);
+      await heads.nth(i).click();
+    }
+    if (await page.locator(".insight-sec .js-plotly-plot").count()) throw new Error("접으면 그림이 사라져야 합니다");
+  });
+}
 
 await step("CAD·CAE 툴", async () => {
   await page.goto(BASE + "/tools");

@@ -129,6 +129,7 @@ export function useLiveInvalidation() {
       case "model_updated": // 배포·되돌리기를 하면 목록의 버전과 카드 그림도 바뀐다
         qc.invalidateQueries({ queryKey: ["models", pid] });
         qc.invalidateQueries({ queryKey: ["simulators"] });
+        qc.invalidateQueries({ queryKey: ["study"] }); // 새 모델이면 판단 도우미도 다시 잰다
         break;
       case "live_reconnected":
         // 끊긴 동안 놓친 변경을 모두 다시 읽는다. 무거운 내 PC 진단은 빼고

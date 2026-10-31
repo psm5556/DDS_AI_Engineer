@@ -186,6 +186,7 @@ class Case(TimestampMixin, Base):
     origin = Column(JSON)
     # 완료된 케이스를 다시 돌리는 동안 지켜 두는 이전 결과. 다시 돌리기가 실패해도 값을 잃지 않는다
     previous = Column(JSON)
+    timing = Column(JSON)  # 해석 시각 {started_at, ended_at}. 옛 케이스에는 없고, 그러면 시간을 말하지 않는다
     error = Column(Text)
 
 

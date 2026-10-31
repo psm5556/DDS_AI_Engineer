@@ -55,7 +55,7 @@ export interface AgentStatus {
   info: { hostname?: string; version?: string; agents?: AgentCli[]; default_agent?: string; workspace?: string; tools_rev?: string } | null;
 }
 
-export interface Variable { name: string; lower: number; upper: number; unit?: string }
+export interface Variable { name: string; lower: number; upper: number; unit?: string; note?: string }
 export interface Objective { name: string; goal: "min" | "max" }
 export interface OutputDef { name: string; note?: string; unit?: string }
 export interface Study {
@@ -143,3 +143,27 @@ export interface FieldModel {
   info: { modes?: number; value_modes?: number; geometry_modes?: number; energy?: number; value_error?: number; geometry_error?: number };
   created_at: string;
 }
+
+/** 스터디 판단 도우미 — server/app/study/insights.py */
+export type InsightState = "good" | "fair" | "caution" | "unknown";
+export interface InsightNext { key?: string; text?: string; label: string; request: string; from?: string; action?: string }
+export interface InsightVariant {
+  name: string; label: string; unit?: string; state: InsightState; state_label: string; sentence: string; notes: string[];
+  facts: Record<string, unknown>; charts: InsightChart[]; next?: InsightNext | null; next_shown_above?: boolean;
+}
+export type InsightChart = { kind: string } & Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+export interface InsightPick { name: string; label: string; goal: "min" | "max" }
+export interface InsightSection {
+  key: string; title: string; term: string; state: InsightState; state_label: string; sentence: string; notes: string[]; how_to_read: string;
+  basis: string; basis_label: string; next: InsightNext | null; facts: Record<string, unknown>; charts: InsightChart[];
+  variants?: InsightVariant[]; pending?: boolean; collapsed?: boolean; next_shown_above?: boolean; bench?: string | null; basis_note?: string;
+  pair_choices?: InsightPick[]; pair_first?: InsightPick; pair_default?: string; lead?: string;
+}
+export interface StudyInsightsData {
+  status: "ready" | "computing"; stale: boolean; computed_at: string; error?: string;
+  overview: { facts: { complete: number; failed: number; waiting: number; base: number; bo: number; al: number; model_version: number | null; run_text: string | null };
+    next: InsightNext | null; word?: string; watch?: { key: string; text: string }[] };
+  sections: InsightSection[];
+}
+export interface TrustLineData { state: InsightState; state_label: string; sentence: string;
+  outputs?: Record<string, { label: string; unit?: string; state: InsightState; state_label: string; p80: number | null }> }

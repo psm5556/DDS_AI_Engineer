@@ -10,6 +10,7 @@ from ..agent.hub import hub
 from ..agent.link import AgentError, registry
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, member_role, require_master
+from ..study import insights
 from ..ws import manager
 
 log = logging.getLogger(__name__)
@@ -112,8 +113,10 @@ async def delete_project(project_id: int, user: models.User = Depends(get_curren
     await manager.broadcast({"type": "project_updated", "project_id": p.id, "data": {"id": p.id, "deleted": True}})
     for chat_id, in db.query(models.ChatSession.id).filter_by(project_id=p.id):
         hub.forget_chat(chat_id)
+    study_ids = [sid for sid, in db.query(models.Study.id).filter_by(project_id=p.id)]
     db.delete(p)
     db.commit()
+    insights.forget(study_ids)
     return {"ok": True}
 
 

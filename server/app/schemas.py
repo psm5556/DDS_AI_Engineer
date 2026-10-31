@@ -253,6 +253,7 @@ class Variable(BaseModel):
     lower: FiniteFloat  # JSON의 NaN을 그대로 받으면 나중에 응답 직렬화가 깨진다
     upper: FiniteFloat
     unit: str | None = None
+    note: str = ""  # 화면과 문장에 쓸 이름과 단위. 예: "스프링 강성 [%]"
 
 
 class Objective(BaseModel):
@@ -519,6 +520,11 @@ class TrainRequest(BaseModel):
 class TrainStartRequest(TrainRequest):
     """오래 걸리는 학습을 백그라운드로 돌린다. 같은 호출을 다시 해도 새 버전이 겹치지 않는다."""
     force: bool = False  # 같은 데이터·같은 출력의 모델이 있어도 새 버전을 만든다
+class InsightPublish(BaseModel):
+    """판단 도우미 결과를 작업 흐름·보고서용 결과로 게시한다. keys: summary·influence·active·pareto 중 고른다(비우면 전부)."""
+    flow_id: int | None = None
+    node_id: str | None = None
+    keys: list[str] | None = None
 
 
 class SuggestRequest(BaseModel):

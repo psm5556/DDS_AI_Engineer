@@ -1,6 +1,7 @@
 """보고서: AI가 작업 흐름·결과·스터디를 읽고 새로 쓰는 종합 보고서와 그 Word·HTML 내려받기.
 AI(dds-flow MCP)는 report-context로 자료를 읽고 POST reports로 저장한다. 웹 '보고서' 탭은 가장 최근 판을 보여 준다."""
 import re
+import time
 from datetime import date
 from urllib.parse import quote
 
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 from .. import models, report, schemas
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, require_member
-from ..study import service
+from ..study import insights, service
 from ..ws import manager
 
 router = APIRouter(prefix="/api", tags=["reports"])
@@ -104,6 +105,7 @@ def report_context(project: models.Project = Depends(get_project_for_member), db
                 "step": steps.get((a.flow_id, a.node_id), "단계 밖"), "data": report.summarize(a)} for a in arts]
 
     studies_out = []
+    wait_until = time.time() + 20  # 판단이 계산 중이면 스터디들을 합쳐 이만큼만 기다린다
     for s in db.query(models.Study).filter_by(project_id=project.id).order_by(models.Study.id):
         counts: dict[str, int] = {}
         for c in s.cases:
@@ -124,7 +126,7 @@ def report_context(project: models.Project = Depends(get_project_for_member), db
             "outputs": [{"name": n, "role": roles.get(n, ""), "note": notes.get(n, ""),
                          "extracted": sum(1 for c in done if n in (c.results or {}))} for n in service.output_names(s)],
             "best": {"case_id": best.id, "params": best.params, "results": best.results} if best else None,
-            "models": models_out})
+            "models": models_out, "insights": insights.report_summary(db, s, until=wait_until)})
     prev = db.query(models.Report).filter_by(project_id=project.id).order_by(models.Report.id.desc()).first()
     return {"project": {"name": project.name, "description": project.description}, "flows": flows_out,
             "results": results, "studies": studies_out,

@@ -76,7 +76,7 @@ function Table({ a, maxRows }: { a: Artifact; maxRows?: number }) {
         <table>
           <thead><tr>{(p.columns ?? []).map((c) => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>{rows.map((r, i) => (
-            <tr key={i}>{r.map((c, j) => <td key={j} className={typeof c === "number" ? "r" : ""}>{fmt(c)}</td>)}</tr>
+            <tr key={i}>{r.map((c, j) => <td key={j} className={typeof c === "number" ? "r" : String(c ?? "").length > 24 ? "art-long" : ""}>{fmt(c)}</td>)}</tr>
           ))}</tbody>
         </table>
       </div>

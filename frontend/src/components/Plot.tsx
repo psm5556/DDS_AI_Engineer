@@ -9,7 +9,7 @@ export const Plot = createPlotlyComponent(Plotly);
 export function chartColors() {
   return {
     grid: token("--line"), text: token("--ink-3"), muted: token("--ink-4"), brand: token("--brand"), err: token("--err"), mean: token("--mean"),
-    warn: token("--warn-solid"), bg: token("--panel-2"), ink: token("--ink"),
+    warn: token("--warn-solid"), bg: token("--panel-2"), ink: token("--ink"), band: token("--chart-band"),
     series: ["--brand", "--mean", "--sigma", "--warn-solid", "--epi", "--err"].map(token),
   };
 }

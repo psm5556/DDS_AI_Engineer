@@ -28,7 +28,8 @@ mcp = DdsMCP(
         "아무 데이터도 없을 때만 create_study → generate_doe → run_cases → train_surrogate 순으로 해석부터 한다. "
         "Flow 승인은 해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 일에만 받는다. 조회·후처리·기존 데이터로 학습·Simulator 배포·보고서는 승인 없이 바로 한다. "
         "최적화는 optimize(mode='bo'), 학습 효율화는 optimize(mode='al')를 쓴다. 불러온 데이터 스터디의 최적화는 해석으로 확인되지 않은 후보만 준다. "
-        "각 단계 결과는 웹앱에 자동으로 게시된다. 사용자가 출력(Output) 항목을 더 원하면 add_outputs로 추가한다(이미 해석한 케이스에서도 추출된다)."
+        "각 단계 결과는 웹앱에 자동으로 게시된다. 사용자가 출력(Output) 항목을 더 원하면 add_outputs로 추가한다(이미 해석한 케이스에서도 추출된다). "
+        "결과를 설명할 때는 먼저 study_insights를 불러 그 상태 말과 문장을 그대로 쓴다. status가 computing이면 인용하지 않고 다시 부른다."
     ),
 )
 MAX_TABLE_BYTES = 200 * 1024 * 1024  # 서버의 표 파일 한도(table_max_mb)와 같다. 넘는 파일은 메모리에 읽기 전에 알린다
@@ -93,8 +94,9 @@ def create_study(name: str, variables: list[dict[str, Any]], objectives: list[di
                  constraints: list[dict[str, Any]] | None = None, outputs: list[dict[str, str]] | None = None,
                  project_id: int | None = None) -> dict:
     """스터디를 만든다. 웹앱 '데이터·모델' 탭에 입력(Input)과 출력(Output)이 나뉘어 보인다.
-    variables: [{"name": "thickness", "lower": 1.0, "upper": 5.0}]  (입력)
-    objectives: [{"name": "mass", "goal": "min"}]  (첫 번째가 최적화 대상, 이름은 results.json 키)
+    variables: [{"name": "thickness", "lower": 1.0, "upper": 5.0, "note": "두께 [mm]"}]  (입력. note는 화면과 판단 문장에 쓰는 쉬운 이름과 단위)
+    objectives: [{"name": "mass", "goal": "min"}]  (이름은 results.json 키. 2개 이상이면 optimize(mode="bo")가 함께 좋아지는 쪽을 찾는다.
+                 이때 train_surrogate의 outputs에 목표를 모두 넣는다. '현재 최적'은 첫 번째 목표 기준이고, 후보들은 study_insights의 두 목표 비교에 나온다)
     constraints: [{"name": "max_stress", "upper": 250}]  (결과 제약 — 최적 케이스·BO가 이를 만족하는 쪽을 고른다.
                  BO에 반영하려면 train_surrogate의 outputs에 제약 항목도 넣는다)
     outputs: [{"name": "deflection", "note": "끝단 처짐 [mm]"}]  (목적·제약 말고도 뽑는 출력과 화면 설명. 나중에 add_outputs로 늘린다)
@@ -264,7 +266,7 @@ def train_surrogate(study_id: int, outputs: list[str] | None = None, flow_id: in
 @mcp.tool()
 def suggest_next(study_id: int, mode: Literal["bo", "al"] = "bo", n: int = 1, flow_id: int | None = None,
                  node_id: str | None = None, objective: str | None = None, goal: Literal["min", "max"] | None = None) -> dict:
-    """최신 Surrogate로 다음 케이스를 제안한다. bo=기대개선(EI) 최적화, al=불확실도 최대(능동학습).
+    """최신 Surrogate로 다음 케이스를 제안한다. bo=기대개선(EI) 최적화(목적이 2개 이상이면 함께 좋아지는 쪽), al=불확실도 최대(능동학습).
     불러온 데이터 스터디는 케이스 대신 모델로만 찾은 후보를 돌려준다(verified=false, 해석으로 확인되지 않은 예측).
     목적을 정하지 않은 표면 objective(출력 이름)와 goal(min·max)을 준다."""
     if objective:  # 스터디에 목적이 없는 표: 목적을 받는 경로는 후보 찾기뿐이다
@@ -313,6 +315,36 @@ def optimize(study_id: int, iterations: int = 10, mode: Literal["bo", "al"] = "b
         history.append({"iter": i + 1, "best": best["results"] if best else None,
                         "r2": {k: round(v["r2"], 4) for k, v in m["metrics"].items()}})
     return {"history": history, "model_id": m["id"], **_summary(api.get(f"/api/studies/{study_id}"))}
+
+
+@mcp.tool()
+def study_insights(study_id: int, wait_sec: int = 20, publish: bool = False, flow_id: int | None = None, node_id: str | None = None) -> dict:
+    """스터디 결과를 쉬운 말로 판단한 것: 설계 범위를 고르게 살폈는지, 이상한 값, 무엇이 결과를 좌우하는지, 예측을 믿어도 되는지,
+    더 돌리면 좋아질지, 최적 설계를 그대로 써도 되는지, 두 목표 비교, 능동학습 효과. 해석을 더 돌리지 않고 이미 있는 케이스와 모델로만 계산한다.
+    문장과 숫자를 바꾸지 말고 인용한다. publish=True면 표·그래프를 결과로 게시하고 보고서에 넣을 embed를 돌려준다."""
+    wait_sec = _wait_cap(wait_sec)
+    t0 = time.time()
+    v = api.get(f"/api/studies/{study_id}/insights?detail=summary")
+    while v.get("status") == "computing" and time.time() - t0 < wait_sec:
+        time.sleep(1)
+        v = api.get(f"/api/studies/{study_id}/insights?detail=summary")
+    nx = (v.get("overview") or {}).get("next") or {}
+    out = {"study_id": study_id, "status": v.get("status"), "facts": (v.get("overview") or {}).get("facts"),
+           "next": {"text": nx.get("text"), "request": nx.get("request")} if nx else None,
+           "sections": [{"key": x["key"], "question": x["title"], "state": x["state_label"], "sentence": x["sentence"], "notes": x.get("notes") or [],
+                         "basis": x.get("basis_label"), "facts": x.get("facts") or {},
+                         "by_output": [{"output": q["name"], "state": q["state_label"], "sentence": q["sentence"]} for q in x.get("variants") or []],
+                         **({"practice_benchmark": x["bench"]} if x.get("bench") else {})}
+                        for x in v.get("sections") or [] if not x.get("pending")],
+           "note": "문장과 숫자를 바꾸지 말고 인용하세요. 예측값은 예측이라고 말하세요."
+                   + (" 아직 계산 중이라 낡은 값일 수 있습니다. 실패가 아니니 인용하지 말고 다시 부르세요." if v.get("status") == "computing" else "")}
+    if publish:
+        # 계산 중이면 게시하지 않는다. 낡은 문장이 보고서에 들어가면 화면의 숫자와 어긋난다
+        if v.get("status") == "ready":
+            out["published"] = api.post(f"/api/studies/{study_id}/insights/publish", {"flow_id": flow_id, "node_id": node_id})["published"]
+        else:
+            out["published"] = []
+    return out
 
 
 @mcp.tool()

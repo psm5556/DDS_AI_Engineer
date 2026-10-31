@@ -1323,3 +1323,54 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .sim-failed { margin-bottom: var(--sp-3); }
 .sim-out li b.none { font-size: var(--fs-14); font-weight: 400; color: var(--ink-3); }
 .sim-var input:disabled { background: var(--panel-2); color: var(--ink-3); }
+/* ---------- 스터디 판단 도우미: 첫 줄만 읽어도 판단할 수 있게. 작업대라 상태가 바뀔 때의 짧은 움직임만 쓴다 ---------- */
+.insights { display: flex; flex-direction: column; gap: var(--sp-2); }
+.insight-summary { display: flex; flex-direction: column; gap: var(--sp-1); padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
+.insight-summary h3 { margin: 0; font-size: var(--fs-14); font-weight: 600; }
+.insight-facts { color: var(--ink-3); font-size: var(--fs-12); }
+.insight-next { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--fs-13); }
+.insight-next b { font-weight: 600; }
+.insight-sec { border-bottom: 1px solid var(--line); }
+.insight-sec:last-child { border-bottom: none; }
+.insight-head { white-space: normal; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: var(--sp-1) var(--sp-2); width: 100%; padding: var(--sp-2) 0; border: none; border-radius: 0; background: none; color: inherit; text-align: left; font: inherit; cursor: pointer; align-items: start; height: auto; box-shadow: none; }
+.insight-head:hover { background: none; }
+.insight-head:disabled { opacity: 1; color: inherit; cursor: default; background: none; }
+.insight-head:disabled .insight-q { color: inherit; }
+.insight-head:hover .insight-q { color: var(--brand); }
+.insight-head > svg { margin-top: 3px; color: var(--ink-3); }
+.insight-q { font-size: var(--fs-13); font-weight: 600; transition: color var(--dur-fast); }
+.insight-q small { margin-left: var(--sp-1); font-size: var(--fs-11); font-weight: 400; color: var(--ink-3); }
+.insight-say { grid-column: 2 / -1; font-size: var(--fs-13); font-weight: 400; line-height: 1.55; color: var(--ink-2); word-break: keep-all; overflow-wrap: anywhere; }
+.insight-sec.low .insight-q { font-weight: 400; color: var(--ink-3); }
+.insight-sec.low .insight-say { color: var(--ink-3); font-size: var(--fs-12); }
+.insight-body { display: flex; flex-direction: column; gap: var(--sp-2); padding: 0 0 var(--sp-3) 22px; min-width: 0; }
+.insight-notes { margin: 0; padding-left: var(--sp-4); font-size: var(--fs-12); color: var(--ink-2); line-height: 1.55; word-break: keep-all; }
+.insight-notes li + li { margin-top: 2px; }
+.insight-how { font-size: var(--fs-12); color: var(--ink-3); }
+.insight-how b { font-weight: 600; color: var(--ink-2); }
+.insight-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.insight-row .seg { flex-wrap: wrap; }
+.insight-bars { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.insight-bar { white-space: normal; display: grid; grid-template-columns: minmax(84px, 30%) minmax(0, 1fr) 44px; gap: var(--sp-2); align-items: center; width: 100%; height: auto; padding: 3px var(--sp-1); border: none; border-radius: var(--r-xs); background: none; color: inherit; font: inherit; font-size: var(--fs-12); text-align: left; cursor: pointer; box-shadow: none; }
+.insight-bar:hover, .insight-bar.on { background: var(--panel-2); }
+.insight-bar > span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.insight-track { position: relative; height: 10px; border-radius: var(--r-xs); background: var(--panel-2); overflow: hidden; }
+.insight-bar:hover .insight-track, .insight-bar.on .insight-track { background: var(--panel); }
+.insight-fill { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-xs); background: var(--brand); }
+.insight-bar .r { text-align: right; font-variant-numeric: tabular-nums; }
+.insight-table { font-size: var(--fs-12); }
+.insight-bench { padding-top: var(--sp-2); border-top: 1px dashed var(--line); font-size: var(--fs-12); color: var(--ink-3); }
+.trust-line { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-s); background: var(--panel); font-size: var(--fs-13); }
+.trust-line > b { font-weight: 600; }
+.trust-line > span:not(.chip) { flex: 1 1 240px; min-width: 0; color: var(--ink-2); word-break: keep-all; }
+.trust-more { padding: 0; height: auto; border: none; background: none; box-shadow: none; color: var(--brand); font-size: var(--fs-12); cursor: pointer; }
+.trust-more:hover { background: none; text-decoration: underline; }
+/* 약한 예측의 영향 막대: 믿을 만한 순위처럼 보이지 않게 흐리게 */
+.insight-bars.weak .insight-fill { background: var(--ink-4); }
+.insight-bars.weak .insight-bar > span:first-child { color: var(--ink-3); }
+.insight-fold { display: flex; flex-direction: column; gap: var(--sp-2); align-items: stretch; }
+.insight-fold > button { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--sp-1); }
+.insight-watch { display: flex; align-items: baseline; gap: var(--sp-1); flex-wrap: wrap; color: var(--ink-2); }
+.insight-watch .trust-more { font-size: inherit; }
+/* 글이 긴 칸은 줄을 바꾼다. 결론이 패널 밖으로 잘리지 않게 */
+.art-table td.art-long { min-width: 9em; height: auto; padding-top: var(--sp-1); padding-bottom: var(--sp-1); white-space: normal; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.5; }

@@ -82,6 +82,8 @@ def test_washer_demo_mock_and_intent():
     assert pick_mode("탈수 진동이 줄도록 스프링·댐퍼를 최적화해 줘") == "washer"
     assert pick_mode("브래킷 CAD를 만들고 보고서까지") == "bracket"
     assert pick_mode("3D 외팔보") == "beam3d" and pick_mode("최적화 해 줘") == "branin"
+    # 두 목표·능동학습 요청은 세탁기 낱말이 있어도 판단 도우미가 모두 채워지는 시나리오로 간다
+    assert pick_mode("세탁기 진동과 전달력 두 목표로 능동학습까지 해 줘") == "washer2" and pick_mode("파레토 보여 줘") == "washer2"
 
 
 def test_project_folder_identity(tmp_path):

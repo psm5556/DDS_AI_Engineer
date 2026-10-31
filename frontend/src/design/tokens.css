@@ -124,6 +124,7 @@
   --mean: #0d9488;  --mean-soft: #f0fdfa;  --mean-ring: #99f6e4;  --mean-ink: #0f766e;
   --sigma: #7c3aed; --sigma-soft: #f5f3ff; --sigma-ring: #ddd6fe; --sigma-ink: #6d28d9;
   --epi: #64748b;
+  --chart-band: rgba(13, 148, 136, 0.16); /* 그래프의 불확실 띠. Plotly가 공백 표기의 투명도를 버려 띠가 불투명해지므로 쉼표 표기를 쓴다 */
 
   /* ---------- 상태 (글자는 -ink, 점·막대 같은 진한 면은 -solid) ---------- */
   --ok: #2f7d4f;   --ok-soft: #e8f3ec;   --ok-ring: #bfddc9;   --ok-ink: #1f6a3d;   --ok-solid: #3e9b63;
@@ -199,6 +200,7 @@
   --mean: #2dd4bf;  --mean-soft: rgb(45 212 191 / 0.1);   --mean-ring: rgb(45 212 191 / 0.3);   --mean-ink: #5eead4;
   --sigma: #a78bfa; --sigma-soft: rgb(167 139 250 / 0.12); --sigma-ring: rgb(167 139 250 / 0.3); --sigma-ink: #c4b5fd;
   --epi: #94a3b8;
+  --chart-band: rgba(45, 212, 191, 0.18);
   --ok: #6fd498;   --ok-soft: rgb(62 155 99 / 0.16);  --ok-ring: rgb(62 155 99 / 0.34);   --ok-ink: #a3e6bd;
   --warn: #f0bd45; --warn-soft: rgb(224 161 0 / 0.14); --warn-ring: rgb(224 161 0 / 0.34); --warn-ink: #f5d27e;
   --err: #ff6b81;  --err-soft: rgb(255 107 129 / 0.13);  --err-ring: rgb(255 107 129 / 0.34);  --err-ink: #ffa3b1;

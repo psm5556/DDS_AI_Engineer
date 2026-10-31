@@ -1,7 +1,7 @@
 """데모 에이전트: Gemini CLI 없이 전체 경로(ACP → MCP 서버 → DDS 서버 → 웹앱)를 검증하기 위한 가짜 ACP 에이전트.
 Gemini처럼 session/new로 받은 MCP 서버를 실제로 띄워서 툴을 호출하며, 정해진 시나리오
 (Flow 제안 → 승인 대기 → 권한 요청 → mock DOE → GP 학습 → BO → Simulator 배포)를 수행한다.
-시나리오는 요청에 따라 고른다(pick_mode): 세탁기 탈수 진동 · 브래킷 E2E · 3D 외팔보 · Branin.
+시나리오는 요청에 따라 고른다(pick_mode): 세탁기 두 목표·능동학습 · 세탁기 탈수 진동 · 브래킷 E2E · 3D 외팔보 · Branin.
 표·해석 폴더·단순 질문은 Flow 없이 바로 처리한다(pick_entry). 그래야 "표로 Simulator"를 시험할 때 엉뚱하게 Branin을 돌려 거짓 통과하지 않는다.
 agent.toml 에 agent_mode = "demo" 로 사용한다.
 """
@@ -34,8 +34,15 @@ def wants_e2e(body: str) -> bool:
     return cad and tail
 
 
+def is_panel_request(body: str) -> bool:
+    """판단 도우미 버튼이 보낸 요청. 데모는 해석을 더 돌리지 않으니 시나리오를 새로 시작하지 않고 그렇게 말한다."""
+    return body.strip().startswith("스터디 '")
+
+
 def pick_mode(body: str) -> str:
-    """요청에 맞는 시나리오: 세탁기 탈수 진동 · CAD~보고서 전체(브래킷) · 3D 형상(외팔보) · 기본(Branin)."""
+    """요청에 맞는 시나리오: 세탁기 두 목표·능동학습 · 세탁기 탈수 진동 · CAD~보고서 전체(브래킷) · 3D 형상(외팔보) · 기본(Branin)."""
+    if any(k in body for k in ("능동학습", "파레토", "두 목표")):
+        return "washer2"
     if "세탁기" in body or "탈수" in body:
         return "washer"
     if wants_e2e(body):
@@ -270,6 +277,10 @@ class DemoAgent:
         '세탁기'/'탈수' 요청(탈수 진동 최적화~보고서) · CAD~보고서 전체(브래킷 E2E) ·
         '3D'/'형상' 요청(Beam3D 형상·필드 학습) · 기본(Branin 최적화)."""
         body = request_text(text)
+        if is_panel_request(body):  # 판단 도우미 버튼의 요청은 어떤 입구보다 먼저 본다. 문구에 '표'·'모델'이 들어 있어도 시나리오로 새지 않는다
+            await s.say("데모에서는 해석을 더 돌리지 않습니다. 실제 에이전트라면 지금 요청을 그대로 진행합니다.\n\n"
+                        f"> {body.strip()}\n\n실제로 돌려 보려면 설정에서 Claude·Gemini·Codex 중 하나를 고르세요.")
+            return
         entry, target = pick_entry(body)
         approved = "승인했습니다" in body or "승인되었습니다" in body
         if not approved and s.pending_table and await self._outputs_answer(s, body):
@@ -312,7 +323,19 @@ class DemoAgent:
             await s.say("요청을 분석하고 있습니다. 전체 작업 흐름을 먼저 제안할게요.", thought=True)
             if "[첨부 파일" in body:
                 await s.say(f"첨부하신 파일을 작업 폴더에서 확인했습니다: {', '.join(attached_files(body))}\n\n")
-            if s.mode == "washer":
+            if s.mode == "washer2":
+                title, desc = "세탁기 진동과 바닥 전달력 함께 보기", "DOE 24건 → 예측 모델 → 능동학습 6건 → 두 목표 최적화 8건 → 판단 정리 → 보고서"
+                nodes = [
+                    {"id": "doe", "label": "DOE 24케이스 (LHS)", "type": "doe", "tool": "mock", "detail": "스프링 강성·댐퍼 감쇠력·밸런서·스프링 위치"},
+                    {"id": "train", "label": "첫 예측 모델", "type": "train", "detail": "GP"},
+                    {"id": "al", "label": "능동학습 6건", "type": "train", "detail": "모델이 가장 모르는 곳을 해석"},
+                    {"id": "opt", "label": "두 목표 최적화 8건", "type": "optimize", "detail": "진동·바닥 전달력 최소"},
+                    {"id": "judge", "label": "결과 판단 정리", "type": "post", "detail": "수렴·앞면·능동학습 효과"},
+                    {"id": "deploy", "label": "Simulator 배포", "type": "deploy"},
+                    {"id": "report", "label": "보고서 작성", "type": "post", "detail": "Word · HTML"},
+                ]
+                pairs = [("doe", "train"), ("train", "al"), ("al", "opt"), ("opt", "judge"), ("judge", "deploy"), ("deploy", "report")]
+            elif s.mode == "washer":
                 title, desc = "드럼세탁기 탈수 진동 저감", "RecurDyn 탈수 모델 → DOE 60케이스 → 진동 예측 모델 → 최적화 → Simulator → 보고서"
                 nodes = [
                     {"id": "model", "label": "탈수 해석 모델 불러오기", "type": "pre", "tool": "recurdyn",
@@ -386,10 +409,11 @@ class DemoAgent:
         if flow["status"] not in ("approved", "in_progress"):
             await s.say("작업 흐름이 아직 승인 전입니다. 카드에서 **승인**을 누르면 시작합니다. 고칠 점이 있으면 반려한 뒤 입력창에 적어 주세요.")
             return
-        n_cases = {"beam3d": 16, "washer": 60}.get(s.mode, 20)
+        n_cases = {"beam3d": 16, "washer": 60, "washer2": 24}.get(s.mode, 20)
         title = s.plan.get("permission") if s.mode in PLANNED_MODES else None
         title = title or {"bracket": "CAD·해석 모델 생성 후 케이스 해석 실행",
-                          "washer": "RecurDyn 탈수 해석 60케이스 실행"}.get(s.mode, "Mock 솔버로 케이스 실행")
+                          "washer": "RecurDyn 탈수 해석 60케이스 실행",
+                          "washer2": "세탁기 예시 식으로 케이스 24건 실행"}.get(s.mode, "Mock 솔버로 케이스 실행")
         if not await self.ask_permission(s, title, {"study": s.mode, "cases": n_cases}):
             await s.say("실행 권한이 거부되어 중단했습니다.")
             return
@@ -397,6 +421,8 @@ class DemoAgent:
         node = lambda nid, st, d=None: s.tool("dds-flow", "update_node", {"flow_id": fid, "node_id": nid, "status": st, "detail": d})
         if s.mode in PLANNED_MODES:
             await self._run_planned(s, fid, node)
+        elif s.mode == "washer2":
+            await self._washer2(s, fid, node)
         elif s.mode == "washer":
             await self._washer(s, fid, node)
         elif s.mode == "bracket":
@@ -814,10 +840,56 @@ class DemoAgent:
         await self._generic_report(s)
         await s.say("있는 결과로 보고서를 썼습니다. 오른쪽 **보고서** 탭에서 볼 수 있습니다.")
 
+    async def _judge(self, s, keys=None) -> dict:
+        """판단 도우미의 문장을 그대로 가져온다. 대화·보고서가 화면과 같은 숫자를 쓰게 한다."""
+        r = await s.tool("dds-study", "study_insights", {"study_id": s.study_id, "wait_sec": 60})
+        return {x["key"]: x for x in r["sections"] if not keys or x["key"] in keys}
+
+    async def _washer2(self, s, fid, node):
+        """두 목표와 능동학습: 판단 도우미의 모든 항목이 실제 값으로 채워지는 시나리오. 값은 예시 식이다."""
+        await node("doe", "in_progress")
+        study = await s.tool("dds-study", "create_study", {
+            "name": "진동과 전달력", "adapter": "mock",
+            "adapter_config": {"function": "washer", "delay_sec": 0.05, "outputs": ["vibration", "floor_force"]},
+            "variables": [{"name": "spring_k", "lower": -10, "upper": 30, "note": "스프링 강성 [%]"},
+                          {"name": "damper_c", "lower": -10, "upper": 50, "note": "댐퍼 감쇠력 [%]"},
+                          {"name": "balancer_m", "lower": -20, "upper": 20, "note": "밸런서 질량 [%]"},
+                          {"name": "spring_pos", "lower": -20, "upper": 20, "note": "스프링 위치 [mm]"}],
+            "objectives": [{"name": "vibration", "goal": "min"}, {"name": "floor_force", "goal": "min"}],
+            "outputs": [{"name": "vibration", "note": "진동 [mm]"}, {"name": "floor_force", "note": "바닥 전달력 [N]"}]})
+        sid = s.study_id = study["study_id"]
+        await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 24, "seed": 12, "flow_id": fid, "node_id": "doe"})
+        r = await s.tool("dds-study", "run_cases", {"study_id": sid})
+        await node("doe", "complete", f"완료 {r['counts'].get('complete', 0)}건")
+        await node("train", "in_progress")
+        await s.tool("dds-study", "train_surrogate", {"study_id": sid, "flow_id": fid, "node_id": "train"})
+        await node("train", "complete")
+        await node("al", "in_progress")
+        await s.tool("dds-study", "optimize", {"study_id": sid, "iterations": 6, "mode": "al", "flow_id": fid, "node_id": "al"})
+        await node("al", "complete")
+        await node("opt", "in_progress")
+        o = await s.tool("dds-study", "optimize", {"study_id": sid, "iterations": 8, "flow_id": fid, "node_id": "opt"})
+        await node("opt", "complete")
+        await node("judge", "in_progress")
+        judged = await s.tool("dds-study", "study_insights", {"study_id": sid, "wait_sec": 60, "publish": True, "flow_id": fid, "node_id": "judge"})
+        by = {x["key"]: x for x in judged["sections"]}
+        await node("judge", "complete")
+        await node("deploy", "in_progress")
+        d = await s.tool("dds-study", "deploy_model", {"model_id": o["model_id"]})
+        await node("deploy", "complete", f"모델 #{d['model_id']}")
+        s.model_id = o["model_id"]
+        await node("report", "in_progress")
+        await self._generic_report(s)
+        files = await s.tool("dds-flow", "make_report", {"formats": ["docx", "html"], "flow_id": fid})
+        await node("report", "complete", f"보고서 탭 · Word·HTML {len(files['files'])}개 저장")
+        lines = [f"- **{by[k]['question']}** {by[k]['state']}. {by[k]['sentence']}" for k in ("pareto", "active", "convergence") if k in by]
+        await s.say("두 목표 최적화와 능동학습을 마쳤습니다.\n\n" + "\n".join(lines)
+                    + "\n\n값은 예시 식으로 만든 것입니다. 자세한 판단은 오른쪽 **데이터** 탭에 있습니다.")
+
     async def _washer(self, s, fid, node):
         """드럼세탁기 탈수 진동: 해석 모델 → DOE 60·해석 → 진동 예측 모델 → 베이지안 최적화 → Simulator → 보고서."""
-        variables = [{"name": "spring_k", "lower": -10, "upper": 30}, {"name": "damper_c", "lower": -10, "upper": 50},
-                     {"name": "balancer_m", "lower": -20, "upper": 20}, {"name": "spring_pos", "lower": -20, "upper": 20}]
+        variables = [{"name": "spring_k", "lower": -10, "upper": 30, "note": "스프링 강성 [%]"}, {"name": "damper_c", "lower": -10, "upper": 50, "note": "댐퍼 감쇠력 [%]"},
+                     {"name": "balancer_m", "lower": -20, "upper": 20, "note": "밸런서 질량 [%]"}, {"name": "spring_pos", "lower": -20, "upper": 20, "note": "스프링 위치 [mm]"}]
         await node("model", "in_progress")
         await s.say("RecurDyn 탈수 모델에서 바꿀 수 있는 부품 값을 설계 변수로 잡습니다.\n\n", thought=True)
         await s.tool("dds-flow", "publish_artifact", {
@@ -858,10 +930,13 @@ class DemoAgent:
         rep = await self._washer_report(s)
         files = await s.tool("dds-flow", "make_report", {"formats": ["docx", "html"]})
         await node("report", "complete", f"보고서 탭 · Word·HTML {len(files['files'])}개 저장")
+        judged = await self._judge(s, ("convergence",))
+        said = f"- {judged['convergence']['sentence']}\n" if judged.get("convergence") else ""
         await s.say(
             "탈수 진동 최적화를 마쳤습니다.\n\n"
             f"- 진동 {rep['now']:.1f} mm → {rep['best']:.1f} mm (**{rep['cut']:.0f}% 감소**), "
             f"스프링 강성 {bp['spring_k']:+.0f}% · 댐퍼 감쇠력 {bp['damper_c']:+.0f}%\n"
+            + said +
             "- 보고서는 오른쪽 **보고서** 탭에 있습니다. 다음으로 최적 설계 검증 해석을 권합니다.")
 
     async def _washer_report(self, s) -> dict:
@@ -937,6 +1012,9 @@ class DemoAgent:
             embeds = [r["embed"] for r in ctx["results"] if r["step"] == f"{x['no']}단계 · {x['label']}"]
             if embeds:
                 lines += [f"### {x['no']}단계 · {x['label']}", *embeds, ""]
+        judged = await self._judge(s) if s.study_id else {}
+        if judged:  # 화면과 같은 문장을 그대로 넣는다
+            lines += ["## 판단 요약", *[f"- **{x['question']}** {x['state']}. {x['sentence']}" for x in judged.values() if x["key"] != "active" or x["facts"].get("al")], ""]
         lines += ["## 결론과 권고", "1. 최적 설계점에서 실제 해석으로 검증 해석을 1건 더 수행합니다.",
                   "2. Simulator로 설계 변수를 바꿔 보며 설계팀과 함께 검토합니다."]
         await s.tool("dds-flow", "write_report", {"title": f"{flow['title']} 보고서", "body": "\n".join(lines), "flow_id": s.flow_id})
@@ -985,7 +1063,9 @@ class DemoAgent:
             "payload": {"text": f"### 결과\n- 최적 설계: x1={best['params']['x1']:.3f}, x2={best['params']['x2']:.3f}\n"
                                 f"- 목적함수 f = **{best['results']['f']:.4f}** (이론 최소 0.398)\n"
                                 f"- Simulator: 모델 #{d['model_id']}"}})
-        await s.say(f"완료했습니다. 최적 f = {best['results']['f']:.4f} 이고, Simulator(모델 #{d['model_id']})를 배포했습니다.")
+        judged = await self._judge(s, ("convergence",))
+        said = f" {judged['convergence']['sentence']}" if judged.get("convergence") else ""
+        await s.say(f"완료했습니다. 최적 f = {best['results']['f']:.4f} 이고, Simulator(모델 #{d['model_id']})를 배포했습니다.{said}")
 
     async def _beam3d(self, s, fid, node):
         await node("doe", "in_progress")

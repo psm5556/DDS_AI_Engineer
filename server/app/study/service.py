@@ -623,6 +623,11 @@ def on_case_status(msg: dict, sender: int | None = None):
             pass  # 다시 돌리기가 끝나지 못했다. 저장된 결과를 비우지 않는다
         else:
             case.status = status
+            # 해석 시간은 이 두 시각으로만 잰다. updated_at은 추출·묶음 올리기에도 바뀌어 시간이 되지 못한다
+            if status == "running":  # 다시 돌리기면 지난번 끝난 시각을 지운다. 남겨 두면 돌고 있는 케이스의 시간이 음수가 된다
+                case.timing = {"started_at": datetime.now().isoformat()}
+            elif status in FINAL:
+                case.timing = {**(case.timing or {}), "ended_at": datetime.now().isoformat()}
             for key in ("error", "run_dir", "images", "fields"):
                 if key in msg:
                     setattr(case, key, msg[key])
@@ -1162,11 +1167,11 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
     db.commit()
 
     for o, v in cv.items():
-        publish_artifact(db, study.project_id, "scatter", f"[{study.name}] {o} 예측 정확도 (교차검증)",
+        publish_artifact(db, study.project_id, "scatter", f"[{study.name}] {o} 예측과 실제 비교",
                          {"x": "실제값", "y": "예측값", "diagonal": True,
                           "series": [{"name": f"R²={v['r2']:.3f}", "points": [{"x": a, "y": p} for a, p in zip(v["actual"], v["cv_pred"])]}]},
                          flow_id, node_id)
-    publish_artifact(db, study.project_id, "table", f"[{study.name}] Surrogate 성능",
+    publish_artifact(db, study.project_id, "table", f"[{study.name}] 예측 정확도 요약",
                      {"columns": ["모델", "출력", "R²", "RMSE", "학습 수"],
                       "rows": [[m.name, o, round(v["r2"], 4), round(v["rmse"], 5), m.n_train] for o, v in m.metrics.items()]},
                      flow_id, node_id)
@@ -1327,6 +1332,21 @@ def _search_model(db: Session, study: models.Study, model_id: int | None) -> mod
     if live is not None and newest is not None and live.id != newest.id and live.deployed_at and newest.created_at and live.deployed_at >= newest.created_at:
         return live
     return newest
+def _suggest_multi(study: models.Study, sur: Surrogate, lo, hi, n: int):
+    """목적이 2개 이상이면 첫 목표만 보지 않고 함께 좋아지는 쪽을 찾는다."""
+    objs = study.objectives
+    missing = [o["name"] for o in objs if o["name"] not in sur.outputs]
+    if missing:
+        raise ValueError(f"두 목표 최적화에는 목표를 모두 학습한 모델이 필요합니다. 빠진 목표: {', '.join(missing)} → train에 함께 넣으세요")
+    # NaN·참거짓이 값 범위에 섞이면 점수가 모두 0이 되어 임의의 점을 고른다
+    done = [c for c in _complete_cases(study) if all(
+        isinstance(v := c.results.get(o["name"]), (int, float)) and not isinstance(v, bool) and np.isfinite(v) for o in objs)]
+    ok = [c for c in done if feasible(study, c.results)] or done
+    if not ok:
+        raise ValueError("완료된 케이스가 없습니다")
+    return bayesopt.suggest(sur, lo, hi, "mo", n, seed=len(study.cases), objectives=objs,
+                            observed=np.array([[c.results[o["name"]] for o in objs] for c in ok], dtype=float),
+                            constraints=[c for c in study.constraints or [] if c["name"] in sur.outputs])
 
 
 def suggest(db: Session, study: models.Study, mode: str, n: int, model_id: int | None,
@@ -1341,7 +1361,9 @@ def suggest(db: Session, study: models.Study, mode: str, n: int, model_id: int |
     lo = np.array([v["lower"] for v in study.variables])
     hi = np.array([v["upper"] for v in study.variables])
     obj = study.objectives[0] if study.objectives else None
-    if mode == "bo":
+    if mode == "bo" and len(study.objectives or []) >= 2:
+        pts = _suggest_multi(study, sur, lo, hi, n)
+    elif mode == "bo":
         if not obj or obj["name"] not in sur.outputs:
             raise ValueError("BO에는 모델이 학습한 목적함수(objectives[0])가 필요합니다")
         best = best_case(study) or best_case(study, feasible_only=False)
