@@ -12,7 +12,7 @@
   session.cancel  {session_id, turn_id?}               (그 세션만 멈춘다. CLI는 그대로 둔다)
   session.force_restart {agent, turn_id?, rid?}        (사용자가 멈췄는데 답이 없을 때. CLI를 끝내고 다시 띄운다. rid가 있으면 받았다고 바로 답한다.
                   답이 없으면 반쯤 끊긴 연결로 보고 다음 hello에 다시 보낸다)
-  agent.ack       {seq}                                (seq가 붙은 메시지를 처리했다. Agent가 outbox에서 지운다)
+  agent.ack       {seq}                                (seq까지 저장했다. Agent가 outbox에서 지운다. 저장에 실패하면 보내지 않고 연결을 닫는다(1013))
   permission.reply {request_id, option_id|null}
   case.run        {case_id, study_id, project_id, params, adapter, adapter_config, dry_run}
   case.extract    {case_id, study_id, project_id, params, results, run_dir, adapter, adapter_config, steps, names}
@@ -48,6 +48,7 @@ Agent → 서버 알림
 from __future__ import annotations
 
 import asyncio
+import errno
 import itertools
 import json
 import logging
@@ -58,11 +59,20 @@ from typing import Any, Callable
 
 from fastapi import WebSocket
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as SATimeoutError
 
 log = logging.getLogger(__name__)
 REPLACED_CODE = 4000  # 같은 사용자의 새 연결이 들어왔다. Agent가 이 코드를 받으면 곧바로 다시 붙지 않고 기다린다(서로 밀어내지 않게)
-DB_RETRY_SEC = 120.0  # DB가 잠겨도 메시지를 버리지 않고 기다리는 시간. Agent 쪽 outbox는 ack를 받으면 지우므로 여기서 버리면 다시 받을 수 없다
+DB_RETRY_SEC = 120.0  # 저장을 다시 시도하며 기다리는 시간. 넘으면 ack하지 않고 연결을 끊어 Agent가 이 메시지부터 다시 보내게 한다
 DB_RETRY_POLL_SEC = 0.5
+RESEND_CODE = 1013  # 잠시 뒤 다시 연결하라는 표준 코드. Agent는 outbox의 ack 안 된 메시지를 처음부터 다시 보낸다
+DISK_ERRNOS = {errno.ENOSPC, errno.EIO, errno.EROFS, errno.EDQUOT}
+
+
+def is_save_failure(e: Exception) -> bool:
+    """저장을 못 한 경우(DB 잠김·디스크 가득). 시간이 지나면 풀리므로 ack하지 않고 다시 받는다.
+    다른 예외는 코드 문제라 몇 번을 다시 받아도 같다. 그것까지 붙들면 그 사용자의 모든 대화가 막힌다."""
+    return isinstance(e, (OperationalError, SATimeoutError)) or (isinstance(e, OSError) and e.errno in DISK_ERRNOS)
 
 
 class AgentError(Exception):
@@ -87,6 +97,7 @@ class AgentConnection:
         self.boot: str | None = None  # Agent 프로세스 표시. 없으면 응답 대기형 session.prompt를 쓰는 옛 Agent다
         self.ready = threading.Event()  # hello를 처리해 살아 있는 세션 목록을 안다
         self.closed = False
+        self.resending = False  # 저장에 실패해 연결을 닫는 중. 뒤의 메시지를 먼저 처리해 ack하면 앞의 것까지 함께 지워진다
         self._pending: dict[int, Future] = {}
 
     # 어느 스레드에서든 호출 가능
@@ -218,16 +229,23 @@ class AgentRegistry:
         if seq is None:
             self._handle(conn, msg)
             return
+        if conn.resending:  # 다음 연결에서 순서대로 다시 온다
+            return
         boot, last = self._seen.get(conn.user_id, (None, 0))
         if boot == msg.get("boot") and seq <= last:  # 재연결 때 다시 온 것. 글자가 두 번 쌓이지 않게 거른다
             self._ack(conn, seq)
             return
         try:
             self._handle_waiting_db(conn, msg)
-        except Exception:
+        except Exception as e:
             if conn.closed:  # 표시하지 않으면 다시 연결될 때 Agent가 다시 보내 이어서 처리한다
                 raise
-            # 끝내 못 했다. 표시하고 넘어간다: 같은 메시지를 계속 다시 받아 막히면 안 된다
+            if is_save_failure(e):
+                # 저장하지 못했으니 ack하지 않는다. ack하면 Agent가 지워 끝난 해석이 '중지됨'이 되고 처음부터 다시 돌리게 된다
+                conn.resending = True
+                conn.close_socket(RESEND_CODE, "save failed")
+                raise
+            # 저장 문제가 아니라 처리 코드의 문제다. 다시 받아도 같으니 표시하고 넘어간다: 같은 메시지로 막히면 안 된다
             if "dropped" in self.handlers:
                 self.handlers["dropped"](conn, msg)
             self._seen[conn.user_id] = (msg.get("boot"), seq)
@@ -237,15 +255,15 @@ class AgentRegistry:
         self._ack(conn, seq)
 
     def _handle_waiting_db(self, conn: AgentConnection, msg: dict):
-        """DB 잠김은 금방 풀린다. 바로 ack하면 Agent가 지워 버려 턴 끝이 사라지고 대화가 '진행 중'에 갇힌다."""
+        """저장 실패는 대개 금방 풀린다(DB 잠김·보안 프로그램). 바로 ack하면 Agent가 지워 버려 턴 끝이 사라지고 대화가 '진행 중'에 갇힌다."""
         end = time.monotonic() + DB_RETRY_SEC
         while True:
             try:
                 return self._handle(conn, msg)
-            except OperationalError as e:
-                if "locked" not in str(e).lower() or conn.closed or time.monotonic() > end:
+            except Exception as e:
+                if not is_save_failure(e) or conn.closed or time.monotonic() > end:
                     raise
-                log.warning("DB가 잠겨 Agent 메시지 처리를 다시 시도합니다: %s", msg.get("type"))
+                log.warning("저장하지 못해 Agent 메시지 처리를 다시 시도합니다: %s (%s)", msg.get("type"), e)
                 time.sleep(DB_RETRY_POLL_SEC)
 
     def _ack(self, conn: AgentConnection, seq: int):

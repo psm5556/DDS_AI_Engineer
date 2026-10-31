@@ -106,6 +106,8 @@ def pick_entry(body: str) -> tuple[str, str | None]:
         return "connect", None
     if "묶음" in body and "올려" in body:
         return "recipe", None
+    if _meaning_of(body) is not None:  # "DOE가 무슨 뜻이에요?"는 DOE를 돌려 달라는 말이 아니다
+        return "question", None
     asking = any(k in body for k in _ASKING_WORD) and not any(k in body for k in _DOING_WORD)
     if any(k in body for k in _MODEL_WORD) and not asking and ("만들" not in body or "공유" in body):
         return "model", None
@@ -116,6 +118,24 @@ def pick_entry(body: str) -> tuple[str, str | None]:
     if any(k in body for k in _ASKING_WORD) and not any(k in body for k in _DOING_WORD) and pick_mode(body) == "branin":
         return "question", None
     return "flow", None
+
+
+_ASKS_MEANING = re.compile(r"(뭐야|뭐예요|뭔가요|뭐지|뭘까|무엇인가요|무엇이야|무슨 뜻|무슨 말|뜻이|뜻은)")
+_THIS_PROJECT = ("이 ", "이번", "지금", "현재", "내 ", "우리", "최근", "몇", "프로젝트", "스터디")  # "이 모델 R²가 뭐야?"는 말뜻이 아니라 내 값을 묻는 것이다
+_TERMS = {
+    "R²": "R²(결정계수)는 예측 모델이 실제 값을 얼마나 잘 따르는지 나타내는 값입니다. 1에 가까울수록 정확합니다.",
+    "DOE": "DOE(실험 계획법)는 적은 해석 횟수로 설계 범위를 고르게 살피도록 해석할 점을 고르는 방법입니다.",
+    "Simulator": "Simulator는 해석 없이 설계변수를 바꿔 결과를 바로 예측하는 화면입니다.",
+    "시뮬레이터": "Simulator는 해석 없이 설계변수를 바꿔 결과를 바로 예측하는 화면입니다.",
+    "Output": "Output(출력)은 해석 결과에서 뽑는 값입니다. 예: 최대 응력, 질량.",
+}
+
+
+def _meaning_of(body: str) -> str | None:
+    """말뜻을 묻는 일반 질문의 답. 아니면 None. 낱말에 'R²'나 '모델'이 들었다고 프로젝트를 뒤지면 일반 질문에 도구를 쓰게 된다."""
+    if not _ASKS_MEANING.search(body) or any(k in body for k in _THIS_PROJECT):
+        return None
+    return next((text for word, text in _TERMS.items() if word in body), "그 말은 이 작업과 관련된 설명을 드릴 수 있습니다. 어떤 값이나 화면에서 보셨는지 알려 주시면 그에 맞게 설명하겠습니다.")
 
 
 def tool_error_text(e: Exception) -> str:
@@ -598,7 +618,7 @@ class DemoAgent:
             post = {"tool": "python", "script": script.group(0)}
         r = await s.tool("dds-study", "add_outputs", {"study_id": st["study_id"], "outputs": [{"name": name.group(1) if name else "extra"}], "post": post})
         got = next(iter(r["extracted"].values()), 0)
-        await s.say(f"Output을 추가했습니다. 완료 케이스 {r['complete_cases']}건 중 {got}건에서 뽑았고, {r['skipped_no_agent']}건은 뽑지 못했습니다. {r.get('note', '')}".strip())
+        await s.say(f"Output을 추가했습니다. 완료 케이스 {r['complete_cases']}건 중 {got}건에서 뽑았고, {r['skipped_no_agent'] + r['other_pc']}건은 뽑지 못했습니다. {r.get('note', '')}".strip())
 
     async def _takeover_run(self, s, st: dict, body: str):
         rec = await s.tool("dds-study", "restore_recipe", {"study_id": st["study_id"]})
@@ -737,7 +757,11 @@ class DemoAgent:
         await s.say("\n".join(lines) + field_note + "\n\n오른쪽 **Simulator** 탭에서 바로 값을 바꿔 볼 수 있습니다.")
 
     async def _answer(self, s, body: str):
-        """조회는 Flow 없이 바로 답한다."""
+        """조회는 Flow 없이 바로 답한다. 말뜻을 묻는 일반 질문은 도구 없이 답한다."""
+        meaning = _meaning_of(body)
+        if meaning is not None:
+            await s.say(meaning)
+            return
         if "툴" in body:  # 없는 툴이 있어도 표·기존 결과 작업은 그대로 된다
             tools = (await s.tool("dds-cae", "list_tools", {}))["tools"]
             ready = [t["name"] for t in tools if t["status"] == "ready"]

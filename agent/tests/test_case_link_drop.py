@@ -47,10 +47,13 @@ def _started(s: Stack, name: str) -> tuple[int, int, Path]:
     """케이스 하나를 돌려 솔버가 뜰 때까지 기다린다. 'go' 파일을 만들 때까지 끝나지 않는다."""
     base = s.tmp / name
     base.mkdir()
-    script = base / "solver.py"
-    script.write_text(SOLVER.format(base=str(base)), encoding="utf-8")
+    # 스크립트는 프로젝트 폴더 안의 상대 경로만 받는다(서버·Agent 둘 다 검사)
+    ws = s.tmp / "ws"
+    project = next(iter(sorted(ws.glob(f"P{s.pid:04d}_*"))), ws / f"P{s.pid:04d}_시험")
+    (project / "scripts").mkdir(parents=True, exist_ok=True)
+    (project / "scripts" / f"{name}_solver.py").write_text(SOLVER.format(base=str(base)), encoding="utf-8")
     sid = s.c.post(f"/api/projects/{s.pid}/studies", json={
-        "name": name, "adapter": "script", "adapter_config": {"tool": "python", "script": str(script)},
+        "name": name, "adapter": "script", "adapter_config": {"tool": "python", "script": f"scripts/{name}_solver.py"},
         "variables": [{"name": "x", "lower": 0, "upper": 1}], "objectives": [{"name": "y", "goal": "min"}]}).json()["id"]
     assert s.c.post(f"/api/studies/{sid}/doe", json={"n": 1, "method": "lhs", "seed": 1}).status_code == 200
     assert s.c.post(f"/api/studies/{sid}/run", json={}).json() == {"queued": 1}
@@ -83,7 +86,7 @@ def test_brief_drop_never_ends_the_solver(stack):
         pid = int((base / "pid").read_text())
         _drop(s, sid)
         r = member.post(f"/api/studies/{sid}/stop", json={})
-        assert r.status_code == 403 and "이 작업을 내 PC에서 이어서 하기" in r.json()["detail"]
+        assert r.status_code == 403 and "내 PC로 복사해서 하기" in r.json()["detail"]
         _back(s)
         wait_for(lambda: s.c.get(f"/api/studies/{sid}").json()["stalled"] == 0, what="끊김 표시 해제")
         assert _alive(pid) and _case(s, sid)["status"] == "running", s.log_tail()

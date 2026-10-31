@@ -728,7 +728,7 @@ class AgentHub:
             log.exception("안내를 저장하지 못했습니다: %s", content[:100])
 
     def _on_dropped(self, conn: AgentConnection, m: dict):
-        """DB 문제로 끝내 저장하지 못한 메시지. 빠진 줄 모르게 두지 않고 턴이 끝날 때 알린다."""
+        """처리 코드 문제로 넘어간 메시지(저장 실패는 여기 오지 않고 Agent가 다시 보낸다). 빠진 줄 모르게 두지 않고 턴이 끝날 때 알린다."""
         st = self.by_sid.get(m.get("session_id"))
         if st and st.user_id == conn.user_id and m.get("type") == "agent.event":
             st.lost_output += 1

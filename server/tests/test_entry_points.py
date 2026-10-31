@@ -1207,10 +1207,9 @@ def test_e16_member_continues_without_my_pc(client):  # noqa: F811
     assert m["n_train"] == 10 and m["created_by"] == member_user["id"]
     assert client.post(f"/api/models/{m['id']}/deploy", headers=member).json()["deployed"]
     assert client.post(f"/api/models/{m['id']}/predict", json={"params": {"thickness": 2, "width": 20}}, headers=member).status_code == 200
-    # 내 원본이 필요한 Output 추가는 이유와 할 일을 알린다
-    r = client.post(f"/api/studies/{sid}/outputs", headers=member, json={"outputs": [{"name": "mass"}], "post": {"tool": "python", "script": "scripts/ex.py"}}).json()
-    assert r["queued"] == 0 and r["skipped"] == 10 and "PC Agent" in r["note"] and "PC를 켠" in r["note"]
-    # 내 PC가 켜져 있으면 그 PC로 간다(원본은 거기 있다)
+    # Output 추가는 주인만: 내 PC가 꺼져 있든 켜져 있든 멤버의 요청으로 내 PC에서 스크립트를 돌리지 않는다
+    r = client.post(f"/api/studies/{sid}/outputs", headers=member, json={"outputs": [{"name": "mass"}], "post": {"tool": "python", "script": "scripts/ex.py"}})
+    assert r.status_code == 403 and "님만 추가할 수 있습니다" in r.json()["detail"] and "내 PC로 복사해서 하기" in r.json()["detail"]
     sent = []
 
     class _Conn:
@@ -1220,16 +1219,22 @@ def test_e16_member_continues_without_my_pc(client):  # noqa: F811
             sent.append(msg)
     registry.conns[me["id"]] = _Conn()
     try:
-        r = client.post(f"/api/studies/{sid}/outputs", headers=member, json={"outputs": [{"name": "mass2"}], "post": {"tool": "python", "script": "scripts/ex.py"}}).json()
+        r = client.post(f"/api/studies/{sid}/outputs", headers=member, json={"outputs": [{"name": "mass2"}], "post": {"tool": "python", "script": "scripts/ex.py"}})
+        assert r.status_code == 403 and sent == []
+        # 주인이 하면 내 PC로 간다(원본은 거기 있다)
+        r = client.post(f"/api/studies/{sid}/outputs", headers=admin, json={"outputs": [{"name": "mass2"}], "post": {"tool": "python", "script": "scripts/ex.py"}}).json()
     finally:
         registry.conns.pop(me["id"], None)
         service._extracting.pop(sid, None)
     assert r["queued"] == 10 and sent[0]["run_dir"] == "D:/내결과/c0" and sent[0]["adapter"] == "data"
+    # 주인의 PC가 꺼져 있으면 이유와 할 일을 알린다
+    r = client.post(f"/api/studies/{sid}/outputs", headers=admin, json={"outputs": [{"name": "mass3"}], "post": {"tool": "python", "script": "scripts/ex.py"}}).json()
+    assert r["queued"] == 0 and r["skipped"] == 10 and "PC Agent" in r["note"] and "PC를 켠" in r["note"]
     # 표에서 온 행은 뽑을 원본이 없다
     rep2 = _import(client, admin, pid, rows=_rows(5, seed=11), name="표만").json()
-    r = client.post(f"/api/studies/{rep2['study_id']}/outputs", headers=member, json={"outputs": [{"name": "mass"}]}).json()
+    r = client.post(f"/api/studies/{rep2['study_id']}/outputs", headers=admin, json={"outputs": [{"name": "mass"}]}).json()
     assert r["no_source"] == 5 and "행 추가" in r["note"]
-    r = client.post(f"/api/studies/{rep2['study_id']}/outputs", headers=member, json={"outputs": [{"name": "m3"}], "post": {"tool": "python", "script": "a.py"}}).json()
+    r = client.post(f"/api/studies/{rep2['study_id']}/outputs", headers=admin, json={"outputs": [{"name": "m3"}], "post": {"tool": "python", "script": "a.py"}}).json()
     assert r["queued"] == 0 and r["no_source"] == 5 and "표에서 온" in r["note"]
     # 레시피: 멤버가 내려받아 이어 쓴다. 만든 사람이 보인다
     sid3 = client.post(f"/api/projects/{pid}/studies", headers=admin, json={

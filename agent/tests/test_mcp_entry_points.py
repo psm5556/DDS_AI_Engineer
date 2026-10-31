@@ -766,6 +766,20 @@ def test_demo_says_what_is_missing_instead_of_running_branin(env, tmp_path):
     assert _no_flow(env) and dds_study.list_studies()["studies"] == []
 
 
+@pytest.mark.parametrize("question, word", [("R²가 뭐야?", "결정계수"), ("DOE가 무슨 뜻이에요?", "실험 계획법"), ("Simulator가 뭐예요?", "해석 없이")])
+def test_demo_meaning_question_uses_no_tool(env, question, word):
+    """말뜻을 묻는 일반 질문은 프로젝트를 뒤지지 않는다. 낱말 'R²'가 들었다고 조회로 보내면 일반 질문에 도구를 쓴다."""
+    s = _DemoHarness()
+    assert word in _chat(s, FIRST + question)
+    assert s.calls == [] and _no_flow(env)
+
+
+def test_demo_question_about_my_values_still_looks_them_up(env):
+    s = _DemoHarness()
+    _chat(s, FIRST + "이 모델 R²가 뭐야?")
+    assert s.calls == ["dds-study.list_studies", "dds-study.list_models"]
+
+
 def test_demo_simple_question_needs_no_flow_and_follow_up_keeps_first_paragraph(env, tmp_path):
     s = _DemoHarness()
     assert "스터디가 없습니다" in _chat(s, FIRST + "이 프로젝트에 모델 몇 개 있어?")
@@ -1178,13 +1192,14 @@ def test_demo_takeover_shows_author_and_explains_what_needs_the_owner_pc(env, cl
     assert f"{author}님이 만든 스크립트" in reply and "돌리지 않았습니다" in reply and env.study(plain)["counts"] == {}
     flow = env.c.get(f"/api/flows/{m3.flow_id}", headers=env.h).json()
     assert flow["status"] == "review" and f"{author}님이 만든 스크립트" in json.dumps(flow["nodes"], ensure_ascii=False)
-    # 내 PC에서 돈 케이스의 Output은 이유와 할 일을 말한다
+    # 내 PC에서 돈 케이스의 Output은 주인만 추가한다. 멤버 AI는 이유와 할 일을 말한다
     env.c.post(f"/api/studies/{plain}/doe", json={"n": 2, "seed": 1}, headers=env.h)
     for c in env.cases(plain):
         service.on_case_status({"case_id": c["id"], "status": "complete", "results": {"y": 1.0}, "run_dir": "C:/my/run"})
     m4 = _DemoAll()
     reply = _chat_all(m4, "입력없음 이어받아 Output mass 추가해 줘 scripts/run.py")
-    assert "뽑지 못했습니다" in reply and "그 PC를 켠" in reply and "→" in reply
+    assert "님만 추가할 수 있습니다" in reply and "내 PC로 복사해서 하기" in reply and "→" in reply
+    assert not [c for c in env.cases(plain) if "mass" in (c["results"] or {})]
 
 
 @pytest.mark.parametrize("text,entry", [

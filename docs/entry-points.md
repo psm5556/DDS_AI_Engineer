@@ -56,7 +56,7 @@
 | 실행 중에 내 PC와 끊긴 케이스 | 서버 | 데이터 탭에 이유가 보인다. 중지와 그 케이스 다시 돌리기는 실행한 사람만 한다(멤버는 403). 잠깐 끊긴 것이면 솔버는 계속 돌고 다시 연결되면 결과를 받는다. 내가 중지했으면 다시 연결될 때 솔버를 끝낸다 |
 | 결과를 전하기 전에 내 PC Agent가 다시 시작 | 내 PC | 서버가 먼저 묻고, 그 PC의 `case.json`이 끝났다고 하면 그 결과를 받는다. 끝나지 않았을 때만 중지로 처리한다 |
 | 입력 모델이 필요한 재해석 | 멤버 PC | 대화 첨부로 서버에 있는 파일만 받을 수 있다. 없으면 어떤 파일이 필요한지 안내하고 돌리지 않는다 |
-| 내 PC 케이스에서 Output 추가 | 내 PC | 멤버 PC에 있는 케이스만 뽑고, 나머지는 "그 PC를 켠 뒤 다시 요청"이라고 이유와 할 일을 말한다. 켜고 다시 요청하면 그 PC에서 뽑는다. 서버의 `case.h5`로 대신 뽑는 경로는 없다(3D 학습은 서버 사본으로 된다) |
+| 내 PC 케이스에서 Output 추가 | 내 PC | 멤버는 하지 못한다. "○○님만 추가할 수 있습니다 → ○○님에게 요청하거나 '내 PC로 복사해서 하기'"라고 이유와 할 일을 말한다. 남의 PC에서 스크립트를 돌리지 않는다. 주인이 하면 주인의 PC에 있는 케이스만 뽑고, 멤버 PC의 케이스는 뽑지 않았다고 말한다. 서버의 `case.h5`로 대신 뽑는 경로는 없다(3D 학습은 서버 사본으로 된다) |
 
 ## 4. 실제 AI로 재기
 
@@ -89,32 +89,32 @@ python3 scripts/pc_verify.py chat "이 프로젝트에 모델 몇 개 있어?" -
 <!-- 결과표 시작 -->
 | ID | 결과 | 걸린 시간 | 확인 수 | 측정값 |
 |---|---|---:|---:|---|
-| E0 | 통과 | 41.9초 | 7 | cases=26; best_f=0.739; r2={"f": 0.988}; propose_sec=9.04; run_sec=31.39 |
-| E1 | 통과 | 2.5초 | 14 | rows=25; solved=0; chats=0; fixed={"재질": "SS400", "하중": 1000.0}; r2={"최대 응력": 0.984, "효율": 1.0}; quality="good"; pred_error_pct=1.05; total_sec=1.96 |
-| E1a | 통과 | 37.3초 | 11 | questions=1; first_reply_sec=9.58; answer_turn_sec=3.5; flows=0; r2={"최대 응력": 0.975, "효율": 1.0} |
-| E1b | 통과 | 20.3초 | 26 | read={"천 단위 쉼표": {"행": 12, "등록": 12, "제외": 0}, "퍼센트": {"행": 12, "등록": 12, "제외": 0}, "빈 행·빈 열": {"행": 12, "등록": 12, "제외": 0}, "따옴표 안 줄바꿈": {"행": 12, "등록": 12, "제외": 0}, "병합 셀 빈칸": {"행": 12, "등록": 12, "제외": 0}, "수식 오류": {"행": 12, "등록": 10, "제외": 2}, "머리글 없음": {"행": 12, "등록": 12, "제외": 0}, "제목 줄·단위·한글": {"행": 12, "등록": 12, "제외": 0}}; encrypted_status={"암호화.xlsx": 400, "암호화.csv": 400}; encrypted_reply="보안 프로그램으로 암호화되어 읽을 수 없습니다 → 엑셀에서 표를 복사해 붙여 넣으세요" |
-| E2 | 통과 | 14.2초 | 6 | cases=16; solved=0; original_changed=0; r2={"s": 0.914}; turn_sec=11.53 |
-| E2b | 통과 | 13.6초 | 3 | registered=12; join={"key": "id", "matched": 12, "only_left": ["12", "13"], "only_right": [], "duplicates_left": [], "duplicates_right": []}; excluded=0 |
-| E3 | 통과 | 16.6초 | 4 | versions=[1, 2]; rows_v2=20; share_model_version=2; r2_v2={"stress": 0.975} |
-| E3b | 통과 | 21.7초 | 6 | duplicates=12; models=1 |
-| E4 | 통과 | 14.9초 | 5 | candidates=3; verified=false; cases_added=0; best_pred=7.708; best_true=8.176 |
-| E5 | 통과 | 15.5초 | 44 | chat_reply="표를 불러오지 못했습니다. 데이터 행이 1개뿐입니다. 예측 모델에는 3행 이상이 필요합니다 → 행을 더 복사해 붙여 넣으세요" |
-| E6 | 통과 | 74.9초 | 6 | cases=68; cases_resolved_for_output=0; version_with_output=10; rolled_back_to=9; flow_sec=51.4 |
-| E7 | 통과 | 28.3초 | 4 | flows=0; reports=[1, 1]; turn_sec=8.54 |
-| E8 | 통과 | 14.5초 | 5 | flows=0; tools=["list_models", "list_studies"]; first_reply_sec=[9.86, 0.3] |
-| E9 | 통과 | 17.4초 | 6 | missing_tools=28; ready_tools=0; r2={"stress": 0.944}; missing_tool_error="명령 실패(None): abaqus cae noGUI= --\n실행 파일을 찾을 수 없습니다: abaqus ([WinError 2] 지정된 파일을 찾을 수 없습니다) → 웹앱 'CA" |
-| E10 | 통과 | 47.1초 | 4 | question_sec=0.28; table_sec=2.96; flow_status_during="review"; studies=2 |
-| E11 | 통과 | 64.9초 | 6 | first_turn_sec=8.76; next_turn_sec=[0.28, 0.28, 0.28]; follow_up={"turns": 3, "process_starts": 0, "session_new": 0, "session_load": 0}; reconnect={"process_starts": 0, "session_load": 0}; server_restart={"process_starts": 0, "session_load": 0}; cli_death={"process_starts": 1, "session_load": 1, "session_new": 0} |
-| E12 | 통과 | 38.7초 | 9 | csv_rows=8; filled=4; solved_later=4; run_before_connect=400; reply_after_connect="해석 방법을 연결했습니다. 대기 중인 4점을 돌리는 작업 흐름을 올렸습니다. **승인**을" |
-| E13 | 통과 | 17.2초 | 6 | cases=8; auto_output="mises_max"; r2={"mises_max": 1.0}; field_nodes=40 |
-| E14 | 통과 | 12.4초 | 5 | found="지난 브래킷"; copied_cases=0; outsider_status=403 |
-| E15 | 통과 | 61.2초 | 14 | old_cases=26; new_cases=26; old_changed=0; new_model_version=1; old_share_pred=5.918 |
-| E15b | 통과 | 33.6초 | 8 | new_cases=4; model_factor=100.0 |
-| E16b | 통과 | 49.7초 | 12 | released=3; kept_results={"y": 2.432393213732834, "z2": 2.9253833041493293} |
-| E16 | 통과 | 82.8초 | 28 | member_cases=4; owner_cases=6; versions=[1, 2, 3]; member_pred_y_at_1_1=1.991; output_note="Output을 추가했습니다. 완료 케이스 10건 중 4건에서 뽑았고, 6건은 뽑지 못했습니다. 6건은 해석 파일이 그 케이스를 등록한 사람의 PC에 있는데 PC Agent가 꺼져 있어 뽑지 못했습니다 → 그 PC를 "; card="박과장님이 만든 스크립트: scripts/run.py, scripts/extract.py 이 PC에서 박과장님이 만든 스크립트 실행  "; permission="박과장님이 만든 스크립트로 4케이스 해석" |
-| PV | 통과 | 87.6초 | 9 | first_reply_sec=10.0; saved=["agent", "attachments", "cases_run", "checks", "deployed_models", "errors", "finished", "first_reply_sec"]; fail_exit_code=1 |
-| UI | 통과 | 116.8초 | 10 | screens=40; shots="C:\\Users\\psm55\\AppData\\Local\\Temp\\dds_e_ih3i20vt\\ui_shots" |
-| UId | 통과 | 102.9초 | 2 | screens=36 |
+| E0 | 통과 | 41.2초 | 7 | cases=26; best_f=0.739; r2={"f": 0.988}; propose_sec=8.25; run_sec=31.43 |
+| E1 | 통과 | 1.6초 | 14 | rows=25; solved=0; chats=0; fixed={"재질": "SS400", "하중": 1000.0}; r2={"최대 응력": 0.984, "효율": 1.0}; quality="good"; pred_error_pct=1.05; total_sec=0.99 |
+| E1a | 통과 | 33.3초 | 11 | questions=1; first_reply_sec=7.98; answer_turn_sec=3.36; flows=0; r2={"최대 응력": 0.975, "효율": 1.0} |
+| E1b | 통과 | 18.4초 | 26 | read={"천 단위 쉼표": {"행": 12, "등록": 12, "제외": 0}, "퍼센트": {"행": 12, "등록": 12, "제외": 0}, "빈 행·빈 열": {"행": 12, "등록": 12, "제외": 0}, "따옴표 안 줄바꿈": {"행": 12, "등록": 12, "제외": 0}, "병합 셀 빈칸": {"행": 12, "등록": 12, "제외": 0}, "수식 오류": {"행": 12, "등록": 10, "제외": 2}, "머리글 없음": {"행": 12, "등록": 12, "제외": 0}, "제목 줄·단위·한글": {"행": 12, "등록": 12, "제외": 0}}; encrypted_status={"암호화.xlsx": 400, "암호화.csv": 400}; encrypted_reply="보안 프로그램으로 암호화되어 읽을 수 없습니다 → 엑셀에서 표를 복사해 붙여 넣으세요" |
+| E2 | 통과 | 12.7초 | 6 | cases=16; solved=0; original_changed=0; r2={"s": 0.914}; turn_sec=10.44 |
+| E2b | 통과 | 13.0초 | 3 | registered=12; join={"key": "id", "matched": 12, "only_left": ["12", "13"], "only_right": [], "duplicates_left": [], "duplicates_right": []}; excluded=0 |
+| E3 | 통과 | 16.2초 | 4 | versions=[1, 2]; rows_v2=20; share_model_version=2; r2_v2={"stress": 0.975} |
+| E3b | 통과 | 21.5초 | 6 | duplicates=12; models=1 |
+| E4 | 통과 | 14.3초 | 5 | candidates=3; verified=false; cases_added=0; best_pred=7.708; best_true=8.176 |
+| E5 | 통과 | 15.1초 | 44 | chat_reply="표를 불러오지 못했습니다. 데이터 행이 1개뿐입니다. 예측 모델에는 3행 이상이 필요합니다 → 행을 더 복사해 붙여 넣으세요" |
+| E6 | 통과 | 73.7초 | 6 | cases=68; cases_resolved_for_output=0; version_with_output=10; rolled_back_to=9; flow_sec=50.69 |
+| E7 | 통과 | 31.3초 | 4 | flows=0; reports=[1, 1]; turn_sec=9.09 |
+| E8 | 통과 | 14.4초 | 5 | flows=0; tools=["list_models", "list_studies"]; first_reply_sec=[10.66, 0.28] |
+| E9 | 통과 | 17.8초 | 6 | missing_tools=28; ready_tools=0; r2={"stress": 0.944}; missing_tool_error="명령 실패(None): abaqus cae noGUI= --\n실행 파일을 찾을 수 없습니다: abaqus ([WinError 2] 지정된 파일을 찾을 수 없습니다) → 웹앱 'CA" |
+| E10 | 통과 | 47.0초 | 4 | question_sec=0.28; table_sec=3.01; flow_status_during="review"; studies=2 |
+| E11 | 통과 | 63.8초 | 6 | first_turn_sec=8.78; next_turn_sec=[0.28, 0.28, 0.28]; follow_up={"turns": 3, "process_starts": 0, "session_new": 0, "session_load": 0}; reconnect={"process_starts": 0, "session_load": 0}; server_restart={"process_starts": 0, "session_load": 0}; cli_death={"process_starts": 1, "session_load": 1, "session_new": 0} |
+| E12 | 통과 | 33.1초 | 9 | csv_rows=8; filled=4; solved_later=4; run_before_connect=400; reply_after_connect="해석 방법을 연결했습니다. 대기 중인 4점을 돌리는 작업 흐름을 올렸습니다. **승인**을" |
+| E13 | 통과 | 15.8초 | 6 | cases=8; auto_output="mises_max"; r2={"mises_max": 1.0}; field_nodes=40 |
+| E14 | 통과 | 12.0초 | 5 | found="지난 브래킷"; copied_cases=0; outsider_status=403 |
+| E15 | 통과 | 59.7초 | 14 | old_cases=26; new_cases=26; old_changed=0; new_model_version=1; old_share_pred=5.918 |
+| E15b | 통과 | 31.6초 | 8 | new_cases=4; model_factor=100.0 |
+| E16b | 통과 | 44.9초 | 12 | released=3; kept_results={"y": 2.432393213732834, "z2": 2.9253833041493293} |
+| E16 | 통과 | 93.6초 | 29 | member_cases=4; owner_cases=6; versions=[1, 2, 3]; member_pred_y_at_1_1=1.991; output_note="이어받지 못했습니다. 이 Output은 박과장님 PC의 해석 결과에서 뽑아야 합니다. 박과장님만 추가할 수 있습니다 → 박과장님에게 요청하거나 '내 PC로 복사해서 하기'로 다시 해석하세요."; card="박과장님이 만든 스크립트: scripts/run.py, scripts/extract.py 이 PC에서 박과장님이 만든 스크립트 실행  "; permission="박과장님이 만든 스크립트로 4케이스 해석" |
+| PV | 통과 | 90.5초 | 9 | first_reply_sec=10.5; saved=["agent", "attachments", "cases_run", "checks", "deployed_models", "errors", "finished", "first_reply_sec"]; fail_exit_code=1 |
+| UI | 통과 | 229.1초 | 10 | screens=53; shots="C:\\Users\\psm55\\AppData\\Local\\Temp\\dds_e_xk79m81v\\ui_shots" |
+| UId | 통과 | 157.0초 | 2 | screens=49 |
 
-실행: 2026-10-31 18:51, Python 3.12.10, 서버 응답 500 0건, 서버 Traceback 0건, 전체 1055초.
+실행: 2026-10-31 20:15, Python 3.12.10, 서버 응답 500 0건, 서버 Traceback 1건, 전체 1209초.
 <!-- 결과표 끝 -->

@@ -453,7 +453,7 @@ def import_new(db: Session, project_id: int, body: dict, user_id: int) -> dict:
         name = str(body.get("name") or "").strip() or (Path(str(body.get("source") or "")).stem or "불러온 표")
         study = models.Study(project_id=project_id, name=service._unique_study_name(db, project_id, name[:200]), variables=variables,
                              objectives=body.get("objectives") or [], constraints=body.get("constraints") or [],
-                             outputs=_output_defs(out_cols), adapter="data", adapter_config={}, flow_id=body.get("flow_id"))
+                             outputs=_output_defs(out_cols), adapter="data", adapter_config={}, flow_id=body.get("flow_id"), created_by=user_id)
         db.add(study)
         db.flush()
         counts = _register(db, study, good, user_id, str(body.get("source") or ""))

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, Copy, FolderOpen, Link2, RotateCcw, Share2, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { del, get, post } from "../api";
+import { ApiError, del, get, post } from "../api";
 import { Field3DPanel } from "../components/Field3DPanel";
 import { Modal } from "../components/Modal";
 import { ModelTrust } from "../components/ModelTrust";
@@ -22,6 +22,7 @@ interface Pred { mean: Record<string, number>; std: Record<string, number> }
 interface Batch { mean: Record<string, number[]>; std: Record<string, number[]> }
 interface Share { id: number; token: string; note: string; enabled: boolean; uses: number; expires_at: string | null; created_at: string; warning?: string | null }
 const SWEEP_N = 41;
+const CLOSED = [403, 404, 410]; // 권한이 끊김·지워짐·공유 기간 끝. 다시 눌러도 되지 않는다
 const MANY_VARS = 6; // 이보다 많으면 민감도 변수는 목록으로 고르고 예측 결과를 슬라이더 위에 둔다. 표로 시작하면 입력이 수십 개일 수 있다
 
 /** 이 버전이 쓰는 3D 모델 목록(되돌리면 3D도 그때 것으로 돌아간다) */
@@ -53,27 +54,37 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
   const [sweepVar, setSweepVar] = useState<string | null>(null);
   const [sweep, setSweep] = useState<Batch | null>(null);
   const [stale, setStale] = useState(false); // 입력을 바꿨는데 새 예측이 아직 오지 않음(값을 흐리게)
+  const [failure, setFailure] = useState<{ reason: string; closed: boolean } | null>(null); // 옛 숫자를 그대로 두면 영향이 없는 줄 알고 판단한다
+  const closed = !!failure?.closed;
   const seq = useRef(0);
   useTheme(); // 테마를 바꾸면 민감도 그래프 색도 다시 그린다
   useEffect(() => { if (spec) { setX(mid0); setSweepVar(spec.variables[0]?.name ?? null); } }, [spec, mid0]);
+  useEffect(() => { setFailure(null); }, [base]); // 탭에서 다른 버전으로 바꾸면 지난 버전의 오류를 들고 가지 않는다
 
   // 입력이 바뀌면 바로 예측 (짧게 모아서). 늦게 도착한 옛 응답이 새 값을 덮지 않게 순서 번호를 본다
   useEffect(() => {
-    if (!spec || !Object.keys(x).length) return;
+    if (!spec || closed || !Object.keys(x).length) return;
     const n = ++seq.current;
     setStale(true);
+    const fail = (e: unknown) => {
+      if (n !== seq.current) return;
+      setPred(null);
+      setSweep(null);
+      setStale(false);
+      setFailure({ reason: e instanceof Error ? e.message : String(e), closed: e instanceof ApiError && CLOSED.includes(e.status) });
+    };
     const t = setTimeout(() => {
       post<Pred>(`${base}/predict`, { params: x })
-        .then((r) => { if (n === seq.current) { setPred(r); setStale(false); } })
-        .catch(() => { if (n === seq.current) setStale(false); });
+        .then((r) => { if (n === seq.current) { setPred(r); setStale(false); setFailure(null); } })
+        .catch(fail);
       const v = spec.variables.find((q) => q.name === sweepVar);
       if (v) {
         const pts = Array.from({ length: SWEEP_N }, (_, i) => ({ ...x, [v.name]: v.lower + ((v.upper - v.lower) * i) / (SWEEP_N - 1) }));
-        post<Batch>(`${base}/predict_batch`, { points: pts }).then((r) => { if (n === seq.current) setSweep(r); }).catch(() => {});
+        post<Batch>(`${base}/predict_batch`, { points: pts }).then((r) => { if (n === seq.current) setSweep(r); }).catch(fail);
       }
     }, 120);
     return () => clearTimeout(t);
-  }, [x, spec, base, sweepVar]);
+  }, [x, spec, base, sweepVar, closed]);
 
   if (error) {
     const msg = <div className="notice err">{(error as Error).message}</div>;
@@ -95,7 +106,7 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
           return (
             <li key={o}>
               <span className="n">{o}{obj && <small>{obj.goal === "min" ? "최소화 목표" : "최대화 목표"}</small>}</span>
-              <b>{pred ? fmt(pred.mean[o], 4) : "…"}</b>
+              <b className={!pred && failure ? "none" : undefined}>{pred ? fmt(pred.mean[o], 4) : failure ? "없음" : "…"}</b>
               <small className="u">{pred ? `± ${fmt(2 * pred.std[o], 2)}` : ""}</small>
             </li>
           );
@@ -126,6 +137,13 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
 
       <ModelTrust model={spec.model} source={spec.data_source} />
 
+      {failure && (
+        <div className={`notice ${closed ? "err" : "warn"} sim-failed`} role="alert"><AlertTriangle size={14} />
+          <span>{closed
+            ? `이 Simulator를 더 쓸 수 없어 예측값을 지웠습니다. ${failure.reason} → ${spec.shared_by ? `공유한 ${spec.shared_by}님에게 문의하세요.` : "프로젝트 관리자에게 문의하세요."}`
+            : `예측하지 못해 값을 지웠습니다. ${failure.reason} → 입력을 바꾸거나 잠시 뒤 다시 시도하세요.`}</span></div>
+      )}
+
       {/* 왼쪽: 입력(설계변수)과 출력(예측값)을 붙여 둔다 · 오른쪽: 3D 형상·필드와 민감도 */}
       <div className="sim2">
         <div className={`sim-side ${many ? "many" : ""}`}>
@@ -133,13 +151,13 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
           {many && results}
           <section className="block sim-inputs">
             <div className="block-head"><h3>설계변수</h3><span className="grow" />
-              <button className="small ghost" onClick={() => setX(mid0)} title="모든 변수를 범위 가운데로"><RotateCcw size={13} />가운데로</button></div>
+              <button className="small ghost" disabled={closed} onClick={() => setX(mid0)} title="모든 변수를 범위 가운데로"><RotateCcw size={13} />가운데로</button></div>
             {spec.variables.map((q) => (
               <div key={q.name} className="sim-var">
                 <div className="sim-var-top"><span title={q.name}>{q.name}{q.unit && <small className="sim-var-unit"> [{q.unit}]</small>}</span>
                   <input type="number" inputMode="decimal" value={x[q.name] !== undefined ? Number(x[q.name].toPrecision(5)) : ""}
-                    min={q.lower} max={q.upper} onChange={(e) => setX({ ...x, [q.name]: Number(e.target.value) })} aria-label={`${q.name} 값`} /></div>
-                <input type="range" min={q.lower} max={q.upper} step={(q.upper - q.lower) / 200} value={x[q.name] ?? q.lower}
+                    min={q.lower} max={q.upper} disabled={closed} onChange={(e) => setX({ ...x, [q.name]: Number(e.target.value) })} aria-label={`${q.name} 값`} /></div>
+                <input type="range" min={q.lower} max={q.upper} step={(q.upper - q.lower) / 200} value={x[q.name] ?? q.lower} disabled={closed}
                   onChange={(e) => setX({ ...x, [q.name]: Number(e.target.value) })} aria-label={q.name} />
                 <div className="sim-var-range small muted"><span>{fmt(q.lower, 4)}</span><span>{fmt(q.upper, 4)}</span></div>
               </div>
@@ -149,7 +167,7 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
         </div>
 
         <div className="sim-main">
-          <Field3DPanel listUrl={fieldList(spec)} baseUrl={fieldBase} params={x} />
+          {!closed && <Field3DPanel listUrl={fieldList(spec)} baseUrl={fieldBase} params={x} />}
           <section className="block">
             <div className="block-head"><h3>민감도</h3><span className="small muted">한 변수만 바꿀 때의 변화 · 주홍 점이 지금 설계</span><span className="grow" />
               {many ? <select className="sim-sweep" value={sweepVar ?? ""} aria-label="민감도를 볼 변수" onChange={(e) => setSweepVar(e.target.value)}>{spec.variables.map((q) => <option key={q.name} value={q.name}>{q.name}</option>)}</select>

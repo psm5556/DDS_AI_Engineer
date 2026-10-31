@@ -1318,3 +1318,8 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .table-job.done > svg { color: var(--ok); }
 .table-job.failed > svg { color: var(--warn-ink); }
 .table-job .grow { min-width: 0; overflow-wrap: anywhere; }
+
+/* ---------- Simulator: 예측이 끊겼을 때. 옛 숫자 대신 이유를 보인다 ---------- */
+.sim-failed { margin-bottom: var(--sp-3); }
+.sim-out li b.none { font-size: var(--fs-14); font-weight: 400; color: var(--ink-3); }
+.sim-var input:disabled { background: var(--panel-2); color: var(--ink-3); }

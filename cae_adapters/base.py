@@ -44,6 +44,17 @@ class CaeAdapter(ABC):
         return CaseOutcome("failed", error=f"'{self.label or self.name}' 실행 방식은 Output 추가 추출을 지원하지 않습니다")
 
 
+def check_script_path(script) -> str:
+    """케이스 스크립트는 프로젝트 폴더 안의 상대 경로만 받는다. 절대 경로를 받으면 남의 PC에서 아무 파일이나 돌릴 수 있다.
+    서버(스터디 설정을 받을 때)와 PC Agent(실행하기 직전)가 같은 규칙을 쓴다."""
+    n = str(script if script is not None else "").replace("\\", "/")
+    parts = n.split("/")
+    # 점·공백뿐인 이름은 Windows가 끝을 지워 상위 폴더가 될 수 있다. ':'은 드라이브(c:a.py)와 대체 스트림(a.py:b)이다
+    if not n.strip() or n.startswith("/") or ":" in n or "\x00" in n or any(p not in ("", ".") and not p.strip(" .") for p in parts):
+        raise ValueError(f"스크립트 경로는 프로젝트 폴더 안의 상대 경로만 씁니다: {str(script)[:120]} → 파일을 scripts/에 두고 'scripts/이름.py'처럼 적어 주세요")
+    return n
+
+
 def resolve_cmd(exe: str) -> list[str]:
     """Windows .bat/.cmd(abaqus.bat 등)는 cmd /c 로 감싼다."""
     path = shutil.which(exe) or exe

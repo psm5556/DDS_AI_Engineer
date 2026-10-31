@@ -22,7 +22,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from cae_adapters import REGISTRY, get_adapter
+from cae_adapters.base import check_script_path
 from cae_adapters.data import NOT_RUNNABLE
+from cae_adapters.recipe_bundle import config_scripts
 
 from .. import models
 from ..config import settings
@@ -52,6 +54,12 @@ def check_flow(db: Session, project_id: int, flow_id: int | None):
     flow = db.get(models.Flow, flow_id)
     if flow is None or flow.project_id != project_id:
         raise ValueError(f"작업 흐름 {flow_id}번이 이 프로젝트에 없습니다 → 흐름 번호를 비우거나 지금 흐름의 번호를 주세요")
+
+
+def check_config_scripts(config: dict | None):
+    """스크립트 경로를 받는 곳(스터디 만들기·복제·해석 방법 연결·Output 추가)에서 부른다. PC Agent도 실행 직전에 다시 본다."""
+    for script in config_scripts(config or {}):
+        check_script_path(script)
 
 
 def check_constraints(constraints: list[dict] | None):
@@ -227,6 +235,7 @@ def set_adapter(db: Session, study: models.Study, adapter: str, config: dict) ->
         raise ValueError(f"알 수 없는 해석 방법입니다: {adapter} → 쓸 수 있는 것: {', '.join(REGISTRY)}")
     if adapter == "script" and not config.get("tool"):
         raise ValueError("해석 방법에 tool이 없습니다 → 예: {\"tool\": \"abaqus_cae\", \"script\": \"scripts/plate.py\"}")
+    check_config_scripts(config)
     if is_running(study.id):
         gone = stalled_view(db, study)
         if gone["stalled"]:
@@ -250,7 +259,7 @@ def _unique_study_name(db: Session, project_id: int, name: str) -> str:
     return f"{name} ({i})"
 
 
-def clone_study(db: Session, study: models.Study, overrides: dict, project_id: int | None = None) -> models.Study:
+def clone_study(db: Session, study: models.Study, overrides: dict, project_id: int | None = None, owner_id: int | None = None) -> models.Study:
     """지난번과 같은 설정으로 새 스터디를 만든다. 케이스·모델은 옮기지 않으므로 옛 결과와 Simulator는 그대로다."""
     from .recipe import copy_to
 
@@ -262,6 +271,7 @@ def clone_study(db: Session, study: models.Study, overrides: dict, project_id: i
     for v in variables:
         if v["lower"] >= v["upper"]:
             raise ValueError(f"변수 '{v['name']}'의 하한이 상한보다 작아야 합니다 → 범위를 고쳐 주세요")
+    check_config_scripts(overrides.get("adapter_config"))
     pid = project_id or study.project_id
     base = (overrides.get("name") or "").strip() or f"{study.name} 복사"
     info: dict = {"cloned_from": {"study_id": study.id, "name": study.name}}
@@ -272,7 +282,7 @@ def clone_study(db: Session, study: models.Study, overrides: dict, project_id: i
                        constraints=overrides.get("constraints") if overrides.get("constraints") is not None else study.constraints,
                        outputs=overrides.get("outputs") if overrides.get("outputs") is not None else [o for o in study.outputs or [] if not o.get("auto")],
                        adapter=adapter, adapter_config=overrides.get("adapter_config") if overrides.get("adapter_config") is not None else study.adapter_config,
-                       import_info=info)
+                       import_info=info, created_by=owner_id)
     db.add(new)
     db.flush()
     copy_to(study, new)
@@ -354,7 +364,7 @@ def _display_names(db: Session, user_ids: list[int]) -> list[str]:
 def _only_runner(db: Session, cases: list[models.Case], action: str) -> str:
     who = ", ".join(_display_names(db, [c.run_by for c in cases if c.run_by]))
     return (f"다른 멤버({who}님)가 실행한 케이스는 실행한 사람만 {action} 수 있습니다. 연결이 잠깐 끊긴 것이면 해석은 그 PC에서 계속 돌고 있습니다 "
-            "→ 직접 돌리려면 '이 작업을 내 PC에서 이어서 하기'를 쓰세요")
+            "→ 직접 돌리려면 '내 PC로 복사해서 하기'를 쓰세요")
 
 
 def stalled_view(db: Session, study: models.Study) -> dict:
@@ -470,7 +480,8 @@ def _check_run_allowed(db: Session, study: models.Study, user_id: int, flow_id: 
                                 "→ 작업 흐름 카드에 만든 사람을 적어 제안하고, 승인한 뒤 그 흐름 번호로 돌리세요")
 
 
-def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, user_id: int, flow_id: int | None = None) -> int:
+def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, user_id: int, flow_id: int | None = None) -> tuple[int, int]:
+    """돌려주는 값: (보낸 케이스 수, 이미 돌고 있어 보내지 않은 수)."""
     from ..agent.link import AgentError, registry
 
     with SessionLocal() as db:
@@ -486,11 +497,16 @@ def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, us
         # 불러온 행은 다시 돌리지 않는다. 입력 모델이 없을 수 있고 사용자의 데이터를 덮어쓰면 안 된다
         cases = [c for c in q.all() if c.source != "import"]
         if not cases:
-            return 0
+            return 0, 0
         # 다른 사람 PC에서 도는 케이스를 넘겨받지 않는다. 실행자가 바뀌면 그 PC가 다시 연결될 때 돌던 솔버가 끝나고 결과도 버려진다
         theirs = [c for c in cases if c.status in ACTIVE and c.run_by not in (None, user_id)]
         if theirs:
             raise NeedsApproval(_only_runner(db, theirs, "다시 돌릴"))
+        # 내 PC에서 도는 케이스도 다시 보내지 않는다. 같은 해석이 두 번 돌고, 다시 보내면 Agent의 중지 신호도 덮인다
+        already = sum(c.status in ACTIVE for c in cases)
+        cases = [c for c in cases if c.status not in ACTIVE]
+        if not cases:
+            return 0, already
         conn = registry.get(user_id)
         if conn is None and not (study.adapter == "mock" and settings.allow_server_mock):
             raise AgentError("케이스를 실행할 PC Agent가 연결되어 있지 않습니다. 내 PC에서 dds-agent를 실행하세요.")
@@ -515,7 +531,7 @@ def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, us
             conn.send({"type": "case.run", **job})
         else:
             _pool.submit(_run_on_server, job)
-    return len(jobs)
+    return len(jobs), already
 
 
 def stop_cases(study_id: int, case_ids: list[int] | None, user_id: int) -> dict:
@@ -655,11 +671,32 @@ def _steps_for(study: models.Study, names: list[str]) -> list[dict]:
     return steps
 
 
+def study_owner(study: models.Study) -> int | None:
+    """스터디의 주인. 작업 구조가 들어오면 작업 주인으로 바뀐다. 주인 칸이 생기기 전 스터디는 처음 돌린 사람이 주인이다."""
+    if study.created_by is not None:
+        return study.created_by
+    return next((c.run_by for c in study.cases if c.run_by is not None), None)
+
+
+def _check_output_owner(db: Session, study: models.Study, user_id: int):
+    """Output 추가는 그 사람 PC에서 스크립트를 돌리는 일이다. 멤버도 관리자도 남의 작업에는 하지 못한다."""
+    owner = study_owner(study)
+    if owner in (None, user_id):
+        return
+    name = _display_names(db, [owner])[0]
+    if any(c.run_by in (owner, None) and c.run_dir for c in study.cases):
+        raise PermissionError(f"이 Output은 {name}님 PC의 해석 결과에서 뽑아야 합니다. {name}님만 추가할 수 있습니다 "
+                              f"→ {name}님에게 요청하거나 '내 PC로 복사해서 하기'로 다시 해석하세요.")
+    raise PermissionError(f"{name}님의 작업이라 볼 수만 있습니다 → {name}님에게 요청하거나 '내 PC로 복사해서 하기'로 내 작업을 만드세요.")
+
+
 def add_outputs(db: Session, study: models.Study, outputs: list[dict], post, extract_existing: bool, user_id: int) -> dict:
     """Output을 목록에 넣고, 추출 단계를 이후 케이스에 붙이고, 이미 해석을 마친 케이스에서도 추출한다."""
+    _check_output_owner(db, study, user_id)
     steps = post if isinstance(post, list) else [post] if post else []
     if steps and study.adapter not in ("script", "data"):
         raise ValueError("추출 단계(post)는 script 어댑터 스터디에만 붙일 수 있습니다")
+    check_config_scripts({"post": steps})
     names = [o["name"] for o in outputs]
     have = {o["name"]: o for o in study.outputs or []}
     for o in outputs:
@@ -677,7 +714,7 @@ def add_outputs(db: Session, study: models.Study, outputs: list[dict], post, ext
     study.version += 1
     db.commit()
     can = study.adapter == "mock" or bool(_steps_for(study, names))
-    queued, skipped = extract_outputs_async(study.id, names, user_id) if extract_existing and can else (0, 0)
+    queued, skipped, other_pc = extract_outputs_async(study.id, names, user_id) if extract_existing and can else (0, 0, [])
     publish_cases_table(db, study)
     manager.publish({"type": "study_updated", "project_id": study.project_id, "data": {"id": study.id}})
     no_source = sum(c.status == "complete" and c.source == "import" and not c.run_dir for c in study.cases)
@@ -689,25 +726,33 @@ def add_outputs(db: Session, study: models.Study, outputs: list[dict], post, ext
     elif no_source:
         notes.append(f"표에서 온 {no_source}건은 원본 해석 파일이 없어 뽑지 못합니다 → 그 출력 열을 더한 표를 데이터 탭의 '행 추가'로 붙여 넣으세요.")
     if skipped:
-        notes.append(f"{skipped}건은 해석 파일이 그 케이스를 등록한 사람의 PC에 있는데 PC Agent가 꺼져 있어 뽑지 못했습니다 → 그 PC를 켠 뒤 다시 요청하세요. 학습·Simulator는 PC 없이 쓸 수 있습니다.")
-    return {"outputs": study.outputs, "queued": queued, "skipped": skipped, "no_source": no_source, "note": " ".join(notes)}
+        notes.append(f"{skipped}건은 해석 파일이 내 PC에 있는데 PC Agent가 꺼져 있어 뽑지 못했습니다 → 그 PC를 켠 뒤 다시 요청하세요. 학습·Simulator는 PC 없이 쓸 수 있습니다.")
+    if other_pc:
+        who = ", ".join(_display_names(db, sorted(set(other_pc))))
+        notes.append(f"{len(other_pc)}건은 해석 파일이 {who}님 PC에 있어 뽑지 않았습니다. 다른 사람 PC에서 스크립트를 돌리지 않습니다 → {who}님에게 요청하세요.")
+    return {"outputs": study.outputs, "queued": queued, "skipped": skipped, "other_pc": len(other_pc), "no_source": no_source, "note": " ".join(notes)}
 
 
-def extract_outputs_async(study_id: int, names: list[str], user_id: int, case_ids: list[int] | None = None) -> tuple[int, int]:
-    """완료된 케이스마다 그 케이스를 해석한 PC Agent로 case.extract를 보낸다. 연결이 없으면 건너뛴다(mock은 서버에서)."""
+def extract_outputs_async(study_id: int, names: list[str], user_id: int, case_ids: list[int] | None = None) -> tuple[int, int, list[int]]:
+    """완료된 케이스를 내 PC Agent로 보내 뽑는다. 내 PC가 꺼져 있으면 건너뛴다(mock은 서버에서).
+    다른 사람이 돌린 케이스는 파일이 그 사람 PC에 있지만, 동의 없이 그 PC에서 스크립트를 돌리지 않는다.
+    돌려주는 값: (보낸 수, 내 PC가 꺼져 건너뛴 수, 다른 사람 PC에 있어 뺀 케이스의 실행자들)."""
     from ..agent.link import registry
 
     with SessionLocal() as db:
         study = db.get(models.Study, study_id)
         project = db.get(models.Project, study.project_id)
         steps = _steps_for(study, names)
-        jobs, skipped = [], 0
+        jobs, skipped, other_pc = [], 0, []
         for c in study.cases:
             if c.status != "complete" or (case_ids and c.id not in case_ids) or c.id in _extracting.get(study_id, set()):
                 continue
             if c.source == "import" and not c.run_dir:  # 표에서 온 행: 뽑을 원본 해석 파일이 없다
                 continue
-            conn = registry.get(c.run_by or user_id)
+            if c.run_by not in (None, user_id):
+                other_pc.append(c.run_by)
+                continue
+            conn = registry.get(user_id)
             if conn is None and not (study.adapter == "mock" and settings.allow_server_mock):
                 skipped += 1
                 continue
@@ -723,7 +768,7 @@ def extract_outputs_async(study_id: int, names: list[str], user_id: int, case_id
             conn.send(job)
         else:
             _pool.submit(_extract_on_server, job)
-    return len(jobs), skipped
+    return len(jobs), skipped, other_pc
 
 
 def _extract_missing(study: models.Study, case: models.Case):

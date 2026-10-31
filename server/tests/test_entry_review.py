@@ -473,7 +473,7 @@ def test_cases_on_a_dead_pc_are_settled_only_by_who_ran_them(client):  # noqa: F
     assert blocked.status_code == 409 and "중지" in blocked.json()["detail"]
     # 멤버는 멈추지 못한다. 끊김은 PC가 꺼졌다는 뜻이 아니어서 솔버가 돌고 있을 수 있다
     denied = client.post(f"/api/studies/{sid}/stop", json={}, headers=member)
-    assert denied.status_code == 403 and "이 작업을 내 PC에서 이어서 하기" in denied.json()["detail"]
+    assert denied.status_code == 403 and "내 PC로 복사해서 하기" in denied.json()["detail"]
     assert client.get(f"/api/studies/{sid}", headers=member).json()["stalled"] == 3
     # 실행한 사람은 PC 없이 정리한다
     r = client.post(f"/api/studies/{sid}/stop", json={}, headers=admin).json()

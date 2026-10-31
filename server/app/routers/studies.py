@@ -7,6 +7,7 @@ from urllib.parse import quote
 import numpy as np
 import base64
 import hashlib
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
@@ -55,7 +56,7 @@ def list_studies(project: models.Project = Depends(get_project_for_member), db: 
 
 @router.post("/projects/{project_id}/studies", response_model=schemas.StudyResponse)
 def create_study(body: schemas.StudyCreate, project: models.Project = Depends(get_project_for_member),
-                 db: Session = Depends(get_db)):
+                 user=Depends(get_current_user), db: Session = Depends(get_db)):
     if body.adapter not in REGISTRY:
         raise HTTPException(400, f"알 수 없는 어댑터: {body.adapter}")
     for v in body.variables:
@@ -64,13 +65,14 @@ def create_study(body: schemas.StudyCreate, project: models.Project = Depends(ge
     constraints = [c.model_dump(exclude_none=True) for c in body.constraints]
     try:
         service.check_constraints(constraints)
+        service.check_config_scripts(body.adapter_config)
     except ValueError as e:
         raise HTTPException(400, str(e))
     # 결과 카드는 스터디 이름으로 묶인다. 같은 이름이면 옛 스터디의 카드가 새 데이터로 덮인다
     s = models.Study(project_id=project.id, name=service._unique_study_name(db, project.id, body.name), variables=[v.model_dump(exclude_none=True) for v in body.variables],
                      objectives=[o.model_dump() for o in body.objectives],
                      constraints=constraints, adapter=body.adapter,
-                     outputs=[o.model_dump() for o in body.outputs], adapter_config=body.adapter_config)
+                     outputs=[o.model_dump() for o in body.outputs], adapter_config=body.adapter_config, created_by=user.id)
     db.add(s)
     db.commit()
     manager.publish({"type": "study_updated", "project_id": project.id, "data": {"id": s.id}})
@@ -320,7 +322,7 @@ def clone_study(study_id: int, body: schemas.StudyCloneRequest, user=Depends(get
         require_member(body.project_id, user, db)
     fields = body.model_dump(exclude_none=True, exclude={"project_id"})
     try:
-        return service.clone_study(db, s, fields, body.project_id)
+        return service.clone_study(db, s, fields, body.project_id, owner_id=user.id)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -410,7 +412,7 @@ def create_doe(study_id: int, body: schemas.DoeRequest, user=Depends(get_current
 def run_cases(study_id: int, body: schemas.RunRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
     _study(study_id, user, db)
     try:
-        n = service.run_cases_async(study_id, body.case_ids, body.dry_run, user.id, body.flow_id)
+        n, already = service.run_cases_async(study_id, body.case_ids, body.dry_run, user.id, body.flow_id)
     except service.NoRunMethod as e:
         raise HTTPException(400, str(e))
     except service.NeedsApproval as e:
@@ -419,6 +421,8 @@ def run_cases(study_id: int, body: schemas.RunRequest, user=Depends(get_current_
         raise HTTPException(400, str(e))
     except AgentError as e:
         raise HTTPException(409, str(e))
+    if already:
+        return {"queued": n, "already_running": already, "note": f"케이스 {already}건은 이미 돌고 있어 다시 시작하지 않았습니다."}
     if n:
         return {"queued": n}
     # 아무것도 돌리지 않았으면 왜 그런지 말한다. queued 0만 보면 돌아가는 줄 안다
@@ -461,6 +465,8 @@ def add_outputs(study_id: int, body: schemas.OutputAddRequest, user=Depends(get_
     s = _study(study_id, user, db)
     try:
         return service.add_outputs(db, s, [o.model_dump() for o in body.outputs], body.post, body.extract_existing, user.id)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -901,14 +907,21 @@ def _b64(a) -> str:
     return base64.b64encode(np.ascontiguousarray(a).tobytes()).decode("ascii")
 
 
-_rom_cache: dict[int, object] = {}
+_rom_cache: dict[tuple[str, int], object] = {}  # (경로, 파일 시각) → 모델. 번호는 지운 뒤 다시 쓰이므로 키로 쓰면 지운 형상이 새 모델 자리에 보인다
 
 
 def _rom(fm: models.FieldModel):
-    if fm.id not in _rom_cache:
+    try:
+        key = (fm.path, os.stat(fm.path).st_mtime_ns)
+    except OSError:
+        raise HTTPException(404, "3D 모델 파일이 서버에 없습니다 → 이 스터디의 3D 모델을 다시 학습하세요") from None
+    if key not in _rom_cache:
         from ..study.fieldmodel import FieldROM
-        _rom_cache[fm.id] = FieldROM.load(fm.path)
-    return _rom_cache[fm.id]
+        rom = FieldROM.load(fm.path)
+        for old in [k for k in _rom_cache if k[0] == fm.path]:  # 다시 학습한 파일의 옛 모델은 다시 쓰이지 않는다
+            _rom_cache.pop(old, None)
+        _rom_cache[key] = rom
+    return _rom_cache[key]
 
 
 def _field_mesh(fm: models.FieldModel) -> dict:

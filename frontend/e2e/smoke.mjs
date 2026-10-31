@@ -251,13 +251,31 @@ await step("표로 바로 Simulator", async () => {
   await page.waitForTimeout(2000);
   await shot("table-poor-shared-link");
   if (await page.getByRole("link", { name: /프로젝트 열기/ }).count()) throw new Error("공유 링크 화면에 프로젝트 버튼이 있습니다");
+  // 쓰는 중에 공유가 끊기면 옛 숫자를 남기지 않는다: 값을 지우고 이유를 보이고 입력을 막는다
+  await page.locator(".sim-out li b").first().filter({ hasNotText: "…" }).waitFor({ timeout: 15000 });
+  const stopped = await page.evaluate((u) => fetch(u, { method: "DELETE", headers: { Authorization: `Bearer ${localStorage.getItem("dds.token")}` } }).then((r) => r.status), `/api/shares/${token}`);
+  if (stopped >= 400) throw new Error(`공유를 중지하지 못했습니다: ${stopped}`);
+  await page.locator('.sim-var input[type="number"]').first().fill(String(await page.locator('.sim-var input[type="range"]').first().getAttribute("min")));
+  const gone = page.locator(".sim-failed");
+  await gone.waitFor({ timeout: 8000 });
+  const why = await gone.innerText();
+  if (!why.includes("예측값을 지웠습니다") || !why.includes("공유가 중지") || !why.includes("→")) throw new Error(`공유 중지 안내가 이상합니다: ${why}`);
+  if ((await page.locator(".sim-out li b").first().innerText()) !== "없음") throw new Error("공유가 끊겼는데 옛 예측값이 남아 있습니다");
+  if (!(await page.locator('.sim-var input[type="range"]').first().isDisabled())) throw new Error("공유가 끊겼는데 입력을 막지 않았습니다");
+  await shot("table-share-stopped");
 });
 
 await step("넓은 Simulator에서 프로젝트로 돌아오기", async () => {
   await page.goto(BASE + "/simulators");
   await page.waitForTimeout(1000);
   await shot("table-simulators");
+  // 카드(기본)와 목록 모두 어디서 온 데이터인지 보인다
+  if (!(await page.locator(".sim-card").filter({ hasText: "불러온 표 31행" }).count())) throw new Error("Simulator 카드에 데이터 출처가 없습니다");
+  await page.getByRole("button", { name: "목록" }).click();
   if (!(await page.locator(".sim-row").filter({ hasText: "불러온 표 31행" }).count())) throw new Error("Simulator 목록에 데이터 출처가 없습니다");
+  if (!(await page.locator(".sim-row .chip.err").filter({ hasText: "정확도 낮음" }).count())) throw new Error("Simulator 목록에 낮은 정확도 표시가 없습니다");
+  await page.getByRole("button", { name: "카드" }).click();
+  if (!(await page.locator(".sim-card .chip.err").filter({ hasText: "정확도 낮음" }).count())) throw new Error("Simulator 카드에 낮은 정확도 표시가 없습니다");
   const sims = await apiGet("/api/simulators");
   const bracket = sims.mine.find((x) => x.study_name === bracketStudy);
   // 현재 버전이 아닌 v2를 넓게 본 뒤 돌아와도 그 버전이 골라져 있어야 한다. 캔버스를 닫아 둔 경우까지 본다

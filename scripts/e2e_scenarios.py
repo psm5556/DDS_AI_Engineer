@@ -785,11 +785,11 @@ def e8(w: World, tmp: Path, c: Check):
     study = o.post(f"/api/projects/{pid}/studies/import/text", {"text": text, "name": "조회용"})["study_id"]
     train_poll(o, study)
     b = chat(o, sid, "지금 모델 정확도 알려 줘")
-    d = chat(o, sid, "넌 무엇을 할 수 있어?")
+    d = chat(o, sid, "R²가 뭐야?")
     c("스터디 1개" in b.reply and "R²" in b.reply, "있는 모델의 정확도를 답함")
     c({x.split(".")[-1] for x in a.tools + b.tools} <= {"list_studies", "list_models"}, "읽기 도구만 씀")
     c(flows(o, pid) == [] and counts(o, study) == {"complete": 10}, "Flow 0, 케이스 변화 0")
-    c(d.tools == [] and d.reply, "일반 질문은 도구 없이")
+    c(d.tools == [] and "결정계수" in d.reply, "일반 질문은 도구 없이")
     c["flows"] = 0
     c["tools"] = sorted({x.split(".")[-1] for x in a.tools + b.tools})
     c["first_reply_sec"] = [a.first_reply_sec, b.first_reply_sec]
@@ -1095,7 +1095,7 @@ def e16b(w: World, tmp: Path, c: Check):
     run = m.post(f"/api/studies/{slow}/run", {})
     c(run["queued"] == 0 and "꺼져" in run["note"] and "→" in run["note"], "다시 돌려도 이유와 할 일을 들음")
     denied = m.c.post(f"/api/studies/{slow}/stop", json={})
-    c(denied.status_code == 403 and "이 작업을 내 PC에서 이어서 하기" in denied.json()["detail"], "멤버는 다른 사람의 케이스를 멈추지 못함")
+    c(denied.status_code == 403 and "내 PC로 복사해서 하기" in denied.json()["detail"], "멤버는 다른 사람의 케이스를 멈추지 못함")
     stop = o.post(f"/api/studies/{slow}/stop", {})
     c(stop["released"] == 3, "실행한 사람은 PC 없이 정리")
     c(counts(m, slow) == {"cancelled": 3} and not m.get(f"/api/studies/{slow}")["stalled"], "정리됨")
@@ -1205,17 +1205,18 @@ def e16(w: World, tmp: Path, c: Check):
     v3 = models_of(m, pid)[0]
     c(v3["deployed"] and v3["n_train"] == 10, "10건으로 재학습·배포")
 
-    # 내 원본이 필요한 Output 추가: 이유와 할 일
-    t2 = chat(m, mid, "스크립트 스터디 이어받아서 Output extra_y 추가해 줘 scripts/extract.py")
-    c(not t2.errors and "그 PC를 켠" in t2.reply and "→" in t2.reply, "내 PC가 필요하다고 이유와 할 일을 말함")
-    got = [x for x in cases_of(m, sid) if "extra_y" in (x["results"] or {})]
-    c(len(got) == 4 and all(x["run_by"] == m.id for x in got), "멤버 PC에 있는 4건만 뽑음")
-    # 안내대로 내 PC를 켜고 다시 요청하면 된다
+    # Output 추가는 주인만: 멤버가 부탁해도 남의 PC에서 스크립트를 돌리지 않는다
     w.owner_pc.start()
-    t3 = chat(m, mid, "스크립트 스터디 이어받아서 Output extra_y 추가해 줘 scripts/extract.py")
-    wait_for(lambda: not m.get(f"/api/studies/{sid}")["extracting"], timeout=60, what="추출 끝")
-    all_cases = cases_of(m, sid)
-    c(not t3.errors and all("extra_y" in (x["results"] or {}) for x in all_cases), "내 PC를 켜면 나머지 6건도 뽑힘")
+    t2 = chat(m, mid, "스크립트 스터디 이어받아서 Output extra_y 추가해 줘 scripts/extract.py")
+    c(f"{OWNER_NAME}님만 추가할 수 있습니다" in t2.reply and "내 PC로 복사해서 하기" in t2.reply and "→" in t2.reply, "멤버는 추가하지 못하고 이유와 할 일을 들음")
+    c(not any("extra_y" in (x["results"] or {}) for x in cases_of(m, sid)), "내 PC가 켜져 있어도 멤버 요청으로는 돌지 않음")
+    # 주인이 직접 하면 내 PC의 6건만 뽑는다. 멤버 PC의 4건에서는 돌리지 않고 그렇다고 말한다
+    t3 = chat(o, o.new_chat(pid), "스크립트 스터디 이어받아서 Output extra_y 추가해 줘 scripts/extract.py")
+    wait_for(lambda: not o.get(f"/api/studies/{sid}")["extracting"], timeout=60, what="추출 끝")
+    all_cases = cases_of(o, sid)
+    got = [x for x in all_cases if "extra_y" in (x["results"] or {})]
+    c(not t3.errors and len(got) == 6 and all(x["run_by"] == o.id for x in got), f"주인 PC의 6건만 뽑힘 {len(got)}")
+    c(MEMBER_NAME in t3.reply and "→" in t3.reply, "멤버 PC에 있는 4건은 뽑지 않았다고 말함")
     w.owner_pc.stop()
 
     # 입력 모델이 PC에 없을 때: 무엇이 필요한지 말하고, 첨부로 받으면 이어 간다

@@ -770,6 +770,27 @@ def _locked_handler(monkeypatch, name: str, times: int):
     return calls
 
 
+def _always_locked(conn, m):
+    from sqlalchemy.exc import OperationalError
+    raise OperationalError("UPDATE", {}, Exception("database is locked"))
+
+
+def _until_closed(ws):
+    """서버가 소켓을 닫을 때까지 읽어, 닫힌 코드와 그 사이 받은 ack를 돌려준다."""
+    from types import SimpleNamespace
+
+    from starlette.websockets import WebSocketDisconnect
+
+    acks = []
+    try:
+        while True:
+            m = ws.receive_json()
+            if m.get("type") == "agent.ack":
+                acks.append(m["seq"])
+    except WebSocketDisconnect as e:
+        return SimpleNamespace(code=e.code, acks=acks)
+
+
 def test_db_lock_on_turn_end_is_retried_not_lost(client, me, monkeypatch):
     monkeypatch.setattr(link, "DB_RETRY_POLL_SEC", 0.02)
     chat = _chat(client, me)
@@ -783,19 +804,102 @@ def test_db_lock_on_turn_end_is_retried_not_lost(client, me, monkeypatch):
         assert _until(ws, "agent.ack")["seq"] == 1
 
 
-def test_db_lock_gives_up_with_notice_and_chat_is_not_stuck(client, me, monkeypatch):
+def test_message_that_could_not_be_saved_is_not_acked_and_comes_again(client, me, monkeypatch):
+    """상황 지도 20행: 끝내 저장하지 못한 메시지를 ack하면 Agent가 지워 버린다. 끝난 해석이 '중지됨'이 되고 처음부터 다시 돌리게 된다.
+    ack하지 않고 연결을 닫아 Agent가 outbox에서 처음부터 다시 보내게 한다. 재시도 표시는 뒤의 메시지가 앞질러 ack되지 않게 막는다."""
     monkeypatch.setattr(link, "DB_RETRY_SEC", 0.1)
     monkeypatch.setattr(link, "DB_RETRY_POLL_SEC", 0.02)
     chat = _chat(client, me)
+    event = {"type": "agent.event", "session_id": "sid-lost", "seq": 1, "boot": "boot1",
+             "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "처음에 못 저장한 글자"}}}
     with _ws(client, me) as ws:
         _hello(ws)
         p = _start_turn(client, me, ws, chat, sid="sid-lost")
-        _locked_handler(monkeypatch, "agent.event", 10 ** 6)
-        ws.send_json({"type": "agent.event", "session_id": "sid-lost", "seq": 1, "boot": "boot1",
-                      "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "못 저장한 글자"}}})
-        assert _until(ws, "agent.ack")["seq"] == 1  # 끝내 못 하면 넘어간다. 같은 메시지로 막히지 않는다
-        monkeypatch.undo()
+        with monkeypatch.context() as m:
+            m.setitem(registry.handlers, "agent.event", _always_locked)
+            ws.send_json(event)
+            closed = _until_closed(ws)
+        assert closed.code == link.RESEND_CODE and closed.acks == []
+    # 다시 연결: 같은 메시지가 처음부터 다시 오면 저장하고 ack한다
+    with _ws(client, me) as ws:
+        _hello(ws)
+        ws.send_json(event)
+        assert _until(ws, "agent.ack")["seq"] == 1
         _end(ws, p["turn_id"], chat, "sid-lost", 2)
+        _wait(lambda: not _status(client, me, chat)["busy"])
+    agent_text = [m["content"] for m in _msgs(client, me, chat) if m["role"] == "agent"]
+    assert agent_text == ["처음에 못 저장한 글자"]  # 잃지도 겹치지도 않는다
+    assert not [m for m in _msgs(client, me, chat) if m["role"] == "system" and "빠졌습니다" in m["content"]]
+
+
+def test_later_message_is_not_handled_ahead_of_the_unsaved_one():
+    """ack는 누적이다(seq까지 지운다). 앞이 저장되지 않았는데 뒤를 처리해 ack하면 앞의 것까지 Agent에서 지워진다."""
+    from sqlalchemy.exc import OperationalError
+
+    class Conn:
+        user_id, closed, resending = 991, False, False
+        sent, shut = [], []
+
+        def send(self, m):
+            self.sent.append(m)
+
+        def close_socket(self, code=0, reason=""):
+            self.shut.append(code)
+
+    done = []
+
+    def handler(conn, m):
+        if m["seq"] == 1:
+            raise OperationalError("UPDATE", {}, Exception("database or disk is full"))
+        done.append(m["seq"])
+
+    reg = link.AgentRegistry()
+    reg.on("x", handler)
+    c = Conn()
+    old = link.DB_RETRY_SEC
+    link.DB_RETRY_SEC = 0
+    try:
+        with pytest.raises(OperationalError):
+            reg.dispatch(c, {"type": "x", "seq": 1, "boot": "b"})
+        reg.dispatch(c, {"type": "x", "seq": 2, "boot": "b"})  # 소켓이 닫히기 전에 이미 받아 둔 메시지
+    finally:
+        link.DB_RETRY_SEC = old
+    assert done == [] and c.sent == [] and c.shut == [link.RESEND_CODE]
+    # 다음 연결: 순서대로 처리된다
+    c2 = Conn()
+    c2.sent = []
+    reg.handlers["x"] = lambda conn, m: done.append(m["seq"])
+    reg.dispatch(c2, {"type": "x", "seq": 1, "boot": "b"})
+    reg.dispatch(c2, {"type": "x", "seq": 2, "boot": "b"})
+    assert done == [1, 2] and [m["seq"] for m in c2.sent] == [1, 2]
+
+
+@pytest.mark.parametrize("error, save", [
+    (OSError(28, "No space left on device"), True),
+    (OSError(5, "Input/output error"), True),
+    (FileNotFoundError(2, "없는 파일"), False),  # 다시 받아도 그대로다
+    (link.AgentTimeout("PC Agent가 답하지 않았습니다"), False),  # TimeoutError(OSError)지만 저장 문제가 아니다
+    (KeyError("case_id"), False),
+])
+def test_which_errors_count_as_a_failed_save(error, save):
+    assert link.is_save_failure(error) is save
+
+
+def test_handler_bug_is_noted_and_does_not_block_the_chat(client, me, monkeypatch):
+    """저장 문제가 아닌 예외는 다시 받아도 같다. 넘어가되 빠졌다고 알린다."""
+    chat = _chat(client, me)
+    with _ws(client, me) as ws:
+        _hello(ws)
+        p = _start_turn(client, me, ws, chat, sid="sid-bug")
+
+        def bug(conn, m):
+            raise KeyError("코드 문제")
+        with monkeypatch.context() as m:
+            m.setitem(registry.handlers, "agent.event", bug)
+            ws.send_json({"type": "agent.event", "session_id": "sid-bug", "seq": 1, "boot": "boot1",
+                          "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "처리 못 한 글자"}}})
+            assert _until(ws, "agent.ack")["seq"] == 1
+        _end(ws, p["turn_id"], chat, "sid-bug", 2)
         _wait(lambda: not _status(client, me, chat)["busy"])
         # 안내는 턴을 끝낸 다음에 저장한다(저장이 실패해도 턴이 갇히지 않게)
         notes = _wait(lambda: [m["content"] for m in _msgs(client, me, chat) if m["role"] == "system"])

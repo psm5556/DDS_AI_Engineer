@@ -62,6 +62,7 @@ class CaseExecutor:
         self.queued = 0
         self.running = 0
         self._stops: dict[int, threading.Event] = {}  # 대기·실행 중인 케이스 → 중지 신호
+        self._kinds: dict[int, str | None] = {}  # 대기·실행 중인 케이스 → 해석인가 추출인가. 추출 중에 온 해석은 중복이 아니다
         self._recipes: dict[int, dict[str, str]] = {}  # 스터디 → 서버에 있다고 확인한 스크립트 내용
         self._recipe_lock = threading.Lock()
         self._settling: set[int] = set()  # 다시 연결될 때 서버가 물어 답하는 중인 케이스
@@ -102,12 +103,17 @@ class CaseExecutor:
             log.warning("스크립트 묶음을 올리지 못했습니다 S%s: %s", study_id, e)
 
     def submit(self, job: dict):
-        self.queued += 1
         kind = job.get("type")
+        # 서버가 걸러도 옛 서버·엇갈린 요청이 있을 수 있다. 다시 받아 등록하면 같은 해석이 두 번 돌고 중지 신호가 덮인다
+        if kind == "case.run" and self._kinds.get(job["case_id"]) == "case.run":
+            log.warning("이미 돌고 있는 케이스를 다시 받아 무시합니다: C%s", job["case_id"])
+            return
+        self.queued += 1
         fn = {"case.extract": self._extract, "case.train_sample": self._train_sample}.get(kind, self._run_case)
         stop = threading.Event()
         if kind != "case.train_sample":  # 학습 샘플은 솔버를 돌리지 않아 금방 끝난다
             self._stops[job["case_id"]] = stop
+            self._kinds[job["case_id"]] = kind
         self.pool.submit(self._run, fn, job, stop)
 
     def _run(self, fn: Callable[[dict], None], job: dict, stop: threading.Event):
@@ -125,6 +131,7 @@ class CaseExecutor:
             self.running -= 1
             if self._stops.get(job.get("case_id")) is stop:
                 self._stops.pop(job["case_id"], None)
+                self._kinds.pop(job["case_id"], None)
 
     def cancel(self, case_ids: list[int], extract_ids: list[int] | None = None):
         """사용자가 중지한 케이스: 대기 중이면 시작하지 않고, 실행 중이면 솔버 트리를 끝낸다.

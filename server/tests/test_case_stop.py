@@ -109,12 +109,12 @@ def test_member_cannot_stop_a_case_during_a_brief_drop(client, running, member):
 
     r = client.post(f"/api/studies/{sid}/stop", headers=member, json={})
     assert r.status_code == 403
-    assert "실행한 사람만" in r.json()["detail"] and "이 작업을 내 PC에서 이어서 하기" in r.json()["detail"] and "→" in r.json()["detail"]
+    assert "실행한 사람만" in r.json()["detail"] and "내 PC로 복사해서 하기" in r.json()["detail"] and "→" in r.json()["detail"]
     assert _case(client, admin, sid, ids[0])["status"] == "running"
 
     # 다시 돌리기로 넘겨받는 길도 막는다. 실행자가 바뀌면 다시 연결될 때 같은 솔버가 끝난다
     r = client.post(f"/api/studies/{sid}/run", headers=member, json={"case_ids": ids[:1]})
-    assert r.status_code == 403 and "이 작업을 내 PC에서 이어서 하기" in r.json()["detail"]
+    assert r.status_code == 403 and "내 PC로 복사해서 하기" in r.json()["detail"]
     assert _case(client, admin, sid, ids[0])["run_by"] == me["id"]
 
     # 다시 연결: 돌던 솔버에 중지를 보내지 않고, 결과를 받는다

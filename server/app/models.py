@@ -155,6 +155,7 @@ class Study(TimestampMixin, Base):
     pc_notice = Column(JSON)
     flow_id = Column(Integer)  # 이 스터디를 마지막으로 쓴 작업 흐름. "지난번 흐름대로 다시"에서 흐름 → 스터디를 찾는다
     recipe = Column(JSON)  # 서버에 올린 스크립트 묶음 정보. 스크립트가 없는 멤버 PC가 내려받아 이어 쓴다 (study/recipe.py)
+    created_by = Column(Integer)  # 이 스터디의 주인. 이 칸이 생기기 전 스터디는 비어 있고, 처음 돌린 사람을 주인으로 본다(service.study_owner)
 
     cases = relationship("Case", cascade="all, delete-orphan", order_by="Case.id")
 

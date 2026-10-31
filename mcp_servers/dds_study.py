@@ -120,14 +120,16 @@ def add_outputs(study_id: int, outputs: list[dict[str, str]], post: dict[str, An
           붙이기 전에 dds-cae.run_script로 한 케이스에서 먼저 시험한다. 결과 파일 경로는 args로 넘긴다. 큰 결과 파일을 inputs로 복사하지 않는다.
           불러온 해석 폴더의 케이스는 원본에 쓰지 않으려고 작업 폴더에서 돈다. 스크립트는 args의 {source_dir} 또는 환경변수 DDS_SOURCE_DIR로 원본을 찾는다.
     mock 어댑터는 post 없이 해석함수에서 다시 계산한다.
-    원본 폴더가 있는 PC가 꺼져 있거나 다른 멤버 PC면 추출할 수 없다. skipped_no_agent·note를 사용자에게 알린다.
+    작업 주인만 추가할 수 있다. 남의 스터디는 403이며 그 문구를 사용자에게 그대로 전한다(다른 사람 PC에서 스크립트를 돌리지 않는다).
+    내 PC가 꺼져 있으면 skipped_no_agent, 다른 멤버가 돌린 케이스는 other_pc로 빠진다. note를 사용자에게 알린다.
+    post의 script는 프로젝트 폴더 안의 상대 경로만 받는다.
     """
     r = api.post(f"/api/studies/{study_id}/outputs", {"outputs": outputs, "post": post, "extract_existing": extract_existing})
     st = _wait(study_id, wait_sec)
     cases = api.get(f"/api/studies/{study_id}/cases")
     names = [o["name"] for o in outputs]
     done = [c for c in cases if c["status"] == "complete"]
-    out = {"queued": r["queued"], "skipped_no_agent": r["skipped"], "still_extracting": len(st.get("extracting") or []),
+    out = {"queued": r["queued"], "skipped_no_agent": r["skipped"], "other_pc": r.get("other_pc", 0), "still_extracting": len(st.get("extracting") or []),
            "extracted": {n: sum(1 for c in done if n in (c.get("results") or {})) for n in names}, "complete_cases": len(done)}
     fails = [{"case_id": c["id"], "error": c["error"][-500:]} for c in done if (c.get("error") or "").startswith("Output 추출 실패")][-3:]
     if fails:
