@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  ChevronsUpDown, Loader2, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Settings, Shield, SlidersHorizontal, SquarePen, Sun, Users, Wrench, X,
+  ChevronsUpDown, Inbox, Layers, Loader2, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Send, Settings, Shield, SlidersHorizontal, SquarePen, Star, Sun, Users, Wrench, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -23,7 +23,29 @@ function StatusMark({ p }: { p: Project }) {
   return null;
 }
 
-/** 왼쪽 사이드바 (Claude·Codex 데스크톱 방식): 새 프로젝트 · 툴 · 검색 · 프로젝트(한 줄 평면 목록) · 아래 PC Agent·사용자.
+type ProjectView = "all" | "favorite" | "sent" | "received";
+const VIEW_KEY = "dds.projectView";
+/** 프로젝트 보기. 관리자는 모든 프로젝트를 받지만, 멤버가 아닌 프로젝트는 공유받은 것이 아니다.
+ *  그런 프로젝트도 관리자가 즐겨찾기하면 즐겨찾기에, 관리자가 만들고 빠진 프로젝트에 다른 멤버가 있으면 내가 공유한 것에 보인다 */
+const VIEWS: { id: ProjectView; label: string; icon: typeof Layers; empty: string; has: (p: Project, me: number | undefined) => boolean }[] = [
+  { id: "all", label: "전체", icon: Layers, empty: "아직 프로젝트가 없습니다. 하고 싶은 일을 말해 보세요.", has: () => true },
+  { id: "favorite", label: "즐겨찾기", icon: Star, empty: "즐겨찾기한 프로젝트가 없습니다. 프로젝트 메뉴에서 고르면 여기에 모입니다.", has: (p) => p.is_favorite },
+  { id: "sent", label: "내가 공유한 것", icon: Send, empty: "공유한 프로젝트가 없습니다. 프로젝트 메뉴의 멤버에서 동료를 더하면 여기에 보입니다.",
+    has: (p, me) => p.owner_id === me && p.members.some((m) => m.user_id !== me) },
+  { id: "received", label: "공유 받은 것", icon: Inbox, empty: "공유 받은 프로젝트가 없습니다. 동료가 멤버로 더하면 여기에 보입니다.",
+    has: (p, me) => p.owner_id !== me && p.members.some((m) => m.user_id === me) },
+];
+
+function savedProjectView(): ProjectView {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    return VIEWS.find((x) => x.id === v)?.id ?? "all";
+  } catch { return "all"; }
+}
+
+/** 왼쪽 사이드바 (Claude·Codex 데스크톱 방식): Simulator · 구분선 · 새 프로젝트 · 프로젝트 검색 · 프로젝트 보기 아이콘(전체·즐겨찾기·내가 공유한 것·공유 받은 것)
+ *  · 고른 보기의 평면 목록(최근 작업 순) · 아래 PC Agent·사용자. 접으면 같은 순서로 아이콘만 남는다.
+ *  고른 보기 밖이라도 지금 연 프로젝트는 따로 한 줄 보인다. 방금 만든 프로젝트가 사라진 것처럼 보이지 않게.
  *  대화 전환은 프로젝트 화면 머리글에서 한다 — 사이드바는 한 단계만. */
 export function Sidebar({ layout }: { layout: PanelLayout }) {
   const { user, logout } = useAuth();
@@ -31,6 +53,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
   const loc = useLocation();
   const { theme, toggle: toggleTheme } = useTheme();
   const [q, setQ] = useState("");
+  const [view, setView] = useState<ProjectView>(savedProjectView);
   const [open, setOpen] = useState(false); // 모바일: 서랍 열림
   const [meOpen, setMeOpen] = useState(false);
   const meRef = useRef<HTMLDivElement>(null);
@@ -53,8 +76,9 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
     return (
       <aside className="sidebar rail" aria-label="사이드바 (접힘)">
         <button className="icon-btn rail-btn" onClick={layout.toggle} aria-label="사이드바 펼치기" title="사이드바 펼치기 (Ctrl+B)"><PanelLeftOpen size={18} /></button>
+        <NavLink className="icon-btn rail-btn" to="/simulators" aria-label="Simulator" title="Simulator"><SlidersHorizontal size={18} /></NavLink>
+        <hr className="rail-sep" />
         <Link className="icon-btn rail-btn" to="/" aria-label="새 프로젝트" title="새 프로젝트"><SquarePen size={18} /></Link>
-        <Link className="icon-btn rail-btn" to="/simulators" aria-label="Simulator" title="Simulator"><SlidersHorizontal size={18} /></Link>
         <span className="grow" />
         <AgentStatusRow compact />
         <Link className="icon-btn rail-btn" to="/tools" aria-label="CAD·CAE 툴" title="CAD·CAE 툴"><Wrench size={18} /></Link>
@@ -64,33 +88,37 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
   }
 
   const term = q.trim().toLowerCase();
-  const list = (projects ?? []).filter((p) => !term || p.name.toLowerCase().includes(term) || p.description.toLowerCase().includes(term));
-  const favs = list.filter((p) => p.is_favorite);
-  const mine = list.filter((p) => p.owner_id === user?.id && !p.is_favorite);
-  const shared = list.filter((p) => p.owner_id !== user?.id && !p.is_favorite);
+  const found = (projects ?? []).filter((p) => !term || p.name.toLowerCase().includes(term) || p.description.toLowerCase().includes(term));
+  const chosen = VIEWS.find((v) => v.id === view) ?? VIEWS[0];
+  const list = found.filter((p) => chosen.has(p, user?.id)); // 서버가 최근 작업 순으로 준다
   const current = projects?.find((p) => p.id === pid);
-
-  const group = (title: string, xs: Project[]) => xs.length > 0 && (
-    <div className="side-group">
-      <h4>{title}</h4>
-      {xs.map((p) => {
-        const st = p.flow_status ? FLOW_STATUS[p.flow_status].label : "";
-        return (
-          <div key={p.id} className={`side-item ${p.id === pid ? "active" : ""}`}
-            onContextMenu={(e) => { e.preventDefault(); setMenu({ p, x: e.clientX, y: e.clientY }); }}>
-            <NavLink to={`/projects/${p.id}`} className="side-link" title={[p.name, st].filter(Boolean).join(" · ")}>
-              <span className="side-name">{p.name}</span>
-              {p.members.length > 1 && <Users size={12} className="side-meta" aria-label={`멤버 ${p.members.length}명`} />}
-              <StatusMark p={p} />
-            </NavLink>
-            <button className="side-more" aria-label={`${p.name} 메뉴`} aria-haspopup="menu" title="이름 바꾸기 · 즐겨찾기 · 멤버 · 폴더 열기 · 삭제"
-              onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ p, x: r.left, y: r.bottom + 4 }); }}>
-              <MoreHorizontal size={15} /></button>
-          </div>
-        );
-      })}
-    </div>
-  );
+  const pinned = current && found.includes(current) && !chosen.has(current, user?.id) ? current : null;
+  // 보기 밖 프로젝트의 승인 대기·실패는 목록에 안 보이므로 전체 아이콘에 표시한다. 손이 가야 하는 것을 놓치지 않게.
+  // 관리자라서 보이는 남의 프로젝트는 내 일이 아니므로 세지 않는다. 그러지 않으면 점이 늘 켜져 뜻이 없어진다
+  const hidden = (projects ?? []).filter((p) => p !== pinned && !chosen.has(p, user?.id) && p.members.some((m) => m.user_id === user?.id));
+  const alert = hidden.some((p) => p.flow_status === "review") ? "review" : hidden.some((p) => p.flow_status === "failed") ? "failed" : null;
+  const chooseView = (v: ProjectView) => {
+    setView(v);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* 이번 화면에서만 기억한다 */ }
+  };
+  const item = (p: Project) => {
+    const st = p.flow_status ? FLOW_STATUS[p.flow_status].label : "";
+    return (
+      <div key={p.id} className={`side-item ${p.id === pid ? "active" : ""}`}
+        onContextMenu={(e) => { e.preventDefault(); setMenu({ p, x: e.clientX, y: e.clientY }); }}>
+        <NavLink to={`/projects/${p.id}`} className="side-link" title={[p.name, st].filter(Boolean).join(" · ")}>
+          <span className="side-name">{p.name}</span>
+          {/* 즐겨찾기 보기에서는 모두 즐겨찾기이므로 표시하지 않는다 */}
+          {p.is_favorite && view !== "favorite" && <Star size={12} className="side-fav" fill="currentColor" aria-label="즐겨찾기" />}
+          {p.members.length > 1 && <Users size={12} className="side-meta" aria-label={`멤버 ${p.members.length}명`} />}
+          <StatusMark p={p} />
+        </NavLink>
+        <button className="side-more" aria-label={`${p.name} 메뉴`} aria-haspopup="menu" title="이름 바꾸기 · 즐겨찾기 · 멤버 · 폴더 열기 · 삭제"
+          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ p, x: r.left, y: r.bottom + 4 }); }}>
+          <MoreHorizontal size={15} /></button>
+      </div>
+    );
+  };
 
   return (
     <aside className={`sidebar ${open ? "open" : ""}`} aria-label="사이드바">
@@ -107,20 +135,38 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
           <button className="icon-btn side-fold" onClick={layout.toggle} aria-label="사이드바 접기" title="사이드바 접기 (Ctrl+B)"><PanelLeftClose size={17} /></button>
         </div>
         <nav className="side-nav-list" aria-label="바로 가기">
-          <button className="side-nav" onClick={() => nav("/")}><SquarePen size={16} />새 프로젝트</button>
           <NavLink className="side-nav" to="/simulators" title="내 Simulator와 공유받은 Simulator"><SlidersHorizontal size={16} />Simulator</NavLink>
+          <hr className="side-sep" />
+          <button className="side-nav" onClick={() => nav("/")}><SquarePen size={16} />새 프로젝트</button>
           <label className="side-nav side-find">
             <Search size={16} />
             <input type="search" placeholder="프로젝트 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="프로젝트 검색" />
           </label>
         </nav>
+        <div className="side-views" role="group" aria-label="프로젝트 보기">
+          {VIEWS.map((v) => {
+            const n = found.filter((p) => v.has(p, user?.id)).length;
+            const dot = v.id === "all" && alert;
+            const tip = `${v.label} ${n}개${dot ? ` · ${alert === "review" ? "승인 대기" : "실패"} 있음` : ""}`;
+            // 이름은 글자 풍선으로 보인다. 브라우저 툴팁(title)과 달리 키보드로 왔을 때도 보인다
+            return (
+              <button key={v.id} className={view === v.id ? "on" : ""} onClick={() => chooseView(v.id)} aria-pressed={view === v.id}
+                aria-label={tip} data-tip={tip} data-view={v.id}>
+                <v.icon size={15} />{n > 0 && <small>{n}</small>}
+                {dot && <i className={`side-st-dot ${alert}`} aria-hidden="true" />}
+              </button>
+            );
+          })}
+        </div>
         <div className="side-body">
           {projects === undefined ? <p className="small muted side-empty">불러오는 중</p> : (
             <>
-              {group("즐겨찾기", favs)}
-              {group("내 프로젝트", mine)}
-              {group("함께하는 프로젝트", shared)}
-              {!list.length && <p className="small muted side-empty">{term ? "검색 결과가 없습니다." : "아직 프로젝트가 없습니다. 하고 싶은 일을 말해 보세요."}</p>}
+              {pinned && <div className="side-group side-pinned"><h4>지금 연 프로젝트</h4>{item(pinned)}</div>}
+              <div className="side-group">
+                <h4>{chosen.label}</h4>
+                {list.map(item)}
+                {!list.length && <p className="small muted side-empty">{term ? `'${chosen.label}'에서 찾지 못했습니다.` : chosen.empty}</p>}
+              </div>
             </>
           )}
         </div>

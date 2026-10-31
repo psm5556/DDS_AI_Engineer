@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -20,12 +23,34 @@ def _to_response(p: models.Project, user: models.User, db: Session) -> dict:
             "flow_status": last.status if last else None, "flow_title": last.title if last else None}
 
 
+def _last_work(db: Session, ids: list[int]) -> dict[int, datetime]:
+    """프로젝트별 마지막 작업 시각. 프로젝트 행은 이름을 바꿀 때만 갱신되므로, 하루 종일 일한 프로젝트도 행의 시각만 보면 아래에 머문다.
+    대화·작업 흐름·결과·스터디를 함께 본다."""
+    F, A, S, C, M = models.Flow, models.Artifact, models.Study, models.ChatSession, models.ChatMessage
+    sources = (
+        db.query(F.project_id, func.max(F.updated_at)).filter(F.project_id.in_(ids)).group_by(F.project_id),
+        db.query(A.project_id, func.max(func.coalesce(A.updated_at, A.created_at))).filter(A.project_id.in_(ids)).group_by(A.project_id),
+        db.query(S.project_id, func.max(S.updated_at)).filter(S.project_id.in_(ids)).group_by(S.project_id),
+        db.query(C.project_id, func.max(M.created_at)).join(M, M.session_id == C.id).filter(C.project_id.in_(ids)).group_by(C.project_id),
+    )
+    last: dict[int, datetime] = {}
+    for source in sources:
+        for project_id, at in source:
+            if at and at > last.get(project_id, datetime.min):
+                last[project_id] = at
+    return last
+
+
 @router.get("", response_model=list[schemas.ProjectResponse])
 def list_projects(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """최근 작업 순. updated_at에도 같은 시각을 담아 화면에 보이는 시각과 순서가 어긋나지 않게 한다."""
     q = db.query(models.Project)
     if not user.is_admin:
         q = q.join(models.ProjectMember).filter(models.ProjectMember.user_id == user.id)
-    return [_to_response(p, user, db) for p in q.order_by(models.Project.updated_at.desc()).all()]
+    projects = q.all()
+    last = _last_work(db, [p.id for p in projects])
+    rows = [{**_to_response(p, user, db), "updated_at": max(p.updated_at, last.get(p.id, p.updated_at))} for p in projects]
+    return sorted(rows, key=lambda r: (r["updated_at"], r["id"]), reverse=True)
 
 
 @router.post("", response_model=schemas.ProjectResponse)

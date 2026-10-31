@@ -383,8 +383,10 @@ class SimulatorItem(BaseModel):
     model_id: int
     version: int | None
     outputs: list[str]
+    n_variables: int = 0
     n_train: int
     url: str
+    thumbnail_url: str | None = None  # 카드 그림(인증 필요). 공유가 끊기면 없다
     source: str  # mine | project | link
     status: str = "active"  # active | stopped | expired
     project_id: int | None = None

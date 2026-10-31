@@ -64,6 +64,12 @@ export async function blobUrl(path: string): Promise<string> {
   return URL.createObjectURL(await res.blob());
 }
 
+/** 없을 수도 있는 그림: 서버가 204(보일 그림 없음)로 답하면 null. etag로 이미 가진 그림과 같은지 비교한다 */
+export async function optionalBlob(path: string): Promise<{ blob: Blob; etag: string | null } | null> {
+  const res = await request(path);
+  return res.status === 204 ? null : { blob: await res.blob(), etag: res.headers.get("etag") };
+}
+
 /** 인증이 필요한 파일을 내려받는다(보고서 등) */
 export async function download(path: string, fallbackName: string) {
   const res = await request(path);

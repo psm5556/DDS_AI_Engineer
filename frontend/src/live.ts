@@ -72,7 +72,19 @@ export function useLiveInvalidation() {
   const qc = useQueryClient();
   // 케이스 이벤트는 수백 건이 몰려 올 수 있어 묶어서 한 번만 다시 읽는다
   const batch = useRef<{ pids: Set<number | undefined>; timer: ReturnType<typeof setTimeout> } | null>(null);
-  useEffect(() => () => { if (batch.current) clearTimeout(batch.current.timer); }, []);
+  const projectsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (batch.current) clearTimeout(batch.current.timer);
+    if (projectsTimer.current) clearTimeout(projectsTimer.current);
+  }, []);
+  // 사이드바는 최근 작업 순이다. 결과·스터디·대화로 일하면 그 프로젝트가 위로 온다. 결과가 몰려 와도 한 번만 다시 읽는다
+  const refreshProjects = () => {
+    if (projectsTimer.current) return;
+    projectsTimer.current = setTimeout(() => {
+      projectsTimer.current = null;
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    }, CASE_BATCH_MS);
+  };
   const refreshStudies = (pid?: number) => {
     if (batch.current) { batch.current.pids.add(pid); return; }
     const pids = new Set([pid]);
@@ -99,13 +111,25 @@ export function useLiveInvalidation() {
       case "artifact_updated":
         qc.invalidateQueries({ queryKey: ["artifacts", pid] });
         qc.invalidateQueries({ queryKey: ["reports", pid] }); // 보고서 뒤에 생긴 결과 수
+        refreshProjects();
         break;
       case "report_updated": qc.invalidateQueries({ queryKey: ["reports", pid] }); break;
       case "study_updated":
+        refreshStudies(pid);
+        refreshProjects();
+        break;
       case "case_updated":
         refreshStudies(pid);
         break;
-      case "model_updated": qc.invalidateQueries({ queryKey: ["models", pid] }); break;
+      case "agent_event": {
+        const kind = e.event?.kind;
+        if (kind === "turn_started" || kind === "turn_ended") refreshProjects();
+        break;
+      }
+      case "model_updated": // 배포·되돌리기를 하면 목록의 버전과 카드 그림도 바뀐다
+        qc.invalidateQueries({ queryKey: ["models", pid] });
+        qc.invalidateQueries({ queryKey: ["simulators"] });
+        break;
       case "live_reconnected":
         // 끊긴 동안 놓친 변경을 모두 다시 읽는다. 무거운 내 PC 진단은 빼고
         qc.invalidateQueries({ predicate: (q) => !(q.queryKey[0] === "agent" && q.queryKey[1] === "diagnose") });

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -80,6 +80,8 @@ class ChatSession(TimestampMixin, Base):
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
+    # 사이드바가 '최근 작업 순'을 정할 때마다 본다. 큰 본문을 건너뛰고 색인만 읽어 메시지가 수십만 개여도 빠르게
+    __table_args__ = (Index("ix_chat_messages_session_time", "session_id", "created_at"),)
     id = Column(Integer, primary_key=True)
     session_id = Column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False)
     # role: user | agent | thought | tool | system
@@ -105,6 +107,7 @@ class Flow(TimestampMixin, Base):
 
 class Artifact(Base):
     __tablename__ = "artifacts"
+    __table_args__ = (Index("ix_artifacts_project_time", "project_id", "updated_at", "created_at"),)  # 위와 같은 이유. payload는 표 전체가 들어 있어 크다
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     flow_id = Column(Integer, ForeignKey("flows.id", ondelete="SET NULL"))

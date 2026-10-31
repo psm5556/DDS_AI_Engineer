@@ -1022,8 +1022,9 @@ td.r { font-family: var(--font-mono); font-size: var(--fs-12); }
 .sim-row > .recent-row { flex: 1; min-width: 0; padding-block: var(--sp-2); }
 .sim-row > .recent-row .small { word-spacing: normal; }
 .sim-row.off .recent-row b { color: var(--ink-3); }
-.sim-row .recent-row b small.sim-row-meta { display: block; margin-top: 2px; font-size: var(--fs-12); font-weight: 400; color: var(--ink-3); }
-.recent-row .small.sim-row-out { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font); }
+.sim-row .recent-row b small.sim-row-meta { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-12); font-weight: 400; color: var(--ink-3); }
+/* 출력이 많아도 이름 칸을 밀어내지 않게 폭을 제한한다. 줄을 알아보는 것은 이름이다 */
+.recent-row .small.sim-row-out { flex: 0 1 auto; min-width: 0; max-width: 36%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font); }
 a.side-nav { color: inherit; text-decoration: none; }
 a.side-nav.active { background: var(--active); color: var(--ink); }
 
@@ -1143,3 +1144,81 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 }
 .report-doc .md :is(h1, h2, h3) { word-break: keep-all; overflow-wrap: anywhere; }
 .report-doc .md blockquote { margin: var(--sp-3) 0; padding-left: var(--sp-3); border-left: 2px solid var(--line); color: var(--ink-2); }
+
+/* ---------- 사이드바: Simulator · 구분선 · 새 프로젝트, 프로젝트 보기 아이콘 ---------- */
+.side-sep { width: 100%; margin: var(--sp-1) 0; border: none; border-top: 1px solid var(--line); }
+.rail-sep { width: 24px; margin: 2px 0; border: none; border-top: 1px solid var(--line); }
+.rail-btn.active { background: var(--active); color: var(--ink); }
+.side-views { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 0 8px var(--sp-1); }
+.side-views button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-height: 30px; padding: 0; border: 1px solid transparent; border-radius: var(--r-s); background: none; box-shadow: none; color: var(--ink-3); font-weight: 400; }
+/* 아이콘 이름: 마우스를 올리거나 키보드로 왔을 때. 양 끝은 사이드바 밖으로 나가지 않게 안쪽으로 붙인다 */
+.side-views button::after { content: attr(data-tip); position: absolute; top: calc(100% + var(--sp-1)); left: 50%; transform: translateX(-50%); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-s); background: var(--panel); box-shadow: var(--shadow-pop); color: var(--ink); font-size: var(--fs-12); font-weight: 400; white-space: nowrap; pointer-events: none; opacity: 0; visibility: hidden; transition: opacity var(--dur-fast); }
+.side-views button:first-child::after { left: 0; transform: none; }
+.side-views button:last-child::after { left: auto; right: 0; transform: none; }
+.side-views button:hover::after, .side-views button:focus-visible::after { opacity: 1; visibility: visible; }
+.side-views .side-st-dot { position: absolute; top: var(--sp-1); right: var(--sp-1); margin: 0; }
+.side-pinned + .side-group { margin-top: var(--sp-1); }
+.side-views button:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.side-views button[aria-pressed="true"], .side-views button[aria-pressed="true"]:hover:not(:disabled) { background: var(--brand-soft); border-color: var(--brand-200); color: var(--brand); }
+.side-views small { font-size: var(--fs-11); font-variant-numeric: tabular-nums; }
+.side-fav { flex: none; color: var(--star); }
+
+/* ---------- Simulator 목록: 검색 · 보기 방식 · 카드 ---------- */
+.sims-tools { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-4); }
+.sims-find { flex: 1; min-width: 0; max-width: 480px; display: flex; align-items: center; gap: var(--sp-2); min-height: 32px; padding: 0 var(--sp-1) 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-s); background: var(--panel); color: var(--ink-3); }
+.sims-find:focus-within { border-color: var(--brand-400); }
+.sims-find svg { flex: none; }
+.sims-find input { flex: 1; min-width: 0; min-height: 30px; padding: 0; border: none; background: transparent; box-shadow: none !important; outline: none; font-size: var(--fs-14); color: var(--ink); }
+.sims-find input::-webkit-search-cancel-button { display: none; }
+.sims-find .icon-btn { flex: none; width: 24px; height: 24px; min-height: 24px; }
+.sims-tools .view-tools { margin: 0 0 0 auto; flex: none; }
+.sims-tools .view-tools .tog { min-height: 32px; }
+.sims-none { margin-top: var(--sp-6); color: var(--ink-3); font-size: var(--fs-14); overflow-wrap: anywhere; }
+.sims-page .home-sec .count { font-weight: 400; color: var(--ink-3); }
+/* 줄·카드는 검색·보기 전환으로 다시 그려진다. 새로 생긴 것만 등장한다 */
+.sim-row > .recent-row { animation: none; }
+.sim-row.fresh, .sim-card.fresh { animation: rise var(--dur-slow) var(--ease-out) backwards; }
+.sim-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--sp-4); }
+.sim-card { position: relative; min-width: 0; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--panel); overflow: hidden; transition: border-color var(--dur-fast); }
+.sim-card:hover:not(.off) { border-color: var(--line-strong); }
+.sim-card:has(.sim-card-link:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sim-card-link { display: flex; flex-direction: column; height: 100%; color: var(--ink); text-decoration: none; outline: none; }
+.sim-card-link:hover { text-decoration: none; color: var(--ink); }
+.sim-card-link:hover b { color: var(--brand); }
+.sim-thumb { position: relative; display: flex; align-items: center; justify-content: center; aspect-ratio: 16 / 10; background: var(--panel-2); border-bottom: 1px solid var(--line-2); overflow: hidden; }
+/* 카드를 꽉 채운다. 3D 그림은 원래 카드 비율이고, 흰 바탕의 이미지 결과가 어두운 카드에서 좁은 띠로 보이지 않는다 */
+.sim-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.sim-thumb img.arrive { animation: fade var(--dur) var(--ease-out) backwards; }
+.sim-thumb.waiting { animation: skeleton-breathe var(--dur-pulse) ease-in-out var(--dur-wait) infinite; }
+.sim-thumb-mark, .sim-thumb.none { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-2); color: var(--ink-3); font-size: var(--fs-12); text-align: center; }
+.sim-thumb-mark svg { color: var(--ink-4); }
+/* 빠르면 보이지 않게 조금 늦게 나타난다 */
+.sim-thumb-wait { color: var(--ink-3); font-size: var(--fs-12); animation: fade var(--dur) var(--ease-out) var(--dur-wait) backwards; }
+.sim-card-body { flex: 1; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3); }
+.sim-card-title { display: flex; align-items: flex-start; gap: var(--sp-2); min-width: 0; }
+/* 끝만 다른 긴 이름도 구분되게 두 줄까지 보인다. 같은 줄의 카드는 키가 같아지고 아래 줄이 맞춰진다 */
+.sim-card-title b { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-14); font-weight: 600; }
+.sim-card-title .chip { flex: none; }
+.sim-card-outs { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; font-size: var(--fs-12); color: var(--ink-2); }
+.sim-card-outs span { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sim-card-outs span + span { padding-left: var(--sp-2); border-left: 1px solid var(--line); }
+.sim-card-outs em { flex: none; font-style: normal; color: var(--ink-3); }
+.sim-card-meta { display: flex; justify-content: space-between; gap: var(--sp-2); margin: auto 0 0; font-size: var(--fs-12); color: var(--ink-3); }
+.sim-card-meta span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sim-card-meta time { flex: none; font-variant-numeric: tabular-nums; }
+.sim-card > .sim-remove { position: absolute; top: var(--sp-2); right: var(--sp-2); width: 26px; height: 26px; min-height: 26px; background: var(--panel); border: 1px solid var(--line-strong); }
+.sim-card.off { background: transparent; border-style: dashed; }
+.sim-card.off .sim-thumb { background: transparent; }
+.sim-card.off b { color: var(--ink-3); }
+@media (max-width: 900px) {
+  /* 줄 두 개가 내용이 짧을 때 함께 늘어나면 본문이 아래로 밀리고, 검색 중에 입력창이 움직인다. 남는 높이는 본문이 갖는다 */
+  .app-shell.agentic, .app-shell.agentic.side-collapsed { grid-template-rows: auto 1fr; }
+  /* 좁은 화면의 접힌 사이드바는 가로로 놓이므로 구분선도 세로다 */
+  .rail-sep { align-self: center; width: 0; height: 24px; margin: 0 2px; border-top: none; border-left: 1px solid var(--line); }
+}
+@media (max-width: 640px) {
+  .sims-tools { flex-wrap: wrap; }
+  .sims-find { flex-basis: 100%; max-width: none; }
+  .sims-tools .view-tools { margin-left: 0; }
+  .recent-row .small.sim-row-out { display: none; } /* 칸이 모자라면 이름을 남긴다. 출력은 카드 보기에서 본다 */
+}

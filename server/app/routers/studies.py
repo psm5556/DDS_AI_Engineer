@@ -7,7 +7,8 @@ import base64
 import hashlib
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -18,7 +19,7 @@ from ..agent.link import AgentError
 from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, require_member
-from ..study import service
+from ..study import service, thumbnail
 from ..ws import manager
 
 router = APIRouter(prefix="/api", tags=["studies"])
@@ -289,7 +290,7 @@ def share_predict_batch(token: str, body: schemas.PredictBatchRequest, user=Depe
 # ---------- 내 Simulator · 공유받은 Simulator ----------
 def _sim_item(m: models.SurrogateModel, study: models.Study, **kw) -> dict:
     return {"study_id": study.id, "study_name": study.name, "model_id": m.id, "version": m.version, "outputs": m.outputs or [],
-            "n_train": m.n_train or 0, "updated_at": m.deployed_at or m.created_at, **kw}
+            "n_variables": len(study.variables or []), "n_train": m.n_train or 0, "updated_at": m.deployed_at or m.created_at, **kw}
 
 
 @router.get("/simulators", response_model=schemas.SimulatorList)
@@ -310,7 +311,8 @@ def my_simulators(user=Depends(get_current_user), db: Session = Depends(get_db))
         own = m.created_by == user.id
         owner = None if own else db.get(models.User, m.created_by) if m.created_by else None
         (mine if own else shared).append(_sim_item(m, study, url=f"/simulator/{m.id}", source="mine" if own else "project", project_id=project.id,
-                                                   project_name=project.name, shared_by=owner.display_name if owner else None))
+                                                   project_name=project.name, shared_by=owner.display_name if owner else None,
+                                                   thumbnail_url=f"/api/models/{m.id}/thumbnail"))
     now = datetime.now()
     access = (db.query(models.ShareAccess, models.ShareLink).join(models.ShareLink, models.ShareAccess.share_id == models.ShareLink.id)
               .filter(models.ShareAccess.user_id == user.id, models.ShareAccess.hidden.is_(False))
@@ -323,9 +325,57 @@ def my_simulators(user=Depends(get_current_user), db: Session = Depends(get_db))
         seen.add(study.id)
         owner = db.get(models.User, sh.created_by)
         status = "stopped" if not sh.enabled else "expired" if sh.expires_at and sh.expires_at < now else "active"
+        # ?v=: 같은 링크가 새 버전을 보여 줄 때 화면이 그림을 다시 받게 한다. 끊긴 공유에는 모델 그림을 주지 않는다
         shared.append(_sim_item(m, study, url=f"/s/{sh.token}", source="link", status=status, share_id=sh.id, note=sh.note or "",
-                                shared_by=owner.display_name if owner else None))  # 링크로 받은 사람에게 프로젝트 정보는 보이지 않는다
+                                shared_by=owner.display_name if owner else None,  # 링크로 받은 사람에게 프로젝트 정보는 보이지 않는다
+                                thumbnail_url=f"/api/shares/{sh.token}/thumbnail?v={m.id}" if status == "active" else None))
     return {"mine": mine, "shared": shared}
+
+
+def _thumbnail_file(path: Path, tag: str, media_type: str, request: Request) -> Response:
+    """브라우저 캐시를 쓰되 매번 서버에 확인한다(no-cache). 그래야 권한이 끊긴 뒤에는 옛 그림도 받지 못한다."""
+    headers = {"ETag": f'"{tag}"', "Cache-Control": "private, no-cache"}
+    if request.headers.get("if-none-match") == headers["ETag"]:
+        return Response(status_code=304, headers=headers)
+    return FileResponse(path, media_type=media_type, headers=headers)
+
+
+async def _thumbnail(m: models.SurrogateModel, request: Request, db: Session, project_images: bool) -> Response:
+    """권한 검사를 마친 뒤에만 부른다. 그림이 없거나 못 그리면 204: 오류가 아니라 '보일 그림이 없음'이고, 화면이 대체 표시를 쓴다.
+    DB와 파일을 보는 일은 모두 이벤트 루프 밖에서 한다. 여기서 멈추면 서버 전체(HTTP·PC Agent 연결)가 함께 멈춘다."""
+    def plan():
+        study = db.get(models.Study, m.study_id)
+        out = study.project_id, study.name, thumbnail.field_jobs(db, m, study)
+        db.close()  # 그리는 차례를 기다리는 요청이 쌓여도 DB 연결을 쥐고 있지 않는다
+        return out
+
+    project_id, study_name, jobs = await run_in_threadpool(plan)
+    for job in jobs:
+        if await thumbnail.render(job):
+            return _thumbnail_file(job.dest, job.dest.stem, "image/png", request)
+    image = await run_in_threadpool(thumbnail.project_image, db, project_id, study_name) if project_images else None
+    if image:
+        return _thumbnail_file(image.path, image.tag, image.media_type, request)
+    return Response(status_code=204)
+
+
+@router.get("/models/{model_id}/thumbnail")
+async def model_thumbnail(model_id: int, request: Request, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Simulator 카드 그림. 이 Simulator(/simulator/:id)를 열 수 있는 프로젝트 멤버·관리자만 받는다."""
+    m = await run_in_threadpool(_model, model_id, user, db)
+    return await _thumbnail(m, request, db, project_images=True)
+
+
+@router.get("/shares/{token}/thumbnail")
+async def share_thumbnail(token: str, request: Request, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """링크로 받은 사람의 카드 그림. 링크(/s/:token)를 열 수 있을 때만 받고, 그 사람이 볼 수 없는 프로젝트 결과 이미지는 쓰지 않는다."""
+    def load():
+        try:
+            return _share_model(_share(token, db), db)
+        except HTTPException as e:  # 기간이 끝난 링크(410)도 '그림 없음'으로 같게 답한다
+            raise HTTPException(404, e.detail) from None
+
+    return await _thumbnail(await run_in_threadpool(load), request, db, project_images=False)
 
 
 @router.delete("/simulators/shared/{share_id}")

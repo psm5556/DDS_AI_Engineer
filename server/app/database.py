@@ -23,7 +23,7 @@ class Base(DeclarativeBase):
 
 
 def ensure_columns():
-    """create_all은 기존 테이블에 새 컬럼을 추가하지 않으므로, SQLite에서 빠진 nullable 컬럼만 추가한다(가벼운 자동 마이그레이션)."""
+    """create_all은 기존 테이블에 새 컬럼·색인을 추가하지 않으므로, SQLite에서 빠진 nullable 컬럼과 색인만 추가한다(가벼운 자동 마이그레이션)."""
     from sqlalchemy import inspect, text
     insp = inspect(engine)
     with engine.begin() as conn:
@@ -34,6 +34,8 @@ def ensure_columns():
             for col in table.columns:
                 if col.name not in have:
                     conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN "{col.name}" {col.type.compile(engine.dialect)}'))
+            for index in table.indexes:
+                index.create(conn, checkfirst=True)
 
 
 def get_db():

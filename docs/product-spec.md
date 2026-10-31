@@ -118,9 +118,20 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 ### 2-3. 레이아웃
 | 영역 | 기본 폭 | 범위 | 단축키 | 비고 |
 |---|---|---|---|---|
-| 사이드바 | 256 px | 200~480 | Ctrl+B | 새 프로젝트·검색·프로젝트 목록, 아래에 PC Agent 상태·계정 메뉴(CAD·CAE 툴·설정·관리·어두운 화면·로그아웃). 접으면 아이콘만(CAD·CAE 툴·설정은 아래쪽) |
+| 사이드바 | 256 px | 200~480 | Ctrl+B | 위에서부터 Simulator·구분선·새 프로젝트·프로젝트 검색·프로젝트 보기 아이콘·프로젝트 목록, 아래에 PC Agent 상태·계정 메뉴(CAD·CAE 툴·설정·관리·어두운 화면·로그아웃). 접으면 같은 순서로 아이콘만(CAD·CAE 툴·설정은 아래쪽) |
 | 대화 | 나머지 | — | — | 가운데 열(최대 폭 고정), 아래 입력창 |
 | 캔버스 | 560 px | 360~1100 | Ctrl+J | 끌어서 폭 조절·두 번 누르면 기본값, 닫으면 완전히 사라짐 |
+
+**프로젝트 보기(사이드바)**: 프로젝트 목록 바로 위의 아이콘 4개로 고른다. 고르면 그 항목만 한 줄 평면 목록으로 보이고(최근 작업 순: 대화·작업 흐름·결과·스터디·이름 변경 중 가장 나중 시각, 위에 보기 이름), 프로젝트 검색은 고른 보기 안에서 찾는다. 아이콘 이름은 마우스를 올리거나 키보드로 왔을 때 글자 풍선으로 보이고, 아이콘 옆 숫자는 지금 검색어로 찾은 수다. 고른 보기는 브라우저에 기억하고, 처음에는 전체다.
+- 지금 연 프로젝트가 고른 보기 밖이면 목록 위에 '지금 연 프로젝트'로 한 줄 따로 보인다. 방금 만든 프로젝트가 사라진 것처럼 보이지 않게 한다.
+- 고른 보기 밖의 내 프로젝트(내가 멤버인 것)에 승인 대기나 실패가 있으면 전체 아이콘에 점을 찍는다.
+
+| 보기 | 보이는 프로젝트 |
+|---|---|
+| 전체 | 내가 받는 모든 프로젝트. 즐겨찾기는 이름 옆 작은 별로 표시한다 |
+| 즐겨찾기 | 내가 즐겨찾기한 것. 관리자가 멤버가 아닌 프로젝트를 즐겨찾기하면 그것도 여기 보인다 |
+| 내가 공유한 것 | 내가 만들었고 다른 멤버가 있는 것. 내가 멤버에서 빠졌어도 만든 사람이면 여기 든다 |
+| 공유 받은 것 | 내가 멤버이고 다른 사람이 만든 것. 관리자라서 보일 뿐 멤버가 아닌 프로젝트는 여기 들지 않는다 |
 
 ### 2-4. 공통 구성 요소
 | 요소 | 규칙 |
@@ -324,7 +335,16 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 - **목록(`/simulators`)**
   - **내 Simulator:** 내가 학습한 모델의 Simulator.
   - **공유받은 Simulator:** 같은 프로젝트 멤버가 만든 것(프로젝트 이름과 함께), 링크로 받아 한 번 연 것(공유한 사람·메모와 함께). 같은 Simulator는 한 번만 보인다.
-  - 공유가 중지되거나 기간이 끝나면 지우지 않고 흐리게 이유를 보인다. 왜 사라졌는지 알 수 있게 한다. [X]로 내 목록에서만 뺀다. 링크를 다시 열면 돌아온다.
+  - 공유가 중지되거나 기간이 끝나면 지우지 않고 흐리게 이유를 보인다. 왜 사라졌는지 알 수 있게 한다. 이때는 카드가 열리지 않고 모델 그림도 없다. [X]로 내 목록에서만 뺀다. 링크를 다시 열면 돌아온다.
+  - **보기:** 기본은 그림 카드이고, 머리의 [카드]·[목록]으로 바꾼다(브라우저에 기억한다). 카드 어디를 눌러도 Simulator가 열린다. 카드에는 그림·이름(두 줄까지)·버전·출력(3개까지, 나머지는 +N)·프로젝트 또는 공유한 사람·수정 시각을 보인다. 목록의 출력 칸은 줄 폭의 36%까지만 쓰고(좁은 화면에서는 숨긴다) 이름 칸을 밀어내지 않는다.
+  - **검색:** 입력하는 대로 이름·출력·프로젝트·공유한 사람·메모에서 찾는다(대소문자 구분 없음). 공유가 끊긴 것은 화면에 보이는 이름·공유한 사람·메모에서만 찾는다. 찾은 것이 없는 구획은 숨기고 구획 제목에 개수를 보인다. 찾은 것이 없으면 안내하고, 검색창의 X나 Esc로 지운다.
+  - **카드 그림**(`GET /api/models/{m}/thumbnail`, 링크로 받은 것은 `GET /api/shares/{t}/thumbnail`). 순서대로 쓴다.
+    1. 그 버전의 3D 모델: 설계 범위 가운데의 예측 형상·필드를 Simulator 3D의 첫 시점으로 서버에서 그린다(matplotlib, 투명 바탕, 큰 메쉬는 줄여서). 처음 요청할 때 한 번 그려 `data/thumbnails/`에 두고, 버전과 3D 모델이 바뀌면 새로 그린다. 되돌리면 그때 그림으로 돌아간다. 동시에 2개까지만 그린다.
+    2. 프로젝트를 볼 수 있는 사람에게만: 그 스터디(제목이 `[스터디 이름]`으로 시작)의 이미지 결과, 없으면 그 스터디의 작업 흐름에 있는 이미지 결과 중 가장 최근 것. 링크로 받은 사람에게는 쓰지 않는다.
+    3. 없거나 못 그리면(형상이 거의 보이지 않는 그림 포함) 서버는 204로 답하고, 화면은 Simulator 기호와 "설계변수 N개 · 출력 M개"를 보인다. 있지도 않은 3D나 결과를 그럴듯하게 그리지 않는다. 처음 그리는 동안에는 "그림 준비 중"을 보인다.
+  - **그림 권한은 여는 권한과 같다.** 모델 주소는 프로젝트 멤버·관리자만, 링크 주소는 유효한 링크일 때만 받는다. 중지·기간 만료 링크는 404, 멤버가 아니면 403이다. 브라우저는 매번 서버에 확인하므로(`no-cache` + ETag) 권한이 끊기면 옛 그림도 받지 못한다.
+  - 그림은 카드가 화면에 들어올 때만 받고 동시에 4개까지만 요청한다. 차례를 기다리다 화면을 벗어난 카드는 줄에서 빠지므로 지금 보이는 카드가 먼저 온다.
+  - 받은 그림은 화면에 64장까지 보관해 보기 전환·검색·페이지 이동에 깜빡이지 않는다. 1분이 지나면 다시 그릴 때 뒤에서 서버에 확인하고(권한이 끊겼으면 지운다), 바뀐 때만 바꾼다. 처음 받은 그림만 나타나는 움직임을 쓴다.
 
 ### 3-8. CAD·CAE 툴 (`/tools`)
 - 툴 29종을 분야별 앱 아이콘으로 보인다. 상태는 셋이다: 바로 사용 · 일부만 찾음 · 찾지 못함(흐리게).
@@ -535,7 +555,7 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 | 스터디 | `GET·POST /api/projects/{p}/studies` · `GET /api/studies/{s}`(counts·best·running·extracting) · `…/cases` · `…/doe` · `…/run` · `…/stop`(대기·실행 중 케이스 중지) · `…/train` · `…/suggest` · `…/outputs` · `…/train_field` · `…/field-models` |
 | 케이스 데이터 | `POST /api/cases/{c}/fields` · `POST·GET /api/cases/{c}/archive` · `GET …/archive/file` · `POST /api/cases/{c}/train_sample?spec_hash=` |
 | 학습 데이터 | `POST·GET /api/studies/{s}/datasets` · `GET /api/datasets/{d}` · `GET /api/datasets/{d}/manifest` |
-| 모델·Simulator | `GET /api/projects/{p}/models` · `GET /api/models/{m}/spec`(versions·current_model_id) · `POST …/deploy`(현재 버전 지정·되돌리기) · `…/predict·predict_batch` · 공유 `/api/models/{m}/shares`, `/api/shares/{t}/…` · 필드 `/api/field-models/{f}/mesh·predict`, `GET /api/studies/{s}/field-models?model_id=` · 목록 `GET /api/simulators`, `DELETE /api/simulators/shared/{share}` |
+| 모델·Simulator | `GET /api/projects/{p}/models` · `GET /api/models/{m}/spec`(versions·current_model_id) · `POST …/deploy`(현재 버전 지정·되돌리기) · `…/predict·predict_batch` · 공유 `/api/models/{m}/shares`, `/api/shares/{t}/…` · 필드 `/api/field-models/{f}/mesh·predict`, `GET /api/studies/{s}/field-models?model_id=` · 목록 `GET /api/simulators`, `DELETE /api/simulators/shared/{share}` · 카드 그림 `GET /api/models/{m}/thumbnail`, `GET /api/shares/{t}/thumbnail`(그림 없음은 204) |
 | PC Agent | `/api/agent/status·diagnose·install·tools…` · `/api/projects/{p}/local/folder·tree·open` · 배포 `/api/releases…` · `/api/instances…` · `/api/setup.exe`·`/api/install.ps1` |
 
 실시간 이벤트(브라우저 `/ws`)
