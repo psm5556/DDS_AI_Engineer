@@ -24,6 +24,8 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+from .context import dds_items
+
 SUBDIRS = ("inputs", "scripts", "runs", "studies", "live", "reports")
 _lock = threading.Lock()
 
@@ -227,7 +229,9 @@ class Workspace:
             raise FileNotFoundError(f"없는 경로입니다: {rel}")
         base = self.project_dir(project_id, project_name, project_uid).resolve()
         entries = []
-        for p in sorted(d.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))[:limit]:
+        dds = dds_items(base)  # 탐색기에서 숨긴 DDS 규칙·스킬은 웹 파일 탭에도 내보이지 않는다
+        kids = [p for p in d.iterdir() if str(p.relative_to(base)).replace("\\", "/") not in dds]
+        for p in sorted(kids, key=lambda x: (x.is_file(), x.name.lower()))[:limit]:
             st = p.stat()
             entries.append({"name": p.name, "path": str(p.relative_to(base)).replace("\\", "/"), "dir": p.is_dir(),
                             "size": None if p.is_dir() else st.st_size,

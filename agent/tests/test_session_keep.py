@@ -576,6 +576,7 @@ def test_mcp_timeouts_and_wait_limits(agent):
     assert "DDS_MCP_WAIT_LIMIT_SEC" not in env
     codex = json.loads(agent._runner_env("codex")["CODEX_CONFIG"])
     assert codex["mcp_servers.dds-cae.tool_timeout_sec"] > 3600 and "CODEX_CONFIG" not in agent._runner_env("claude")
+    assert codex["project_doc_max_bytes"] > 64 * 1024  # 규칙 파일이 32KiB를 넘어 Codex 기본값에서는 잘린다
 
 
 # ---------- 자동 업데이트 ----------

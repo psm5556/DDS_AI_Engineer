@@ -59,6 +59,7 @@ WORK_MSGS = ("session.", "case.", "permission.", "agent.install", "tools.set", "
 MCP_SERVERS = ("dds_flow", "dds_cae", "dds_study", "dds_live")
 # MCP 시작·도구 시간 제한. 긴 해석이 실패로 보이거나 MCP가 늦게 떠 dds 도구 없이 대화가 시작되지 않게 한다
 MCP_START_MS, MCP_TOOL_MS = 30 * 60 * 1000, 25 * 3600 * 1000  # Claude Code: MCP_TIMEOUT · MCP_TOOL_TIMEOUT
+CODEX_DOC_BYTES = 256 * 1024
 # 시간 제한을 바꿀 수 없는 CLI는 긴 도구가 이 안에 돌아오게 한다(dds_cae.script_status·dds_study._wait로 이어서 확인).
 # Gemini 기본 10분. Codex는 기본 60초이고 codex-acp가 서버별 값을 넘길 길이 CODEX_CONFIG뿐이라 믿지 않고 짧게 잡는다
 MCP_WAIT_LIMIT_SEC = {"gemini": 540, "codex": 50}
@@ -140,6 +141,8 @@ class Agent:
                 key = f"mcp_servers.{server.replace('_', '-')}"
                 config[f"{key}.startup_timeout_sec"] = MCP_START_MS // 1000
                 config[f"{key}.tool_timeout_sec"] = MCP_TOOL_MS // 1000
+            # Codex는 AGENTS.md를 기본 32KiB에서 자른다. 사용자 글 뒤에 붙는 DDS 규칙이 잘리지 않게 넉넉히 둔다
+            config["project_doc_max_bytes"] = CODEX_DOC_BYTES
             env["CODEX_CONFIG"] = json.dumps(config)
         return env
 
