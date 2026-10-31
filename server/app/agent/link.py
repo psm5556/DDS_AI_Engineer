@@ -25,6 +25,8 @@
   agent.update    {version, sha256, force}             (지금 업데이트)
   agent.settings  {auto_update, remote_test_until, acks} (hello에 대한 답, 그리고 사용자가 설정을 바꿀 때. acks: 이 서버는 agent.ack를 보낸다)
   devtest.run     {op, script?, tool?, ...}            → 실행 결과 (개발 AI의 원격 검증, 응답 필요. routers/devtest.py)
+  project.renamed {project_id, project_uid, project_name} (이름이 바뀌었다. Agent가 작업 폴더 이름을 맞춘다. 옛 Agent는 로그만 남긴다)
+  project.names   {projects:[{project_id, project_uid, project_name}]} (hello에 대한 답. 꺼져 있는 동안 바뀐 이름을 따라간다)
 Agent → 서버 알림
   hello           {hostname, version, agents:[{name,label,installed,login}], default_agent, tools,
                    boot, live_sessions:[sid], active_turns:[{turn_id, chat_id, session_id, agent, started_at}],

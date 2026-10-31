@@ -183,6 +183,14 @@ def settings_message(user: models.User) -> dict:
             "remote_test_until": until.timestamp() if until and user.is_admin else 0}
 
 
+def project_names_message(db: Session, user: models.User) -> dict:
+    """이 사용자의 프로젝트 이름. 꺼져 있는 동안 이름이 바뀌었으면 PC Agent가 연결할 때 작업 폴더 이름을 맞춘다."""
+    q = db.query(models.Project)
+    if not user.is_admin:
+        q = q.join(models.ProjectMember).filter(models.ProjectMember.user_id == user.id)
+    return {"type": "project.names", "projects": [{"project_id": p.id, "project_uid": p.uid, "project_name": p.name} for p in q.all()]}
+
+
 @router.get("/settings", response_model=schemas.AgentSettings)
 def get_agent_settings(user=Depends(get_current_user)):
     return {"auto_update": _auto_update_on(user)}
@@ -219,7 +227,11 @@ def record_instance(conn: AgentConnection, msg: dict, connected: bool = True):
         inst.connected, inst.last_seen = connected, now
         db.commit()
         if msg.get("type") == "hello":
-            conn.send(settings_message(db.get(models.User, conn.user_id)))
+            me = db.get(models.User, conn.user_id)
+            names = project_names_message(db, me)
+            if names["projects"]:
+                conn.send(names)
+            conn.send(settings_message(me))  # 마지막에 보낸다: agent.settings가 hello 처리가 끝났다는 표시다
     manager.publish({"type": "agent_status", "user_id": conn.user_id, "connected": connected})
 
 

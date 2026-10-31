@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+SESSION_CWD_MAX = 200
 
 
 def state_path() -> Path:
@@ -56,6 +57,19 @@ class AgentState:
             if last.get("session_id") == session_id:
                 self.data.pop("last_session", None)
                 self._save()
+
+    def remember_cwd(self, session_id: str, cwd: str):
+        """세션을 시작한 작업 폴더 문자열. 폴더 이름이 바뀐 뒤 불러올 때 같은 문자열을 넘겨야 CLI가 지난 대화를 찾는다(Gemini는 경로로 찾는다)."""
+        with self._lock:
+            cwds = self.data.setdefault("session_cwd", {})
+            cwds.pop(session_id, None)
+            cwds[session_id] = cwd
+            while len(cwds) > SESSION_CWD_MAX:
+                cwds.pop(next(iter(cwds)))
+            self._save()
+
+    def session_cwd(self, session_id: str) -> str | None:
+        return (self.data.get("session_cwd") or {}).get(session_id)
 
     def record_time(self, agent: str, kind: str, seconds: float):
         """kind: start(프로그램 시작~initialize) | session(session/new·load)"""

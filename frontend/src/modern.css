@@ -1222,3 +1222,5 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
   .sims-tools .view-tools { margin-left: 0; }
   .recent-row .small.sim-row-out { display: none; } /* 칸이 모자라면 이름을 남긴다. 출력은 카드 보기에서 본다 */
 }
+
+.local-notice { margin: 0 0 var(--sp-3); }

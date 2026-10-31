@@ -2,17 +2,24 @@
 MCP 서버들도 이 파일에서 서버 주소·토큰·툴 경로를 읽는다."""
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from cae_adapters.hidden import console_python
 from cae_adapters.tool_commands import DEFAULT_TOOL_PATHS
 
+log = logging.getLogger("dds_agent.config")
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_PATH = Path(os.environ.get("DDS_AGENT_CONFIG", Path.home() / ".dds-agent" / "agent.toml"))
+CONFIG_PATH = Path(os.environ.get("DDS_AGENT_CONFIG", Path.home() / ".dds-agent" / "agent.toml")).absolute()
+if os.environ.get("DDS_AGENT_CONFIG"):
+    # 상대 경로는 cwd가 바뀌면 다른 파일을 가리킨다. MCP의 cwd는 프로젝트 폴더라 설정을 못 찾고 ~/DDS_Workspace에 번호만 있는 폴더를 만들었다
+    os.environ["DDS_AGENT_CONFIG"] = str(CONFIG_PATH)
 
 
 @dataclass
@@ -60,6 +67,7 @@ class AgentSettings:
     base_tools: dict[str, str] = field(default_factory=dict)  # 기본값 + agent.toml [tools]
     base_tool_env: dict[str, dict[str, str]] = field(default_factory=dict)
     config_tools: set[str] = field(default_factory=set)  # agent.toml [tools]에 적힌 키
+    project_lookup: Callable[[int], dict] | None = None  # MCP: 이 PC에 폴더가 없는 프로젝트의 이름·uid를 서버에 묻는다
 
     @property
     def ws_url(self) -> str:
@@ -71,8 +79,23 @@ class AgentSettings:
         return Workspace(self.workspace_dir, self.server_url)
 
     def project_dir(self, project_id: int, name: str | None = None, uid: str | None = None) -> Path:
-        """로컬 데이터 규칙(P0012_<이름>)에 따른 프로젝트 작업 폴더 — workspace.py 참고"""
-        return self.workspace.project_dir(project_id, name, uid)
+        """로컬 데이터 규칙(P0012_<이름>)에 따른 프로젝트 작업 폴더 — workspace.py 참고.
+        이름·uid 없이 부르는 쪽은 MCP다. 세션의 폴더를 PC Agent가 알려 주었으면 그대로 쓴다(cwd와 같은 폴더).
+        모르는 프로젝트는 서버에 이름을 물어 만든다. 번호만 있는 폴더를 만들지 않는다."""
+        ws = self.workspace
+        if not name and not uid:
+            if str(project_id) == os.environ.get("DDS_PROJECT_ID"):
+                own = os.environ.get("DDS_PROJECT_DIR")
+                if own and Path(own).is_dir():
+                    return Path(own)
+                uid = os.environ.get("DDS_PROJECT_UID") or None
+            if ws.find(project_id) is None and self.project_lookup:
+                try:
+                    p = self.project_lookup(project_id) or {}
+                    name, uid = p.get("name") or name, p.get("uid") or uid
+                except Exception as e:  # 서버가 안 되어도 일은 계속한다. 이름은 다음 동기화에 맞춘다
+                    log.info("프로젝트 이름을 서버에서 가져오지 못했습니다(%s): %s", project_id, e)
+        return ws.project_dir(project_id, name, uid)
 
     def agent_command(self, name: str) -> list[str]:
         if name not in self.agents:

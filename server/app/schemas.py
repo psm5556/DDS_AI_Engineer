@@ -63,6 +63,7 @@ class ProjectUpdate(BaseModel):
 
 class ProjectBase(ORM):
     id: int
+    uid: str | None = None  # PC Agent·MCP가 작업 폴더를 찾는 고유값
     name: str
     description: str
     owner_id: int

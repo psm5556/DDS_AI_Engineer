@@ -251,7 +251,7 @@ def test_console_python_keeps_others(tmp_path):
 
 
 def test_mcp_command_is_console_python(installed_python):
-    fake = SimpleNamespace(s=SimpleNamespace(server_url="http://x", token="t"))
+    fake = SimpleNamespace(s=SimpleNamespace(server_url="http://x", token="t", workspace_dir=Path("C:/ws")))
     servers = Agent.mcp_servers(fake, 1)
     assert servers and {s["command"] for s in servers} == {str(installed_python / "python.exe")}
 

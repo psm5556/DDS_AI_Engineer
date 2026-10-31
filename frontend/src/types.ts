@@ -90,7 +90,7 @@ export interface ApiToken { id: number; name: string; created_at: string; last_u
 
 export interface Attachment { id: number; project_id: number; filename: string; size: number; sha256: string; created_at: string }
 export interface LocalEntry { name: string; path: string; dir: boolean; size: number | null; modified: string }
-export interface LocalTree { root: string; path: string; entries: LocalEntry[]; custom?: boolean }
+export interface LocalTree { root: string; path: string; entries: LocalEntry[]; custom?: boolean; notice?: string | null }
 export interface TrainingDataset {
   id: number; study_id: number; name: string; status: "building" | "ready" | "failed"; pending: number[];
   excluded: { case_id: number; reason: string }[]; n_samples: number; splits: { train?: number; val?: number; test?: number };

@@ -129,6 +129,8 @@ class Stack:
         self.token = ""
         self.pid: int | None = None
         self.agent_extra = agent_extra
+        self.relative_config = False  # dev_live.cmd --data data\dev 처럼 DDS_AGENT_CONFIG를 상대 경로로 준다
+        self.agent_env: dict[str, str] = {}
         self.control(start_delay=start_delay, load=load)
 
     # ---------- 프로세스 ----------
@@ -199,6 +201,10 @@ class Stack:
         env.pop("DDS_AGENT_HOME", None)  # 개발 모드: 자동 업데이트를 하지 않는다
         env.pop("DDS_SERVER_URL", None)
         env.pop("DDS_TOKEN", None)
+        if self.relative_config:
+            env["DDS_AGENT_CONFIG"] = os.path.relpath(cfg, ROOT)
+            env.pop("DDS_WORKSPACE", None)
+        env.update(self.agent_env)
         self.agent = self._popen([sys.executable, "-m", "agent.dds_agent.main"], env, "agent")
         wait_for(lambda: self.agent_connected(), what="Agent 연결", timeout=90)
 

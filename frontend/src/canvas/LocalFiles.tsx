@@ -76,6 +76,7 @@ export function LocalFiles({ pid }: { pid: number }) {
           <button className="link-btn small" onClick={() => setPicking(true)}>폴더 바꾸기</button>
         </div>
       )}
+      {data?.notice && <p className="small muted local-notice" role="status">{data.notice}</p>}
       {picking && <FolderModal pid={pid} onClose={() => { setPicking(false); setPath(""); }} />}
       <div className="table-wrap"><table className="local-table">
         <tbody>

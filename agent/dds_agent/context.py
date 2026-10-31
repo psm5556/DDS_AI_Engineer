@@ -35,7 +35,7 @@ SKILL_DIRS = (".gemini/skills", ".claude/skills", ".agents/skills")
 MANAGED = ".dds-skills.json"  # 이 Agent가 복사한 스킬 이름 목록
 STAMP = ".dds-context-stamp"  # 1행: 마지막으로 복사한 규칙·스킬의 지문, 2행: 규칙 파일별 크기·DDS 전용 여부, 숨긴 항목, git 상태(JSON)
 GEMINI_IGNORE = ".geminiignore"
-FORMAT = "2"  # 규칙 파일 형식이 바뀌면 올린다. 지문이 달라져 기존 프로젝트도 한 번 다시 맞춘다
+FORMAT = "3"  # 규칙 파일 형식이 바뀌면 올린다. 지문이 달라져 기존 프로젝트도 한 번 다시 맞춘다
 
 # 표시 구간 밖은 사용자 글이다. 파일 앞뒤 어디에 있어도 이 구간만 바꾼다
 RULES_START = "<!-- DDS Conversa 규칙 시작: 이 구간은 자동으로 바뀝니다. 직접 쓴 글은 구간 밖에 두세요 -->"
@@ -282,6 +282,32 @@ def dds_items(project_dir: Path) -> set[str]:
     return set(state["hidden"]) if state else set()
 
 
+def dds_owned_files(project_dir: Path) -> set[str]:
+    """내용을 보고 DDS 것임이 확실한 파일(프로젝트 폴더 기준 상대 경로). 지워도 사용자 글을 잃지 않는 것만 고른다.
+    dds_items는 마지막 동기화 때의 기록이라 그 뒤에 넣은 메모·명령·개인 스킬까지 DDS 것으로 본다. 지우는 판단에는 쓰지 않는다.
+    - 동기화 기록 파일
+    - 표시 구간 밖에 글이 없는 규칙 파일·.geminiignore (옛 형식은 고르지 않는다: 본문을 고쳤는지 알 수 없다)
+    - DDS 스킬 폴더 안에서 배포본에 같은 이름이 있는 파일 (동기화가 어차피 덮어쓴다. docs/local-data.md)"""
+    owned = {n for n in (MANAGED, STAMP) if (project_dir / n).is_file()}
+    marks = [(n, RULES_START, RULES_END) for n in RULE_FILES] + [(GEMINI_IGNORE, IGNORE_START, IGNORE_END)]
+    for name, start, end in marks:
+        path = project_dir / name
+        try:
+            if not path.is_symlink() and _merge(path.read_bytes(), "", start, end)[1]:
+                owned.add(name)
+        except OSError:
+            pass
+    for rel in SKILL_DIRS:
+        for skill in _skill_names():
+            src, dst = CONTEXT_DIR / "skills" / skill, project_dir / rel / skill
+            for sub_dir, _, files in os.walk(dst):
+                for f in files:
+                    path = Path(sub_dir) / f
+                    if (src / path.relative_to(dst)).is_file():
+                        owned.add(path.relative_to(project_dir).as_posix())
+    return owned
+
+
 # ---------- git: 커밋에 섞이지 않게 .git/info/exclude에만 적는다. 실패해도 조용히 넘어간다 ----------
 def _find_repo(project_dir: Path) -> tuple[Path, Path] | None:
     """(저장소 최상위, 제외 목록이 있는 git 폴더). 작업 폴더가 저장소 안쪽 폴더여도 찾는다."""
@@ -382,6 +408,52 @@ def _git_hide(project_dir: Path, repo: tuple[Path, Path], items: list[str]) -> t
     return items, ok
 
 
+def forget_git_block(old_dir: Path, new_dir: Path):
+    """프로젝트 폴더 이름이 바뀌었다. 옛 경로의 제외 구간을 지운다. 크기가 달라져 다음 동기화가 새 경로의 구간을 다시 쓴다."""
+    repo = _find_repo(new_dir)
+    if not repo:
+        return
+    root, git_dir = repo
+    try:
+        prefix = Path(os.path.abspath(old_dir)).relative_to(root).as_posix()
+    except ValueError:
+        return
+    exclude = git_dir / "info" / "exclude"
+    if prefix == "." or not exclude.is_file():  # 폴더 자체가 저장소이면 구간 표시에 경로가 없다
+        return
+    with _git_lock:
+        raw = exclude.read_bytes()
+        enc, tag = _codec(raw), f"[/{prefix}/]"
+        start, end = re.escape(f"# DDS Conversa 시작 {tag}".encode(enc)), re.escape(f"# DDS Conversa 끝 {tag}".encode(enc))
+        new = re.sub(start + b".*?" + end + b"(?:\r?\n)?", b"", raw, flags=re.S)
+        if new != raw:
+            _write_bytes(exclude, new)
+
+
+def git_hide_aliases(root: Path, project_id: int, names: list[str]):
+    """프로젝트 폴더의 다른 이름(접합)을 제외 목록에 적는다. git은 접합을 보통 폴더로 보아 규칙·스킬·파일 전체를 새 파일로 잡는다.
+    `git add -A`면 같은 파일이 이름마다 또 올라간다. 접합이 파일로 보이는 OS도 있어 경로 끝에 /를 붙이지 않는다.
+    프로젝트 폴더 자체가 저장소이면 접합은 저장소 밖이라 할 일이 없다(root에서 저장소를 찾지 못한다)."""
+    repo = _find_repo(root)
+    if not repo:
+        return
+    top, git_dir = repo
+    here = Path(os.path.abspath(root))
+    prefix = "" if here == top else here.relative_to(top).as_posix() + "/"
+    tag = f"[/{prefix}P{project_id:04d} 접합]"
+    start, end = f"# DDS Conversa 시작 {tag}: 이 구간은 자동으로 바뀝니다. 직접 쓴 줄은 구간 밖에 두세요", f"# DDS Conversa 끝 {tag}"
+    exclude = git_dir / "info" / "exclude"
+    with _git_lock:
+        try:
+            raw = exclude.read_bytes()
+        except FileNotFoundError:
+            raw = b""
+        if not names and start.encode(_codec(raw)) not in raw:
+            return
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        _put_block(exclude, "\n".join(_pattern(prefix + n) for n in sorted(names)), start, end)
+
+
 def _size(path: Path) -> int | None:
     try:
         return path.stat().st_size
@@ -429,7 +501,8 @@ def _tidy(project_dir: Path, stamp: str, state: dict | None, rules: dict, dirty:
 
 # ---------- 동기화 ----------
 def _skill_index(skills_root: Path) -> str:
-    lines = ["", "## 부록: 사용 가능한 스킬", "필요할 때 아래 SKILL.md를 읽고 따르세요."]
+    # 경로는 프로젝트 폴더 기준이다. 절대 경로를 적으면 프로젝트 이름을 바꿀 때 낡고, 규칙 파일을 커밋하면 이 PC의 경로가 함께 올라간다
+    lines = ["", "## 부록: 사용 가능한 스킬", "필요할 때 아래 SKILL.md를 읽고 따르세요. 경로는 이 프로젝트 폴더 기준입니다."]
     if os.name == "nt":  # PowerShell·ripgrep이 Hidden 항목을 건너뛰어 스킬이 없다고 오해할 수 있다
         lines.append("사용자 폴더를 깔끔하게 두려고 이 스킬 폴더에 Hidden 속성을 붙여 두었습니다. 아래 경로는 그대로 읽으면 됩니다. "
                      "목록을 볼 때 PowerShell은 `Get-ChildItem -Force`, ripgrep은 `--hidden`을 쓰세요.")
@@ -440,7 +513,7 @@ def _skill_index(skills_root: Path) -> str:
         except OSError:
             text = ""
         m = re.search(r"^description:\s*(.+)$", text, re.M)
-        lines.append(f"- **{d.name}** — {m.group(1).strip() if m else ''}  \n  `{(d / 'SKILL.md').as_posix()}`")
+        lines.append(f"- **{d.name}** — {m.group(1).strip() if m else ''}  \n  `.claude/skills/{d.name}/SKILL.md`")
     return "\n".join(lines) + "\n"
 
 

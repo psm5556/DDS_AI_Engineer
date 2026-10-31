@@ -12,6 +12,7 @@ from agent.dds_agent.server_api import ServerApi, ServerError  # noqa: E402
 
 settings = load_settings()
 api = ServerApi(settings)
+settings.project_lookup = lambda pid: api.get(f"/api/projects/{pid}")
 
 
 def fresh_tools():

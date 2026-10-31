@@ -88,7 +88,8 @@ class CaseExecutor:
     def _case_dir(self, job: dict) -> Path:
         run_dir = Path(job["run_dir"]) if job.get("run_dir") else None
         if run_dir and run_dir.is_dir():
-            return run_dir
+            # 서버에 남은 경로가 프로젝트의 옛 이름(접합)일 수 있다. 접합으로 cwd를 두면 실제 폴더가 잠기므로 실제 경로로 돈다
+            return Path(os.path.realpath(run_dir))
         # 작업 폴더를 옮겼으면 스터디 폴더에서 다시 찾는다
         sdir = self.s.workspace.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
                                           job.get("project_uid"))

@@ -14,6 +14,12 @@
   [modelerr] 세션은 살아 있는데 "model gemini-x not found" 오류를 낸다
   [ratelimit] 사용 한도 오류    [emptyerr] 메시지 없는 오류
   [longtool] 명령줄처럼 아주 긴 제목의 도구를 6초 돌린다
+  [rename 이름]  실제 dds_flow.set_project_info를 세션의 작업 폴더·MCP 환경으로 돌려 프로젝트 이름을 바꾼다
+  [where]    실제 dds_cae.project_folder를 같은 환경으로 돌려 작업 폴더를 글자로 쓴다
+control.json의 hold_cwd=true면 세션마다 cwd가 그 작업 폴더인 자식 프로세스를 띄운다.
+실제 Claude(세션마다 claude.exe·MCP가 cwd를 그 폴더에 둔다)처럼 Windows가 폴더 이름 바꾸기를 막는다.
+control.json의 history_by는 session/load가 기록을 찾는 규칙이다: "realpath"는 Claude($CLAUDE_CONFIG_DIR/projects/<실제 경로 인코딩>/<세션>.jsonl 한 곳),
+"cwd"는 Gemini(경로 문자열). 실제 CLI로 확인한 규칙이다. 없으면 세션 id로만 찾는다.
 """
 from __future__ import annotations
 
@@ -49,6 +55,8 @@ class FakeCli:
         (self.state / "sessions").mkdir(parents=True, exist_ok=True)
         self.start_delay, self.session_delay = a.start_delay, a.session_delay
         self.load_ok, self.auth_error = not a.no_load, a.auth_error
+        self.hold_cwd = False
+        self.history_by = None
         ctl = self.state / "control.json"
         if ctl.exists():
             c = json.loads(ctl.read_text(encoding="utf-8"))
@@ -56,7 +64,11 @@ class FakeCli:
             self.session_delay = c.get("session_delay", self.session_delay)
             self.load_ok = c.get("load", self.load_ok)
             self.auth_error = c.get("auth_error", self.auth_error)
+            self.hold_cwd = c.get("hold_cwd", False)
+            self.history_by = c.get("history_by")
         self.live: set[str] = set()
+        self.session_env: dict[str, tuple[str, dict]] = {}  # 세션 id → (cwd, MCP 환경)
+        self.holders: list[subprocess.Popen] = []
         self.cancelled: dict[str, threading.Event] = {}
         self.waiters: dict[int, threading.Event] = {}
         self.replies: dict[int, dict] = {}
@@ -91,6 +103,49 @@ class FakeCli:
 
     def _remember(self, sid: str, text: str):
         self._session_file(sid).write_text(json.dumps(self._history(sid) + [text], ensure_ascii=False), encoding="utf-8")
+
+    # ---------- 실제 CLI가 지난 대화를 찾는 방법 (control.json의 history_by) ----------
+    def _claude_transcript(self, sid: str, cwd: str) -> Path:
+        name = re.sub(r"[^a-zA-Z0-9]", "-", os.path.realpath(cwd))
+        return Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / name / f"{sid}.jsonl"
+
+    def _record_home(self, sid: str, cwd: str):
+        if self.history_by == "realpath":
+            path = self._claude_transcript(sid, cwd)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{}\n", encoding="utf-8")
+        elif self.history_by == "cwd":
+            (self.state / "sessions" / f"{sid}.cwd").write_text(os.path.normcase(os.path.abspath(cwd)), encoding="utf-8")
+
+    def _history_found(self, sid: str, cwd: str) -> bool:
+        if self.history_by == "realpath":  # Claude: 접합을 풀어 실제 경로의 폴더 한 곳만 본다
+            return self._claude_transcript(sid, cwd).is_file()
+        if self.history_by == "cwd":  # Gemini: 경로 문자열 그대로 찾는다
+            home = self.state / "sessions" / f"{sid}.cwd"
+            return home.is_file() and home.read_text(encoding="utf-8") == os.path.normcase(os.path.abspath(cwd))
+        return True
+
+    # ---------- 작업 폴더 ----------
+    def _open_session(self, sid: str, params: dict):
+        cwd = params.get("cwd") or os.getcwd()
+        servers = params.get("mcpServers") or []
+        env = {e["name"]: e["value"] for e in servers[0].get("env") or []} if servers else {}
+        self.session_env[sid] = (cwd, env)
+        if self.hold_cwd:  # stdin이 닫히면(이 프로세스가 끝나면) 함께 끝난다
+            self.holders.append(subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"], cwd=cwd, stdin=subprocess.PIPE,
+                                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)))
+            self.log("holder", sid=sid, holder=self.holders[-1].pid, cwd=cwd)
+
+    def _run_mcp(self, sid: str, code: str, *args: str) -> str:
+        """MCP 서버를 실제 CLI처럼 세션 cwd에서 세션 환경으로 띄워 도구 함수를 부른다."""
+        cwd, env = self.session_env[sid]
+        root = Path(__file__).resolve().parents[2]
+        full = {**os.environ, **env, "PYTHONIOENCODING": "utf-8"}
+        boot = f"import sys, json; sys.path.insert(0, {str(root / 'mcp_servers')!r}); " + code
+        r = subprocess.run([sys.executable, "-c", boot, *args], cwd=cwd, env=full, capture_output=True, text=True, encoding="utf-8", timeout=120,
+                           stdin=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return r.stdout.strip() or r.stderr.strip()[-500:]
 
     # ---------- 요청 ----------
     def handle(self, msg: dict):
@@ -128,17 +183,20 @@ class FakeCli:
             sid = "fake-" + uuid.uuid4().hex[:10]
             self.live.add(sid)
             self._remember(sid, "(세션 시작)")
+            self._record_home(sid, params.get("cwd") or os.getcwd())
+            self._open_session(sid, params)
             self.log("session_new", sid=sid, cwd=params.get("cwd"), mcp=len(params.get("mcpServers") or []))
             return {"sessionId": sid}
         if method == "session/load":
             sid = params.get("sessionId")
-            self.log("session_load", sid=sid, was_live=sid in self.live)
+            self.log("session_load", sid=sid, was_live=sid in self.live, cwd=params.get("cwd"))
             time.sleep(self.session_delay)
-            if not self._session_file(sid).exists():
+            if not self._session_file(sid).exists() or not self._history_found(sid, params.get("cwd") or os.getcwd()):
                 raise RuntimeError("-32002:Session not found")
             for text in self._history(sid):  # 실제 CLI처럼 지난 대화를 다시 들려준다. 화면에 또 쌓이면 시험이 잡는다
                 self.say(sid, "[다시 들려줌] " + text)
             self.live.add(sid)
+            self._open_session(sid, params)
             return {}
         raise RuntimeError(f"-32601:지원하지 않는 메서드: {method}")
 
@@ -152,6 +210,15 @@ class FakeCli:
         self._remember(sid, text)
         cancelled = self.cancelled[sid] = threading.Event()
         stop = "end_turn"
+        m = re.search(r"\[rename ([^\]]+)\]", text)
+        if m:
+            out = self._run_mcp(sid, "import dds_flow; print(json.dumps(dds_flow.set_project_info(name=sys.argv[1]), ensure_ascii=False))", m.group(1))
+            self.log("mcp_rename", sid=sid, out=out)
+            self.say(sid, out + " ")
+        if "[where]" in text:
+            out = self._run_mcp(sid, "import dds_cae; print(json.dumps(dds_cae.project_folder()['folder'], ensure_ascii=False))")
+            self.log("mcp_where", sid=sid, out=out)
+            self.say(sid, "폴더:" + out + " ")
         if "[die-silent]" in text:
             os._exit(3)
         if "[die]" in text:

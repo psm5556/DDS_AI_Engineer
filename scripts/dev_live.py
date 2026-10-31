@@ -23,7 +23,7 @@ def main():
     ap.add_argument("--admin", default="admin")
     ap.add_argument("--pin", default="123456")
     a = ap.parse_args()
-    data = Path(a.data)
+    data = Path(a.data).resolve()  # 상대 경로로 넘기면 cwd가 다른 MCP가 설정을 찾지 못한다
     data.mkdir(parents=True, exist_ok=True)
     rt = ROOT / "data" / "agent_runtime"
     if rt.exists() and not (data / "agent_runtime").exists() and data != ROOT / "data":

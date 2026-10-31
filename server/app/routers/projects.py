@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,10 +7,12 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..agent.hub import hub
+from ..agent.link import AgentError, registry
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, member_role, require_master
 from ..ws import manager
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
@@ -39,6 +42,18 @@ def _last_work(db: Session, ids: list[int]) -> dict[int, datetime]:
             if at and at > last.get(project_id, datetime.min):
                 last[project_id] = at
     return last
+
+
+def _tell_agents_renamed(p: models.Project, user: models.User):
+    """멤버들의 PC Agent가 작업 폴더 이름을 따라가게 한다. 끊긴 PC는 다음 연결의 project.names로 따라온다. 옛 Agent는 로그만 남긴다."""
+    msg = {"type": "project.renamed", "project_id": p.id, "project_uid": p.uid, "project_name": p.name}
+    for uid in {m.user_id for m in p.members} | {user.id}:  # 관리자는 멤버가 아니어도 바꿀 수 있다
+        conn = registry.get(uid)
+        if conn:
+            try:
+                conn.send(msg)
+            except AgentError as e:  # 다음 연결에 맞춘다. 이름 바꾸기 자체는 이미 끝났다
+                log.info("이름 변경을 PC Agent에 알리지 못했습니다: %s", e)
 
 
 @router.get("", response_model=list[schemas.ProjectResponse])
@@ -78,12 +93,15 @@ async def update_project(project_id: int, body: schemas.ProjectUpdate, user: mod
     require_master(project_id, user, db)
     if p.version != body.version:
         raise HTTPException(409, "다른 사용자가 수정했습니다. 새로고침 후 다시 시도하세요.")
+    old_name = p.name
     for k in ("name", "description"):
         if getattr(body, k) is not None:
             setattr(p, k, getattr(body, k))
     p.version += 1
     db.commit()
     await manager.broadcast({"type": "project_updated", "project_id": p.id, "data": {"id": p.id}})
+    if p.name != old_name:
+        _tell_agents_renamed(p, user)
     return _to_response(p, user, db)
 
 
