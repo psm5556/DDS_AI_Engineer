@@ -211,12 +211,14 @@ function CurveChart({ c }: { c: InsightChart }) {
   const t = usePlot();
   const word = useContext(Word);
   const idx = c.index as number[];
-  const pick = (ok: boolean) => idx.filter((_: number, i: number) => (c.feasible as boolean[])[i] === ok);
-  const vals = (ok: boolean) => (c.values as number[]).filter((_, i) => (c.feasible as boolean[])[i] === ok);
+  // 제약 판정은 세 가지다: 만족(true)·어김(false)·값이 없어 모름(null). 모르는 값을 어긴 것으로 그리지 않는다
+  const pick = (ok: boolean | null) => idx.filter((_: number, i: number) => (c.feasible as (boolean | null)[])[i] === ok);
+  const vals = (ok: boolean | null) => (c.values as number[]).filter((_, i) => (c.feasible as (boolean | null)[])[i] === ok);
   return (
     <Chart data={[
       { type: "scatter", mode: "markers", name: `케이스별 ${word}값`, x: pick(true), y: vals(true), marker: { color: t.text, size: 5, opacity: 0.7 } },
       ...(pick(false).length ? [{ type: "scatter", mode: "markers", name: "제약을 어긴 값(최고 값에서 뺌)", x: pick(false), y: vals(false), marker: { color: t.err, size: 6, symbol: "x", opacity: 0.7 } }] : []),
+      ...(pick(null).length ? [{ type: "scatter", mode: "markers", name: "제약 값이 없어 모르는 값(최고 값에서 뺌)", x: pick(null), y: vals(null), marker: { color: t.muted, size: 6, symbol: "circle-open", opacity: 0.8 } }] : []),
       { type: "scatter", mode: "lines", name: "지금까지 가장 좋은 값", x: idx, y: c.best, line: { color: t.brand, width: 2, shape: "hv" } },
     ]} layout={{ xaxis: axis(t, `${word} 순서`), yaxis: axis(t, titled(c.output, c.unit)), ...startLine(t, c.bo_from) }} />
   );
@@ -239,11 +241,13 @@ function CandidatesTable({ c }: { c: InsightChart }) {
   const showMargin = rows.some((r) => r.margin);
   return (
     <div className="table-wrap insight-table"><table>
-      <thead><tr><th>구분</th>{vars.map((v) => <th key={v.name} className="r">{titled(v.label, v.unit)}</th>)}<th className="r">{titled(c.output, c.unit)}</th>{showMargin && <th>제약 여유</th>}</tr></thead>
+      <thead><tr><th>구분</th><th className="r">{titled(c.output, c.unit)}</th>{vars.map((v) => <th key={v.name} className="r">{titled(v.label, v.unit)}</th>)}{showMargin && <th>제약 여유</th>}</tr></thead>
       <tbody>{rows.map((r, i) => (
         <tr key={i}><td className="nowrap">{r.kind === "predicted" ? <span className="chip info">예측</span> : <>케이스 {r.case_id}</>}</td>
+          {/* 변수가 많으면 표가 옆으로 밀린다. 판단에 쓰는 값이 잘려 보이지 않게 앞에 둔다 */}
+          <td className="r">{plain(r.value)}</td>
           {vars.map((v) => <td key={v.name} className="r">{plain(r.params[v.name])}</td>)}
-          <td className="r">{plain(r.value)}</td>{showMargin && <td>{r.margin ?? ""}</td>}</tr>))}</tbody>
+          {showMargin && <td>{r.margin ?? ""}</td>}</tr>))}</tbody>
     </table></div>
   );
 }
@@ -272,7 +276,7 @@ function FrontTable({ c }: { c: InsightChart }) {
 function ParetoChart({ c }: { c: InsightChart }) {
   const t = usePlot();
   const word = useContext(Word);
-  const all = c.all as [number, number, number, boolean][];
+  const all = c.all as [number, number, number, boolean | null][];
   const front = c.front as [number, number, number][];
   const pred = c.predicted as [number, number][];
   const knee = c.knee as { case_id: number; a: number; b: number } | null;
@@ -291,7 +295,7 @@ function ParetoChart({ c }: { c: InsightChart }) {
   return (
     <>
     <Chart height={300} data={[
-      { type: "scatter", mode: "markers", name: word === "해석" ? "해석한 설계" : "데이터의 설계", x: all.map((p) => p[1]), y: all.map((p) => p[2]), text: all.map((p) => `케이스 ${p[0]}${p[3] ? "" : " · 제약 위반 또는 판단 불가"}`), marker: { color: t.text, size: 5, opacity: 0.45 } },
+      { type: "scatter", mode: "markers", name: word === "해석" ? "해석한 설계" : "데이터의 설계", x: all.map((p) => p[1]), y: all.map((p) => p[2]), text: all.map((p) => `케이스 ${p[0]}${p[3] === true ? "" : p[3] === false ? " · 제약 위반" : " · 제약 값이 없어 모름"}`), marker: { color: t.text, size: 5, opacity: 0.45 } },
       { type: "scatter", mode: "lines+markers", name: word === "해석" ? "좋은 후보 (해석 확인)" : "좋은 후보 (데이터 값)", x: sorted.map((p) => p[1]), y: sorted.map((p) => p[2]), text: sorted.map((p) => `케이스 ${p[0]}`), line: { color: t.brand, width: 2, shape: c.a.goal === "min" ? "hv" : "vh" }, marker: { color: t.brand, size: 8 } },
       ...(pred.length ? [{ type: "scatter", mode: "markers", name: "예측 후보 (아직 해석 안 함)", x: pred.map((p) => p[0]), y: pred.map((p) => p[1]), marker: { color: "rgba(0,0,0,0)", size: 7, line: { color: t.mean, width: 1.2 } } }] : []),
       ...(knee ? [{ type: "scatter", mode: "markers", name: "균형 설계 (제안)", x: [knee.a], y: [knee.b], text: [`케이스 ${knee.case_id}`], marker: { color: t.mean, size: 13, symbol: "diamond", line: { color: t.ink, width: 1 } } }] : []),

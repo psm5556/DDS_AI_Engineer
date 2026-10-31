@@ -29,7 +29,7 @@ from .surrogate import Surrogate, _make_gp
 
 log = logging.getLogger(__name__)
 
-SCHEMA = 2  # 결과 모양이 바뀌면 올린다. 저장된 옛 결과를 쓰지 않게 한다
+SCHEMA = 3  # 결과 모양이 바뀌면 올린다. 저장된 옛 결과를 쓰지 않게 한다
 
 # 판단값. 몇 개 시험 함수로 정한 값이고 실제 CAE 데이터로 검증되지 않았다. 사내 검증 뒤 조정한다
 THRESHOLDS: dict[str, float] = {
@@ -76,6 +76,7 @@ STATE_WORDS = {
     "active": {"good": "효과 있음", "fair": "효과 작음", "caution": "효과 없음"},
 }
 _RANK = {"good": 0, "unknown": 1, "fair": 2, "caution": 3}
+QUALITY_STATE = {"good": "good", "fair": "fair", "poor": "caution"}  # service.assess_quality의 등급 → 판단 도우미의 상태
 BASIS_LABEL = {"verified": "해석으로 확인한 값", "predicted": "AI 예측값", "mixed": "해석값과 AI 예측값", "imported": "표에 있던 값", "planned": "계획한 점(아직 해석 전)"}
 
 
@@ -204,6 +205,7 @@ T = {
     "con_flat_bad": "최적화 {k}건이 처음 계획한 해석의 최고보다 나아지지 않았습니다. 예측 정확도와 설계 범위를 먼저 확인하세요.",
     "con_poor": "개선이 멈춘 것처럼 보이지만 예측 정확도가 낮아 다 찾았다고 볼 수 없습니다. 예측 정확도부터 올리세요.",
     "con_infeasible": "제약을 만족한 설계를 아직 찾지 못했습니다.",
+    "con_unknown_all": "케이스에 제약 값이 없어 제약을 만족하는지 아직 모릅니다. 제약 항목을 결과에서 뽑으면 판단합니다.",
     "con_multi_stop": "최근 {W}건에서 {goals}를 함께 좋게 하는 후보가 {r} 나아졌고, 예측으로도 더 나아질 곳이 적습니다. 더 돌려도 효과가 작습니다.",
     "con_multi_soft": "최근 {W}건에서 {goals}를 함께 좋게 하는 후보가 {r} 나아졌습니다. 작아 보여도 잠시 멈춘 것일 수 있어 {W}건 더 돌려 확인할 만합니다{cost}.",
     "con_multi_going": "최근 {W}건에서 {goals}를 함께 좋게 하는 후보가 {r} 더 나아졌습니다. 아직 나아지는 중이라 {W}건 더 돌릴 만합니다{cost}.",
@@ -295,10 +297,11 @@ NEXT = {
     "margin": ("{con} 여유가 작습니다. 여유 있는 설계를 찾아 보세요.", "여유 있는 설계 찾기 요청"),
     "edge": ("{var} 범위를 넓혀 볼 만합니다.", "범위 넓히기 요청"),
     "finish": ("Simulator를 배포하고 보고서를 쓰면 됩니다.", "보고서 요청"),
+    "report": ("보고서를 쓰면 됩니다.", "보고서 요청"),
 }
 # 버튼이 하는 일. 이름이 달라도 하는 일이 같으면 한 곳에만 둔다
 NEXT_ACTION = {"doe_fix": "doe", "count": "doe", "make_doe": "doe", "run": "run", "fail": "fail", "train": "train", "stale": "train", "poor": "al", "check_inputs": "inputs",
-               "optimize": "bo", "more_opt": "bo", "verify": "verify", "margin": "margin", "edge": "edge", "finish": "finish"}
+               "optimize": "bo", "more_opt": "bo", "verify": "verify", "margin": "margin", "edge": "edge", "finish": "finish", "report": "finish"}
 # 요약 카드의 '바로 확정하기 전에 볼 것'
 WATCH = {"coverage": "설계 범위", "quality": "이상한 값", "influence": "영향 순위", "trust": "예측 정확도", "convergence": "더 돌리기", "optimum": "최고 설계 확인",
          "pareto": "목표 맞바꾸기", "active": "추가 해석 효과"}
@@ -421,6 +424,7 @@ class ModelRow:
     path: str
     created_at: datetime | None
     deployed: bool
+    quality: dict = field(default_factory=dict)  # service.assess_quality가 학습 때 저장한 값
 
 
 @dataclass
@@ -482,6 +486,10 @@ def _running_state(snap: Snap) -> tuple[bool, bool]:
     return True, False
 
 
+def _model_row(m: models.SurrogateModel) -> ModelRow:
+    return ModelRow(m.id, m.version, list(m.outputs or []), dict(m.metrics or {}), m.n_train or 0, m.path, m.created_at, bool(m.deployed), dict(m.quality or {}))
+
+
 def snapshot(db: Session, study: models.Study) -> Snap:
     db.refresh(study)
     try:  # 화면의 '현재 최적'과 같은 케이스를 점검한다. 결과에 문자열이 섞이면 best_case가 비교하지 못하므로 그때는 직접 고른다
@@ -495,7 +503,7 @@ def snapshot(db: Session, study: models.Study) -> Snap:
         objectives=list(study.objectives or []), constraints=list(study.constraints or []), outputs=list(study.outputs or []),
         adapter=study.adapter, running=service.is_running(study.id), best_id=best_id, best_failed=broken, owner=_owner(study),
         cases=[CaseRow(c.id, dict(c.params or {}), dict(c.results or {}), c.status, c.source or "doe", c.timing, c.created_at, c.run_by, c.updated_at) for c in study.cases],
-        models=[ModelRow(m.id, m.version, list(m.outputs or []), dict(m.metrics or {}), m.n_train or 0, m.path, m.created_at, bool(m.deployed)) for m in rows])
+        models=[_model_row(m) for m in rows])
     snap.running, snap.link_lost = _running_state(snap)
     return snap
 
@@ -571,7 +579,7 @@ class Ctx:
         return (re.sub(r"\s*\[[^\]]*\]\s*", "", note).strip() or name) if note else name
 
     def unit_of(self, name: str) -> str:
-        for o in self.s.outputs:
+        for o in [*self.s.outputs, *self.s.variables]:  # 표에서 읽은 변수는 note 없이 unit만 있다
             if o["name"] == name and o.get("unit"):
                 return str(o["unit"])
         note = self.notes.get(name, "") or next((v.get("note") or "" for v in self.s.variables if v["name"] == name), "")
@@ -599,16 +607,14 @@ class Ctx:
         return [(c, v) for c in (self.complete if rows is None else rows) if (v := num(c.results.get(name))) is not None]
 
     def feasible(self, c: CaseRow) -> bool | None:
-        """제약을 모두 만족하면 True, 어기면 False, 값이 없어 모르면 None."""
-        known = True
-        for con in self.s.constraints:
-            v = num(c.results.get(con["name"]))
-            if v is None:
-                known = False
-                continue
-            if (con.get("upper") is not None and v > con["upper"]) or (con.get("lower") is not None and v < con["lower"]):
-                return False
-        return True if known else None
+        """화면의 '현재 최적'과 어긋나지 않게 서버의 정의를 그대로 쓴다."""
+        return service.constraint_state(self.s.constraints, c.results)
+
+    def no_feasible(self, kind: str) -> tuple[str, str]:
+        """고를 설계가 없을 때의 (상태, 문장). 어긴 케이스가 있으면 주의, 값이 없어 모르기만 하면 아직 판단하지 못한 것이다."""
+        if any(self.feasible(c) is False for c in self.complete):
+            return "caution", T[f"{kind}_infeasible"]
+        return "unknown", T["con_unknown_all"]
 
     def cost(self, n: int) -> str:
         """'N건 더'의 시간. 잰 케이스가 3건 이상이고 의미 있게 길 때만 말한다."""
@@ -640,8 +646,14 @@ class Ctx:
     def rmse(self, m: ModelRow, output: str) -> float | None:
         return num((m.metrics.get(output) or {}).get("rmse"))
 
+    def rows_of(self, m: ModelRow, output: str) -> int:
+        """이 출력을 학습한 행 수. 출력마다 값이 있는 행만 쓰므로 모델 전체 행 수보다 적을 수 있다."""
+        return int((m.quality.get("rows_by_output") or {}).get(output) or m.n_train)
+
     def stale_by(self, m: ModelRow, output: str) -> int:
-        return max(0, len(self.values(output)) - m.n_train)
+        """학습한 뒤 늘어난 건수. 행이 많아 골라 학습했으면 고르기 전 행 수와 견준다. 그러지 않으면 골라 뺀 행이 새 해석으로 보인다."""
+        seen = (m.quality.get("sampled") or {}).get("from") or self.rows_of(m, output)
+        return max(0, len(self.values(output)) - int(seen))
 
     def is_stale(self, m: ModelRow, output: str) -> bool:
         k = self.stale_by(m, output)
@@ -652,11 +664,11 @@ class Ctx:
         if m is None:
             return "unknown"
         r2 = self.r2(m, output)
-        if m.n_train < T_["train_min"] or r2 is None:
+        if self.rows_of(m, output) < T_["train_min"] or r2 is None:
             return "unknown"
         if r2 < T_["r2_fair"]:
             return "caution"
-        return "good" if r2 >= T_["r2_good"] and m.n_train >= self.need else "fair"
+        return "good" if r2 >= T_["r2_good"] and self.rows_of(m, output) >= self.need else "fair"
 
     def score(self, m: ModelRow, o: str) -> dict | None:
         """설계 범위 전체를 말하는 정확도. 최적화 점은 한곳에 몰려 서로를 잘 맞히므로 빼고 잰다(Hartmann6: 전체 R² 0.93, 실제 0.49).
@@ -675,11 +687,9 @@ class Ctx:
             dropped = int((~keep).sum())
             if dropped and keep.sum() < T_["train_min"]:  # 남는 점이 너무 적으면 뺄 수 없다
                 keep, dropped = np.ones(len(actual), dtype=bool), 0
-            a, p = actual[keep], pred[keep]
-            err = np.abs(p - a)
-            tot = float(np.sum((a - a.mean()) ** 2))
+            err = np.abs(pred[keep] - actual[keep])
             stored = self.r2(m, o)
-            r2 = stored if not dropped and stored is not None else (1 - float(np.sum((p - a) ** 2)) / tot if tot > 0 else None)
+            r2 = stored if not dropped and stored is not None else service.design_range_r2(actual, pred, keep)
             out = {"r2": r2, "p80": float(np.percentile(err, 80)), "rmse": float(np.sqrt(np.mean(err ** 2))), "n": int(keep.sum()), "dropped": dropped}
         self._score[key] = out
         return out
@@ -703,18 +713,19 @@ class Ctx:
         return True
 
     def verdict(self, m: ModelRow | None, o: str) -> str:
-        """화면의 예측 판정. 건수가 최소에 못 미치면 판단하지 않고, 설계 범위 기준 정확도로 본다."""
-        if m is None or m.n_train < self.need:
+        """화면의 예측 판정. 건수가 최소에 못 미치면 판단하지 않고, 설계 범위 기준 정확도로 본다.
+        같은 화면의 정확도 칩(ModelTrust)과 어긋나지 않게 학습 때 저장한 품질보다 좋게 말하지 않는다. 거의 일정한 출력만 예외다: R²가 뜻이 없고 문장이 그 이유를 말한다."""
+        if m is None or self.rows_of(m, o) < self.need:
             return "unknown"
         s = self.score(m, o)
         r2 = s["r2"] if s else self.r2(m, o)
         if r2 is None:
             return "unknown"
-        if r2 >= T_["r2_good"]:
+        if r2 < T_["r2_good"] and self.near_flat(m, o):
             return "good"
-        if self.near_flat(m, o):
-            return "good"
-        return "fair" if r2 >= T_["r2_fair"] else "caution"
+        level = "good" if r2 >= T_["r2_good"] else "fair" if r2 >= T_["r2_fair"] else "caution"
+        stored = QUALITY_STATE.get(((m.quality.get("by_output") or {}).get(o) or {}).get("level"))
+        return stored if stored and _RANK[stored] > _RANK[level] else level
 
     def model_info(self, m: ModelRow, output: str | None = None) -> dict:
         return {"id": m.id, "version": m.version, "n_train": m.n_train, "stale_by": self.stale_by(m, output) if output else 0}
@@ -1279,7 +1290,7 @@ def _influence_one(ctx: Ctx, o: str) -> dict:
     charts = [{"kind": "influence", "bars": bars, "effects": effects, "output": label, "unit": ctx.unit_of(o), "weak": level == "caution"}]
     info = ctx.model_info(m, o)
     if level == "unknown":
-        return out("unknown", say("inf_few", n=m.n_train, m=max(1, ctx.need - m.n_train)), facts=facts, charts=charts, model=info, predicted=True)
+        return out("unknown", say("inf_few", n=ctx.rows_of(m, o), m=max(1, ctx.need - ctx.rows_of(m, o))), facts=facts, charts=charts, model=info, predicted=True)
     if level == "caution":
         # 약한 모델의 교호작용은 말하지 않는다. 해석값과의 관련은 우연으로 설명되지 않을 때만 이름을 댄다
         if related is None:
@@ -1357,8 +1368,8 @@ def _trust_one(ctx: Ctx, o: str) -> dict:
 
     if is_constant(vals):
         return blank(say("tr_flat", out=label))
-    if m.n_train < ctx.need:  # 몇 건으로 잰 80백분위는 우연이다. 최소 건수부터 판단한다
-        return blank(say("tr_few", n=m.n_train, m=ctx.need - m.n_train))
+    if ctx.rows_of(m, o) < ctx.need:  # 몇 건으로 잰 80백분위는 우연이다. 최소 건수부터 판단한다
+        return blank(say("tr_few", n=ctx.rows_of(m, o), m=ctx.need - ctx.rows_of(m, o)))
     cv = ctx.cv(sur, o, m)
     level = ctx.verdict(m, o)
     if level == "unknown":
@@ -1469,8 +1480,8 @@ def convergence(ctx: Ctx) -> dict | None:
     # '처음 계획한 해석'은 정말 처음 점이어야 한다. 능동학습 점은 처음 값에도, 최적화 개선에도 넣지 않는다
     base_vals = [v for c, v in rows if c.source not in ("bo", "al")]
     ptp = float(np.ptp(base_vals)) if len(base_vals) >= 2 else 0.0
-    feas = [(c, v) for c, v in rows if ctx.feasible(c) is not False and num(c.results.get(o)) is not None]
-    curve = _curve(rows, feas, sign)
+    feas = [(c, v) for c, v in rows if ctx.feasible(c) is True]
+    curve = _curve(ctx, rows, feas, sign)
     charts = [{"kind": "curve", "output": label, "unit": unit, "goal": obj.get("goal", "min"), **curve}]
     facts = {"bo": k, "window": W, "unit": unit, "goal": obj.get("goal", "min"), "output": o}
     m = ctx.model_for(o)
@@ -1480,7 +1491,8 @@ def convergence(ctx: Ctx) -> dict | None:
         next_ = _ask(ctx, "최적화 요청", "스터디 '{name}'에서 최적화를 돌려 줘.", "bo") if m else None
         return _section("convergence", "unknown", T["con_none"], facts=facts, charts=charts if rows else [], how=how, next_=next_, basis=ctx.basis)
     if not feas:
-        return _section("convergence", "caution", T["con_infeasible"], facts=facts, charts=charts, how=how, basis=ctx.basis)
+        state, sentence = ctx.no_feasible("con")
+        return _section("convergence", state, sentence, facts=facts, charts=charts, how=how, basis=ctx.basis)
     base_feas = [v for c, v in feas if c.source not in ("bo", "al")]
     start = (min(base_feas, key=lambda v: sign * v) if base_feas else feas[0][1])
     now = min((v for _, v in feas), key=lambda v: sign * v)
@@ -1544,7 +1556,7 @@ def _best_after_bo(ctx: Ctx, feas, start, sign) -> tuple[float, list[float]]:
     return (start if first is None else first), out
 
 
-def _curve(rows, feas, sign) -> dict:
+def _curve(ctx: Ctx, rows, feas, sign) -> dict:
     ok = {c.id for c, _ in feas}
     best, out = None, {"index": [], "case_ids": [], "values": [], "best": [], "source": [], "feasible": []}
     for i, (c, v) in enumerate(rows, 1):
@@ -1555,7 +1567,7 @@ def _curve(rows, feas, sign) -> dict:
         out["values"].append(v)
         out["best"].append(best)
         out["source"].append(c.source)
-        out["feasible"].append(c.id in ok)
+        out["feasible"].append(ctx.feasible(c))  # True·False·None(값이 없어 모름). 모르는 값을 '어겼다'고 그리지 않는다
     first_bo = next((i for i, c in enumerate(rows, 1) if c[0].source == "bo"), None)
     out["bo_from"] = first_bo
     return out
@@ -1619,7 +1631,8 @@ def _convergence_multi(ctx: Ctx) -> dict:
         return _section("convergence", "unknown", T["con_none"], facts=facts, how=how, basis=ctx.basis,
                         next_=_ask(ctx, "최적화 요청", f"스터디 '{{name}}'에서 {goals_word} 최적화를 돌려 줘.", "bo") if s.models else None)
     if not len(S):
-        return _section("convergence", "caution", T["con_infeasible"], facts=facts, how=how, basis=ctx.basis)
+        state, sentence = ctx.no_feasible("con")
+        return _section("convergence", state, sentence, facts=facts, how=how, basis=ctx.basis)
     is_base = np.array([c.source not in ("bo", "al") for c in cases])
     base = S[is_base] if is_base.any() else S
     ref = base.max(axis=0) + 0.1 * np.where(np.ptp(base, axis=0) > 0, np.ptp(base, axis=0), np.maximum(np.abs(base.max(axis=0)), 1.0))
@@ -1681,7 +1694,7 @@ def _best(ctx: Ctx) -> CaseRow | None:
             return picked
         # NaN이 먼저 오면 best_case가 그 케이스를 고른다. '해석이 없다'고 잘못 말하지 않게 값이 있는 최고를 쓴다
     sign = 1.0 if s.objectives[0].get("goal", "min") == "min" else -1.0
-    rows = [(c, v) for c, v in ctx.values(o) if ctx.feasible(c) is not False]
+    rows = [(c, v) for c, v in ctx.values(o) if ctx.feasible(c) is True]
     return min(rows, key=lambda t: sign * t[1])[0] if rows else None
 
 
@@ -1748,7 +1761,8 @@ def optimum(ctx: Ctx) -> dict | None:
     best = _best(ctx)
     table = _candidates(ctx, o, sign)
     if best is None or num(best.results.get(o)) is None:
-        return _section("optimum", "caution" if s.constraints else "unknown", T["opt_infeasible"] if s.constraints else T["opt_none"], charts=table, basis=ctx.basis)
+        state, sentence = ctx.no_feasible("opt") if s.constraints else ("unknown", T["opt_none"])
+        return _section("optimum", state, sentence, charts=table, basis=ctx.basis)
     val = float(best.results[o])
     v_text = with_unit(val, unit)
     if len(ctx.complete) < ctx.need:
@@ -1906,7 +1920,7 @@ def _margin_ask(ctx: Ctx, con: str) -> dict:
 
 
 def _total_gain(ctx: Ctx, o: str, sign: float) -> float:
-    rows = [(c, v) for c, v in ctx.values(o) if ctx.feasible(c) is not False]
+    rows = [(c, v) for c, v in ctx.values(o) if ctx.feasible(c) is True]
     base = [v for c, v in rows if c.source not in ("bo", "al")]
     if not base or not rows:
         return 0.0
@@ -1918,7 +1932,7 @@ def _total_gain(ctx: Ctx, o: str, sign: float) -> float:
 def _candidates(ctx: Ctx, o: str, sign: float) -> list:
     """후보 표: 해석으로 확인한 상위 5건. 예측 후보는 _add_predicted_rows가 따로 표시해 넣는다."""
     s = ctx.s
-    rows = sorted([(c, v) for c, v in ctx.values(o) if ctx.feasible(c) is not False], key=lambda t: sign * t[1])[:5]
+    rows = sorted([(c, v) for c, v in ctx.values(o) if ctx.feasible(c) is True], key=lambda t: sign * t[1])[:5]
     if not rows:
         return []
     out = []
@@ -2018,10 +2032,11 @@ def pareto_pair(ctx: Ctx, a: str, a_goal: str, b: str, b_goal: str) -> dict:
     single = len(s.objectives) < 2
     notes = [say("par_single", a=ctx.label(s.objectives[0]["name"]))] if single and s.objectives else []
     chart = {"kind": "pareto", "a": {"name": a, "label": la, "unit": ua, "goal": a_goal}, "b": {"name": b, "label": lb, "unit": ub, "goal": b_goal},
-             "all": [[c.id, float(c.results[a]), float(c.results[b]), ctx.feasible(c) is True] for c in any_values[:2000]],
+             "all": [[c.id, float(c.results[a]), float(c.results[b]), ctx.feasible(c)] for c in any_values[:2000]],
              "front": [], "predicted": [], "knee": None}
     if s.constraints and any_values and not cases:
-        return _section("pareto", "caution", T["par_infeasible"], notes=notes, facts=facts, charts=[chart], how=how, basis=ctx.basis)
+        state, sentence = ctx.no_feasible("par")
+        return _section("pareto", state, sentence, notes=notes, facts=facts, charts=[chart], how=how, basis=ctx.basis)
     if len(cases) < T_["pareto_min"]:
         return _section("pareto", "unknown", say("par_few", n=len(cases), m=int(T_["pareto_min"]) - len(cases)), notes=notes, facts=facts, charts=[chart], how=how, basis=ctx.basis)
     mask = calc.non_dominated(S)
@@ -2434,6 +2449,8 @@ def _next(ctx: Ctx, by: dict) -> dict | None:
         return go("edge", (opt.get("next") or {}).get("request") or "", "optimum", var=ctx.label(e["variable"]))
     if not ctx.complete:
         return None
+    if any(m.deployed for m in s.models):  # 표로 만들면 Simulator가 이미 배포돼 있다. 한 일을 또 하라고 하지 않는다
+        return go("report", "스터디 '{name}'의 보고서를 써 줘.", "overview")
     return go("finish", "스터디 '{name}'의 Simulator를 배포하고 보고서를 써 줘.", "overview")
 
 
@@ -2740,7 +2757,7 @@ def trust_line(db: Session, m: models.SurrogateModel) -> dict:
     """Simulator 위 한 줄. 공유 화면에도 나가므로 출력 이름과 정확도만 담는다(프로젝트·케이스 정보 없음)."""
     study = db.get(models.Study, m.study_id)
     snap = snapshot(db, study)
-    row = next((x for x in snap.models if x.id == m.id), None) or ModelRow(m.id, m.version, list(m.outputs or []), dict(m.metrics or {}), m.n_train or 0, m.path, m.created_at, bool(m.deployed))
+    row = next((x for x in snap.models if x.id == m.id), None) or _model_row(m)
     ctx = Ctx(snap, True, light=True)  # 요청 경로다. 옛 모델을 여기서 다시 재지 않는다
     sur = ctx.surrogate(row)
     outs = [o for o in row.outputs if sur and o in sur.models]
@@ -2754,8 +2771,8 @@ def trust_line(db: Session, m: models.SurrogateModel) -> dict:
         label, unit = ctx.label(o), ctx.unit_of(o)
         sc = ctx.score(row, o)
         level = ctx.verdict(row, o)
-        if row.n_train < ctx.need:
-            line = ("unknown", say("tr_few", n=row.n_train, m=ctx.need - row.n_train))
+        if ctx.rows_of(row, o) < ctx.need:
+            line = ("unknown", say("tr_few", n=ctx.rows_of(row, o), m=ctx.need - ctx.rows_of(row, o)))
         elif sc:
             near = ctx.near_flat(row, o) and (sc["r2"] if sc["r2"] is not None else 0.0) < T_["r2_good"]
             line = (level, say("tr_nearflat", out=label, val=with_unit(float(np.median([v for _, v in ctx.values(o)] or [0.0])), unit), p80=with_unit(sc["p80"], unit)) if near

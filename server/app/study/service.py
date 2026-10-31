@@ -127,15 +127,27 @@ def _complete_cases(study):
     return [c for c in study.cases if c.status == "complete"]
 
 
-def feasible(study: models.Study, results: dict) -> bool:
-    """제약(constraints)을 모두 만족하는가. 결과에 없는 제약 항목은 판단하지 않는다."""
-    for c in study.constraints or []:
-        v = results.get(c["name"])
-        if v is None:
+def constraint_state(constraints: list[dict] | None, results: dict | None) -> bool | None:
+    """제약 판정의 단 하나의 정의. True: 모두 만족 · False: 하나라도 어김 · None: 어긴 것은 없지만 값이 없어 모름.
+    값이 없는 케이스를 만족으로 치면 제약 값을 뽑지 못한 설계가 '최적'이 된다. 그래서 고를 때는 True만 쓴다(`is True`).
+    제약이 없거나 범위가 없는 제약은 따질 것이 없어 True다."""
+    known = True
+    for c in constraints or []:
+        upper, lower = c.get("upper"), c.get("lower")
+        if upper is None and lower is None:
             continue
-        if (c.get("upper") is not None and v > c["upper"]) or (c.get("lower") is not None and v < c["lower"]):
+        v = (results or {}).get(c["name"])
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            known = False
+            continue
+        if (upper is not None and v > upper) or (lower is not None and v < lower):
             return False
-    return True
+    return True if known else None
+
+
+def feasible(study: models.Study, results: dict | None) -> bool | None:
+    """이 스터디의 제약으로 본 결과. 뜻은 constraint_state."""
+    return constraint_state(study.constraints, results)
 
 
 def best_case(study: models.Study, feasible_only: bool = True) -> models.Case | None:
@@ -144,7 +156,7 @@ def best_case(study: models.Study, feasible_only: bool = True) -> models.Case | 
         return None
     obj = study.objectives[0]
     done = [c for c in _complete_cases(study) if obj["name"] in c.results
-            and (not feasible_only or feasible(study, c.results))]
+            and (not feasible_only or feasible(study, c.results) is True)]
     if not done:
         return None
     key = lambda c: c.results[obj["name"]]
@@ -382,6 +394,7 @@ def _restore_previous(case: models.Case, why: str | None) -> bool:
         return False
     case.status, case.results, case.run_by, case.run_dir = "complete", prev.get("results") or {}, prev.get("run_by"), prev.get("run_dir")
     case.archive, case.images, case.fields = prev.get("archive"), prev.get("images"), prev.get("fields")
+    case.timing = prev.get("timing", case.timing)  # 지켜 둔 값을 낸 해석의 시각. 끝나지 못한 다시 돌리기의 시각으로 해석 시간을 재면 안 된다
     case.error = f"다시 돌리기가 끝나지 못해 이전 결과를 지켰습니다: {why}" if why else None
     case.previous = None
     return True
@@ -514,7 +527,7 @@ def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, us
             _batches.setdefault(study_id, set()).update(c.id for c in cases)
         for c in cases:
             if c.status == "complete" and c.results and not c.previous:  # 다시 돌리기가 실패해도 지금 값을 잃지 않게 둔다
-                c.previous = {"results": c.results, "run_by": c.run_by, "run_dir": c.run_dir, "archive": c.archive, "images": c.images, "fields": c.fields}
+                c.previous = {"results": c.results, "timing": c.timing, "run_by": c.run_by, "run_dir": c.run_dir, "archive": c.archive, "images": c.images, "fields": c.fields}
             c.status, c.run_by, c.error, c.stopped_by = "queued", user_id, None, None
         db.commit()
         project = db.get(models.Project, study.project_id)
@@ -963,7 +976,7 @@ def publish_convergence(db, study, flow_id=None, node_id=None):
     best, pts_best, pts_raw = None, [], []
     for i, c in enumerate([c for c in study.cases if c.status == "complete" and obj["name"] in c.results], 1):
         v = c.results[obj["name"]]
-        if feasible(study, c.results):  # 최적값은 제약을 만족하는 케이스로만
+        if feasible(study, c.results) is True:  # 최적값은 제약을 만족한다고 확인된 케이스로만
             best = v if best is None or sign * v < sign * best else best
         pts_raw.append({"x": i, "y": v})
         if best is not None:
@@ -1060,17 +1073,37 @@ def quality_level(m: models.SurrogateModel) -> str | None:
     return max(map(_r2_level, r2s), key=_QUALITY_ORDER.get) if r2s else None
 
 
-def assess_quality(cv: dict, n_train: int, n_vars: int, adapter: str, constant: list[str]) -> dict:
+def design_range_r2(actual, pred, keep) -> float | None:
+    """설계 범위 전체를 말하는 R². keep은 점수에 넣는 점이다. 최적화 점은 한곳에 몰려 서로를 잘 맞히므로 빼고 잰다(Hartmann6: 전체 R² 0.93, 실제 0.49).
+    점수에서만 빼는 것이고 학습에서 빼는 것은 아니다. 값이 모두 같아 잴 수 없으면 None."""
+    a, p = np.asarray(actual, dtype=float)[keep], np.asarray(pred, dtype=float)[keep]
+    tot = float(np.sum((a - a.mean()) ** 2))
+    return 1 - float(np.sum((p - a) ** 2)) / tot if tot > 0 else None
+
+
+def assess_quality(cv: dict, n_train: int, n_vars: int, adapter: str, constant: list[str], scored: dict | None = None) -> dict:
     """교차검증 R²와 표본 수로 품질을 정한다. R²는 Surrogate.fit의 K겹 교차검증 값이라 학습에 안 쓴 점으로 잰 것이다.
-    표본이 적으면 R²가 높게 나와도 믿기 어려워 한 단계 낮춘다. 배포를 막지는 않고 화면과 공유에 경고로 보인다."""
+    표본이 적으면 R²가 높게 나와도 믿기 어려워 한 단계 낮춘다. 배포를 막지는 않고 화면과 공유에 경고로 보인다.
+    scored는 출력별로 점수에 넣을 점(True)이다. 판단 도우미와 같은 값을 보여 주려고 같은 기준으로 잰다. 남는 점이 5개 미만이면 빼지 않는다."""
     by_output: dict[str, dict] = {}
     warnings: list[str] = []
+    narrowed: dict[str, float] = {}
+    for o, v in cv.items():
+        keep = (scored or {}).get(o)
+        if keep is None or o in constant or keep.all() or int(keep.sum()) < 5:
+            continue
+        r2 = design_range_r2(v["actual"], v["cv_pred"], keep)
+        if r2 is not None:
+            narrowed[o] = r2
     for o, v in cv.items():
         if o in constant:  # 값이 하나뿐이면 R²가 뜻이 없다
             by_output[o] = {"level": "fair", "r2": None}
             warnings.append(f"출력 '{o}'은(는) 학습 행에서 값이 모두 같아 정확도를 잴 수 없습니다")
             continue
-        by_output[o] = {"level": _r2_level(v["r2"]), "r2": round(v["r2"], 4)}
+        r2 = narrowed.get(o, v["r2"])
+        by_output[o] = {"level": _r2_level(r2), "r2": round(r2, 4)}
+        if _r2_level(r2) != _r2_level(v["r2"]):  # 다른 곳에 보이는 R²(모든 점)와 등급이 다르면 왜 다른지 밝힌다
+            warnings.append(f"'{o}' 정확도는 최적화가 한곳에 몰아 돌린 점을 빼고 쟀습니다(모든 점으로 재면 R² {v['r2']:.2f}). 설계 범위 전체를 맞히는지를 보기 위해서입니다")
     level = max((b["level"] for b in by_output.values()), key=_QUALITY_ORDER.get, default="poor")
     more = "표에 행을 더하거나 빠진 입력 변수가 없는지 확인하세요" if adapter == "data" else "점을 더 해석하거나(능동학습) 빠진 입력 변수가 없는지 확인하세요"
     if n_vars > 30:  # 입력이 많으면 행을 더해도 잘 나아지지 않는다. 듣지 않는 처방을 시키지 않는다
@@ -1105,6 +1138,7 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
     data_hash = _data_hash(study, done, outputs)
     names = _var_names(study)
     X = np.array([[float(c.params[v]) for v in names] for c in done])
+    from_bo = np.array([c.source == "bo" for c in done])
 
     def column(o: str) -> np.ndarray:
         cells = [_cell((c.results or {}).get(o), 12) for c in done]
@@ -1122,6 +1156,7 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
     if rows_total > limit:  # GP 시간은 행 수의 세제곱으로 는다(측정: 400행 93초). 서버 스레드를 오래 잡지 않게 고르게 줄인다
         keep = space_filling_subset(X, limit)
         X = X[keep]
+        from_bo = from_bo[keep]
         Y = {o: y[keep] for o, y in Y.items()}
         sampled = {"from": rows_total, "to": int(len(keep))}
     constant = [o for o, y in Y.items() if float(np.ptp(y[np.isfinite(y)])) == 0]
@@ -1136,7 +1171,8 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
     for v in cv.values():
         v["r2"], v["rmse"] = float(np.nan_to_num(v["r2"], nan=0.0, posinf=1.0, neginf=-1e6)), float(np.nan_to_num(v["rmse"], nan=0.0, posinf=1e300))
 
-    quality = assess_quality(cv, min(rows_by_output.values()), len(names), study.adapter, constant)
+    quality = assess_quality(cv, min(rows_by_output.values()), len(names), study.adapter, constant,
+                             {o: ~from_bo[np.isfinite(Y[o])] for o in cv})
     whole = [e for e in excluded if e["whole"]]
     if whole:
         kinds = list(dict.fromkeys(e["reason"] for e in whole))
@@ -1341,7 +1377,7 @@ def _suggest_multi(study: models.Study, sur: Surrogate, lo, hi, n: int):
     # NaN·참거짓이 값 범위에 섞이면 점수가 모두 0이 되어 임의의 점을 고른다
     done = [c for c in _complete_cases(study) if all(
         isinstance(v := c.results.get(o["name"]), (int, float)) and not isinstance(v, bool) and np.isfinite(v) for o in objs)]
-    ok = [c for c in done if feasible(study, c.results)] or done
+    ok = [c for c in done if feasible(study, c.results) is True] or done
     if not ok:
         raise ValueError("완료된 케이스가 없습니다")
     return bayesopt.suggest(sur, lo, hi, "mo", n, seed=len(study.cases), objectives=objs,
@@ -1419,7 +1455,10 @@ def model_candidates(db: Session, study: models.Study, mode: str, n: int, model_
     cand = qmc.scale(qmc.Sobol(d=len(lo), scramble=True, seed=0).random(4096), lo, hi)
     mean, std = sur.predict(cand)
     note = UNVERIFIED_NOTE
-    ok = np.ones(len(cand), dtype=bool)
+    use = study.constraints if constraints is None else constraints
+    # 후보의 제약 판정도 같은 정의를 쓴다. 모델이 배우지 않은 제약은 값이 없는 것이니 만족으로 치지 않는다
+    states = [constraint_state(use, {k: mean[k][i] for k in sur.outputs}) for i in range(len(cand))]
+    ok = np.array([st is not False for st in states], dtype=bool)
     best_known = None
     if mode == "bo":
         first = (study.objectives or [{}])[0]
@@ -1432,20 +1471,14 @@ def model_candidates(db: Session, study: models.Study, mode: str, n: int, model_
         if goal not in ("min", "max"):  # 수명을 '최소'로 찾으면 가장 짧은 수명을 최적이라고 답하게 된다. 묻는다
             raise ValueError(f"'{objective}'을(를) 줄일까요, 키울까요? → goal에 min(줄이기) 또는 max(키우기)를 주세요")
         sign = 1.0 if goal == "min" else -1.0
-        use = study.constraints if constraints is None else constraints
         missing = [c["name"] for c in use or [] if c["name"] not in sur.outputs]
-        for c in use or []:
-            if c["name"] in sur.outputs:
-                if c.get("upper") is not None:
-                    ok &= mean[c["name"]] <= c["upper"]
-                if c.get("lower") is not None:
-                    ok &= mean[c["name"]] >= c["lower"]
         if missing:
             note += f" 모델이 학습하지 않은 제약은 반영하지 못했습니다: {', '.join(missing)}"
         if not ok.any():
             note += " 제약을 모두 만족한다고 예측되는 점이 없어 목적이 가장 좋은 점을 보였습니다"
         order = np.lexsort((sign * mean[objective], ~ok))
-        rows = [c for c in _complete_cases(study) if isinstance((c.results or {}).get(objective), (int, float))]
+        # 지금까지 가장 좋은 값도 제약을 만족한다고 확인된 케이스에서 고른다
+        rows = [c for c in _complete_cases(study) if isinstance((c.results or {}).get(objective), (int, float)) and constraint_state(use, c.results) is True]
         if rows:
             best = min(rows, key=lambda c: sign * c.results[objective])
             best_known = {"case_id": best.id, "params": best.params, "results": best.results}
@@ -1457,11 +1490,11 @@ def model_candidates(db: Session, study: models.Study, mode: str, n: int, model_
     picked = _pick_spaced(order, cand, lo, hi, n)
     candidates = [{"params": {v: float(cand[i][j]) for j, v in enumerate(sur.variables)},
                    "predicted": {k: float(mean[k][i]) for k in sur.outputs}, "std": {k: float(std[k][i]) for k in sur.outputs},
-                   "feasible": bool(ok[i]), "verified": False} for i in picked]
+                   "feasible": states[i], "verified": False} for i in picked]
     publish_artifact(db, study.project_id, "table", f"[{study.name}] 모델 예측 후보 (확인 안 됨)",
                      {"columns": [*sur.variables, *[f"{k} 예측" for k in sur.outputs], "제약 만족 예측"],
                       "rows": [[*[round(c["params"][v], 4) for v in sur.variables], *[round(c["predicted"][k], 5) for k in sur.outputs],
-                                "예" if c["feasible"] else "아니오"] for c in candidates]})
+                                {True: "예", False: "아니오"}.get(c["feasible"], "모름")] for c in candidates]})
     note += f" (예측 모델 v{m.version} 기준)"
     return {"study_id": study.id, "model_id": m.id, "model_version": m.version, "mode": mode, "verified": False, "note": note, "objective": objective, "goal": goal,
             "candidates": candidates, "best_known": best_known}

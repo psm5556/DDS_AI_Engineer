@@ -584,7 +584,7 @@ class CandidatesResponse(BaseModel):
     objective: str | None = None
     goal: str | None = None
     model_version: int | None = None  # 후보를 찾은 모델 버전
-    candidates: list[dict[str, Any]]  # {params, predicted, std, feasible, verified: false}
+    candidates: list[dict[str, Any]]  # {params, predicted, std, feasible(true·false·null=모름), verified: false}
     best_known: dict[str, Any] | None = None  # 데이터에 실제로 있는 최적 행(비교용)
 
 

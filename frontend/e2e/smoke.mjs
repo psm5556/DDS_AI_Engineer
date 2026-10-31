@@ -391,6 +391,7 @@ if (INSIGHTS) {
     }
     await page.locator(".insight-sec .chip", { hasText: "계산 중" }).first().waitFor({ state: "detached", timeout: 60000 }).catch(() => {});
     await shot("insights-closed");
+    await page.setViewportSize({ width: 1440, height: 1600 }); // 펼친 그림 전체가 한 장에 들어오게
     const heads = page.locator(".insight-head:not([disabled])");
     for (let i = 0; i < (await heads.count()); i++) {
       await heads.nth(i).click();
@@ -400,6 +401,7 @@ if (INSIGHTS) {
       await shot(`insights-open-${name}`);
       await heads.nth(i).click();
     }
+    await page.setViewportSize({ width: 1440, height: 900 });
     if (await page.locator(".insight-sec .js-plotly-plot").count()) throw new Error("접으면 그림이 사라져야 합니다");
   });
 }

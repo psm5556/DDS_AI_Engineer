@@ -97,7 +97,7 @@ def create_study(name: str, variables: list[dict[str, Any]], objectives: list[di
     variables: [{"name": "thickness", "lower": 1.0, "upper": 5.0, "note": "두께 [mm]"}]  (입력. note는 화면과 판단 문장에 쓰는 쉬운 이름과 단위)
     objectives: [{"name": "mass", "goal": "min"}]  (이름은 results.json 키. 2개 이상이면 optimize(mode="bo")가 함께 좋아지는 쪽을 찾는다.
                  이때 train_surrogate의 outputs에 목표를 모두 넣는다. '현재 최적'은 첫 번째 목표 기준이고, 후보들은 study_insights의 두 목표 비교에 나온다)
-    constraints: [{"name": "max_stress", "upper": 250}]  (결과 제약 — 최적 케이스·BO가 이를 만족하는 쪽을 고른다.
+    constraints: [{"name": "max_stress", "upper": 250}]  (결과 제약 — 최적 케이스·BO가 이를 만족하는 쪽을 고른다. 제약 값이 없는 케이스는 만족으로 치지 않는다.
                  BO에 반영하려면 train_surrogate의 outputs에 제약 항목도 넣는다)
     outputs: [{"name": "deflection", "note": "끝단 처짐 [mm]"}]  (목적·제약 말고도 뽑는 출력과 화면 설명. 나중에 add_outputs로 늘린다)
     adapter='script' 이면 adapter_config: {"tool": "abaqus_cae", "script": "scripts/plate.py", "inputs": ["models/plate.cae"], "post": {...}}

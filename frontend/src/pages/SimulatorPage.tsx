@@ -101,7 +101,7 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
   const outside = spec.variables.filter((q) => x[q.name] !== undefined && (x[q.name] < q.lower || x[q.name] > q.upper));
   const results = (
     <section className="block sim-results">
-      <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted">{trust?.outputs && Object.values(trust.outputs).some((q) => q.p80 != null) ? "± 지난 해석으로 맞춰 본 오차(10번 중 8번)" : "± 예측 불확실도"}</span></div>
+      <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted">{trust?.outputs && Object.values(trust.outputs).some((q) => q.p80 != null) ? `± ${spec.data_source && spec.data_source.kind !== "solver" ? "지난 데이터로" : "지난 해석으로"} 맞춰 본 오차(10번 중 8번)` : "± 예측 불확실도"}</span></div>
       <ul className={`sim-out ${stale ? "stale" : ""}`}>
         {outs.map((o) => {
           const obj = spec.objectives.find((q) => q.name === o);

@@ -859,10 +859,10 @@ class DemoAgent:
             "outputs": [{"name": "vibration", "note": "진동 [mm]"}, {"name": "floor_force", "note": "바닥 전달력 [N]"}]})
         sid = s.study_id = study["study_id"]
         await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 24, "seed": 12, "flow_id": fid, "node_id": "doe"})
-        r = await s.tool("dds-study", "run_cases", {"study_id": sid})
+        r = await s.tool("dds-study", "run_cases", {"study_id": sid, "flow_id": fid})
         await node("doe", "complete", f"완료 {r['counts'].get('complete', 0)}건")
         await node("train", "in_progress")
-        await s.tool("dds-study", "train_surrogate", {"study_id": sid, "flow_id": fid, "node_id": "train"})
+        await self._finished(s, "dds-study", "train_surrogate", {"study_id": sid, "flow_id": fid, "node_id": "train"})
         await node("train", "complete")
         await node("al", "in_progress")
         await s.tool("dds-study", "optimize", {"study_id": sid, "iterations": 6, "mode": "al", "flow_id": fid, "node_id": "al"})

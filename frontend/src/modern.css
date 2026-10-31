@@ -1374,3 +1374,7 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .insight-watch .trust-more { font-size: inherit; }
 /* 글이 긴 칸은 줄을 바꾼다. 결론이 패널 밖으로 잘리지 않게 */
 .art-table td.art-long { min-width: 9em; height: auto; padding-top: var(--sp-1); padding-bottom: var(--sp-1); white-space: normal; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.5; }
+
+/* 패널 안의 믿음 한 줄: 폭이 좁으니 질문·상태·자세히를 첫 줄에, 문장을 둘째 줄에 둔다 */
+.sim-embed .trust-line > span:not(.chip) { order: 1; flex-basis: 100%; }
+.sim-embed .trust-line > .trust-more { margin-left: auto; }
