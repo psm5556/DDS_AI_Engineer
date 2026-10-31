@@ -31,7 +31,7 @@ def test_change_reaches_connected_agent(client):  # noqa: F811
     registry.conns[me["id"]] = conn
     try:
         client.put("/api/agent/settings", json={"auto_update": False}, headers=admin)
-        assert conn.sent == [{"type": "agent.settings", "auto_update": False, "remote_test_until": 0}]
+        assert conn.sent == [{"type": "agent.settings", "auto_update": False, "acks": True, "remote_test_until": 0}]
     finally:
         registry.conns.pop(me["id"], None)
         client.put("/api/agent/settings", json={"auto_update": True}, headers=admin)
@@ -43,7 +43,7 @@ def test_saved_without_connected_agent(client):  # noqa: F811
     assert client.put("/api/agent/settings", json={"auto_update": False}, headers=admin).status_code == 200
     conn = _Conn(me["id"])
     agents.record_instance(conn, {"type": "hello", "hostname": "PC-1", "version": "1.0"})
-    assert conn.sent == [{"type": "agent.settings", "auto_update": False, "remote_test_until": 0}]
+    assert conn.sent == [{"type": "agent.settings", "auto_update": False, "acks": True, "remote_test_until": 0}]
     conn.sent.clear()
     agents.record_instance(conn, {"type": "heartbeat", "hostname": "PC-1", "status": {}})
     assert conn.sent == []  # 하트비트마다 보내지 않는다

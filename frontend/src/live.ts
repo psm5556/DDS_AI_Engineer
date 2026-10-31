@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getToken } from "./api";
 
 /** 서버 실시간 이벤트(WebSocket /ws). 연결 하나를 앱 전체가 함께 쓰고, 끊기면 다시 붙는다. */
@@ -12,13 +12,21 @@ const CASE_BATCH_MS = 400;
 const listeners = new Set<Listener>();
 let ws: WebSocket | null = null;
 let retry = 1000;
+let wasOpen = false;
+let down = false; // 한 번 붙었다가 끊긴 상태. 이벤트가 오지 않는데 화면이 "진행 중"이라고 안심시키면 안 된다
 
 function connect() {
   const t = getToken();
   if (!t || ws) return;
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(t)}`);
-  ws.onopen = () => { retry = 1000; };
+  ws.onopen = () => {
+    retry = 1000;
+    // 끊긴 동안 놓친 이벤트(turn_ended 등)가 있을 수 있다. 다시 읽으라고 알린다
+    if (wasOpen) listeners.forEach((l) => l({ type: "live_reconnected" }));
+    wasOpen = true;
+    down = false;
+  };
   ws.onmessage = (m) => {
     try {
       const e = JSON.parse(m.data) as LiveEvent;
@@ -27,6 +35,10 @@ function connect() {
   };
   ws.onclose = () => {
     ws = null;
+    if (wasOpen && !down) {
+      down = true;
+      listeners.forEach((l) => l({ type: "live_lost" }));
+    }
     setTimeout(connect, retry);
     retry = Math.min(retry * 2, 15000);
   };
@@ -43,6 +55,16 @@ export function useLive(fn: Listener) {
     listeners.add(l);
     return () => { listeners.delete(l); };
   }, []);
+}
+
+/** 이 화면이 서버와 끊겼는지. 사이드바 상태와 대기 말풍선이 함께 쓴다 */
+export function useServerDown(): boolean {
+  const [isDown, setDown] = useState(down);
+  useLive((e) => {
+    if (e.type === "live_lost") setDown(true);
+    else if (e.type === "live_reconnected") setDown(false);
+  });
+  return isDown;
 }
 
 /** 서버 변경 이벤트 → React Query 캐시 무효화 (앱 루트에서 한 번 사용) */
@@ -84,6 +106,10 @@ export function useLiveInvalidation() {
         refreshStudies(pid);
         break;
       case "model_updated": qc.invalidateQueries({ queryKey: ["models", pid] }); break;
+      case "live_reconnected":
+        // 끊긴 동안 놓친 변경을 모두 다시 읽는다. 무거운 내 PC 진단은 빼고
+        qc.invalidateQueries({ predicate: (q) => !(q.queryKey[0] === "agent" && q.queryKey[1] === "diagnose") });
+        break;
       case "agent_status":
       case "agent_release":
         // 내 PC 진단(툴 찾기·WSL 확인)은 무거워 상태 변화마다 다시 돌리지 않는다 — 툴 화면의 '다시 확인'으로만

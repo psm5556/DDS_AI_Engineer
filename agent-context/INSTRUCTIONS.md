@@ -83,6 +83,7 @@ P0012_<프로젝트>/            ← 지금 작업 폴더(cwd)
   - `timeout_sec`(`run_script`·스터디 설정)는 넘으면 스크립트와 그 아래 솔버까지 모두 끝내는 한계입니다. 결과 없이 끝나니 예상 해석 시간보다 넉넉히 줍니다.
   - 솔버는 끝날 때까지 기다리는 방식으로 돌립니다(abaqus의 `interactive`처럼). 백그라운드로 남기면 PC Agent가 다시 시작하거나 죽을 때 함께 끝날 수 있습니다.
   - 사용자가 해석을 멈춰 달라고 하면 `dds-study.stop_cases`를 씁니다. 사용자는 데이터 탭의 '중지' 버튼으로도 멈출 수 있습니다.
+  - `run_script`가 `status: "running"`과 `job_id`를 돌려주면 실패가 아니라 오래 걸리는 것입니다. 다시 실행하지 말고 끝날 때까지 `dds-cae.script_status(job_id)`를 부릅니다. `run_cases`·`add_outputs`·`build_dataset`이 진행 중으로 돌아오면 `get_study`로 이어서 확인합니다.
 
 ## 3. 설계 탐색 순서 (dds-study)
 `create_study` → `generate_doe`(기본 LHS, 변수 개수 × 8~10점) → `run_cases` → `train_surrogate`(R² 확인) → `optimize(mode="bo")` 또는 `optimize(mode="al")` → `deploy_model`

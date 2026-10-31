@@ -36,6 +36,15 @@ export interface ChatMessage {
 export interface PermissionOption { optionId: string; name: string; kind: string }
 export interface PermissionRequest { request_id: string; title: string; tool_kind?: string; raw_input?: unknown; options: PermissionOption[] }
 
+/** GET /api/sessions/{id}/status · turn_started·turn_stage 이벤트. 시간은 서버 기준 경과(초)라 PC 시계가 달라도 맞다. */
+export type TurnStage = "idle" | "sending" | "agent_starting" | "session_new" | "session_load" | "thinking" | "tool" | "reconnecting";
+export interface TurnStatus {
+  stage: TurnStage; stage_detail: string | null; started_at: string | null;
+  elapsed_sec: number; stage_elapsed_sec: number; idle_sec: number; typical_start_sec: number | null;
+  link: "ok" | "lost"; cancelling: boolean; cancel_elapsed_sec: number | null; agent: string | null;
+}
+export interface SessionStatus extends TurnStatus { busy: boolean; pending_permissions: PermissionRequest[] }
+
 export interface AgentCli { name: string; label: string; installed: boolean; installable?: boolean; login?: string }
 export interface AgentStatus {
   connected: boolean; active_project_id: number | null;

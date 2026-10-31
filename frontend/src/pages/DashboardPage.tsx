@@ -97,7 +97,7 @@ export default function DashboardPage() {
         <div className="np-card">
           <Composer big autoFocus typing suggestions={STARTERS.map((x) => x.p)} seed={seed} busy={start.isPending}
             onSend={(o) => start.mutateAsync(o).then(() => true, () => false)}
-            leftBar={<AgentPicker value={resolveAgent(agent, preferred)} onChange={setPreferred} disabled={!connected} />}
+            leftBar={<AgentPicker value={resolveAgent(agent, preferred) ?? ""} onChange={setPreferred} disabled={!connected} />}
             placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘" />
           <div className={`np-opts ${showOpts ? "open" : ""}`}>
             <button type="button" className="np-opts-toggle" aria-expanded={showOpts} onClick={() => setOpts(!showOpts)}

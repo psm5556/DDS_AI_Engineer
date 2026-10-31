@@ -14,13 +14,14 @@ export function usePreferredAgent(): [string | null, (name: string) => void] {
   return [v, set];
 }
 
-/** 내 PC에 설치된 에이전트 중 실제로 쓸 이름 (선호값이 설치돼 있지 않으면 기본값) */
-export function resolveAgent(agent: AgentStatus | undefined, preferred: string | null): string {
+/** 내 PC에 설치된 에이전트 중 실제로 쓸 이름 (선호값이 설치돼 있지 않으면 기본값).
+ *  아직 모르면 null이다: 정해 둔 이름으로 채우면 사용자가 고르지 않은 CLI가 뜬다(연결 직후 hello가 오기 전에 실제로 있었다) */
+export function resolveAgent(agent: AgentStatus | undefined, preferred: string | null): string | null {
   const list = agent?.info?.agents ?? [];
   const ok = (n?: string | null) => !!n && list.some((a) => a.name === n && a.installed);
   if (ok(preferred)) return preferred!;
   if (ok(agent?.info?.default_agent)) return agent!.info!.default_agent!;
-  return list.find((a) => a.installed)?.name ?? preferred ?? "gemini";
+  return list.find((a) => a.installed)?.name ?? preferred;
 }
 
 /** 입력창 아래 에이전트 선택 메뉴 (Gemini · Claude Code · Codex · 데모) */
@@ -31,7 +32,7 @@ export function AgentPicker({ value, onChange, disabled, note }: {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const list = agent?.info?.agents ?? [];
-  const label = list.find((a) => a.name === value)?.label ?? value;
+  const label = list.find((a) => a.name === value)?.label ?? (value || "에이전트 확인 중");
 
   useEffect(() => {
     if (!open) return;

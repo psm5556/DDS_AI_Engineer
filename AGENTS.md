@@ -71,6 +71,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 프론트엔드 | `cd frontend; npm run build` | TypeScript 오류 없음 |
 | 화면·흐름 | 서버를 띄운 뒤 `cd frontend; npm run smoke` (흐름까지: `npm run smoke -- --demo`) | 마지막 줄 `PASS`, `frontend\e2e\shots\` 스크린샷을 직접 열어 확인 |
 | ACP·MCP 실제 프로세스 | `.venv\Scripts\python scripts\e2e_demo.py` | 시나리오 완료 |
+| 세션 유지·대기 표시 | `.venv\Scripts\python scripts\e2e_sessions.py` (실제 서버·Agent + 가짜 CLI `agent/tests/fake_acp.py`, 창 없는 브라우저) | 마지막 줄 `E2E 통과`, 스크린샷 `frontend\e2e\shots\sessions\` |
 | 설치·자동 업데이트 | `.venv\Scripts\python scripts\e2e_install.py` | 설치→연결→새 버전→업데이트 |
 | 스킬 스크립트 | `python -m py_compile <파일>` · 툴 목록 일관성은 pytest의 `test_tool_catalog_consistent` | — |
 | 실제 CAD/CAE 연동(서버에 툴 없음) | `scripts/pc_verify.py`로 사용자 PC에서 직접 시험(`deploy` → `suite --tool <툴>`·`chat "요청"`). [docs/pc-verification.md](docs/pc-verification.md) | 사람에게 눌러 보라고 하지 않고 결과를 받아 판단 |
@@ -99,7 +100,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
   - PC Agent 쪽: `agent/dds_agent/main.py`의 `handle()`
   - 서버 쪽: `registry.runner(user.id).call("타입", {...})`
 - PC Agent·MCP·스킬을 바꿨으면 `agent/dds_agent/__init__.py`의 `__version__`을 올린다.
-  배포는 관리 > Agent 배포 > "서버 코드로 첫 버전 배포"(같은 버전은 한 번만)로 하며, 자동 업데이트가 켜진 PC(설정, 기본 켜짐)는 작업이 없고 5분 조용할 때 업데이트한다.
+  배포는 관리 > Agent 배포 > "서버 코드로 첫 버전 배포"(같은 버전은 한 번만)로 하며, 자동 업데이트가 켜진 PC(설정, 기본 켜짐)는 작업이 없고 5분 조용할 때 받아 두고, AI CLI가 떠 있으면 1시간 조용할 때 다시 시작한다(없으면 5분).
 - 비밀값(토큰·PIN·secret key)과 `data/` 아래 파일은 커밋하지 않는다.
 - 셸에서 백슬래시가 든 텍스트를 heredoc으로 파일에 쓰면 깨질 수 있다. 파일 편집 도구를 쓴다.
 

@@ -28,4 +28,14 @@ def resolve_pid(explicit: int | None = None) -> int:
     return api.resolve_project(None)
 
 
-__all__ = ["api", "settings", "resolve_pid", "fresh_tools", "ServerError", "ROOT"]
+def tool_wait_limit() -> int:
+    """도구 한 번이 기다려도 되는 시간(초). 0이면 제한 없음.
+    CLI의 MCP 도구 시간 제한을 바꿀 수 없는 경우(Gemini 10분, Codex 60초) PC Agent가 정해 준다.
+    이 안에 끝나지 않은 일은 실패로 보이지 않게 "아직 진행 중"으로 돌려주고 AI가 다시 확인한다."""
+    try:
+        return max(0, int(os.environ.get("DDS_MCP_WAIT_LIMIT_SEC") or 0))
+    except ValueError:
+        return 0
+
+
+__all__ = ["api", "settings", "resolve_pid", "fresh_tools", "tool_wait_limit", "ServerError", "ROOT"]

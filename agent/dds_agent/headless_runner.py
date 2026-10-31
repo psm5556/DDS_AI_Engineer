@@ -26,15 +26,24 @@ class HeadlessRunner(AgentRunner):
         self._procs: dict[str, subprocess.Popen] = {}
         self._job = KillOnExitJob()  # Agent가 비정상 종료해도 숨은 CLI가 고아로 남지 않게
 
-    def new_session(self, cwd: str, mcp_servers=None) -> str:
+    def new_session(self, cwd: str, mcp_servers=None, report=None) -> str:
         sid = f"headless-{uuid.uuid4().hex[:8]}"
         self._cwd[sid], self._turns[sid] = cwd, 0
         return sid
 
-    def load_session(self, session_id: str, cwd: str, mcp_servers=None) -> bool:
+    def load_session(self, session_id: str, cwd: str, mcp_servers=None, report=None) -> bool:
         self._cwd[session_id] = cwd
         self._turns.setdefault(session_id, 1)
         return True
+
+    def live_sessions(self) -> set[str]:
+        return set(self._cwd)  # 프롬프트마다 프로세스를 띄우므로 세션은 죽지 않는다
+
+    def shutdown(self):
+        """멈춘 프롬프트를 끝낸다. 상주 프로세스가 없으니 세션은 그대로 쓸 수 있다."""
+        for proc in list(self._procs.values()):
+            if proc.poll() is None:
+                kill_tree(proc)
 
     def prompt(self, session_id: str, text: str) -> str:
         args = [*self.command, "-p", text, "--output-format", "stream-json", *self.extra_args]

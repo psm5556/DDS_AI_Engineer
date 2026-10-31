@@ -48,6 +48,9 @@ export function toolLabel(title: string): [string, string | null] {
   return [title, null];
 }
 
+/** 도구 제목에는 명령줄·긴 경로가 그대로 올 수 있다. 말풍선과 한 줄 묶음에서는 앞부분만 보여 준다(전체는 '자세히'에 있다) */
+export const clip = (s: string, n = 60) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
 const ARG_LABEL: Record<string, string> = {
   study: "스터디", study_id: "스터디", cases: "케이스 수", n: "개수", tool: "툴", script: "스크립트", filename: "파일",
   command: "명령", cmd: "명령", path: "경로", file_path: "파일", cwd: "폴더", params: "설계변수", iterations: "반복 횟수",

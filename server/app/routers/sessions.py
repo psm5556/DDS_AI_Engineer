@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from .. import models, schemas
 from ..agent.hub import hub
@@ -49,7 +50,9 @@ def list_sessions(project: models.Project = Depends(get_project_for_member), db:
 def create_session(body: schemas.ChatSessionCreate | None = None, project: models.Project = Depends(get_project_for_member),
                    user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     conn = registry.get(user.id)
-    agent = (body.agent if body else None) or (conn.info.get("default_agent") if conn else None) or "gemini"
+    agent = (body.agent if body else None) or (conn.info.get("default_agent") if conn else None)
+    if not agent:  # 정해진 값으로 채우면 사용자가 고르지 않은 CLI가 뜬다(Agent가 막 붙어 hello가 오기 전에 실제로 있었다)
+        raise HTTPException(409, "사용할 AI 에이전트를 아직 알 수 없습니다 → 입력창에서 에이전트를 고르거나 PC Agent가 연결된 뒤 다시 시도하세요")
     _check_agent(conn, agent)
     s = models.ChatSession(project_id=project.id, user_id=user.id, agent=agent)
     db.add(s)
@@ -76,11 +79,13 @@ def send_prompt(session_id: int, body: schemas.PromptRequest, user: models.User 
             raise HTTPException(404, "첨부 파일을 찾을 수 없습니다")
         atts.append({"id": a.id, "filename": a.filename, "size": a.size, "sha256": a.sha256})
     text = body.text.strip() or "첨부한 파일을 확인해 주세요."
+    _check_agent(registry.get(chat.user_id), chat.agent)
     try:
-        hub.send_prompt(session_id, text, atts)
+        # 바로 돌아온다. CLI 준비는 뒤에서 하고 화면은 turn_started·turn_stage로 단계를 본다
+        turn_id = hub.send_prompt(session_id, text, atts)
     except AgentError as e:
         raise HTTPException(409, str(e))
-    return {"ok": True}
+    return {"ok": True, "turn_id": turn_id}
 
 
 @router.post("/sessions/{session_id}/cancel")
@@ -88,6 +93,17 @@ def cancel(session_id: int, user: models.User = Depends(get_current_user), db: S
     _session_for_owner(session_id, user, db)
     try:
         hub.cancel(session_id)
+    except AgentError as e:
+        raise HTTPException(409, str(e))
+    return {"ok": True}
+
+
+@router.post("/sessions/{session_id}/force-restart")
+def force_restart(session_id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """중지했는데 AI 도구가 답하지 않을 때: 그 AI 도구를 끝내고 다시 띄운다. 멈춘 스크립트도 함께 끝나고, 창이 보이는 CAD는 남는다."""
+    _session_for_owner(session_id, user, db)
+    try:
+        hub.force_restart(session_id)
     except AgentError as e:
         raise HTTPException(409, str(e))
     return {"ok": True}
@@ -106,8 +122,8 @@ def permission(session_id: int, body: schemas.PermissionReply, user: models.User
 
 @router.get("/sessions/{session_id}/status")
 def status(session_id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _session_for_member(session_id, user, db)
-    return hub.status(session_id)
+    chat = _session_for_member(session_id, user, db)
+    return hub.status(session_id, chat.user_id)
 
 
 @router.get("/agent/status")
@@ -159,6 +175,7 @@ def rename_session(session_id: int, body: schemas.SessionUpdate, user: models.Us
         hub.forget_session(chat.agent_session_id)
         chat.agent = body.agent
         chat.agent_session_id = None  # 다음 요청 때 새 CLI로 세션을 열고 이전 대화를 요약해 넘긴다
+        flag_modified(chat, "agent_session_id")  # 읽은 값이 이미 None이어도 쓴다: 그사이 중지한 턴의 준비가 값을 썼을 수 있다
     db.commit()
     return chat
 
@@ -261,8 +278,9 @@ def set_local_folder(body: schemas.LocalFolder, project: models.Project = Depend
     info = _agent_call(user, "local.folder.set", {"project_id": project.id, "project_name": project.name,
                                                    "project_uid": project.uid, "path": body.path})
     for c in chats:
-        hub.forget_chat(c.id)
+        hub.forget_chat(c.id)  # 시작 중 중지한 턴의 준비가 옛 폴더의 세션을 뒤늦게 묶지 못하게 한다
         c.agent_session_id = None
+        flag_modified(c, "agent_session_id")  # 읽은 값이 이미 None이어도 쓴다
     db.commit()
     return info
 

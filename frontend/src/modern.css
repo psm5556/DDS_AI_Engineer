@@ -1084,3 +1084,24 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .scn-table th, .scn-table td { height: 22px; padding: 1px var(--sp-2); line-height: 1.3; background: transparent; }
 .login-top-right { display: flex; align-items: center; gap: var(--sp-3); }
 .login-top-right button { display: inline-flex; align-items: center; gap: var(--sp-1); }
+
+/* ---------- 기다리는 말풍선: 단계·흐르는 시간·안내. 멈추지 않았음을 움직임이 아니라 글자로 보여 준다(움직임 줄이기에서도 흐른다) ---------- */
+.chat-msg .bubble.waiting-bubble { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); }
+.waiting-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); color: var(--ink-2); font-size: var(--fs-14); }
+.waiting-clock { font-family: var(--font-mono); font-size: var(--fs-13); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.waiting-note { margin: 0; font-size: var(--fs-13); line-height: 1.6; color: var(--ink-3); }
+.waiting-restart { display: inline-flex; align-items: center; gap: var(--sp-1); margin-top: var(--sp-1); }
+.chat-offline { margin-bottom: var(--sp-3); }
+.chat-offline > svg { flex: none; }
+
+/* 긴 도구 제목(명령줄·경로)이 말풍선을 키우거나 대화 칸을 옆으로 넘치지 않게 */
+.waiting-head { min-width: 0; max-width: 100%; }
+.waiting-head .activity-text { min-width: 0; overflow-wrap: anywhere; }
+.waiting-clock { white-space: nowrap; }
+.tl-item { min-width: 0; max-width: 100%; }
+.cv-toolgroup { min-width: 0; max-width: 100%; }
+.cv-toolgroup-head { max-width: 100%; min-width: 0; }
+.cv-toolgroup-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-tool-head .t { overflow-wrap: anywhere; }
+.cv-tool-body { min-width: 0; overflow-wrap: anywhere; }
+.cv-tool-body pre { overflow-x: auto; }

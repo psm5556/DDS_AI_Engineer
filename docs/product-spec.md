@@ -177,7 +177,25 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 | 작업 흐름 카드 | 단계 번호 목록(1, 2, 3…)과 진행률. 승인 대기면 **[반려] [승인하고 실행]**. "흐름도" 버튼은 캔버스를 연다 |
 | 실행 확인 카드 | "내 PC에서 실행해도 될까요?" — 쉬운 이름과 입력값 표, 허용·거부 |
 | 결과 칩 | "결과 N개" 목록(4개 + 더 보기). 누르면 작업 흐름 탭의 그 단계 결과로 이동한다 |
-| 진행 표시 | "OO 진행 중 · 3/7단계" 또는 "생각하는 중…" |
+| 대기 말풍선 | 단계 문구 + 1초마다 흐르는 시간 + 안내(아래 표). 진행 중이면 입력창이 막히고 중지 버튼이 보인다 |
+
+대기 말풍선은 서버의 `/status`·`turn_stage`를 그대로 보여 준다. 새 대화의 첫 메시지·새로고침·브라우저 재연결 뒤에도 같은 경과 시간으로 이어진다.
+
+| 단계(`stage`) | 문구 |
+|---|---|
+| `agent_starting` | "Claude Code를 시작하는 중 · 1분 20초" + "사내 보안 검사로 몇 분 걸릴 수 있습니다. 멈춘 것이 아닙니다. 다른 일을 하다 와도 이어서 진행합니다." + 있으면 "지난번에는 3분 12초 걸렸습니다." |
+| `session_new` · `session_load` | "새 대화를 여는 중" · "이전 대화를 이어 붙이는 중" + 같은 안내 |
+| `thinking` | "생각하는 중 · 12초". 60초 넘게 출력이 없으면 "답을 기다리는 중 · 2분 10초" + "오래 걸리는 작업일 수 있습니다." 작업 흐름이 진행 중이면 "OO 진행 중 · 3/7단계" |
+| `tool` | "스크립트 실행 중 · 40초" |
+| `reconnecting` | "PC Agent 연결을 다시 잡는 중" + "작업은 PC에서 계속됩니다." |
+| 중지를 누른 뒤 | "중지하는 중". 30초 안에 끝나지 않으면 "AI 도구 다시 시작" 버튼(시작이 10분을 넘겨도 보인다). 서버가 받기 전에 누른 중지는 받는 대로 전달한다 |
+| 화면이 서버에 닿지 않을 때 | "서버 연결을 다시 잡는 중" + "진행 상황을 받지 못합니다". "멈춘 것이 아닙니다"라고 안심시키지 않는다. 위에 안내 띠, 사이드바는 "서버 연결 끊김" |
+
+시간은 1시간이 넘어도 초까지 보인다. 긴 도구 제목(명령줄)은 앞부분만 보이고 전체는 '자세히'에 있다. 내용이 자라면(안내·다시 시작 버튼) 바닥에 있을 때 스크롤이 따라간다.
+
+PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기록이 있으면 위에 안내 띠만 보이고, 설치한 적이 없고 기록도 없을 때만 설치 안내가 나온다. 서버가 다시 시작되어 Agent가 아직 안 붙은 동안(최대 90초)에는 말풍선을 거두지 않는다.
+
+기록을 읽는 동안에는 빈 새 대화 화면 대신 뼈대를 보이고 보내기를 막는다. 첫 화면에서 쓴 요청이 전송에 실패하면 요청과 첨부가 입력창으로 돌아온다. Agent가 막 붙어 쓸 수 있는 AI 도구를 아직 모르면 입력창을 막는다(정해 둔 이름으로 채워 고르지 않은 CLI를 띄우지 않는다).
 
 입력창(Composer)
 - Enter로 보내고 Shift+Enter로 줄을 바꾼다.
@@ -305,7 +323,7 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 구획마다 왼쪽에 제목·설명, 오른쪽에 내용을 두고 옅은 선으로 나눈다(상자를 쌓지 않는다).
 - 내 PC Agent
   - 연결 상태와 버전을 보인다.
-  - 자동 업데이트 선택(사용자마다 서버에 저장, 기본 켜짐). 켜 두면 대화·해석이 없고 마지막 작업에서 5분이 지났을 때 뒤에서 설치하고 다시 시작한다. 끄면 기다리던 업데이트도 취소하고, '지금 업데이트' 버튼으로만 한다.
+  - 자동 업데이트 선택(사용자마다 서버에 저장, 기본 켜짐). 켜 두면 대화·해석이 없고 마지막 작업에서 5분이 지났을 때 뒤에서 받아 두고, AI 도구가 떠 있으면 1시간 조용할 때 다시 시작한다(AI 도구가 없으면 5분). 끄면 기다리던 업데이트도 취소하고, '지금 업데이트' 버튼으로만 한다.
   - 설치: 설치 파일 받기, 또는 PowerShell 한 줄. 설치 파일은 웹앱과 같은 디자인의 4단계다(`installer/DdsAgentSetup.cs`).
     1. 계정 확인: 아이디·PIN으로 토큰을 자동 발급한다(이미 발급한 토큰도 쓸 수 있다). 이 PC가 이미 연결돼 있으면 묻지 않는다.
     2. AI 에이전트: Gemini·Claude·Codex가 이 PC에 있는지 먼저 확인한다. 있으면 선택을 막고 "설치됨". 본체만 있고 Agent가 실행하는 연결 구성요소(`claude-agent-acp`·`codex-acp`)가 없으면 그것만 설치한다.
@@ -446,8 +464,19 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 
 ### 4-11. PC Agent
 - **설치·연결:** 설치 파일 또는 PowerShell 한 줄, 토큰으로 연결한다.
-- **자동 업데이트:** 설정에서 켜 두면 서버에 새 버전이 배포될 때 유휴 시 뒤에서 업데이트한다. 유휴는 진행 중인 대화·케이스·CLI 설치가 없고 마지막 작업(`session.*`·`case.*` 등 사람이 시킨 메시지)에서 5분이 지난 때다. 받고 설치하는 동안 current.txt는 그대로이고, 그사이 시작한 일이 끝난 뒤에 전환하고 다시 시작한다. 같은 버전은 한 번만 배포한다.
-- **스킬 동기화:** `agent-context`를 프로젝트 폴더로 복사한다.
+- **자동 업데이트:** 설정에서 켜 두면 서버에 새 버전이 배포될 때 유휴 시 뒤에서 업데이트한다. 유휴는 진행 중인 대화·케이스·CLI 설치가 없고 마지막 작업(`session.*`·`case.*` 등 사람이 시킨 메시지)에서 5분이 지난 때다. 받고 설치하는 동안 current.txt는 그대로이고, 그사이 시작한 일이 끝난 뒤에 전환하고 다시 시작한다. 다시 시작은 살아 있는 AI CLI를 끝내므로 CLI가 떠 있으면 `IDLE_RESTART_SEC`(1시간) 조용할 때까지 미루고, 서버에 전하지 못한 출력이 남아 있어도 미룬다. 뜬 뒤 마지막 CLI·대화를 미리 띄운다. 같은 버전은 한 번만 배포한다.
+- **세션 유지:** 느린 CLI를 실패시키지 않고, 세션은 죽었거나 사용자가 끊었을 때만 버린다.
+  - 요청은 저장하고 바로 돌아온다. CLI 준비는 뒤에서 한다. 진행 중이면 409. 시작 한계는 `cli_start_timeout_sec`(기본 1800초) 하나이고, 넘어도 프로세스를 끝내지 않으며 늦은 `initialize`도 받는다.
+  - 끊겨도 턴·세션을 버리지 않는다. Agent는 대화 이벤트·턴 끝을 서버가 받았다고 답할 때까지 outbox에 쥐고 있다가 다시 보내고, 서버는 (boot, seq)로 중복을 거른다. 답을 못 받은 권한 요청도 다시 보낸다. 메시지 하나는 8MB를 넘지 않게 줄인다(큰 파일 diff·이미지가 연결을 끊지 않게).
+  - DB가 잠겨도 메시지를 버리지 않는다. SQLite는 30초 기다리고, 서버는 2분까지 다시 시도한 뒤 넘어가며 빠진 출력은 턴 끝에 안내한다. 안내를 저장하지 못해도 턴은 끝낸다.
+  - `hello`의 `live_sessions`·`active_turns`로 맞춘다. 살아 있는 세션은 `session/load` 없이 쓴다(Gemini는 load가 세션을 dispose한다). 서버를 다시 시작해도 턴을 되살린다. Agent가 다시 시작해 사라진 턴은 한 번만 안내하고 끝낸다. 서버와 Agent가 함께 다시 시작해 끝을 알 수 없게 된 턴은 답이 조금 나온 뒤였어도 대화별로 한 번 안내하고 끝나지 않은 도구를 닫는다.
+  - CLI가 죽으면(`agent.runner_exit`) 그 세션을 잊고 진행 중 턴을 끝낸다. 다음 요청은 CLI 재시작 + `session/load`, CLI가 그 세션을 모른다고 하거나 load를 지원하지 않으면 새 세션 + 지난 대화 요약 + 안내 한 번. 일시적인 실패와 세션과 무관한 오류("model … not found" 등)로 세션을 버리지 않는다. 사용자가 중지한 요청은 요약에서 빼거나(CLI에 닿기 전) "중지한 요청"으로 표시한다.
+  - 시작 중 중지는 바로 끝난다. 프롬프트는 보내지 않고 CLI는 끝내지 않는다. 그 뒤 작업 폴더나 에이전트를 바꾸면 늦게 끝난 세션을 대화에 묶지 않고, 새 CLI는 멈춘 CLI의 시작을 기다리지 않는다.
+  - CLI를 끝내는 길은 "AI 도구 다시 시작"(`session.force_restart`) 하나다. 그 아래 멈춘 스크립트도 끝나고, 창이 보이는 CAD는 남는다. Agent가 받았다고 답하지 않으면(반쯤 끊긴 연결) 다시 연결될 때 보낸다. 곧바로 보낸 요청은 옛 CLI가 끝난 뒤 새 CLI로 간다. 0.2.16 이하의 Agent는 이 메시지를 모르므로 끝낸 척하지 않고 이유와 할 일을 알린다.
+  - 옛 버전과 함께 쓰기: 0.2.16 이하의 Agent는 밀려나도 소켓을 닫지 않는다(곧바로 다시 붙어 서로 밀어내므로). 서버를 옛 버전으로 되돌려도 0.2.17 Agent는 응답 대기형 `session.prompt`에 답하고, `agent.settings`에 `acks`가 없으면 outbox를 쌓거나 다시 보내지 않는다.
+  - 미리 띄우기: Agent가 뜨거나 재연결되면 `state.json`(agent.toml 옆)의 마지막 CLI를 `initialize`까지 띄우고 마지막 대화를 불러온다. 시작 시간도 여기에 재어 화면과 heartbeat에 보낸다. 끄려면 `warm_up = false`.
+  - MCP 시간 제한: Claude Code는 `MCP_TIMEOUT`·`MCP_TOOL_TIMEOUT`을 준다. 제한을 바꿀 수 없는 Gemini(10분)·Codex(60초)는 `DDS_MCP_WAIT_LIMIT_SEC`로 긴 도구가 그 안에 돌아오게 하고 `script_status`·`get_study`로 이어서 확인한다.
+- **스킬 동기화:** `agent-context`를 프로젝트 폴더로 복사한다. 내용이 그대로면(`.dds-context-stamp`) 건너뛴다. 세션마다 파일 수백 개를 복사하면 보안 검사에 걸린다.
 - **그 밖:** 툴 자동 찾기(`toolscan`), 트레이 아이콘, HPC 실행(slurm·pbs 등)
 - **코드:** `agent/dds_agent/*` · `installer/` · `scripts/install-agent.ps1`
 
@@ -485,7 +514,7 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 |---|---|
 | 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin` · `GET·POST·DELETE /api/tokens` · `GET·PUT /api/users` |
 | 프로젝트 | `GET·POST /api/projects` · `GET·PUT·DELETE /api/projects/{p}` · 즐겨찾기 · 멤버 |
-| 대화 | `GET·POST /api/projects/{p}/sessions` · `PUT·DELETE /api/sessions/{s}` · `POST …/prompt·cancel·permission` · `GET …/messages·status` · 첨부 |
+| 대화 | `GET·POST /api/projects/{p}/sessions` · `PUT·DELETE /api/sessions/{s}` · `POST …/prompt·cancel·permission·force-restart` · `GET …/messages·status`(busy·stage·stage_detail·started_at·elapsed_sec·typical_start_sec·link·pending_permissions) · 첨부 |
 | 작업 흐름 | `GET·POST /api/projects/{p}/flows` · `GET /api/flows/{f}` · `PUT …/status` · `PUT …/nodes/{n}` |
 | 결과 | `GET·POST /api/projects/{p}/artifacts` · `DELETE /api/artifacts/{a}` · `POST /api/projects/{p}/files`(이미지) · `GET …/files/{path}` |
 | 보고서 | `GET /api/projects/{p}/reports` · `GET …/reports/latest` · `GET /api/reports/{r}` · `POST /api/projects/{p}/reports` · `GET …/report-context` · `GET …/report?format=docx|html&report_id=` |
@@ -498,11 +527,11 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 실시간 이벤트(브라우저 `/ws`)
 - `flow_updated` · `artifact_updated` · `report_updated`
 - `study_updated` · `case_updated` · `model_updated`
-- `project_updated` · `agent_event`(대화) · `agent_status`
+- `project_updated` · `agent_event`(대화. `turn_started`·`turn_stage`·`turn_ended`·`chunk`·`tool_call`·권한 요청) · `agent_status`
 
 PC Agent 메시지(`/ws/agent`, `server/app/agent/link.py` 머리 주석)
-- 서버 → Agent: `session.new·load·prompt·cancel`, `permission.reply`, `case.run`, `case.extract`, `case.train_sample`, `local.*`, `tools.*`, `agent.install·update`
-- Agent → 서버: `hello`, `heartbeat`, `agent.event`, `agent.permission`, `case.status`(results·images·fields·archive, extract)
+- 서버 → Agent: `session.new·load·prompt·cancel·force_restart`, `agent.ack`, `permission.reply`, `case.run`, `case.extract`, `case.train_sample`, `local.*`, `tools.*`, `agent.install·update`
+- Agent → 서버: `hello`(live_sessions·active_turns·boot), `heartbeat`, `agent.event`, `agent.permission`, `agent.turn_end`, `agent.runner_exit`, `agent.live`, `session.stage`, `case.status`(results·images·fields·archive, extract)
 
 ---
 
@@ -510,7 +539,7 @@ PC Agent 메시지(`/ws/agent`, `server/app/agent/link.py` 머리 주석)
 | 서버 | 툴 |
 |---|---|
 | dds-flow | `propose_flow` · `get_flow` · `update_node` · `publish_artifact` · `publish_image` · `set_project_info` · `get_report_context` · `write_report` · `make_report` |
-| dds-cae | `case_contract` · `list_tools` · `project_folder` · `run_script` |
+| dds-cae | `case_contract` · `list_tools` · `project_folder` · `run_script` · `script_status` |
 | dds-study | `list_adapters` · `create_study`(outputs) · `add_outputs` · `generate_doe` · `run_cases` · `get_study` · `case_data` · `train_surrogate` · `suggest_next` · `optimize` · `train_field_model` · `build_dataset` · `deploy_model` · `predict` |
 | dds-live | `live_status` · `live_launch` · `live_info` · `live_set_params` · `live_view` · `live_undo` · `live_exec` · `live_result` · `live_capture` |
 
@@ -564,6 +593,8 @@ PC Agent 메시지(`/ws/agent`, `server/app/agent/link.py` 머리 주석)
 | Output 추가 | 이미 해석한 케이스 모두에 새 값(기존 값 유지), 이후 케이스에도 값, 표 열 순서 | `test_add_output_extracts_existing_and_later_cases`, `test_post_steps_merge_and_extract_existing` |
 | HDF5 저장 | 케이스마다 case.h5, 검증 ok, manifest에 모든 파일, 서버 요약·받기, npz 없이 3D 학습 | `test_h5store.py`, `test_cae_to_h5.py`, `test_archive.py` |
 | 대화 정리 | 생각·툴 호출이 한 줄로 접히고, 범위 표기(6~14)가 취소선이 되지 않는다 | 스모크 |
+| 세션 유지 | 후속 요청·재연결·서버 재시작에 CLI 재시작 0회·`session/load` 0회. CLI가 죽으면 다음 요청이 재시작 + load로 이어지고, 끊긴 동안의 출력이 빠지거나 겹치지 않는다 | `test_sessions_stack.py`, `test_session_hub.py`, `test_session_keep.py`, `scripts/e2e_sessions.py` |
+| 대기 표시 | 시작 중에도 POST가 바로 돌아오고, 단계·흐르는 시간·안내가 보이며, 새로고침해도 이어진다. 끊겨도 기록이 설치 안내로 바뀌지 않는다 | `scripts/e2e_sessions.py`(스크린샷) |
 | 대화 움직임 | 기록을 열거나 새로 고쳐도 등장 움직임 없음, 새 항목만 등장. 턴 중 위로 올린 스크롤이 끌려 내려가지 않음 | 데모로 직접 |
 | 규모 | 케이스 500행에서 표 스크롤·탭 전환이 끊기지 않음(이벤트 400ms 묶음, 표 줄 memo) | Playwright `page.route`로 부풀려 확인 |
 

@@ -3,7 +3,7 @@
 import time
 from typing import Any, Literal
 
-from _common import api, resolve_pid
+from _common import api, resolve_pid, tool_wait_limit
 from mcp.server import MCPServer
 
 mcp = MCPServer(
@@ -87,7 +87,13 @@ def generate_doe(study_id: int, n: int = 20, method: Literal["lhs", "sobol", "ra
     return {"created": len(cases), "case_ids": [c["id"] for c in cases]}
 
 
+def _wait_cap(wait_sec: int) -> int:
+    limit = tool_wait_limit()  # CLI의 도구 시간 제한 안에 돌아온다. 그래야 실패로 보이지 않고 get_study로 이어서 확인한다
+    return min(wait_sec, limit) if limit else wait_sec
+
+
 def _wait(study_id: int, wait_sec: int) -> dict:
+    wait_sec = _wait_cap(wait_sec)
     t0 = time.time()
     while True:
         st = api.get(f"/api/studies/{study_id}")
@@ -161,7 +167,12 @@ def optimize(study_id: int, iterations: int = 10, mode: Literal["bo", "al"] = "b
     """제안 → 실행 → 재학습을 iterations번 반복한다. bo는 목적함수 최적화, al은 Surrogate 정확도 향상.
     한 번 호출이 오래 걸리면 iterations를 나눠 여러 번 호출한다. 수렴 그래프가 게시된다."""
     history = []
+    t0, limit = time.time(), tool_wait_limit()
     for i in range(iterations):
+        if i and limit and time.time() - t0 > limit * 0.5:  # 반복 전체가 CLI의 도구 시간 제한을 넘지 않게 여기까지만 하고 돌려준다
+            return {"history": history, "stopped_at": i, "model_id": m["id"],
+                    "reason": "실패가 아닙니다. 한 번에 도는 시간을 넘겨 여기까지 했습니다. 남은 반복을 iterations로 나눠 다시 호출하세요.",
+                    **_summary(api.get(f"/api/studies/{study_id}"))}
         api.post(f"/api/studies/{study_id}/suggest", {"mode": mode, "n": batch, "flow_id": flow_id, "node_id": node_id})
         api.post(f"/api/studies/{study_id}/run", {})
         st = _wait(study_id, wait_sec)
@@ -196,6 +207,7 @@ def build_dataset(study_id: int, targets: list[str] | None = None, frames: str |
     d = api.post(f"/api/studies/{study_id}/datasets", {"name": name, "targets": targets, "frames": frames, "step": step,
                                                         "flow_id": flow_id, "node_id": node_id})
     t0 = time.time()
+    wait_sec = _wait_cap(wait_sec)
     while d["status"] == "building" and time.time() - t0 < wait_sec:
         time.sleep(2)
         d = api.get(f"/api/datasets/{d['id']}")

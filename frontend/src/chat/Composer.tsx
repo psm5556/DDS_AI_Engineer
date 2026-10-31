@@ -26,12 +26,15 @@ const fmtSize = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math
 /** 입력창: → 키로 추천 프롬프트 받기(회색 글자로 미리 보임) · 파일 첨부(버튼·끌어 놓기·붙여넣기) · Enter 보내기
  *  projectId가 있으면 첨부를 바로 올리고, 없으면(첫 화면) 보낼 때 pendingFiles로 넘긴다. */
 export function Composer({
-  projectId, suggestions, onSend, busy, onStop, disabled, placeholder, big, leftBar, autoFocus, hint, seed, typing,
+  projectId, suggestions, onSend, busy, stopping, onStop, disabled, placeholder, big, leftBar, autoFocus, hint, seed, typing,
 }: {
-  projectId?: number; suggestions: string[]; onSend: (o: Outgoing) => void | boolean | Promise<void | boolean>; busy?: boolean; onStop?: () => void;
+  projectId?: number; suggestions: string[]; onSend: (o: Outgoing) => void | boolean | Promise<void | boolean>; busy?: boolean;
+  /** 중지를 눌렀고 끝나기를 기다리는 중 */
+  stopping?: boolean;
+  onStop?: () => void;
   disabled?: boolean; placeholder: string; big?: boolean; leftBar?: ReactNode; autoFocus?: boolean; hint?: string;
-  /** 밖에서 입력창을 채울 때(예: 시작 버튼) — n이 바뀔 때마다 text로 채운다 */
-  seed?: { text: string; n: number };
+  /** 밖에서 입력창을 채울 때(예: 시작 버튼) — n이 바뀔 때마다 text로 채운다. attachments: 이미 올린 첨부도 되돌린다 */
+  seed?: { text: string; n: number; attachments?: Attachment[] };
   /** 비어 있을 때 추천을 타이핑하듯 보이고 다음 추천으로 넘어간다(첫 화면). → 키는 그대로 전체를 받는다 */
   typing?: boolean;
 }) {
@@ -43,22 +46,32 @@ export function Composer({
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (autoFocus) ta.current?.focus(); }, [autoFocus]);
+  // 기다리는 동안 입력창이 막혀 커서가 사라졌다. 끝나면 돌려준다(다른 곳을 보고 있으면 빼앗지 않는다)
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (wasBusy.current && !busy && !disabled && document.activeElement === document.body) ta.current?.focus();
+    wasBusy.current = !!busy;
+  }, [busy, disabled]);
   useLayoutEffect(() => { // 화면을 그리기 전에 채운다 — 바로 Enter를 눌러도 빈 입력으로 보내지 않게
     if (!seed) return;
     setText(seed.text);
+    if (seed.attachments?.length) {
+      const back = seed.attachments.map((att) => ({ key: `att-${att.id}`, file: new File([], att.filename), progress: 1, att }));
+      setItems((xs) => [...xs.filter((x) => !back.some((b) => b.key === x.key)), ...back]);
+    }
     requestAnimationFrame(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(seed.text.length, seed.text.length); } });
   }, [seed]);
 
   // 추천: 비어 있으면 상황별 추천을 차례로, 입력 중이면 그 글자로 시작하는 추천·지난 요청
   const ghost = useMemo(() => {
-    if (disabled) return "";
+    if (disabled || busy) return "";
     if (!text) return suggestions.length ? suggestions[pick % suggestions.length] : "";
     if (text.length < 2) return "";
     const low = text.toLowerCase();
     const pool = [...suggestions, ...history()];
     const hit = pool.find((s) => s.toLowerCase().startsWith(low) && s.length > text.length);
     return hit ? text + hit.slice(text.length) : "";
-  }, [text, suggestions, pick, disabled]);
+  }, [text, suggestions, pick, disabled, busy]);
 
   // 타이핑 효과: 보이는 글자 수만 늘린다. 입력을 시작하면 바로 멈춘다
   const animate = !!typing && !text && !disabled && !!ghost && !reducedMotion();
@@ -136,7 +149,7 @@ export function Composer({
             <span key={i.key} className={`file-chip ${i.error ? "err" : ""}`} title={i.error ?? i.file.name}>
               {projectId && !i.att && !i.error ? <Loader2 size={12} className="spin" /> : <FileUp size={12} />}
               <span className="n">{i.file.name}</span>
-              <span className="s">{i.error ? "실패" : projectId && !i.att ? `${Math.round(i.progress * 100)}%` : fmtSize(i.file.size)}</span>
+              <span className="s">{i.error ? "실패" : projectId && !i.att ? `${Math.round(i.progress * 100)}%` : fmtSize(i.att?.size ?? i.file.size)}</span>
               <button type="button" className="x" aria-label={`${i.file.name} 빼기`} onClick={() => setItems((xs) => xs.filter((x) => x.key !== i.key))}><X size={11} /></button>
             </span>
           ))}
@@ -145,7 +158,7 @@ export function Composer({
       <div className="composer-input">
         {/* 회색 추천 글자: 입력한 글자 뒤에 이어서 보인다 (→ 또는 Tab으로 받기) */}
         <div className="composer-ghost" aria-hidden="true"><span className="typed">{text}</span>{ghostShown}{animate && <i className="type-caret" />}</div>
-        <textarea ref={ta} value={text} rows={big ? 3 : 1} disabled={disabled} placeholder={ghost ? "" : placeholder}
+        <textarea ref={ta} value={text} rows={big ? 3 : 1} disabled={disabled || busy} placeholder={ghost ? "" : placeholder}
           aria-label="에이전트에게 요청" onChange={(e) => setText(e.target.value)}
           onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); } }}
           onKeyDown={(e) => {
@@ -169,7 +182,8 @@ export function Composer({
         <span className="grow" />
         {leftBar}
         {busy && onStop ? (
-          <button type="button" className="send" onClick={onStop} aria-label="중지" title="중지"><Square size={14} /></button>
+          <button type="button" className="send" onClick={onStop} disabled={stopping} aria-label={stopping ? "중지하는 중" : "중지"}
+            title={stopping ? "중지하는 중" : "중지"}>{stopping ? <Loader2 size={14} className="spin" /> : <Square size={14} />}</button>
         ) : (
           <button type="submit" className="primary send" disabled={!canSend} aria-label="보내기"><ArrowUp size={16} /></button>
         )}

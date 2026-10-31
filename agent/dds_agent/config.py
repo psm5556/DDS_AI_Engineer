@@ -35,6 +35,9 @@ class AgentSettings:
                  "login": "로그인 불필요 (Gemini 없이 흐름 검증용)"},
     })
     default_agent: str = "gemini"
+    # AI CLI 시작(initialize·session/new·session/load) 한계. 사내 보안 검사로 몇 분씩 걸려 넉넉히 둔다. 넘겨도 프로세스는 끝내지 않는다
+    cli_start_timeout_sec: int = 1800
+    warm_up: bool = True  # Agent가 뜨고 연결되면 마지막에 쓴 CLI와 대화를 미리 띄운다
     # gemini를 ACP 대신 헤드리스(-p --output-format stream-json)로 쓸 때 true
     gemini_headless: bool = False
     headless_extra_args: list[str] = field(default_factory=lambda: ["--approval-mode", "auto_edit"])

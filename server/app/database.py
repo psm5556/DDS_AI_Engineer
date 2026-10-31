@@ -3,7 +3,8 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
 
-engine = create_engine(settings.db_url, connect_args={"check_same_thread": False})
+# timeout: 사내 보안 프로그램이 DB 파일을 검사하는 동안 쓰기가 바로 실패하지 않고 기다린다(기본 5초면 턴 끝·출력을 잃을 수 있다)
+engine = create_engine(settings.db_url, connect_args={"check_same_thread": False, "timeout": 30})
 
 
 @event.listens_for(engine, "connect")

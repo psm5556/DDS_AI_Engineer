@@ -178,7 +178,8 @@ def _auto_update_on(user: models.User) -> bool:
 def settings_message(user: models.User) -> dict:
     """PC Agent가 따르는 설정. 연결할 때마다, 사용자가 바꿀 때마다 보낸다."""
     until = user.remote_test_until
-    return {"type": "agent.settings", "auto_update": _auto_update_on(user),
+    # acks: 서버를 옛 버전으로 되돌리면 ack가 오지 않는다. Agent가 이 표시로 알아채 outbox를 끝없이 쌓거나 다시 보내지 않는다
+    return {"type": "agent.settings", "auto_update": _auto_update_on(user), "acks": True,
             "remote_test_until": until.timestamp() if until and user.is_admin else 0}
 
 

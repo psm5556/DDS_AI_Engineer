@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -10,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import models
 from .agent.hub import hub
-from .agent.link import AgentConnection, registry
+from .agent.link import REPLACED_CODE, AgentConnection, registry
 from .config import ROOT
 from .database import Base, SessionLocal, engine, ensure_columns
 from .deps import user_from_token
@@ -56,6 +57,20 @@ def _backfill_model_versions():
         db.commit()
 
 
+def _on_agent_hello(conn: AgentConnection, msg: dict):
+    try:
+        hub.on_hello(conn, msg)
+    finally:  # 대화 상태를 먼저 맞춘다. 아래가 알리는 '연결됨'을 보고 화면이 다시 읽을 때 되살린 턴이 있어야 한다
+        agents.record_instance(conn, msg)
+
+
+def _after_link_lost(conn: AgentConnection):
+    """끊김 정리. 대화 상태를 먼저 맞춘다: '끊김' 방송을 보고 화면이 다시 읽을 때 reconnecting이어야 한다."""
+    hub.on_link_lost(conn.user_id)
+    manager.publish({"type": "agent_status", "user_id": conn.user_id, "connected": False})
+    agents.mark_disconnected(conn)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
@@ -72,7 +87,7 @@ async def lifespan(app: FastAPI):
     loop.set_exception_handler(quiet_resets)
     registry.on("case.status", lambda conn, m: service.on_case_status(m))
     registry.on("case.train_sample", lambda conn, m: dataset.on_sample_status(m))
-    registry.on("hello", agents.record_instance)
+    registry.on("hello", _on_agent_hello)
     registry.on("heartbeat", agents.record_instance)
     with SessionLocal() as db:  # 서버 재시작 시 연결 상태 초기화
         db.query(models.AgentInstance).update({models.AgentInstance.connected: False})
@@ -121,22 +136,31 @@ async def ws_agent(ws: WebSocket, token: str | None = None):
         await ws.close(code=4401, reason="invalid token")  # Agent가 '토큰 오류'로 구분할 수 있게 accept 후 닫는다
         return
     conn = AgentConnection(ws, user.id, asyncio.get_running_loop())
-    registry.add(conn)
-    hub.forget_user(user.id)
+    registry.add(conn)  # 턴과 세션은 건드리지 않는다. hello가 오면 hub가 Agent가 아는 것과 맞춘다
     log.info("PC Agent 연결: %s", user.username)
     try:
         while True:
-            msg = json.loads(await ws.receive_text())
-            # 핸들러는 DB 작업을 하므로 이벤트 루프를 막지 않게 스레드에서 처리
-            await asyncio.to_thread(registry.dispatch, conn, msg)
-    except WebSocketDisconnect:
+            raw = await ws.receive_text()
+            try:
+                msg = json.loads(raw)
+                # 밀려난 연결: 새 Agent(boot가 있음)는 닫아서 대기시킨다. 0.2.16까지의 Agent는 4000을 모르고 곧바로 다시 붙어
+                # 서로 밀어내므로 예전처럼 소켓을 열어 두고 메시지(해석 결과 등)만 받는다
+                if registry.get(user.id) is not conn and (conn.boot or msg.get("boot")):
+                    await ws.close(code=REPLACED_CODE, reason="replaced")
+                    break
+                # 핸들러는 DB 작업을 하므로 이벤트 루프를 막지 않게 스레드에서 처리
+                await asyncio.to_thread(registry.dispatch, conn, msg)
+            except Exception:  # 메시지 하나의 예외로 연결을 끊으면 그 사용자의 모든 대화가 흔들린다
+                log.exception("Agent 메시지 처리 실패: %s", raw[:300])
+    except (WebSocketDisconnect, RuntimeError):  # RuntimeError: 이미 닫힌 소켓을 읽었다(밀려나 닫힌 연결)
         pass
     finally:
-        registry.remove(conn)
-        await asyncio.to_thread(agents.mark_disconnected, conn)
-        hub.forget_user(user.id)
-        log.info("PC Agent 연결 끊김: %s", user.username)
-        manager.publish({"type": "agent_status", "user_id": user.id, "connected": False})
+        current = registry.remove(conn)
+        log.info("PC Agent 연결 끊김: %s%s", user.username, "" if current else " (옛 연결)")
+        if current:  # 옛 연결의 뒤늦은 정리는 새 연결의 상태를 지우지도, '끊김'을 방송하지도 않는다
+            # 따로 스레드에서 한다: on_link_lost는 대화 잠금을 잡는데, 잠금을 쥔 쪽이 conn.send로 이 이벤트 루프를 기다리면 서버 전체가 멈춘다.
+            # run_in_executor로 기다리면 이 작업이 취소될 때 아직 시작 안 한 정리까지 함께 취소되어 끊김 표시가 사라진다
+            threading.Thread(target=_after_link_lost, args=(conn,), daemon=True, name="link-lost").start()
 
 
 # ---------- 프론트엔드 (빌드본) ----------

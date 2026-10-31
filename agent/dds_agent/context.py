@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -18,6 +19,7 @@ CONTEXT_DIR = REPO_ROOT / "agent-context"
 RULE_FILES = ("GEMINI.md", "CLAUDE.md", "AGENTS.md")
 SKILL_DIRS = (".gemini/skills", ".claude/skills", ".agents/skills")
 MANAGED = ".dds-skills.json"  # 이 Agent가 복사한 스킬 이름 목록
+STAMP = ".dds-context-stamp"  # 마지막으로 복사한 규칙·스킬의 지문
 
 
 def _skill_index(skills_root: Path) -> str:
@@ -29,7 +31,30 @@ def _skill_index(skills_root: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def sync_project_context(project_dir: Path) -> None:
+def _source_stamp() -> str:
+    """배포된 규칙·스킬의 지문. 파일 내용을 읽지 않고 이름·크기·수정 시각만 본다(보안 프로그램이 읽을 때마다 검사한다)."""
+    h = hashlib.sha1()
+    for p in sorted(CONTEXT_DIR.rglob("*")):
+        if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc":
+            st = p.stat()
+            h.update(f"{p.relative_to(CONTEXT_DIR).as_posix()}|{st.st_size}|{st.st_mtime_ns}\n".encode("utf-8"))
+    return h.hexdigest()
+
+
+def _up_to_date(project_dir: Path, stamp: str) -> bool:
+    try:
+        if (project_dir / STAMP).read_text(encoding="utf-8").strip() != stamp:
+            return False
+    except OSError:
+        return False
+    return all((project_dir / n).is_file() for n in RULE_FILES) and all((project_dir / d).is_dir() for d in SKILL_DIRS)
+
+
+def sync_project_context(project_dir: Path) -> bool:
+    """복사했으면 True, 내용이 그대로라 건너뛰었으면 False. 세션마다 파일 수백 개를 복사하면 보안 검사에 걸려 대화 시작이 늦어진다."""
+    stamp = _source_stamp()
+    if _up_to_date(project_dir, stamp):
+        return False
     skills_src = CONTEXT_DIR / "skills"
     names = sorted(p.name for p in skills_src.iterdir() if p.is_dir())
     marker = project_dir / MANAGED
@@ -52,3 +77,5 @@ def sync_project_context(project_dir: Path) -> None:
     rules += _skill_index(project_dir / ".claude" / "skills")
     for name in RULE_FILES:
         (project_dir / name).write_text(rules, encoding="utf-8")
+    (project_dir / STAMP).write_text(stamp, encoding="utf-8")  # 다 쓴 뒤에 남긴다. 중간에 끊기면 다음에 다시 복사한다
+    return True
