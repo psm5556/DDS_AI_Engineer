@@ -231,6 +231,7 @@ class ReportResponse(ORM):
     body: str
     created_at: datetime
     new_results: int = 0  # 이 판을 쓴 뒤 새로 생기거나 바뀐 결과 수(다시 쓸지 판단)
+    frozen: dict[str, dict] | None = None  # 본문에 넣은 결과의 쓸 때 값. 화면도 파일과 같은 값을 그린다. 이 기능 전에 쓴 판은 없다
     # 보고서 틀(표지·맺음말): 파일(report.py)과 웹 화면이 같은 글을 쓰도록 서버가 만들어 준다
     project_name: str = ""
     doc_no: str = ""  # DDS-P0012-R003

@@ -856,8 +856,8 @@ def test_benchmark_is_labelled_and_computed_from_real_code(tmp_path):
     line = insights.bench_line(v)
     assert line.startswith("연습 함수 기준(") and "내 결과가 아닙니다" in line
     assert insights.bench_line(None) is None  # 값이 없으면 줄 자체를 내지 않는다
-    assert "항상 낫지는 않습니다" in insights.bench_line({"functions": {"a": {}}, "total": 3, "not_worse": 2, "worse": 1})
-    assert "같다는 뜻은 아닙니다" in insights.bench_line({"functions": {"a": {}}, "total": 3, "not_worse": 3, "worse": 0})
+    assert "항상 낫지는 않습니다" in insights.bench_line({"functions": {"a": {}}, "total": 3, "wins": 7, "runs": 15})
+    assert "같다는 뜻은 아닙니다" in insights.bench_line({"functions": {"a": {}}, "total": 3, "wins": 15, "runs": 15})
 
 
 # ---------- 획득함수 ----------
@@ -1273,8 +1273,9 @@ def test_uncertainty_is_compared_on_one_scale():
     assert u["mean_after"] <= u["mean_before"], u
 
 
-def test_stop_advice_needs_several_added_points(tmp_path):
+def test_stop_advice_needs_several_added_points(tmp_path, monkeypatch):
     """한 건의 흔들림으로 '여기서 멈춰도 됩니다'라고 하지 않는다."""
+    monkeypatch.setattr(insights.calc, "drop_interval", lambda *a, **k: (1.0, -1.0))  # 멈춤 조언만 본다. 우연과 구분되지 않는 경우는 test_insights_review.py
     sec = insights.active(Ctx(_al_snap(tmp_path, n_add=4, seed=31), True))
     joined = " ".join(sec["notes"])
     assert "아직 말하지 않습니다" in joined and "멈춰도" not in joined and sec["facts"]["stop"] is None, sec["notes"]

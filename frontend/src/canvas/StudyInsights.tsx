@@ -32,8 +32,16 @@ const axis = (t: ReturnType<typeof chartColors>, title?: string, extra?: Record<
 const titled = (label: string, unit?: string) => (unit ? `${label} [${unit}]` : label);
 /** 변수 범위보다 조금 넓게 그린다. 범위 끝의 점과 번호가 잘리지 않게 */
 const padded = (v: { lower: number; upper: number }) => { const p = (v.upper - v.lower) * 0.05; return [v.lower - p, v.upper + p]; };
-/** 표의 숫자: 유효숫자 3자리. 지수 표기(1.00e-3)는 읽기 어렵다 */
-const plain = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Number(v.toPrecision(3)).toLocaleString("en-US", { maximumFractionDigits: 8 }) : fmt(v));
+/** 표의 숫자. 문장의 숫자(서버 insights.n3)와 같은 규칙으로 줄인다. 규칙이 다르면 한 설계가 문장과 표에서 다른 값으로 읽힌다 */
+const plain = (v: unknown) => {
+  if (typeof v !== "number" || !Number.isFinite(v)) return fmt(v);
+  const a = Math.abs(v);
+  if (a === 0) return "0";
+  if (a >= 1000) return v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  if (a < 1e-6) return v.toExponential(2);
+  if (a < 0.001) return v.toFixed(1 - Math.floor(Math.log10(a))); // 지수 표기는 읽기 어렵다
+  return String(Number(v.toPrecision(3)));
+};
 
 /** 한 번 더 눌러야 보이는 그림. 접혀 있으면 그리지 않는다 */
 function Fold({ label, children }: { label: string; children: ReactNode }) {
@@ -51,17 +59,20 @@ type Pt = { id: number; x: number[] };
 interface VarRow { name: string; label: string; unit?: string; lower: number; upper: number }
 interface PairsData { variables: VarRow[]; groups: { base: Pt[]; opt: Pt[]; al: Pt[]; failed: Pt[]; waiting: Pt[] }; thinned?: boolean }
 const GROUP_LABEL: Record<string, string> = { base: "처음 계획한 점", opt: "최적화로 더한 점", al: "정확도를 높이려고 더한 점", failed: "실패", waiting: "아직 해석 안 함" };
+/** 표에서 온 점은 계획해서 뽑은 점이 아니다 */
+const groupLabel = (g: string, word: string) => (g === "base" && word !== "해석" ? "처음 있던 점" : GROUP_LABEL[g]);
 const groupColors = (t: ReturnType<typeof chartColors>): Record<string, string> => ({ base: t.mean, opt: t.brand, al: t.series[2], failed: t.err, waiting: t.muted });
 
 function PairsChart({ c }: { c: PairsData }) {
   const t = usePlot();
+  const word = useContext(Word);
   const color = groupColors(t);
   const vars = c.variables;
   const present = (Object.keys(GROUP_LABEL) as (keyof PairsData["groups"])[]).filter((g) => c.groups[g].length);
   const [pair, setPair] = useState<[number, number]>([0, Math.min(1, vars.length - 1)]);
   if (vars.length <= 5) {
     const data = present.map((g) => ({
-      type: "splom", name: GROUP_LABEL[g], showupperhalf: false, diagonal: { visible: false },
+      type: "splom", name: groupLabel(g, word), showupperhalf: false, diagonal: { visible: false },
       dimensions: vars.map((v, i) => ({ label: titled(v.label, v.unit), values: c.groups[g].map((p) => p.x[i]) })),
       text: c.groups[g].map((p) => `케이스 ${p.id}`),
       marker: { color: color[g], size: 5, opacity: 0.85, symbol: g === "failed" ? "x" : "circle" },
@@ -80,7 +91,7 @@ function PairsChart({ c }: { c: PairsData }) {
         <label>가로 <select value={a} aria-label="가로 변수" onChange={(e) => setPair([Number(e.target.value), b])}>{vars.map((v, i) => <option key={v.name} value={i}>{v.label}</option>)}</select></label>
         <label>세로 <select value={b} aria-label="세로 변수" onChange={(e) => setPair([a, Number(e.target.value)])}>{vars.map((v, i) => <option key={v.name} value={i}>{v.label}</option>)}</select></label>
       </div>
-      <Chart data={present.map((g) => ({ type: "scatter", mode: "markers", name: GROUP_LABEL[g], x: c.groups[g].map((p) => p.x[a]), y: c.groups[g].map((p) => p.x[b]),
+      <Chart data={present.map((g) => ({ type: "scatter", mode: "markers", name: groupLabel(g, word), x: c.groups[g].map((p) => p.x[a]), y: c.groups[g].map((p) => p.x[b]),
         text: c.groups[g].map((p) => `케이스 ${p.id}`), marker: { color: color[g], size: 7, opacity: 0.85, symbol: g === "failed" ? "x" : "circle" } }))}
         layout={{ xaxis: axis(t, titled(vars[a].label, vars[a].unit), { range: padded(vars[a]) }), yaxis: axis(t, titled(vars[b].label, vars[b].unit), { range: padded(vars[b]) }) }} />
     </>
@@ -90,12 +101,13 @@ function PairsChart({ c }: { c: PairsData }) {
 /** 변수별 줄무늬: 범위를 0~100%로 맞춰 어느 구간이 비었는지 한눈에 본다 */
 function StripChart({ c }: { c: PairsData }) {
   const t = usePlot();
+  const word = useContext(Word);
   const color = groupColors(t);
   const present = (Object.keys(GROUP_LABEL) as (keyof PairsData["groups"])[]).filter((g) => c.groups[g].length);
   const labels = c.variables.map((v) => v.label);
   const pos = (i: number, x: number) => ((x - c.variables[i].lower) / (c.variables[i].upper - c.variables[i].lower || 1)) * 100;
   const data = present.map((g) => ({
-    type: "scatter", mode: "markers", name: GROUP_LABEL[g], hoverinfo: "text",
+    type: "scatter", mode: "markers", name: groupLabel(g, word), hoverinfo: "text",
     x: c.groups[g].flatMap((p) => p.x.map((v, i) => pos(i, v))), y: c.groups[g].flatMap((p) => p.x.map((_, i) => labels[i])),
     text: c.groups[g].flatMap((p) => p.x.map((v, i) => `${labels[i]} ${fmt(v)}${c.variables[i].unit ? ` ${c.variables[i].unit}` : ""} · 케이스 ${p.id}`)),
     marker: { color: color[g], size: 10, opacity: 0.6, symbol: "line-ns", line: { width: 1.5, color: color[g] } },
@@ -317,6 +329,7 @@ function LearningChart({ c }: { c: InsightChart }) {
 
 function AlPoints({ c }: { c: InsightChart }) {
   const t = usePlot();
+  const word = useContext(Word);
   const vars = c.variables as VarRow[];
   const [a, setA] = useState(0);
   const [b, setB] = useState(Math.min(1, vars.length - 1));
@@ -331,7 +344,7 @@ function AlPoints({ c }: { c: InsightChart }) {
         <label>세로 <select value={b} aria-label="세로 변수" onChange={(e) => setB(Number(e.target.value))}>{vars.map((v, i) => <option key={i} value={i}>{v.label}</option>)}</select></label>
       </div>}
       <Chart height={240} data={[
-        { type: "scatter", mode: "markers", name: "처음 계획한 점", x: base.map((p) => p[a]), y: base.map((p) => p[b]), marker: { color: t.text, size: 5, opacity: 0.6 } },
+        { type: "scatter", mode: "markers", name: groupLabel("base", word), x: base.map((p) => p[a]), y: base.map((p) => p[b]), marker: { color: t.text, size: 5, opacity: 0.6 } },
         { type: "scatter", mode: "markers+text", name: "더 돌린 점 (순서)", x: added.map((p) => p[a]), y: added.map((p) => p[b]), text: added.map((_, i) => String(i + 1)), textposition: "top center", textfont: { size: 10, color: t.text }, cliponaxis: false,
           marker: { color: t.series[2], size: 9 } },
       ]} layout={{ xaxis: axis(t, titled(vars[a].label, vars[a].unit), { range: padded(vars[a]) }), yaxis: axis(t, titled(vars[b].label, vars[b].unit), { range: padded(vars[b]) }) }} />
@@ -460,7 +473,7 @@ export function StudyInsights({ id }: { id: number }) {
   const f = data.overview.facts;
   const nx = data.overview.next;
   const word = data.overview.word ?? "해석";
-  const mix = [f.base ? `처음 계획 ${f.base}` : "", f.bo ? `최적화 ${f.bo}` : "", f.al ? `정확도 높이기 ${f.al}` : ""].filter(Boolean);
+  const mix = [f.base ? `${word === "해석" ? "처음 계획" : "처음 있던 데이터"} ${f.base}` : "", f.bo ? `최적화 ${f.bo}` : "", f.al ? `정확도 높이기 ${f.al}` : ""].filter(Boolean);
   const done = `${word === "해석" ? `해석 ${f.complete}건 완료` : `데이터 ${f.complete}건`}${mix.length > 1 ? `(${mix.join(" + ")})` : ""}`;
   const parts = [done, f.failed ? `실패 ${f.failed}건` : "", f.waiting ? `대기 ${f.waiting}건` : "", f.run_text ? `해석 시간 합계 ${f.run_text}` : ""].filter(Boolean);
   const watch = data.overview.watch ?? [];

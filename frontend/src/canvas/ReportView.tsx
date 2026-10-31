@@ -181,8 +181,11 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
         </span>
       </div>
       {writing ? <p className="notice-inline info report-note"><AgentGlyph size={14} state="thinking" />AI가 최신 결과로 보고서를 다시 쓰고 있습니다. 다 쓰면 새 판으로 바뀝니다.</p>
-        : rid == null && rep.new_results > 0 && (
-          <p className="notice-inline warn report-note">이 보고서를 쓴 뒤 새로 생기거나 바뀐 결과가 {rep.new_results}개 있습니다 → 'AI 보고서 작성'으로 반영하세요</p>
+        : rep.new_results > 0 && (rep.frozen == null
+          ? <p className="notice-inline warn report-note">이 판은 쓸 때의 값을 저장하지 않아 그림과 표가 지금 값으로 보입니다. 글의 숫자와 다를 수 있습니다 → 'AI 보고서 작성'으로 새 판을 쓰세요</p>
+          : rid == null
+            ? <p className="notice-inline warn report-note">이 보고서를 쓴 뒤 새로 생기거나 바뀐 결과가 {rep.new_results}개 있습니다 → 'AI 보고서 작성'으로 반영하세요</p>
+            : <p className="notice-inline info report-note">이 판은 쓸 때의 값을 그대로 보여 줍니다. 그 뒤 새로 생기거나 바뀐 결과 {rep.new_results}개는 들어 있지 않습니다.</p>
         )}
       {/* 새 판이 오면 표지부터 다시 등장한다 */}
       <article key={rep.id} className="report-doc">
@@ -214,7 +217,9 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
           <div className="report-body" ref={toc.body}>
             {parts.map((p, i) => {
               if ("md" in p) return <Markdown key={i} text={p.md} />;
-              const a = byId.get(p.id);
+              // 판에 저장된 값으로 그린다. 같은 제목으로 다시 게시되어도 이 판의 숫자는 글과 같아야 한다. 지운 결과는 어느 판에서도 빠진다
+              const live = byId.get(p.id);
+              const a = live && rep.frozen?.[p.id] ? { ...live, ...rep.frozen[p.id] } : live;
               if (!a) return <p key={i} className="small muted rep-missing">(삭제된 결과입니다: {p.caption})</p>;
               const label = a.kind === "table" ? `표 ${++tbl}` : `그림 ${++fig}`;
               return (

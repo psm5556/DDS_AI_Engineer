@@ -25,6 +25,8 @@ export interface Artifact {
 /** AI가 작업 흐름·결과를 읽고 새로 쓴 종합 보고서(가장 최근 판). 본문에 ![캡션](artifact:<id>) 줄로 결과를 넣는다 */
 export interface Report {
   id: number; project_id: number; flow_id: number | null; title: string; body: string; created_at: string; new_results: number;
+  /** 본문에 넣은 결과의 쓸 때 값. 이 기능 전에 쓴 판은 null */
+  frozen: Record<string, Pick<Artifact, "kind" | "title" | "payload">> | null;
   /** 보고서 틀(표지·맺음말)의 글. 파일과 같게 서버가 만들어 준다 */
   project_name: string; doc_no: string; edition: number; issued_at: string; author: string; provenance: string; colophon: string;
 }
@@ -166,4 +168,8 @@ export interface StudyInsightsData {
   sections: InsightSection[];
 }
 export interface TrustLineData { state: InsightState; state_label: string; sentence: string;
+  /** 옛 모델을 다시 재는 중이면 true. 끝날 때까지 다시 읽는다 */
+  computing?: boolean;
+  /** 이 모델이 배운 적 없는 구간 */
+  gaps?: { variable: string; lo: number; hi: number; gap: number }[];
   outputs?: Record<string, { label: string; unit?: string; state: InsightState; state_label: string; p80: number | null }> }

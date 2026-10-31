@@ -130,6 +130,8 @@ class Report(Base):
     flow_id = Column(Integer, ForeignKey("flows.id", ondelete="SET NULL"))
     title = Column(String(200), nullable=False)
     body = Column(Text, default="")
+    # 본문에 넣은 결과의 쓸 때 값 {id: {kind, title, payload}}. 결과는 같은 제목이면 갱신되므로, 없으면 저장한 판의 표·그림이 글과 다른 숫자로 바뀐다. 이 기능 전에 쓴 판은 None
+    frozen = Column(JSON)
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=_now, nullable=False)
 

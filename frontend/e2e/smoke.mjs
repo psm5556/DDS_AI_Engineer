@@ -267,6 +267,29 @@ await step("표로 바로 Simulator", async () => {
   await shot("table-share-stopped");
 });
 
+await step("넓은 Simulator의 ±와 자세히", async () => {
+  const sims = await apiGet("/api/simulators");
+  const one = sims.mine.find((x) => x.study_name === bracketStudy);
+  await page.goto(`${BASE}/simulator/${one.model_id}`);
+  await page.locator(".sim-out li b").first().filter({ hasNotText: "…" }).waitFor({ timeout: 15000 });
+  await page.locator(".trust-line").waitFor({ timeout: 15000 });
+  await page.waitForTimeout(600);
+  // ±는 맞춰 본 오차와 이 위치에서 AI가 말한 폭 중 큰 값이다
+  const u = page.locator(".sim-out li .u").first();
+  const [shown, title] = [await u.innerText(), await u.getAttribute("title")];
+  const num = (s) => Number(s.replace(/,/g, ""));
+  const both = [...(title ?? "").matchAll(/± ([\d.,e+-]+)/g)].map((m) => num(m[1]));
+  if (both.length !== 2) throw new Error(`±의 근거가 툴팁에 없습니다: ${title}`);
+  if (num(shown.match(/± ([\d.,e+-]+)/)[1]) !== Math.max(...both)) throw new Error(`±(${shown})가 큰 값이 아닙니다: ${title}`);
+  await shot("simulator-wide-error-bar");
+  // 넓은 화면의 자세히: 프로젝트만 여는 것이 아니라 데이터 탭의 그 항목을 펼친다
+  await page.locator(".trust-line a.trust-more").click();
+  await page.waitForURL(/\/projects\/\d+/, { timeout: 15000 });
+  await page.locator("#insight-trust .insight-body").waitFor({ timeout: 30000 });
+  if ((await page.getByRole("tab", { name: "데이터" }).first().getAttribute("aria-selected")) !== "true") throw new Error("자세히가 데이터 탭을 열지 않습니다");
+  await shot("simulator-more-trust");
+});
+
 await step("넓은 Simulator에서 프로젝트로 돌아오기", async () => {
   await page.goto(BASE + "/simulators");
   await page.waitForTimeout(1000);
@@ -403,6 +426,10 @@ if (INSIGHTS) {
     }
     await page.setViewportSize({ width: 1440, height: 900 });
     if (await page.locator(".insight-sec .js-plotly-plot").count()) throw new Error("접으면 그림이 사라져야 합니다");
+    // 이 시나리오는 단위를 note에만 적는다("스프링 강성 [%]"). 입력 칸에도 단위가 보여야 한다
+    await page.getByRole("tab", { name: "Simulator" }).first().click();
+    await page.locator(".sim-tab .sim-var-unit").first().waitFor({ timeout: 15000 });
+    await shot("insights-simulator-units");
   });
 }
 

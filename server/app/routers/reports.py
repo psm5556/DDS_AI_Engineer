@@ -77,7 +77,10 @@ def create_report(body: schemas.ReportCreate, project: models.Project = Depends(
     if ids - have:
         raise HTTPException(400, f"이 프로젝트에 없는 결과를 넣었습니다: artifact {', '.join(map(str, sorted(ids - have)))} "
                                  "→ report-context의 results에 있는 id만 쓰세요")
-    rep = models.Report(project_id=project.id, flow_id=body.flow_id, title=body.title, body=body.body, created_by=user.id)
+    # 저장한 판은 문서다. 글이 인용한 표·그림의 숫자를 쓸 때 값으로 함께 저장한다. 다시 게시해도 이 판의 숫자는 바뀌지 않는다
+    arts = db.query(models.Artifact).filter(models.Artifact.id.in_(ids)).all() if ids else []
+    frozen = {str(a.id): {"kind": a.kind, "title": a.title, "payload": a.payload} for a in arts}
+    rep = models.Report(project_id=project.id, flow_id=body.flow_id, title=body.title, body=body.body, frozen=frozen, created_by=user.id)
     db.add(rep)
     db.commit()
     db.refresh(rep)

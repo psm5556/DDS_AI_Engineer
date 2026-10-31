@@ -356,6 +356,15 @@ class Composed:
 
 
 COVER_PROJECT, COVER_SUMMARY = 120, 240
+STALE_NOTE = "이 판을 쓴 뒤 바뀐 결과가 있습니다. 이 판은 쓸 때의 값을 저장하지 않아 그림과 표는 지금 값으로 보입니다. 글의 숫자와 다를 수 있습니다."
+
+
+def _as_written(a: models.Artifact, saved: dict | None) -> models.Artifact:
+    """판에 저장된 값으로 만든 복사본. 세션에 넣지 않으므로 카드(최신 값)는 그대로다."""
+    if not saved:
+        return a
+    return models.Artifact(id=a.id, project_id=a.project_id, flow_id=a.flow_id, node_id=a.node_id, kind=saved.get("kind", a.kind), title=saved.get("title", a.title),
+                           payload=saved.get("payload"), created_at=a.created_at, updated_at=a.updated_at)
 
 
 def compose(project: models.Project, arts: list[models.Artifact], flow: models.Flow | None, rep: models.Report | None = None) -> Composed:
@@ -364,11 +373,18 @@ def compose(project: models.Project, arts: list[models.Artifact], flow: models.F
     if rep:
         by_id = {a.id: a for a in arts}
         counters: dict[str, int] = {}
+        saved = getattr(rep, "frozen", None)
+        shown = []
         for kind, text, aid in split_body(clean_body(rep.body, rep.title)):
             if kind == "md":
                 blocks.append(Block("md", parsed=report_md.parse(text, toc)))
             elif (a := by_id.get(aid)) is not None:  # 지워진 결과는 파일에서 빠지고 번호도 세지 않는다
+                shown.append(a)
+                a = _as_written(a, (saved or {}).get(str(aid)))
                 blocks.append(Block("figure", art=a, text=f"{_figure_label(a.kind, counters)}. {text or a.title}"))
+        # 쓸 때 값을 저장하기 전의 판은 지금 값으로 그릴 수밖에 없다. 글과 어긋날 수 있다고 파일 안에서 밝힌다(파일은 화면의 안내 없이 돌아다닌다)
+        if saved is None and any((getattr(a, "updated_at", None) or a.created_at) > rep.created_at for a in shown):
+            blocks.insert(0, Block("note", text=STALE_NOTE))
     else:
         if flow:
             title = f"작업 흐름 — {flow.title}"

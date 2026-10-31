@@ -9,6 +9,7 @@ import { Modal } from "../components/Modal";
 import { ModelTrust } from "../components/ModelTrust";
 import { baseLayout, chartColors, Plot, plotConfig } from "../components/Plot";
 import { Skeleton } from "../components/Skeleton";
+import { askInsightFocus } from "../canvas/StudyInsights";
 import { copyText, fmt, when } from "../format";
 import { useTheme } from "../theme";
 import { useToast } from "../toast";
@@ -60,6 +61,13 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
   const seq = useRef(0);
   const trust = useTrustLine(`${base}/trust-line`);
   useTheme(); // 테마를 바꾸면 민감도 그래프 색도 다시 그린다
+  // 옛 모델을 다시 잰 뒤에는 위의 정확도 칩도 새 값으로 그린다. 한 줄과 칩이 다른 답을 하면 안 된다
+  const qc = useQueryClient();
+  const measuring = useRef(false);
+  useEffect(() => {
+    if (measuring.current && trust && !trust.computing) void qc.invalidateQueries({ queryKey: ["sim-spec", specPath] });
+    measuring.current = !!trust?.computing;
+  }, [trust, qc, specPath]);
   useEffect(() => { if (spec) { setX(mid0); setSweepVar(spec.variables[0]?.name ?? null); } }, [spec, mid0]);
   useEffect(() => { setFailure(null); }, [base]); // 탭에서 다른 버전으로 바꾸면 지난 버전의 오류를 들고 가지 않는다
 
@@ -99,26 +107,32 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
   const grid = c.grid, txt = c.text;
   const many = spec.variables.length > MANY_VARS;
   const outside = spec.variables.filter((q) => x[q.name] !== undefined && (x[q.name] < q.lower || x[q.name] > q.upper));
+  const unseen = (trust?.gaps ?? []).filter((g) => x[g.variable] !== undefined && x[g.variable] > g.lo && x[g.variable] < g.hi);
   const results = (
     <section className="block sim-results">
-      <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted">{trust?.outputs && Object.values(trust.outputs).some((q) => q.p80 != null) ? `± ${spec.data_source && spec.data_source.kind !== "solver" ? "지난 데이터로" : "지난 해석으로"} 맞춰 본 오차(10번 중 8번)` : "± 예측 불확실도"}</span></div>
+      <div className="block-head"><h3><Sparkles size={15} />예측 결과</h3><span className="small muted" title="값마다 둘 중 큰 쪽을 보여 줍니다. 맞춰 본 오차는 데이터가 있는 곳의 값이고, AI가 말한 폭은 입력을 바꾸면 달라져 데이터가 없는 곳에서 커집니다">{trust?.outputs && Object.values(trust.outputs).some((q) => q.p80 != null) ? `± ${spec.data_source && spec.data_source.kind !== "solver" ? "지난 데이터로" : "지난 해석으로"} 맞춰 본 오차와 AI가 말한 폭 중 큰 값` : "± 예측 불확실도"}</span></div>
       <ul className={`sim-out ${stale ? "stale" : ""}`}>
         {outs.map((o) => {
           const obj = spec.objectives.find((q) => q.name === o);
-          // 값 옆의 ±는 실제로 맞춰 본 오차다. AI가 스스로 짐작한 폭은 훨씬 좁게 나오기도 해 믿을 숫자로 보이지 않게 툴팁에 둔다
+          // ±는 맞춰 본 오차와 AI가 이 위치에서 말한 폭 중 큰 값이다. 맞춰 본 오차는 데이터가 있는 곳의 값이라 데이터가 없는 곳의 예측에 그대로 붙이면 큰 오차를 작게 보여 주고,
+          // AI가 말한 폭은 데이터가 있는 곳에서 실제보다 좁게 나오기도 한다
           const t = trust?.outputs?.[o];
-          const guess = pred ? `AI가 스스로 짐작한 폭입니다: ± ${fmt(2 * pred.std[o], 2)}` : undefined;
+          const said = pred ? 2 * pred.std[o] : 0;
+          const bar = t?.p80 != null ? Math.max(t.p80, said) : said;
+          const guess = pred && t?.p80 != null ? `맞춰 본 오차 ± ${fmt(t.p80, 2)} · 이 위치에서 AI가 말한 폭 ± ${fmt(said, 2)}` : undefined;
           return (
             <li key={o}>
               <span className="n" title={o}>{t && t.label !== o ? `${t.label} (${o})` : o}{obj && <small>{obj.goal === "min" ? "최소화 목표" : "최대화 목표"}</small>}</span>
               <b className={!pred && failure ? "none" : undefined}>{pred ? fmt(pred.mean[o], 4) : failure ? "없음" : "…"}</b>
-              <small className="u" title={guess}>{pred ? (t?.p80 != null ? `± ${fmt(t.p80, 2)}${t.unit ? ` ${t.unit}` : ""}` : `± ${fmt(2 * pred.std[o], 2)}`) : ""}</small>
+              <small className="u" title={guess}>{pred ? `± ${fmt(bar, 2)}${t?.unit && t.unit !== "-" ? ` ${t.unit}` : ""}` : ""}</small>
             </li>
           );
         })}
       </ul>
       {/* 숫자 칸에는 범위 밖 값을 적을 수 있다. 외삽한 값을 믿지 않게 알린다 */}
       {outside.length > 0 && <div className="notice warn sim-outside" role="status"><AlertTriangle size={14} /><span>이 버전을 학습한 범위 밖입니다({outside.slice(0, 3).map((q) => q.name).join(", ")}). 예측을 믿기 어렵습니다 → 범위 안으로 되돌리거나 그 범위의 데이터를 더해 다시 학습하세요</span></div>}
+      {/* 범위 안이어도 데이터가 한 번도 없는 구간이면 맞춰 본 오차가 아무것도 말해 주지 않는다 */}
+      {unseen.length > 0 && <div className="notice warn sim-outside sim-unseen" role="status"><AlertTriangle size={14} /><span>지금 값은 학습 데이터가 없는 구간입니다({unseen.slice(0, 3).map((g) => `${g.variable} ${fmt(g.lo, 3)}~${fmt(g.hi, 3)}`).join(", ")}). 예측을 믿기 어렵습니다 → 그 구간의 데이터를 더해 다시 학습하세요</span></div>}
     </section>
   );
 
@@ -149,7 +163,8 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
             : `예측하지 못해 값을 지웠습니다. ${failure.reason} → 입력을 바꾸거나 잠시 뒤 다시 시도하세요.`}</span></div>
       )}
 
-      <TrustLine url={`${base}/trust-line`} onMore={onMore} moreTo={!onMore && spec.project_id ? `/projects/${spec.project_id}` : undefined} />
+      <TrustLine url={`${base}/trust-line`} onMore={onMore} moreTo={!onMore && spec.project_id ? `/projects/${spec.project_id}` : undefined}
+        moreState={{ canvasTab: "data", studyId: spec.model.study_id }} onMoreLink={() => askInsightFocus("trust")} />
 
       {/* 왼쪽: 입력(설계변수)과 출력(예측값)을 붙여 둔다 · 오른쪽: 3D 형상·필드와 민감도 */}
       <div className="sim2">

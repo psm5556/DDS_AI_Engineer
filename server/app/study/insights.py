@@ -46,9 +46,11 @@ THRESHOLDS: dict[str, float] = {
     "pass_good": 0.30, "pass_fair": 0.10,
     "r2_good": 0.9, "r2_fair": 0.7,
     "train_min": 5,  # assess_quality와 같은 경계. 판단 자체는 최소 건수(need)부터 한다
-    "flat_rel": 0.001, "flat_margin": 5,  # 오차가 값의 이 비율 이하이고 제약까지 오차의 이 배수 이상 떨어지면 거의 일정한 출력으로 본다
+    "flat_rel": 0.001, "flat_margin": 5,  # 오차와 값의 흔들림이 모두 값의 이 비율 이하이고 제약까지 오차의 이 배수 이상 떨어지면 거의 일정한 출력으로 본다
+    "flat_goal_rel": 1e-06,  # 목표는 더 엄격하다. 최적화하려는 값의 작은 흔들림은 잡음이 아니라 신호다(101325±50 Pa). 수치 잡음만 일정하다고 본다
     "share_small": 0.05, "interaction": 0.10, "pair": 0.05,
     "rank_stable": 4,  # 5겹 중 1위가 같은 횟수
+    "tie_gap": 0.10,  # 잘 맞는 모델에서 1·2위 몫의 차이가 이보다 작으면서 1위가 흔들리면 정말 비슷한 것이다
     "mono": 0.8, "dir_main_ratio": 0.5,  # 1차 지수 ÷ 전체 지수가 이보다 작으면 방향이 다른 변수에 달렸다
     "related_p": 0.05,  # 해석값과 변수의 순위 상관을 이름 붙여 말하는 유의수준(변수 수로 나눈다)
     "conv_window_min": 5, "conv_range": 0.01, "conv_total": 0.10, "conv_ei": 0.01,
@@ -59,8 +61,12 @@ THRESHOLDS: dict[str, float] = {
     "stale_count": 3, "stale_ratio": 0.10,
     "pareto_min": 5, "pareto_tradeoff": 3, "conflict_extent": 0.10, "knee_min": 0.05, "tradeoff_step": 0.10,
     "al_good": 0.20, "al_fair": 0.05, "al_worse": -0.10, "al_stop": 0.05, "al_stop_window": 3, "al_min_base": 10, "al_min_added": 3,
+    "al_min_base_per_var": 5,  # 처음 점이 max(10, 5d)건은 있어야 판단한다. 시험 함수 측정값은 docs/product-spec.md 4-6-1절
+    "al_level": 0.9,  # 감소율 구간. 이 구간이 0을 걸치면 줄었다고도 늘었다고도 말하지 않는다
     "cost_min_sec": 60,  # 이보다 짧으면 시간을 말하지 않는다
+    "percent_limit": 5,  # 처음 값의 이 배수를 넘는 변화는 %로 말하지 않는다(기준이 0에 가까운 값이다)
 }
+ARBITRARY_ZERO = {"degc", "°c", "℃", "c", "degf", "°f", "℉", "f"}  # 영점이 임의인 단위. 0 근처 값의 %는 뜻이 없다
 T_ = THRESHOLDS
 
 # 상태 말은 그 질문의 답이어야 한다. '더 돌리면 좋아질까요? 좋음'은 거꾸로 읽힌다. 네 가지 상태(색)는 그대로 두고 말만 질문마다 다르다
@@ -73,7 +79,7 @@ STATE_WORDS = {
     "convergence": {"good": "거의 다 찾음", "fair": "더 돌릴 만함", "caution": "먼저 점검"},
     "optimum": {"good": "써도 됨", "fair": "확인 후 사용", "caution": "아직 쓰지 마세요"},
     "pareto": {"good": "함께 좋아짐", "fair": "맞바꿔야 함", "caution": "후보 없음"},
-    "active": {"good": "효과 있음", "fair": "효과 작음", "caution": "효과 없음"},
+    "active": {"good": "효과 보임", "fair": "효과 작음", "caution": "효과 없음"},  # 처음 점으로 잰 값이라 '있다'고 단정하지 않는다
 }
 _RANK = {"good": 0, "unknown": 1, "fair": 2, "caution": 3}
 QUALITY_STATE = {"good": "good", "fair": "fair", "poor": "caution"}  # service.assess_quality의 등급 → 판단 도우미의 상태
@@ -145,8 +151,11 @@ T = {
     "q_pass_zero": "제약을 만족한 설계가 하나도 없습니다. 제약값이나 설계 범위를 확인하세요.",
     "q_constant": "{out} 값이 모두 같습니다. 결과 추출을 확인하세요.",
     "q_con_missing": "제약 값이 없어 판단하지 못한 케이스가 {k}건 있습니다.",
+    "q_goal_none": "목표 {out} 값이 해석 {n}건 어디에도 없습니다. 결과 이름이 맞는지, 값을 뽑았는지 확인하세요.",
+    "q_goal_missing": "해석 {n}건 중 {k}건에 {out} 값이 없습니다. 값을 제대로 뽑았는지 확인하세요.",
     # 영향도
     "inf_few": "해석이 {n}건이라 아직 판단하지 못합니다. {m}건 더 끝나면 봅니다.",
+    "inf_no_value": "{out} 값이 있는 해석이 {n}건이라 아직 판단하지 못합니다. {m}건 더 있어야 봅니다.",
     "inf_no_model": "예측 모델이 아직 없습니다. 해석 결과만 놓고 보면 {out|은는} {var|과와} 가장 함께 움직입니다(원인이라는 뜻은 아닙니다).",
     "inf_no_model_none": "예측 모델이 아직 없습니다. 해석 결과만 놓고 봐도 {out|과와} 뚜렷하게 함께 움직이는 변수는 없습니다.",
     "inf_flat": "{out} 값이 거의 변하지 않아 영향도를 계산하지 않았습니다.",
@@ -154,6 +163,9 @@ T = {
     "inf_good_one": "{out|은는} {var1|이가} {p1}%를 좌우합니다.",
     "inf_single": "변수가 {var} 하나뿐이라 {out|은는} {var}에 따라 정해집니다.",
     "inf_fair": "(참고용) {out|은는} {var1}의 영향이 가장 커 보입니다({p1}%). 예측 정확도가 보통이라 순서는 바뀔 수 있습니다.",
+    "inf_fair_hole": "(참고용) {out|은는} {var1}의 영향이 가장 커 보입니다({p1}%). {var}의 {range} 구간은 해석이 없어 순서가 바뀔 수 있습니다.",
+    "inf_tie": "{out|은는} {var1|과와} {var2}의 영향이 비슷합니다({p1}%, {p2}%). 어느 쪽이 더 큰지는 가릴 수 없습니다.",
+    "inf_moving": "(참고용) {out|은는} {var1}의 영향이 가장 커 보입니다({p1}%). 예측은 잘 맞지만 데이터를 조금 바꿔 다시 재면 1위가 바뀌기도 합니다.",
     "inf_fair_more": "예측 정확도를 올린 뒤 다시 보면 순서가 더 분명해집니다.",
     "inf_caution": "예측 정확도가 낮아 영향 순위는 아직 믿기 어렵습니다. 해석 결과만 놓고 보면 {var|과와} 가장 함께 움직입니다(원인이라는 뜻은 아닙니다).",
     "inf_caution_none": "예측 정확도가 낮아 영향 순위는 아직 믿기 어렵습니다. 해석 결과만 놓고 봐도 뚜렷하게 함께 움직이는 변수는 없습니다.",
@@ -185,6 +197,8 @@ T = {
     "tr_rmse_caution": "{out} 예측은 오차가 큽니다(평균 ±{rmse}). 참고만 하고, 점을 더 넣거나 빠진 변수를 확인하세요.",
     "tr_flat": "{out} 값이 거의 변하지 않아 정확도를 잴 수 없습니다.",
     "tr_nearflat": "{out} 값은 거의 일정합니다(보통 {val}). 예측 오차 ±{p80}는 무시해도 되는 크기입니다.",
+    "tr_hole": "{var}의 {range} 구간(범위의 {p}%)은 해석이 없어 이 구간의 예측은 믿기 어렵습니다.",
+    "tr_measuring": "이 예측의 정확도를 다시 재고 있습니다. 잠시 뒤 결과가 나옵니다.",
     "tr_region": "최적화로 더한 {k}건은 좋은 곳에 몰려 서로 잘 맞으므로 빼고 나머지 {b}건으로 쟀습니다. 몰린 곳 근처의 예측은 이보다 나을 수 있습니다.",
     "tr_small": "점이 {n}건으로 적어 실제 예측보다 나쁘게 잰 값일 수 있습니다.",
     "tr_stale": "최신 해석 {k}건을 아직 못 배웠습니다.",
@@ -212,8 +226,13 @@ T = {
     "con_multi_note": "처음 계획한 해석보다 {gain} 나아졌습니다.",
     "con_multi_flat": "최적화 {k}건으로도 {goals}를 함께 좋게 하는 후보가 나아지지 않았습니다. {W}건 더 돌려 보거나 설계 범위를 확인하세요.",
     "con_multi_flat_bad": "최적화 {k}건으로도 {goals}를 함께 좋게 하는 후보가 나아지지 않았습니다. 예측 정확도와 설계 범위를 먼저 확인하세요.",
+    "con_multi_found": "처음 계획한 해석에는 제약을 만족한 설계가 없었고, 최적화로 {goals}의 후보 {n}개를 찾았습니다. 최근 {W}건에서 후보가 {r} 나아졌습니다.",
+    "con_unlearned": "예측 모델이 {con} 제약을 배우지 않아, 예측으로 본 남은 여지에는 이 제약이 빠져 있습니다.",
+    "goal_no_value": "목표 값이 있는 케이스가 없어 판단하지 못합니다. 결과 이름이 맞는지, 값을 뽑았는지 확인하세요.",
     # 최적 설계
     "opt_none": "완료된 해석이 없어 아직 판단하지 못합니다.",
+    "opt_no_value": "완료된 해석 {n}건에 {out} 값이 없어 판단하지 못합니다. 결과 이름이 맞는지, 값을 뽑았는지 확인하세요.",
+    "opt_unlearned": "예측 모델이 {con} 제약을 배우지 않아 제약을 따져 예측 후보를 고를 수 없습니다. 제약까지 넣어 다시 학습하세요.",
     "opt_few": "지금 가장 좋은 값은 {out} {val}(케이스 {id})이지만 변수 {d}개에 {n}건뿐이라 아직 판단하지 못합니다. {m}건 더 필요합니다.",
     "opt_infeasible": "제약을 만족한 설계가 없어 점검하지 못합니다.",
     "opt_head": "지금 가장 좋은 설계(케이스 {id}, {out} {val})는 해석으로 확인된 값입니다.",
@@ -229,11 +248,14 @@ T = {
     "why_few_opt": "최적화가 {k}건뿐이라 더 좋아질 수 있습니다",
     "why_going": "더 돌리면 아직 좋아질 수 있어 보입니다",
     "why_fair_trust": "예측 정확도가 보통이라 주변 설계를 해석으로 비교해 보는 것이 좋습니다",
+    "why_hole": "{var}의 {range} 구간은 해석이 없어 그곳에 더 좋은 설계가 있는지 모릅니다",
     "why_multi": "목표가 여럿이라 첫 목표 {out} 기준으로만 고른 설계입니다",
     "opt_edge": "{var|이가} 범위 {side}인 {x}에 붙어 있습니다. 범위를 넓혀 볼 만합니다.",
     "opt_pred": "다만 AI 예측으로는 {x} 근처에서 {out} {pred}까지 {verb} 수 있어, 확인 해석 1건을 권합니다{cost}.",
     "opt_margin_fair": "{con} 여유가 {m}({p}%)로 작습니다.",
     "opt_margin_caution": "{con|이가} 한계까지 {m}({p}%)밖에 남지 않았습니다. 공차를 생각하면 넘을 수 있어 그대로 쓰지 마세요.",
+    "opt_margin_fair_range": "{con} 여유가 {m}(값 폭의 {p}%)로 작습니다.",
+    "opt_margin_caution_range": "{con|이가} 한계까지 {m}(값 폭의 {p}%)밖에 남지 않았습니다. 공차를 생각하면 넘을 수 있어 그대로 쓰지 마세요.",
     "opt_robust": "변수가 범위의 ±{tol}%만 흔들려도 {out|이가} {a}~{b}로 크게 움직입니다(예측). 조금 안쪽 설계도 비교하세요.",
     "opt_robust_fair": "변수가 범위의 ±{tol}% 흔들리면 {out|은는} {a}~{b}로 움직입니다(예측).",
     "opt_robust_con": "변수가 범위의 ±{tol}%만 흔들려도 {con} 제약을 넘을 수 있습니다(예측 통과율 {p}%).",
@@ -254,11 +276,14 @@ T = {
     "par_knee_note": "균형 설계는 제안입니다. 답을 정해 주는 것이 아니니 무엇을 더 중요하게 볼지 정해 고르세요.",
     "par_pred_note": "속 빈 점 {k}개는 AI 예측이라 아직 해석으로 확인하지 않았습니다.",
     "par_pred_low": "예측 정확도가 낮아 예측 후보는 보여 주지 않습니다.",
+    "par_pred_con": "예측 모델이 {con} 제약을 배우지 않아 예측 후보는 보여 주지 않습니다.",
     # 능동학습
     "al_few": "정확도를 높이려고 더 돌린 해석이 {k}건입니다. {need}건이 되면 판단합니다.",
     "al_base_few": "정확도를 높이려고 더 돌린 해석은 {k}건이지만 처음 계획한 해석이 {b}건뿐입니다. {need}건이 있어야 판단합니다.",
-    "al_good": "정확도를 높이려고 더 돌린 {k}건으로 평균 오차가 {p}% 줄었습니다({a} → {b}). 아무 데나 골랐을 때보다 나은지는 재지 않았습니다.",
-    "al_fair": "정확도를 높이려고 더 돌린 {k}건으로 평균 오차가 {p}% 줄었습니다({a} → {b}). 효과는 있지만 크지 않고, 아무 데나 골랐을 때보다 나은지는 재지 않았습니다.",
+    "al_good": "정확도를 높이려고 더 돌린 {k}건 뒤, 처음 계획한 점 {n}건에 맞춰 본 평균 오차가 {p}% 줄었습니다({a} → {b}). 아무 데나 골랐을 때보다 나은지는 재지 않았습니다.",
+    "al_fair": "정확도를 높이려고 더 돌린 {k}건 뒤, 처음 계획한 점 {n}건에 맞춰 본 평균 오차가 {p}% 줄었습니다({a} → {b}). 크지 않고, 아무 데나 골랐을 때보다 나은지는 재지 않았습니다.",
+    "al_unsure": "정확도를 높이려고 더 돌린 {k}건 뒤, 처음 계획한 점 {n}건에 맞춰 본 평균 오차는 {a} → {b}입니다. 점이 적어 우연과 구분되지 않으니 효과가 있다고도 없다고도 말하지 않습니다.",
+    "al_scope": "이 값은 처음 계획한 점에서 잰 것이라 설계 범위 전체의 오차와 다를 수 있습니다. 연습 함수에서도 실제 오차와 어긋난 경우가 있었습니다.",
     "al_flat": "정확도를 높이려고 더 돌린 {k}건 뒤에도 평균 오차는 거의 그대로입니다({a} → {b}). 다만 처음 계획한 점에서 잰 값이라 범위 끝쪽에서 좋아진 만큼은 드러나지 않습니다.",
     "al_flat_ok": "정확도를 높이려고 더 돌린 {k}건 뒤에도 평균 오차는 거의 그대로입니다({a} → {b}). 예측이 이미 잘 맞아 더 돌릴 필요가 적습니다.",
     "al_worse": "정확도를 높이려고 더 돌린 {k}건 뒤 평균 오차가 오히려 {p}% 늘었습니다({a} → {b}, 처음 계획한 점 기준). 더 돌리기 전에 추가된 결과 값이 이상하지 않은지 확인하세요.",
@@ -287,8 +312,11 @@ NEXT = {
     "computing": ("판단을 계산하고 있습니다. 잠시 뒤 다음 할 일을 알려 드립니다.", ""),
     "fail": ("실패 원인부터 찾으세요.", "원인 찾기 요청"),
     "count": ("해석이 {n}건입니다. 변수 {d}개면 최소 {need}건은 있어야 판단할 수 있습니다{cost}.", "해석 조건 더 넣기 요청"),
+    "no_value": ("목표 {out} 값이 어느 결과에도 없습니다. 결과 이름과 값 뽑기를 먼저 확인하세요.", "값 뽑기 점검 요청"),
+    "no_feasible": ("제약을 만족한 설계가 없습니다. 더 돌리기 전에 제약값과 설계 범위를 확인하세요.", "제약 점검 요청"),
     "train": ("예측 모델을 학습할 차례입니다.", "학습 요청"),
     "stale": ("최신 해석 {k}건을 반영해 다시 학습하세요.", "재학습 요청"),
+    "retrain_con": ("예측 모델이 {con} 제약을 배우지 않았습니다. 제약까지 넣어 다시 학습하세요.", "재학습 요청"),
     "poor": ("예측 정확도를 먼저 올리세요{cost}.", "정확도 높이는 해석 요청"),
     "check_inputs": ("점을 더 넣어도 예측이 금방 나아지지 않습니다. 설계 범위와 빠진 변수를 확인하세요.", "원인 점검 요청"),
     "optimize": ("최적화를 돌릴 차례입니다.", "최적화 요청"),
@@ -300,8 +328,16 @@ NEXT = {
     "report": ("보고서를 쓰면 됩니다.", "보고서 요청"),
 }
 # 버튼이 하는 일. 이름이 달라도 하는 일이 같으면 한 곳에만 둔다
-NEXT_ACTION = {"doe_fix": "doe", "count": "doe", "make_doe": "doe", "run": "run", "fail": "fail", "train": "train", "stale": "train", "poor": "al", "check_inputs": "inputs",
-               "optimize": "bo", "more_opt": "bo", "verify": "verify", "margin": "margin", "edge": "edge", "finish": "finish", "report": "finish"}
+NEXT_ACTION = {"doe_fix": "doe", "count": "doe", "make_doe": "doe", "run": "run", "fail": "fail", "no_value": "extract", "no_feasible": "constraints", "train": "train", "stale": "train", "retrain_con": "train",
+               "poor": "al", "check_inputs": "inputs", "optimize": "bo", "more_opt": "bo", "verify": "verify", "margin": "margin", "edge": "edge", "finish": "finish", "report": "finish"}
+# 표로 만든 스터디(adapter=data)에는 돌릴 해석이 없다. 같은 일을 표에 할 수 있는 말로 바꾼다. 없는 해석을 돌리라고 하면 눌러도 건수가 늘지 않는다
+DATA_NEXT = {"poor": "표에 행을 더 넣어 예측 정확도를 먼저 올리세요.", "count": "데이터가 {n}건입니다. 변수 {d}개면 표에 최소 {need}행은 있어야 판단할 수 있습니다."}
+DATA_ASK = {
+    "al": ("표에 행 더 넣기 요청", "스터디 '{name}'의 표에 행을 더 넣어 예측 정확도를 올리고 싶어. 어느 범위의 행을 더 모으면 좋은지 알려 줘."),
+    "doe": ("표에 행 더 넣기 요청", "스터디 '{name}'의 표에 행을 더 넣어 빈 범위를 채우고 싶어. 어느 범위의 행을 더 모으면 좋은지 알려 줘."),
+    "verify": ("확인할 설계 정리 요청", "스터디 '{name}'에서 예측으로 고른 후보를 시험이나 해석으로 확인할 수 있게 정리해 줘. 아직 확인되지 않은 값이라고 함께 적어 줘."),
+    "bo": ("예측 후보 찾기 요청", "스터디 '{name}'의 예측 모델로 좋은 후보를 찾아 줘. 아직 확인되지 않은 값이라고 함께 적어 줘."),
+}
 # 요약 카드의 '바로 확정하기 전에 볼 것'
 WATCH = {"coverage": "설계 범위", "quality": "이상한 값", "influence": "영향 순위", "trust": "예측 정확도", "convergence": "더 돌리기", "optimum": "최고 설계 확인",
          "pareto": "목표 맞바꾸기", "active": "추가 해석 효과"}
@@ -362,7 +398,7 @@ def n3(x: float | None) -> str:
 
 def with_unit(x: float | None, u: str) -> str:
     s = n3(x)
-    return s if not u else f"{s}{u}" if u == "%" else f"{s} {u}"
+    return s if not u or u == "-" else f"{s}{u}" if u == "%" else f"{s} {u}"  # '-'는 단위가 없다는 표시다
 
 
 def pct(x: float) -> str:
@@ -375,6 +411,9 @@ def hours_text(h: float) -> str:
     if h < 1:
         return f"{round(h * 60)}분"
     return f"{h:.1f}시간" if h < 48 else f"{h / 24:.1f}일"
+
+
+SHOWN = 12  # 화면 표가 다시 반올림하는 값. 여기서 4자리로 줄이면 237.46이 238이 되어 같은 설계를 237로 쓴 문장과 어긋난다
 
 
 def _r(x, k: int = 4):
@@ -461,6 +500,11 @@ class Snap:
     def imported(self) -> bool:
         return self.adapter == "data" or any(c.source == "import" for c in self.cases)
 
+    @property
+    def no_solver(self) -> bool:
+        """돌릴 해석이 없다. 표로 만든 스터디는 행을 더해야 건수가 는다."""
+        return self.adapter == "data"
+
 
 def _owner(study: models.Study) -> str:
     return f"{study.project_id}:{study.created_at.isoformat() if study.created_at else ''}"
@@ -532,6 +576,39 @@ def _write_cv(model_id: int, output: str, value: dict):
         tmp.replace(p)
     except OSError:
         log.warning("옛 모델의 교차검증 값을 저장하지 못했습니다", exc_info=True)
+
+
+# ---------- 본 적 없는 구간 ----------
+def unseen_ranges(X: np.ndarray, variables: list[dict]) -> list[dict]:
+    """학습 자료가 한 번도 닿지 않은 구간(변수별, 넓은 것부터). 기준은 설계 범위 판단의 '주의'와 같다. 격자는 수준 사이가 비는 것이 설계이므로 양 끝만 본다."""
+    X = np.asarray(X, dtype=float)
+    lo = np.array([float(v["lower"]) for v in variables])
+    hi = np.array([float(v["upper"]) for v in variables])
+    if X.ndim != 2 or not len(X) or X.shape[1] != len(variables):
+        return []
+    span = np.where(hi > lo, hi - lo, 1.0)
+    U = np.clip((X - lo) / span, 0.0, 1.0)
+    limit = max(T_["gap_caution"], T_["gap_caution_per_n"] / len(U))
+    levels = calc.level_counts(U, int(T_["level_max"]))
+    out = []
+    for i, v in enumerate(variables):
+        g = calc.largest_gap(U[:, i], bool(levels[i]))
+        if hi[i] > lo[i] and g["gap"] > limit:
+            out.append({"variable": v["name"], "lo": float(lo[i] + g["lo"] * span[i]), "hi": float(lo[i] + g["hi"] * span[i]), "gap": g["gap"]})
+    return sorted(out, key=lambda h: -h["gap"])
+
+
+def note_unseen(quality: dict, X: np.ndarray, variables: list[dict]):
+    """정확도 칩·목록·공유 경고가 쓰는 저장 품질에도 반영한다. 맞춰 본 점수가 좋아도 그 구간은 맞춰 본 적이 없어 '좋음'이 아니다. 같은 화면의 한 줄과 다른 답을 하면 안 된다."""
+    holes = unseen_ranges(X, variables)
+    if not holes:
+        return
+    h = holes[0]
+    v = next(x for x in variables if x["name"] == h["variable"])
+    name = re.sub(r"\s*\[[^\]]*\]\s*", "", v.get("note") or "").strip() or v["name"]
+    quality.setdefault("warnings", []).append(f"{name}의 {n3(h['lo'])}~{n3(h['hi'])} 구간(범위의 {pct(h['gap'] * 100)}%)은 학습 데이터가 없어 이 구간의 예측은 믿기 어렵습니다 → 그 구간의 데이터를 더해 다시 학습하세요")
+    if quality.get("level") == "good":
+        quality.update(level="fair", label=service.QUALITY_LABEL["fair"])
 
 
 # ---------- 계산 맥락 ----------
@@ -611,8 +688,12 @@ class Ctx:
         return service.constraint_state(self.s.constraints, c.results)
 
     def no_feasible(self, kind: str) -> tuple[str, str]:
-        """고를 설계가 없을 때의 (상태, 문장). 어긴 케이스가 있으면 주의, 값이 없어 모르기만 하면 아직 판단하지 못한 것이다."""
-        if any(self.feasible(c) is False for c in self.complete):
+        """고를 설계가 없을 때의 (상태, 문장). 만족한 케이스가 있는데 고를 게 없다면 목표 값이 없는 것이고,
+        어긴 케이스가 있으면 주의, 제약 값이 없어 모르기만 하면 아직 판단하지 못한 것이다."""
+        states = [self.feasible(c) for c in self.complete]
+        if any(st is True for st in states):
+            return "unknown", T["goal_no_value"]
+        if any(st is False for st in states):
             return "caution", T[f"{kind}_infeasible"]
         return "unknown", T["con_unknown_all"]
 
@@ -681,12 +762,8 @@ class Ctx:
         cv = self.cv(sur, o, m) if sur is not None and o in sur.models else None
         if cv:
             actual, pred = np.array(cv["actual"], dtype=float), np.array(cv["cv_pred"], dtype=float)
-            X, _ = train_xy(sur.models[o])
-            by = self.case_by_x()
-            keep = np.array([getattr(by.get(tuple(round(v, 7) for v in row)), "source", "doe") != "bo" for row in X]) if len(X) == len(actual) else np.ones(len(actual), dtype=bool)
+            keep = self.scored_points(sur, o, len(actual))
             dropped = int((~keep).sum())
-            if dropped and keep.sum() < T_["train_min"]:  # 남는 점이 너무 적으면 뺄 수 없다
-                keep, dropped = np.ones(len(actual), dtype=bool), 0
             err = np.abs(pred[keep] - actual[keep])
             stored = self.r2(m, o)
             r2 = stored if not dropped and stored is not None else service.design_range_r2(actual, pred, keep)
@@ -694,16 +771,46 @@ class Ctx:
         self._score[key] = out
         return out
 
+    def scored_points(self, sur: Surrogate, o: str, n: int) -> np.ndarray:
+        """정확도 점수에 넣는 점. 최적화 점을 빼되, 남는 점이 너무 적으면 뺄 수 없다."""
+        X, _ = train_xy(sur.models[o])
+        by = self.case_by_x()
+        keep = np.array([getattr(by.get(tuple(round(v, 7) for v in row)), "source", "doe") != "bo" for row in X]) if len(X) == n else np.ones(n, dtype=bool)
+        return keep if keep.all() or keep.sum() >= T_["train_min"] else np.ones(n, dtype=bool)
+
+    def holes(self, m: ModelRow, o: str) -> list[dict]:
+        """이 모델이 배운 적이 없는 구간(변수별, 넓은 것부터). 교차검증은 본 곳끼리 맞춰 보는 것이라 안 본 곳의 오차를 말해 주지 못한다.
+        실패가 모인 구간처럼 정말 빈 곳에서는 작은 오차를 내고 '믿을 만함'이 된다. 기준은 설계 범위 판단의 '주의'와 같다."""
+        key = ("holes", m.id, o)
+        if key in self._cache:
+            return self._cache[key]
+        sur = self.surrogate(m)
+        out: list[dict] = []
+        if sur is not None and o in sur.models and list(sur.variables) == self.s.names:
+            out = unseen_ranges(train_xy(sur.models[o])[0], self.s.variables)
+        self._cache[key] = out
+        return out
+
+    def hole_kw(self, h: dict) -> dict:
+        return {"var": self.label(h["variable"]), "range": self.span_text(h["variable"], h["lo"], h["hi"]), "p": pct(h["gap"] * 100)}
+
+    def unlearned(self, sur: Surrogate) -> list[str]:
+        """모델이 배우지 않은 제약. 예측으로 고른 설계가 그 제약을 어겨도 모델은 알 수 없다."""
+        return [c["name"] for c in self.s.constraints if c["name"] not in sur.models]
+
     def near_flat(self, m: ModelRow, o: str) -> bool:
         """거의 일정한 출력: 흔들림이 수치 잡음이라 R²는 0에 가깝지만 오차는 무시할 만하다. 점을 더 넣어도 R²는 오르지 않는다.
-        제약 경계가 그 오차 안에 있으면 무시할 수 없다."""
+        오차만 보면 안 된다. 큰 값 위에서 움직이는 출력은 오차가 값에 비해 작아도 그 오차가 흔들림 전부일 수 있다. 값이 정말 안 움직일 때만이고,
+        최적화하려는 목표는 수치 잡음 크기까지만 인정한다. 제약 경계가 그 오차 안에 있으면 무시할 수 없다."""
         vals = [v for _, v in self.values(o)]
         if len(vals) < 2:
             return False
         med = float(np.median(vals))
         s = self.score(m, o)
         err = s["p80"] if s else self.rmse(m, o)
-        if err is None or med == 0 or err > T_["flat_rel"] * abs(med):
+        rel = T_["flat_goal_rel"] if any(x["name"] == o for x in self.s.objectives) else T_["flat_rel"]
+        spread = float(np.subtract(*np.percentile(vals, [95, 5])))
+        if err is None or med == 0 or err > rel * abs(med) or spread > rel * abs(med):
             return False
         for con in self.s.constraints:
             if con["name"] == o:
@@ -714,7 +821,8 @@ class Ctx:
 
     def verdict(self, m: ModelRow | None, o: str) -> str:
         """화면의 예측 판정. 건수가 최소에 못 미치면 판단하지 않고, 설계 범위 기준 정확도로 본다.
-        같은 화면의 정확도 칩(ModelTrust)과 어긋나지 않게 학습 때 저장한 품질보다 좋게 말하지 않는다. 거의 일정한 출력만 예외다: R²가 뜻이 없고 문장이 그 이유를 말한다."""
+        같은 화면의 정확도 칩(ModelTrust)과 어긋나지 않게 학습 때 저장한 품질보다 좋게 말하지 않는다. 거의 일정한 출력만 예외다: R²가 뜻이 없고 문장이 그 이유를 말한다.
+        모델이 본 적 없는 구간이 있으면 맞춰 본 점수가 아무리 좋아도 '믿을 만함'이 아니다. 그 구간을 맞춰 본 적이 없다."""
         if m is None or self.rows_of(m, o) < self.need:
             return "unknown"
         s = self.score(m, o)
@@ -722,10 +830,12 @@ class Ctx:
         if r2 is None:
             return "unknown"
         if r2 < T_["r2_good"] and self.near_flat(m, o):
-            return "good"
-        level = "good" if r2 >= T_["r2_good"] else "fair" if r2 >= T_["r2_fair"] else "caution"
-        stored = QUALITY_STATE.get(((m.quality.get("by_output") or {}).get(o) or {}).get("level"))
-        return stored if stored and _RANK[stored] > _RANK[level] else level
+            level = "good"
+        else:
+            level = "good" if r2 >= T_["r2_good"] else "fair" if r2 >= T_["r2_fair"] else "caution"
+            stored = QUALITY_STATE.get(((m.quality.get("by_output") or {}).get(o) or {}).get("level"))
+            level = stored if stored and _RANK[stored] > _RANK[level] else level
+        return "fair" if level == "good" and self.holes(m, o) else level
 
     def model_info(self, m: ModelRow, output: str | None = None) -> dict:
         return {"id": m.id, "version": m.version, "n_train": m.n_train, "stale_by": self.stale_by(m, output) if output else 0}
@@ -801,6 +911,8 @@ def _pending(key: str) -> dict:
 
 def _ask(ctx: Ctx, label: str, request: str, action: str | None = None) -> dict:
     """버튼. action이 같으면 하는 일이 같은 버튼이다(화면에 한 번만 둔다)."""
+    if ctx.s.no_solver and action in DATA_ASK:
+        label, request = DATA_ASK[action]
     return {"label": label, "request": request.replace("{name}", ctx.s.name), "action": action or label}
 
 
@@ -1012,8 +1124,23 @@ def quality(ctx: Ctx) -> dict:
         vals = [v for _, v in ctx.values(name)]
         if is_constant(vals):
             verdicts.append(("caution", say("q_constant", out=ctx.label(name))))
-    # 제약 통과율
     notes = []
+    # 목표 값이 없는 케이스. 완료여도 값을 뽑지 못했거나 이름이 틀리면 뒤의 모든 판단이 그만큼 적은 건수로 이뤄진다
+    for obj in s.objectives:
+        miss = n - len(ctx.values(obj["name"]))
+        if not n or not miss:
+            continue
+        facts.setdefault("objective_missing", {})[obj["name"]] = miss
+        kw = dict(out=ctx.label(obj["name"]), n=n, k=miss)
+        if miss == n:
+            verdicts.append(("caution", say("q_goal_none", **kw)))
+        elif miss / n > T_["fail_caution"]:
+            verdicts.append(("caution", say("q_goal_missing", **kw)))
+        elif miss / n >= T_["fail_fair"]:
+            verdicts.append(("fair", say("q_goal_missing", **kw)))
+        else:
+            notes.append(say("q_goal_missing", **kw))
+    # 제약 통과율
     if s.constraints and ctx.complete:
         judged = [(c, ctx.feasible(c)) for c in ctx.complete]
         known = [(c, p) for c, p in judged if p is not None]
@@ -1154,7 +1281,9 @@ def _influence_one(ctx: Ctx, o: str) -> dict:
         related = calc.top_related(np.array([ctx.x(c) for c, _ in rows]), y, T_["related_p"])
     if m is None:
         if n < ctx.need:
-            return out("unknown", say("inf_few", n=n, m=ctx.need - n), facts={"n": n})
+            # 완료 건수가 충분한데 값이 모자라면 '해석이 0건'이 아니라 값이 없는 것이다
+            few = "inf_no_value" if len(ctx.complete) > n else "inf_few"
+            return out("unknown", say(few, out=label, n=n, m=ctx.need - n), facts={"n": n})
         facts = {"n": n, "top": s.names[related[0]] if related[0] is not None else None, "spearman": _r(related[1])}
         sentence = say("inf_no_model", var=ctx.label(s.names[related[0]]), out=label) if related[0] is not None else say("inf_no_model_none", out=label)
         return out("unknown", sentence, facts=facts,
@@ -1311,6 +1440,7 @@ def _influence_one(ctx: Ctx, o: str) -> dict:
         facts["unseen_top"] = {"variable": s.names[i1], "gap": _r(top_gap["gap"])}
         notes.insert(0, dir_text(i1))
         return out("fair", say("inf_gap", out=label, var1=v1, p1=p1, range=rng), notes=notes, facts=facts, charts=charts, model=info, predicted=True)
+    tie = False
     if d == 1:
         sentence = f"{say('inf_single', var=v1, out=label)} {dir_text(i1)}"
     elif level == "good" and stable:
@@ -1318,14 +1448,23 @@ def _influence_one(ctx: Ctx, o: str) -> dict:
             sentence = f"{say('inf_good', out=label, var1=v1, p1=p1, var2=ctx.label(s.names[i2]), p2=round(float(share[i2]) * 100))} {dir_text(i1)}"
         else:
             sentence = f"{say('inf_good_one', out=label, var1=v1, p1=p1)} {dir_text(i1)}"
+    elif level == "good" and share[i1] - share[i2] <= T_["tie_gap"]:
+        # 잘 맞는 모델에서 1위가 흔들리면 정확도 문제가 아니라 정말 비슷한 것이다. 그것이 곧 믿을 만한 답이다
+        sentence = say("inf_tie", out=label, var1=v1, var2=ctx.label(s.names[i2]), p1=p1, p2=round(float(share[i2]) * 100))
+        notes.insert(0, dir_text(i1))
+        tie = True
+    elif level == "good":
+        sentence = say("inf_moving", out=label, var1=v1, p1=p1)
+        notes.insert(0, dir_text(i1))
     else:
-        sentence = say("inf_fair", out=label, var1=v1, p1=p1)
+        hole = ctx.holes(m, o)
+        sentence = say("inf_fair_hole", out=label, var1=v1, p1=p1, **ctx.hole_kw(hole[0])) if hole else say("inf_fair", out=label, var1=v1, p1=p1)
         notes.insert(0, dir_text(i1))
         if not stable:
             notes.insert(1, T["inf_unstable"])
-        if level == "fair":
+        if not hole:
             notes.append(T["inf_fair_more"])
-    state = "good" if (level == "good" and stable) or (d == 1 and level == "good") else "fair"
+    state = "good" if (level == "good" and stable) or (d == 1 and level == "good") or tie else "fair"
     if d > 1 and state == "good" and i2 is not None:
         notes.insert(0, dir_text(i2))
     return out(state, sentence, notes=notes, facts=facts, charts=charts, model=info, predicted=True)
@@ -1390,7 +1529,7 @@ def _trust_one(ctx: Ctx, o: str) -> dict:
         scored = [getattr(c, "source", "doe") != "bo" or not (sc and sc["dropped"]) for c in found]
         order = [int(i) for i in np.argsort(-err) if scored[int(i)]]
         for i in order[:3]:
-            worst_rows.append({"case_id": ids[i], "actual": _r(actual[i]), "predicted": _r(pred[i]), "error": _r(err[i])})
+            worst_rows.append({"case_id": ids[i], "actual": _r(actual[i], SHOWN), "predicted": _r(pred[i], SHOWN), "error": _r(err[i], SHOWN)})
         charts.append({"kind": "pva", "points": [[ids[i], float(actual[i]), float(pred[i]), bool(scored[i])] for i in range(len(actual))], "unit": unit, "output": label, "worst": worst_rows})
     pv = with_unit(p80, unit) if p80 is not None else None
     near = ctx.near_flat(m, o) and (sc["r2"] if sc and sc["r2"] is not None else (r2 or 0.0)) < T_["r2_good"]
@@ -1410,6 +1549,12 @@ def _trust_one(ctx: Ctx, o: str) -> dict:
         notes.append(say("tr_small", n=m.n_train))
     if ctx.is_stale(m, o):
         notes.append(say("tr_stale", k=info["stale_by"]))
+    # 본 적 없는 구간: 맞춰 본 오차로는 드러나지 않으니 첫 줄에서 말한다. 건수가 아니라 구간이 비었으므로 처방도 그 구간을 채우는 것이다
+    holes = ctx.holes(m, o)
+    if holes:
+        facts["holes"] = [{**h, "lo": _r(h["lo"]), "hi": _r(h["hi"]), "gap": _r(h["gap"])} for h in holes]
+        sentence = f"{sentence} {say('tr_hole', **ctx.hole_kw(holes[0]))}"
+        notes += [say("tr_hole", **ctx.hole_kw(h)) for h in holes[1:]]
     # 모델이 모르는 곳
     Q = calc.sobol_unit(ctx.d, 2048, seed=2)
     pipe = sur.models[o]
@@ -1435,6 +1580,9 @@ def _trust_one(ctx: Ctx, o: str) -> dict:
         next_ = _ask_al(ctx)
     elif ctx.is_stale(m, o):
         next_ = _ask(ctx, "재학습 요청", "스터디 '{name}'의 최신 해석까지 넣어 예측 모델을 다시 학습해 줘.", "train")
+    elif holes:
+        kw = ctx.hole_kw(holes[0])
+        next_ = _ask(ctx, "해석 조건 더 넣기 요청", f"스터디 '{{name}}'에 해석 조건을 더 넣어 {kw['var']}의 {kw['range']} 구간을 채워 줘. 그 구간이 실패로 비었으면 원인도 함께 봐 줘.", "doe")
     elif level == "fair" and ctx.s.objectives:
         next_ = _ask(ctx, "확인 해석 요청", "스터디 '{name}'에서 예측으로 고른 최선 설계를 해석 1건으로 확인해 줘.", "verify")
     return {**base, "state": level, "state_label": state_label("trust", level), "sentence": sentence, "notes": notes, "facts": facts, "charts": charts, "next": next_}
@@ -1451,14 +1599,16 @@ def prior_predictions(ctx: Ctx, o: str) -> list[dict]:
             continue
         pipe = sur.models[o]
         mu, sd = pipe[-1].predict(pipe[0].transform(np.array([ctx.x(c)])), return_std=True)
-        done.append({"case_id": c.id, "source": c.source, "model_version": m.version, "actual": _r(v), "predicted": _r(mu[0]), "std": _r(sd[0]), "n_train": m.n_train})
+        done.append({"case_id": c.id, "source": c.source, "model_version": m.version, "actual": _r(v, SHOWN), "predicted": _r(mu[0], SHOWN), "std": _r(sd[0], SHOWN), "n_train": m.n_train})
     return done
 
 
 # ---------- 수렴성 ----------
-def _ref_percent(start: float, ptp: float) -> bool:
-    """기준값이 0에 가까우면 퍼센트가 뜻이 없다. 단위 값만 말한다."""
-    return abs(start) >= 0.05 * ptp and abs(start) > 0
+def _ref_percent(start: float, ptp: float, now: float | None = None, unit: str = "") -> bool:
+    """퍼센트가 뜻이 있을 때만 쓴다. 기준값이 0에 가깝거나, 영점이 임의인 단위(온도)이거나, 부호가 바뀌거나, 기준값의 몇 배씩 움직이면 단위 값만 말한다(584% 좋아졌다는 말은 읽을 수 없다)."""
+    if not start or abs(start) < 0.05 * ptp or unit.strip().lower() in ARBITRARY_ZERO:
+        return False
+    return now is None or (now * start >= 0 and abs(now - start) <= T_["percent_limit"] * abs(start))
 
 
 def convergence(ctx: Ctx) -> dict | None:
@@ -1467,8 +1617,18 @@ def convergence(ctx: Ctx) -> dict | None:
         return None
     if ctx.s.models and not ctx.use_models:
         return _pending("convergence")
-    if len(s.objectives) >= 2:
-        return _convergence_multi(ctx)
+    sec = _convergence_multi(ctx) if len(s.objectives) >= 2 else _convergence_one(ctx)
+    # 남은 여지를 예측으로 잰 경우 그 예측에 없는 제약을 밝힌다
+    m = ctx.model_for(s.objectives[0]["name"])
+    sur = ctx.surrogate(m) if m else None
+    missing = ctx.unlearned(sur) if sur is not None else []
+    if missing and (sec["facts"].get("ei_left") is not None or sec["facts"].get("hv_left_pct") is not None):
+        sec["notes"].append(say("con_unlearned", con="·".join(ctx.label(n) for n in missing)))
+    return sec
+
+
+def _convergence_one(ctx: Ctx) -> dict:
+    s = ctx.s
     obj = s.objectives[0]
     o, sign = obj["name"], 1.0 if obj.get("goal", "min") == "min" else -1.0
     label, unit = ctx.label(o), ctx.unit_of(o)
@@ -1502,7 +1662,7 @@ def convergence(ctx: Ctx) -> dict | None:
     first, seq = _best_after_bo(ctx, feas, start, sign)
     before = seq[-W - 1] if len(seq) > W else first
     recent = sign * (before - now)
-    use_pct = _ref_percent(start, ptp)
+    use_pct = _ref_percent(start, ptp, now, unit)
     ref = abs(start)
     gain = f"{pct(total / ref * 100)}%" if use_pct else with_unit(total, unit)
     rtext = f"{pct(recent / ref * 100)}%" if use_pct else with_unit(recent, unit)
@@ -1667,6 +1827,10 @@ def _convergence_multi(ctx: Ctx) -> dict:
     # 한 목표일 때와 같은 규칙: 모델이 약하면 평평해 보여도 다 찾았다고 말하지 않고, 나아진 적이 없으면 좋다고 말하지 않는다
     if small_recent and "caution" in levels:
         return _section("convergence", "caution", T["con_poor"], notes=[note], facts=facts, charts=charts, how=how, basis=ctx.basis, next_=_ask_al(ctx))
+    if not is_base.any():
+        # 처음 점에 제약을 만족한 설계가 없었다. 비교할 '처음 값'이 없으니 시작과 지금이 같게 나온다. 나아지지 않은 것이 아니라 찾아낸 것 자체가 진전이다(한 목표와 같은 규칙)
+        front = int(calc.non_dominated(S).sum())
+        return _section("convergence", "fair", say("con_multi_found", goals=goals_word, n=front, W=W, r=rtext), facts={**facts, "no_start": True, "more_worth": True, "total_pct": None}, charts=charts, how=how, next_=again, basis=ctx.basis)
     if total <= 0:
         if k >= 2 * W:
             return _section("convergence", "caution", say("con_multi_flat_bad", k=k, goals=goals_word), facts=facts, charts=charts, how=how, basis=ctx.basis)
@@ -1737,7 +1901,8 @@ def _optimum_caps(ctx: Ctx, o: str) -> list[tuple[str, str]]:
     elif con and con["state"] == "fair":
         caps.append(("fair", T["why_going"]))
     if level == "fair":
-        caps.append(("fair", T["why_fair_trust"]))
+        hole = ctx.holes(m, o)
+        caps.append(("fair", say("why_hole", **ctx.hole_kw(hole[0])) if hole else T["why_fair_trust"]))
     if len(s.objectives) >= 2:
         caps.append(("fair", say("why_multi", out=ctx.label(o))))
     return caps
@@ -1758,6 +1923,8 @@ def optimum(ctx: Ctx) -> dict | None:
     label, unit = ctx.label(o), ctx.unit_of(o)
     if not ctx.complete:
         return _section("optimum", "unknown", T["opt_none"], basis=ctx.basis)
+    if not ctx.values(o):  # '완료된 해석이 없다'가 아니라 그 값이 없는 것이다
+        return _section("optimum", "unknown", say("opt_no_value", n=len(ctx.complete), out=label), basis=ctx.basis)
     best = _best(ctx)
     table = _candidates(ctx, o, sign)
     if best is None or num(best.results.get(o)) is None:
@@ -1799,14 +1966,22 @@ def optimum(ctx: Ctx) -> dict | None:
         for bound, dist in (("upper", (con.get("upper") - v) if con.get("upper") is not None else None), ("lower", (v - con.get("lower")) if con.get("lower") is not None else None)):
             if dist is None:
                 continue
-            limit = abs(float(con[bound])) or 1.0
-            p = dist / limit
-            margins.append({"output": con["name"], "bound": bound, "margin": _r(dist), "ratio": _r(p)})
+            # 여유의 기준은 한계값이다. 한계가 0이거나 값의 폭에 비해 작으면 기준이 되지 못하므로 값의 폭으로 본다(변형률 여유: 한계 0, 값 -1e-4)
+            limit = abs(float(con[bound]))
+            spread = np.ptp([x for _, x in ctx.values(con["name"])])
+            by_range = limit < 0.05 * spread or limit == 0
+            ref = float(spread) if by_range else limit
+            if ref <= 0:  # 한계도 0이고 값도 움직이지 않으면 여유를 비율로 말할 수 없다
+                margins.append({"output": con["name"], "bound": bound, "margin": _r(dist), "ratio": None})
+                continue
+            p = dist / ref
+            margins.append({"output": con["name"], "bound": bound, "margin": _r(dist), "ratio": _r(p), "basis": "range" if by_range else "limit"})
+            tail = "_range" if by_range else ""
             if p < T_["margin_fair"]:
-                verdicts.append(("caution", "margin", say("opt_margin_caution", con=cl, m=with_unit(dist, cu), p=pct(p * 100))))
+                verdicts.append(("caution", "margin", say(f"opt_margin_caution{tail}", con=cl, m=with_unit(dist, cu), p=pct(p * 100))))
                 tight_con = tight_con or con["name"]
             elif p < T_["margin_good"]:
-                verdicts.append(("fair", "margin", say("opt_margin_fair", con=cl, m=with_unit(dist, cu), p=pct(p * 100))))
+                verdicts.append(("fair", "margin", say(f"opt_margin_fair{tail}", con=cl, m=with_unit(dist, cu), p=pct(p * 100))))
                 tight_con = tight_con or con["name"]
     facts["margins"] = margins
     facts["tight_constraint"] = tight_con
@@ -1829,7 +2004,12 @@ def optimum(ctx: Ctx) -> dict | None:
         p80 = sc["p80"] if sc else 0.0
         ptp_v = [v for _, v in ctx.values(o)]
         ptp = float(np.ptp(ptp_v)) if len(ptp_v) >= 2 else 0.0
-        if ok.any() and level in ("good", "fair"):
+        # 배우지 않은 제약은 후보를 걸러 내지 못한다. 알려진 제약을 어기는 설계를 권하지 않도록 예측 후보를 내지 않고 이유를 말한다
+        missing = ctx.unlearned(sur)
+        if missing:
+            facts["unlearned_constraints"] = missing
+            verdicts.append(("fair", "unlearned", say("opt_unlearned", con="·".join(ctx.label(n) for n in missing))))
+        if ok.any() and level in ("good", "fair") and not missing:
             ids = np.where(ok)[0]
             j = ids[int(np.argmin(sign * mean[o][ids]))]
             pv = float(mean[o][j])
@@ -1903,6 +2083,9 @@ def optimum(ctx: Ctx) -> dict | None:
         next_ = _ask_al(ctx)
     elif any(v[1] == "margin" and v[0] == "caution" for v in verdicts) and tight_con:
         next_ = _margin_ask(ctx, tight_con)
+    elif "unlearned" in kinds and _can_learn(ctx, facts["unlearned_constraints"]):
+        names = "·".join(ctx.label(n) for n in facts["unlearned_constraints"])
+        next_ = _ask(ctx, "재학습 요청", f"스터디 '{{name}}'의 예측 모델을 제약 {names}까지 넣어 다시 학습해 줘.", "train")
     elif "pred" in kinds:
         facts["verify_request"] = True
         next_ = _ask(ctx, "확인 해석 요청", "스터디 '{name}'에서 예측 모델이 고른 최선점을 해석으로 확인해 줘.", "verify")
@@ -1913,6 +2096,11 @@ def optimum(ctx: Ctx) -> dict | None:
         next_ = _margin_ask(ctx, tight_con)
     return _section("optimum", state, sentence, notes=notes, facts=facts, charts=table,
                     next_=next_, basis="mixed" if m else ctx.basis, model=ctx.model_info(m, o) if m else None)
+
+
+def _can_learn(ctx: Ctx, names: list[str]) -> bool:
+    """값이 있어야 배울 수 있다. 값이 없는 제약을 다시 학습하라고 하면 눌러도 그대로다."""
+    return any(len(ctx.values(n)) >= 3 for n in names)
 
 
 def _margin_ask(ctx: Ctx, con: str) -> dict:
@@ -1938,7 +2126,7 @@ def _candidates(ctx: Ctx, o: str, sign: float) -> list:
     out = []
     for c, v in rows:
         margin = _margin_text(ctx, c)
-        out.append({"kind": "verified", "case_id": c.id, "params": {n: _r(c.params[n]) for n in s.names}, "value": _r(v), "margin": margin})
+        out.append({"kind": "verified", "case_id": c.id, "params": {n: _r(c.params[n], SHOWN) for n in s.names}, "value": _r(v, SHOWN), "margin": margin})
     return [{"kind": "candidates", "variables": _var_rows(ctx), "output": ctx.label(o), "unit": ctx.unit_of(o), "rows": out}]
 
 
@@ -1957,7 +2145,7 @@ def _margin_text(ctx: Ctx, c: CaseRow) -> str | None:
 
 def _add_predicted_rows(ctx: Ctx, table: list, o: str, sign: float, unit: str, row: dict):
     if table:
-        table[0]["rows"].append({"kind": "predicted", "case_id": None, "params": {k: _r(v) for k, v in row["params"].items()}, "value": _r(row["pred"]), "margin": None})
+        table[0]["rows"].append({"kind": "predicted", "case_id": None, "params": {k: _r(v, SHOWN) for k, v in row["params"].items()}, "value": _r(row["pred"], SHOWN), "margin": None})
 
 
 # ---------- 두 목표 비교 ----------
@@ -2009,7 +2197,7 @@ def _goals_table(ctx: Ctx, objs: list[dict]) -> dict | None:
     mask = calc.non_dominated(S)
     picked = [(c, y) for c, y, k in zip(cases, Y, mask) if k]
     picked.sort(key=lambda t: t[1][0] * (1 if goals[0] == "min" else -1))
-    rows = [{"case_id": c.id, "goals": {n: _r(y[i]) for i, n in enumerate(names)}, "params": {n: _r(c.params[n]) for n in ctx.s.names}} for c, y in _thin_rows(picked, 10)]
+    rows = [{"case_id": c.id, "goals": {n: _r(y[i], SHOWN) for i, n in enumerate(names)}, "params": {n: _r(c.params[n], SHOWN) for n in ctx.s.names}} for c, y in _thin_rows(picked, 10)]
     return {"kind": "front_table", "goals": _goal_cols(ctx, names), "variables": _var_rows(ctx), "rows": rows, "total": len(picked), "knee": None}
 
 
@@ -2064,10 +2252,14 @@ def pareto_pair(ctx: Ctx, a: str, a_goal: str, b: str, b_goal: str) -> dict:
         facts["knee_params"] = {n: _r(kc.params[n]) for n in s.names}
         if not next_:
             next_ = _ask(ctx, "이 후보 자세히 보기 요청", f"스터디 '{{name}}'에서 케이스 {kc.id} 설계를 자세히 보여 줘: 변수 값, 목표 값, 제약 여유.", "detail")
-    # 예측 앞면: 두 출력 모두 쓸 만할 때만
-    predicted = _predicted_front(ctx, a, a_goal, b, b_goal)
+    # 예측 앞면: 두 출력 모두 쓸 만할 때만. 배우지 않은 제약이 있으면 제약을 어기는 후보를 걸러 내지 못하므로 그리지 않는다
+    ma = ctx.model_for(a) if ctx.use_models else None
+    missing = ctx.unlearned(ctx.surrogate(ma)) if ma is not None and ctx.surrogate(ma) is not None else []
+    predicted = [] if missing else _predicted_front(ctx, a, a_goal, b, b_goal)
     extra: dict = {}
-    if predicted is None:
+    if missing:
+        notes.append(say("par_pred_con", con="·".join(ctx.label(n) for n in missing)))
+    elif predicted is None:
         notes.append(T["par_pred_low"])
     elif predicted:
         chart["predicted"] = predicted
@@ -2075,7 +2267,7 @@ def pareto_pair(ctx: Ctx, a: str, a_goal: str, b: str, b_goal: str) -> dict:
         how = _pareto_how(a_goal, b_goal, True)
         extra["basis_note"] = "해석값(속 빈 점만 예측)"
     table = {"kind": "front_table", "goals": _goal_cols(ctx, names), "variables": _var_rows(ctx), "total": k, "knee": chart["knee"]["case_id"] if chart["knee"] else None,
-             "rows": [{"case_id": cases[i].id, "goals": {n: _r(Y[i, j]) for j, n in enumerate(names)}, "params": {n: _r(cases[i].params[n]) for n in s.names}} for i in _front_pick(order, knee_i)]}
+             "rows": [{"case_id": cases[i].id, "goals": {n: _r(Y[i, j], SHOWN) for j, n in enumerate(names)}, "params": {n: _r(cases[i].params[n], SHOWN) for n in s.names}} for i in _front_pick(order, knee_i)]}
     charts = [chart, table]
     if k == 1:
         return _section("pareto", "good", say("par_one", id=cases[order[0]].id, a=la, b=lb), notes=notes, facts=facts, charts=[chart], how=how, basis=ctx.basis, next_=next_, **extra)
@@ -2189,8 +2381,10 @@ def _active_one(ctx: Ctx, o: str, al: list[CaseRow]) -> dict | None:
                                       "facts": kw.get("facts", {}), "charts": kw.get("charts", []), "next": kw.get("next")}
     if k < T_["al_min_added"]:
         return out("unknown", say("al_few", k=k, need=int(T_["al_min_added"])), facts={"al": k})
-    if len(base_rows) < T_["al_min_base"]:
-        return out("unknown", say("al_base_few", k=k, b=len(base_rows), need=int(T_["al_min_base"])), facts={"al": k, "base": len(base_rows)})
+    # 가린 점이 곧 채점 문제다. 변수에 비해 적으면 한두 점의 운으로 판정이 갈린다
+    min_base = int(max(T_["al_min_base"], T_["al_min_base_per_var"] * ctx.d))
+    if len(base_rows) < min_base:
+        return out("unknown", say("al_base_few", k=k, b=len(base_rows), need=min_base), facts={"al": k, "base": len(base_rows)})
     Xb = pipe[0].transform(np.array([ctx.x(c) for c, _ in base_rows]))
     yb = np.array([v for _, v in base_rows])
     Xa = pipe[0].transform(np.array([ctx.x(c) for c, _ in add_rows]))
@@ -2202,11 +2396,19 @@ def _active_one(ctx: Ctx, o: str, al: list[CaseRow]) -> dict | None:
     a_t, b_t = with_unit(first["rmse"], unit), with_unit(last["rmse"], unit)
     level = ctx.verdict(m, o)
     worse = drop <= T_["al_worse"]
+    n_base = len(base_rows)
+    # 같은 가린 점끼리 짝지어 본 구간이 0을 걸치면 몇 점의 운일 수 있다. 줄었다고도 늘었다고도 단정하지 않는다(순수 잡음 12+6건: 30번 중 12번이 5% 넘게 줄어 보였다)
+    low, high = calc.drop_interval(first["err"], last["err"], level=T_["al_level"]) if "err" in first and "err" in last else (drop, drop)
+    unsure = (drop >= T_["al_fair"] and low <= 0) or (worse and high >= 0)
+    if unsure:
+        worse = False
     # 가린 점은 처음 점이고 능동학습 점은 범위 끝으로 간다. 그래서 오차가 그대로여도 끝쪽 개선은 안 보인 것일 수 있어(실측 47% 줄었는데 -2%로 잰 경우) '효과 없음'은 오차가 늘었을 때만 말한다
-    if drop >= T_["al_good"]:
-        state, sentence = "good", say("al_good", k=k, p=pct(drop * 100), a=a_t, b=b_t)
+    if unsure:
+        state, sentence = "unknown", say("al_unsure", k=k, n=n_base, a=a_t, b=b_t)
+    elif drop >= T_["al_good"]:
+        state, sentence = "good", say("al_good", k=k, n=n_base, p=pct(drop * 100), a=a_t, b=b_t)
     elif drop >= T_["al_fair"]:
-        state, sentence = "fair", say("al_fair", k=k, p=pct(drop * 100), a=a_t, b=b_t)
+        state, sentence = "fair", say("al_fair", k=k, n=n_base, p=pct(drop * 100), a=a_t, b=b_t)
     elif worse:
         state, sentence = "caution", say("al_worse", k=k, p=pct(-drop * 100), a=a_t, b=b_t)
     elif level == "good":
@@ -2214,11 +2416,11 @@ def _active_one(ctx: Ctx, o: str, al: list[CaseRow]) -> dict | None:
     else:
         state, sentence = "fair", say("al_flat", k=k, a=a_t, b=b_t)
     # 멈춤 조언은 최근 몇 건을 봐야 한다. 한 건의 흔들림으로 '여기서 멈춰도 됩니다'라고 하지 않는다
-    notes: list[str] = []
+    notes: list[str] = [T["al_scope"]] if state in ("good", "fair") and drop >= T_["al_fair"] else []
     next_ = None
     stop = None
     stop_poor = False
-    if not worse:
+    if not worse and not unsure:
         tail = next((c for c in curve if c["m"] == k - window), None) if k >= 2 * window else None
         if tail is None:
             notes.append(say("al_wait", m=k))
@@ -2254,7 +2456,7 @@ def _active_one(ctx: Ctx, o: str, al: list[CaseRow]) -> dict | None:
         notes.append(say("al_same", k=same))
     if state == "caution":
         notes.append(T["al_no_compare"])
-    facts = {"al": k, "base": len(base_rows), "rmse_start": _r(first["rmse"]), "rmse_end": _r(last["rmse"]), "drop_pct": _r(drop * 100),
+    facts = {"al": k, "base": len(base_rows), "rmse_start": _r(first["rmse"]), "rmse_end": _r(last["rmse"]), "drop_pct": _r(drop * 100), "drop_low": _r(low), "drop_high": _r(high),
              "uncertainty": {kk: _r(vv) for kk, vv in unc.items()}, "edge_ratio": _r(edge_p), "mean_distance": _r(float(np.mean(near))),
              "stop": stop, "stop_poor": stop_poor, "unit": unit, "method": "처음 점 5겹 가리기, 최종 모델 kernel 고정, 능동학습 점만 실행 순서대로 추가, 가린 점과 거의 같은 추가 점은 그 겹에서 뺌", "compared_with_random": False}
     charts = [{"kind": "learning", "curve": [{"m": c["m"], "rmse": _r(c["rmse"]), "r2": _r(c["r2"])} for c in curve], "unit": unit, "output": label, "base_count": len(base_rows)},
@@ -2286,19 +2488,19 @@ def _code_hash() -> str:
 def _bench_value() -> dict | None:
     try:
         v = json.loads(_bench_path().read_text(encoding="utf-8"))
-        return v if v.get("code") == _code_hash() else None
+        return v if v.get("code") == _code_hash() and "wins" in v else None  # 옛 모양(평균 비교) 값은 다시 잰다
     except (OSError, ValueError):
         return None
 
 
 def bench_line(v: dict | None) -> str | None:
+    """평균으로 낫다·나쁘다를 가르면 시작 점 몇 개로 말이 뒤집힌다(같은 코드로 3번과 5번의 결론이 달랐다). 같은 시작 점끼리 이긴 횟수를 그대로 말한다."""
     if not v or not v.get("functions"):
         return None
-    head = f"연습 함수 기준(수학 시험 문제 {v['total']}개로 미리 잰 값이고 내 결과가 아닙니다): "
-    # 낮은 함수가 없었을 때 '항상 낫지는 않다'고 쓰면 잰 값과 어긋난다. 내 스터디로 옮길 수 없다는 사실을 말한다
-    if v["worse"]:
-        return f"{head}{v['not_worse']}개에서는 아무 데나 고른 점 이상, {v['worse']}개에서는 더 낮았습니다. 능동학습이 항상 낫지는 않습니다."
-    return f"{head}아무 데나 고른 점보다 나쁘지 않았습니다. 내 해석 결과에서도 같다는 뜻은 아닙니다."
+    head = f"연습 함수 기준(수학 시험 문제 {v['total']}개를 시작 점만 바꿔 돌린 값이고 내 결과가 아닙니다): {v['runs']}번 중 {v['wins']}번은 아무 데나 고른 점보다 예측이 잘 맞았습니다."
+    if v["wins"] < v["runs"]:
+        head += " 능동학습이 항상 낫지는 않습니다."
+    return f"{head} 내 해석 결과에서도 같다는 뜻은 아닙니다."
 
 
 def run_benchmark(seeds: int = 5, n_start: int = 12, n_add: int = 12, functions: dict | None = None) -> dict:
@@ -2339,9 +2541,9 @@ def run_benchmark(seeds: int = 5, n_start: int = 12, n_add: int = 12, functions:
                 sur.models["y"] = _make_gp(d).fit(X_al, f(X_al))
             al_scores.append(float(r2_score(f(test), sur.models["y"].predict(test))))
             rnd_scores.append(float(r2_score(f(test), _make_gp(d).fit(X_rnd, f(X_rnd)).predict(test))))
-        out[name] = {"al": float(np.mean(al_scores)), "random": float(np.mean(rnd_scores))}
-    worse = sum(1 for v in out.values() if v["al"] < v["random"])
-    return {"code": _code_hash(), "functions": out, "total": len(out), "worse": worse, "not_worse": len(out) - worse, "seeds": seeds,
+        wins = sum(1 for a, r in zip(al_scores, rnd_scores) if a > r)
+        out[name] = {"al": float(np.mean(al_scores)), "random": float(np.mean(rnd_scores)), "wins": wins, "runs": len(al_scores)}
+    return {"code": _code_hash(), "functions": out, "total": len(out), "wins": sum(v["wins"] for v in out.values()), "runs": sum(v["runs"] for v in out.values()), "seeds": seeds,
             "n_start": n_start, "n_add": n_add, "computed_at": datetime.now().isoformat(timespec="seconds")}
 
 
@@ -2373,10 +2575,13 @@ def overview(ctx: Ctx, sections: list[dict]) -> dict:
     al = sum(1 for c in ctx.complete if c.source == "al")
     latest = s.models[0] if s.models else None
     times = run_times(s.cases)
+    # 시간을 잰 케이스만 더한 값을 합계라고 하면 옛 케이스(시각 없음)만큼 줄어 보인다. 모두 쟀을 때만 합계를 말한다
+    timed = len(times["durations"])
+    whole = timed > 0 and timed == sum(1 for c in s.cases if c.status == "complete")
     facts = {"complete": len(ctx.complete), "failed": len(ctx.failed), "waiting": len(ctx.waiting), "bo": bo, "al": al, "base": len(ctx.complete) - bo - al,
-             "model_version": latest.version if latest else None,
-             "run_hours": _r(times["total_sec"] / 3600) if times["durations"] else None,
-             "run_text": hours_text(times["total_sec"] / 3600) if times["durations"] else None}
+             "model_version": latest.version if latest else None, "run_timed": timed,
+             "run_hours": _r(times["total_sec"] / 3600) if whole else None,
+             "run_text": hours_text(times["total_sec"] / 3600) if whole else None}
     # 위쪽 초록 줄만 보고 끝났다고 여기지 않게, 확정 전에 볼 것을 맨 위에 모아 준다(주의 먼저)
     flagged = [x for x in sections if x["state"] in ("caution", "fair") and not x.get("pending")]
     flagged.sort(key=lambda x: -_RANK[x["state"]])
@@ -2389,7 +2594,11 @@ def _next(ctx: Ctx, by: dict) -> dict | None:
 
     def go(key: str, request: str, source: str, **kw) -> dict:
         text, label = NEXT[key]
-        return {"key": key, "text": text.format(**kw) if kw else text, "label": label, "request": request.replace("{name}", s.name), "from": source, "action": NEXT_ACTION.get(key, key)}
+        action = NEXT_ACTION.get(key, key)
+        if s.no_solver:
+            text = DATA_NEXT.get(key, text)
+            label, request = DATA_ASK.get(action, (label, request))
+        return {"key": key, "text": text.format(**kw) if kw else text, "label": label, "request": request.replace("{name}", s.name), "from": source, "action": action}
 
     def plain(key: str) -> dict:
         n = go(key, "", "overview")
@@ -2420,6 +2629,11 @@ def _next(ctx: Ctx, by: dict) -> dict | None:
         return go("count", f"스터디 '{{name}}'에 해석 조건을 {k}건 더 넣어 줘.", "coverage", n=n_spread, d=ctx.d, need=ctx.need, cost=ctx.cost(k))
     if pending:
         return go("run", "스터디 '{name}'의 대기 케이스를 실행해 줘.", "overview")
+    # 목표 값이 없으면 학습도 최적화도 뜻이 없다. 값 이름이나 추출부터 고쳐야 한다
+    gone = [o["name"] for o in s.objectives if not ctx.values(o["name"])]
+    if n_done and gone:
+        out = "·".join(ctx.label(n) for n in gone)
+        return go("no_value", f"스터디 '{{name}}'의 목표 {out} 값이 결과에 없는 원인을 결과 이름과 값 뽑기 쪽으로 점검해 줘.", "quality", out=out)
     if not s.models and n_done:
         return go("train", "스터디 '{name}'의 완료된 케이스로 예측 모델을 학습해 줘.", "trust")
     if s.models and tr and not tr.get("pending"):
@@ -2428,11 +2642,19 @@ def _next(ctx: Ctx, by: dict) -> dict | None:
             m = ctx.model_for(v["name"])
             if m and ctx.is_stale(m, v["name"]):
                 return go("stale", "스터디 '{name}'의 최신 해석까지 넣어 예측 모델을 다시 학습해 줘.", "trust", k=k)
+        # 만족하는 설계가 하나도 없는데 해석을 더 쓰라고 하면 아래 항목의 '제약값을 확인하세요'와 어긋난다. 예측이 만족할 곳을 보고 아직 찾아보지 않았을 때만 최적화로 넘어간다
+        if q and q["facts"].get("pass_count") == 0 and q["facts"].get("pass_rate") is not None and (s.no_solver or any(c.source == "bo" for c in ctx.complete) or not _model_sees_feasible(ctx)):
+            return go("no_feasible", "스터디 '{name}'에서 제약을 만족하는 설계가 없는 원인을 제약값과 설계 범위 쪽으로 점검해 줘.", "quality")
+        learn = (opt["facts"].get("unlearned_constraints") or []) if opt else []
+        if _can_learn(ctx, learn):
+            names = "·".join(ctx.label(n) for n in learn)
+            return go("retrain_con", f"스터디 '{{name}}'의 예측 모델을 제약 {names}까지 넣어 다시 학습해 줘.", "optimum", con=names)
         if tr["state"] == "caution":
             if ac and ac["facts"].get("stop_poor"):  # 능동학습이 더 넣어도 어렵다고 말한 뒤에 또 점을 넣으라고 하면 어긋난다
                 return go("check_inputs", "스터디 '{name}'에서 점을 더 넣어도 예측이 나아지지 않는 원인을 설계 범위와 빠진 변수 쪽으로 점검해 줘.", "active")
             return go("poor", "스터디 '{name}'에 능동학습으로 해석 점을 더 넣어 예측 정확도를 올려 줘.", "trust", cost=ctx.cost(max(3, ctx.d)))
-    if s.objectives and s.models and not any(c.source == "bo" for c in s.cases):
+    # 표로 만든 스터디는 최적화나 확인 해석을 돌려도 케이스가 늘지 않아 이 줄이 영영 그대로다. 그 후보는 항목 안의 버튼으로 찾고 여기서는 넘어간다
+    if s.objectives and s.models and not s.no_solver and not any(c.source == "bo" for c in s.cases):
         return go("optimize", "스터디 '{name}'에서 최적화를 돌려 줘.", "convergence")
     W = int((con or {}).get("facts", {}).get("window", max(int(T_["conv_window_min"]), ctx.d)))
     if con and (con["facts"].get("improving") or con["facts"].get("more_worth")):
@@ -2440,7 +2662,7 @@ def _next(ctx: Ctx, by: dict) -> dict | None:
     if con and con["state"] == "unknown" and con["facts"].get("bo"):
         left = max(1, W - int(con["facts"]["bo"]))
         return go("more_opt", f"스터디 '{{name}}'에서 최적화를 {left}건 더 돌려 줘.", "convergence", W=left, cost=ctx.cost(left))
-    if opt and opt["facts"].get("predicted_best"):
+    if opt and opt["facts"].get("predicted_best") and not s.no_solver:
         return go("verify", "스터디 '{name}'에서 예측 모델이 고른 최선점을 해석으로 확인해 줘.", "optimum", cost=ctx.cost(1))
     if opt and opt["facts"].get("tight_constraint"):
         return go("margin", (opt.get("next") or {}).get("request") or _margin_ask(ctx, opt["facts"]["tight_constraint"])["request"], "optimum", con=ctx.label(opt["facts"]["tight_constraint"]))
@@ -2454,12 +2676,23 @@ def _next(ctx: Ctx, by: dict) -> dict | None:
     return go("finish", "스터디 '{name}'의 Simulator를 배포하고 보고서를 써 줘.", "overview")
 
 
+def _model_sees_feasible(ctx: Ctx) -> bool:
+    """예측으로 제약을 만족할 곳이 있는가. 배우지 않은 제약이 있으면 알 수 없으니 없다고 본다."""
+    m = ctx.s.models[0] if ctx.s.models else None
+    sur = ctx.surrogate(m) if m else None
+    if sur is None or ctx.unlearned(sur):
+        return False
+    cand = ctx.s.lo + calc.sobol_unit(ctx.d, 2048, seed=9) * (ctx.s.hi - ctx.s.lo)
+    mean, std = sur.predict(cand)
+    return bool((bayesopt.constraint_probability(mean, std, ctx.s.constraints, len(cand)) >= 0.5).any())
+
+
 def _data_words(text: str) -> str:
-    """표로 불러온 값은 해석으로 확인한 값이 아니다. 앞으로 돌릴 해석('확인 해석', '해석 조건')과 FE 모델을 뜻하는 말은 그대로 둔다."""
+    """표로 불러온 값은 해석으로 확인한 값이 아니고, 계획해서 뽑은 점도 아니다. 앞으로 돌릴 해석('확인 해석', '해석 조건')과 FE 모델을 뜻하는 말은 그대로 둔다."""
     keep = ("확인 해석", "해석 조건", "해석 모델(FE)", "해석 1건")
     for i, word in enumerate(keep):
         text = text.replace(word, f"\0{i}\0")
-    for old, new in (("아직 해석 안 함", "데이터에 없음"), ("해석 확인", "데이터 값"), ("해석값", "데이터값"), ("해석으로", "데이터로"), ("해석이", "데이터가"), ("해석을", "데이터를"), ("해석은", "데이터는"), ("해석", "데이터")):
+    for old, new in (("처음 계획한", "처음 있던"), ("아직 해석 안 함", "데이터에 없음"), ("해석 확인", "데이터 값"), ("해석값", "데이터값"), ("해석으로", "데이터로"), ("해석이", "데이터가"), ("해석을", "데이터를"), ("해석은", "데이터는"), ("해석", "데이터")):
         text = text.replace(old, new)
     for i, word in enumerate(keep):
         text = text.replace(f"\0{i}\0", word)
@@ -2517,6 +2750,10 @@ def compute(snap: Snap, use_models: bool = True) -> dict:
             seen.add(x["next"].get("action"))
     if snap.imported:
         _say_data_instead_of_solver(sections, ov)
+    if use_models:  # 교차검증이 저장되기 전 모델의 칩도 지금 잰 값을 따르게 한다. 이미 불러온 모델만 보므로 추가 비용이 없다
+        for m in snap.models:
+            if _needs_backfill(ctx._sur.get(m.id), m.quality):
+                _request_backfill(m.id)
     return _clean({"schema": SCHEMA, "study_id": snap.study_id, "study_name": snap.name, "owner": snap.owner, "overview": ov, "sections": sections, "had_error": ctx.had_error,
                    "computed_at": datetime.now().isoformat(timespec="seconds"), "complete_layer": bool(use_models or not snap.models)})
 
@@ -2542,12 +2779,13 @@ def _cache_path(study_id: int):
 
 
 def state_key(db: Session, study: models.Study) -> str:
-    """케이스를 다 읽지 않고 집계로만 만든다. 케이스·모델·스터디 설정이 바뀌면 달라진다."""
+    """케이스를 다 읽지 않고 집계로만 만든다. 케이스·모델·스터디 설정·배포 상태가 바뀌면 달라진다. 배포를 빼면 배포한 뒤에도 '배포하라'는 말이 남는다."""
     rows = db.query(models.Case.status, func.count(models.Case.id), func.max(models.Case.updated_at)).filter(models.Case.study_id == study.id).group_by(models.Case.status).all()
     latest = db.query(func.max(models.SurrogateModel.id)).filter(models.SurrogateModel.study_id == study.id).scalar()
+    live = db.query(func.max(models.SurrogateModel.id)).filter(models.SurrogateModel.study_id == study.id, models.SurrogateModel.deployed.is_(True)).scalar()
     counts = "".join(f"{s}{n}" for s, n, _ in sorted(rows, key=lambda r: r[0] or ""))
     stamp = max((t for _, _, t in rows if t), default=None)
-    return f"s{SCHEMA}v{study.version}m{latest or 0}{counts}@{stamp.isoformat() if stamp else ''}"
+    return f"s{SCHEMA}v{study.version}m{latest or 0}d{live or 0}{counts}@{stamp.isoformat() if stamp else ''}"
 
 
 def _read(study_id: int) -> dict | None:
@@ -2753,6 +2991,73 @@ def report_summary(db: Session, study: models.Study, until: float | None = None)
         return {"status": "error", "sections": []}
 
 
+# ---------- 옛 모델을 한 번 다시 재기 ----------
+# 저장된 품질은 최적화 점까지 넣어 잰 값이라 설계 범위 전체의 정확도보다 좋게 나온다. 데이터 탭을 열어야만 다시 재면
+# 공유받은 사람은 영영 옛 값을 보고, 판정이 나중에 뒤집힌다. 요청 경로에서는 재지 않으므로 처음 보는 쪽에서 뒤로 넘기고 그동안 '계산 중'이라고 말한다
+_cv_lock = threading.Lock()
+_cv_gate = threading.Semaphore(1)  # 작업 스레드가 몇 분씩 묶이지 않게 한 번에 하나씩
+_cv_busy: set[int] = set()
+_cv_failed: set[int] = set()
+
+
+def _needs_backfill(sur: Surrogate | None, quality: dict | None) -> bool:
+    return sur is not None and not getattr(sur, "cv", None) and not (quality or {}).get("reassessed")
+
+
+def _request_backfill(model_id: int):
+    with _cv_lock:
+        if model_id in _cv_busy or model_id in _cv_failed:
+            return
+        _cv_busy.add(model_id)
+    threading.Thread(target=_backfill, args=(model_id,), daemon=True, name="insights-cv").start()
+
+
+def _backfill(model_id: int):
+    try:
+        with _cv_gate, SessionLocal() as db:
+            m = db.get(models.SurrogateModel, model_id)
+            study = db.get(models.Study, m.study_id) if m else None
+            if study is None:
+                return
+            snap = snapshot(db, study)
+            row = _model_row(m)
+            ctx = Ctx(snap, True)
+            sur = ctx.surrogate(row)
+            if sur is None:
+                raise ValueError("모델 파일을 읽지 못했습니다")
+            _reassess(db, m, ctx, row, sur)
+            manager.publish({"type": "model_updated", "project_id": study.project_id, "data": {"id": m.id}})
+    except Exception:
+        log.exception("옛 모델을 다시 재지 못했습니다: %s", model_id)
+        _cv_failed.add(model_id)  # 같은 실패를 되풀이하지 않고 저장된 값으로 말한다
+    finally:
+        with _cv_lock:
+            _cv_busy.discard(model_id)
+
+
+def _reassess(db: Session, m: models.SurrogateModel, ctx: Ctx, row: ModelRow, sur: Surrogate):
+    """화면의 정확도 칩이 판정과 같은 값을 쓰도록 저장된 품질을 새 기준으로 다시 정한다. 학습할 때 남긴 다른 정보(범위·행 수·경고)는 그대로 둔다."""
+    cv, scored, constant = {}, {}, []
+    for o in row.outputs:
+        if o not in sur.models:
+            continue
+        got = ctx.cv(sur, o, row)
+        if not got:
+            continue
+        whole = np.ones(len(got["actual"]), dtype=bool)
+        cv[o] = {"actual": got["actual"], "cv_pred": got["cv_pred"], "r2": service.design_range_r2(got["actual"], got["cv_pred"], whole) or 0.0}
+        scored[o] = ctx.scored_points(sur, o, len(got["actual"]))
+        if is_constant(got["actual"]):
+            constant.append(o)
+    old = dict(m.quality or {})
+    new = service.assess_quality(cv, min((ctx.rows_of(row, o) for o in cv), default=m.n_train or 0), ctx.d, ctx.s.adapter, constant, scored) if cv else {}
+    merged = {**old, **new, "warnings": list(dict.fromkeys([*(old.get("warnings") or []), *(new.get("warnings") or [])])), "reassessed": True}
+    if cv and list(sur.variables) == ctx.s.names:
+        note_unseen(merged, train_xy(sur.models[next(iter(cv))])[0], ctx.s.variables)
+    m.quality = merged
+    db.commit()
+
+
 def trust_line(db: Session, m: models.SurrogateModel) -> dict:
     """Simulator 위 한 줄. 공유 화면에도 나가므로 출력 이름과 정확도만 담는다(프로젝트·케이스 정보 없음)."""
     study = db.get(models.Study, m.study_id)
@@ -2762,27 +3067,45 @@ def trust_line(db: Session, m: models.SurrogateModel) -> dict:
     sur = ctx.surrogate(row)
     outs = [o for o in row.outputs if sur and o in sur.models]
     if not outs:
-        return {"state": "unknown", "state_label": UNKNOWN_LABEL, "sentence": "이 예측의 정확도를 읽지 못했습니다.", "outputs": {}}
+        return {"state": "unknown", "state_label": UNKNOWN_LABEL, "sentence": "이 예측의 정확도를 읽지 못했습니다.", "outputs": {}, "gaps": [], "computing": False}
+    computing = _needs_backfill(sur, row.quality) and m.id not in _cv_failed
+    if computing:
+        _request_backfill(m.id)
     keys = ctx.decision_outputs()
     pool = [o for o in outs if o in keys] or outs
     best = None
     per = {}
+    gaps: dict[str, dict] = {}
     for o in outs:
         label, unit = ctx.label(o), ctx.unit_of(o)
+        vals = [v for _, v in ctx.values(o)]
         sc = ctx.score(row, o)
         level = ctx.verdict(row, o)
         if ctx.rows_of(row, o) < ctx.need:
             line = ("unknown", say("tr_few", n=ctx.rows_of(row, o), m=ctx.need - ctx.rows_of(row, o)))
+        elif is_constant(vals):
+            line = ("unknown", say("tr_flat", out=label))
         elif sc:
             near = ctx.near_flat(row, o) and (sc["r2"] if sc["r2"] is not None else 0.0) < T_["r2_good"]
-            line = (level, say("tr_nearflat", out=label, val=with_unit(float(np.median([v for _, v in ctx.values(o)] or [0.0])), unit), p80=with_unit(sc["p80"], unit)) if near
+            line = (level, say("tr_nearflat", out=label, val=with_unit(float(np.median(vals or [0.0])), unit), p80=with_unit(sc["p80"], unit)) if near
                     else say({"good": "tr_good", "fair": "tr_fair"}.get(level, "tr_caution"), out=label, p80=with_unit(sc["p80"], unit)))
-        else:  # 옛 모델은 교차검증 예측이 저장되어 있지 않다. 여기서는 다시 재지 않고 RMSE로 말한다
+        elif computing:  # 저장된 값으로 '믿을 만함'이라고 했다가 다 잰 뒤 뒤집히면 안 된다
+            line = ("unknown", T["tr_measuring"])
+        else:  # 교차검증을 잴 수 없을 때만 저장된 오차로 말한다
             line = (level, say({"good": "tr_rmse_good", "fair": "tr_rmse_fair"}.get(level, "tr_rmse_caution"), out=label, rmse=with_unit(ctx.rmse(row, o), unit)))
+        holes = ctx.holes(row, o)
+        if holes and line[0] != "unknown":
+            line = (line[0], f"{line[1]} {say('tr_hole', **ctx.hole_kw(holes[0]))}")
+        for h in holes:
+            if o in pool and h["gap"] > gaps.get(h["variable"], {"gap": 0})["gap"]:
+                gaps[h["variable"]] = {"variable": h["variable"], "lo": _r(h["lo"], SHOWN), "hi": _r(h["hi"], SHOWN), "gap": _r(h["gap"])}
         per[o] = {"label": label, "unit": unit, "state": line[0], "state_label": state_label("trust", line[0]), "p80": _r(sc["p80"]) if sc else None}
         if o in pool and (best is None or _RANK[line[0]] > _RANK[best[0]]):
             best = line
-    return {"state": best[0], "state_label": state_label("trust", best[0]), "sentence": best[1], "basis": "predicted", "outputs": per}
+    sentence = _data_words(best[1]) if snap.imported else best[1]
+    label = "계산 중" if computing and best[0] == "unknown" else state_label("trust", best[0])
+    return {"state": best[0], "state_label": label, "sentence": sentence, "basis": "predicted", "outputs": per,
+            "gaps": sorted(gaps.values(), key=lambda g: -g["gap"]), "computing": computing}
 
 
 class NotReady(Exception):

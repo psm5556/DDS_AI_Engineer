@@ -284,8 +284,19 @@ def learning_curve(X_base, y_base, X_add, y_add, kernel, points: int = 6, folds:
             use = np.where(ok[:m])[0]
             err[te] = _fold_error(np.vstack([X_base[tr], X_add[use]]), np.concatenate([y_base[tr], y_add[use]]), X_base[te], y_base[te], kernel)
         sse = float(np.sum(err ** 2))
-        out.append({"m": m, "rmse": math.sqrt(sse / len(err)), "r2": 1 - sse / tot if tot > 0 else None})
+        out.append({"m": m, "rmse": math.sqrt(sse / len(err)), "r2": 1 - sse / tot if tot > 0 else None, "err": err.tolist()})
     return out
+
+
+def drop_interval(err_first, err_last, rounds: int = 2000, seed: int = 0, level: float = 0.9) -> tuple[float, float]:
+    """오차 감소율의 구간. 같은 가린 점의 오차를 짝지어 점을 다시 뽑아 잰다. 가린 점이 적으면 몇 점의 운으로 평균 오차가 크게 움직이므로,
+    이 구간이 0을 걸치면 줄었다고도 늘었다고도 말할 수 없다."""
+    a, b = np.asarray(err_first, dtype=float) ** 2, np.asarray(err_last, dtype=float) ** 2
+    pick = np.random.default_rng(seed).integers(0, len(a), size=(rounds, len(a)))
+    first, last = a[pick].mean(axis=1), b[pick].mean(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        drops = np.where(first > 0, 1 - np.sqrt(last / first), 0.0)
+    return float(np.percentile(drops, 50 * (1 - level))), float(np.percentile(drops, 50 * (1 + level)))
 
 
 def uncertainty_change(X_before, y_before, X_after, y_after, kernel, Q) -> dict:

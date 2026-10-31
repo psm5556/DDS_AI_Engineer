@@ -101,6 +101,15 @@ def publish_artifact(db: Session, project_id: int, kind: str, title: str, payloa
     return art
 
 
+def _retitle_artifact(db: Session, project_id: int, old: str, new: str):
+    """카드 제목을 바꿀 때 쓴다. 갱신은 제목으로 찾으므로, 그대로 두면 옛 카드가 낡은 숫자를 들고 새 카드 옆에 남아 보고서 자료에도 섞인다.
+    id를 지키므로 이미 쓴 보고서의 ![..](artifact:id)도 그대로 이어진다."""
+    art = db.query(models.Artifact).filter_by(project_id=project_id, title=old).first()
+    if art and not db.query(models.Artifact).filter_by(project_id=project_id, title=new).first():
+        art.title = new
+        db.commit()
+
+
 def _var_names(study):
     return [v["name"] for v in study.variables]
 
@@ -1173,6 +1182,8 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
 
     quality = assess_quality(cv, min(rows_by_output.values()), len(names), study.adapter, constant,
                              {o: ~from_bo[np.isfinite(Y[o])] for o in cv})
+    from .insights import note_unseen  # 판단값이 한 곳에 있도록 판단 도우미의 것을 쓴다. insights가 이 모듈을 불러오므로 여기서 부른다
+    note_unseen(quality, X, study.variables)
     whole = [e for e in excluded if e["whole"]]
     if whole:
         kinds = list(dict.fromkeys(e["reason"] for e in whole))
@@ -1203,10 +1214,12 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
     db.commit()
 
     for o, v in cv.items():
+        _retitle_artifact(db, study.project_id, f"[{study.name}] {o} 예측 정확도 (교차검증)", f"[{study.name}] {o} 예측과 실제 비교")
         publish_artifact(db, study.project_id, "scatter", f"[{study.name}] {o} 예측과 실제 비교",
                          {"x": "실제값", "y": "예측값", "diagonal": True,
                           "series": [{"name": f"R²={v['r2']:.3f}", "points": [{"x": a, "y": p} for a, p in zip(v["actual"], v["cv_pred"])]}]},
                          flow_id, node_id)
+    _retitle_artifact(db, study.project_id, f"[{study.name}] Surrogate 성능", f"[{study.name}] 예측 정확도 요약")
     publish_artifact(db, study.project_id, "table", f"[{study.name}] 예측 정확도 요약",
                      {"columns": ["모델", "출력", "R²", "RMSE", "학습 수"],
                       "rows": [[m.name, o, round(v["r2"], 4), round(v["rmse"], 5), m.n_train] for o, v in m.metrics.items()]},
@@ -1234,7 +1247,12 @@ def model_variables(study: models.Study, m: models.SurrogateModel) -> list[dict]
             trained = {v: [lo, hi] for v, lo, hi in zip(sur.variables, *sur.bounds)} if sur.bounds else {}
         except Exception:  # noqa: BLE001 — 범위를 못 읽어도 Simulator는 열려야 한다
             trained = {}
-    return [{**v, "lower": trained[v["name"]][0], "upper": trained[v["name"]][1]} if v["name"] in trained else v for v in study.variables]
+
+    def with_unit(v: dict) -> dict:
+        # 단위는 note("스프링 강성 [%]")에 적으라고 안내한다. 화면이 이름에서 그 부분을 빼므로 unit으로 함께 준다. 값이 기준 대비 %인 변수에서는 단위가 없으면 읽을 수 없다
+        unit = v.get("unit") or next(iter(re.findall(r"\[([^\]]+)\]", v.get("note") or "")), None)
+        return {**v, "unit": None if unit == "-" else unit}
+    return [with_unit({**v, "lower": trained[v["name"]][0], "upper": trained[v["name"]][1]} if v["name"] in trained else v) for v in study.variables]
 
 
 def delete_case(db: Session, study: models.Study, case: models.Case) -> bool:
