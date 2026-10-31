@@ -165,10 +165,24 @@ async def ws_agent(ws: WebSocket, token: str | None = None):
 
 # ---------- 프론트엔드 (빌드본) ----------
 DIST = ROOT / "frontend" / "dist"
+
+
+def spa_file(dist, full_path: str):
+    """주소에 맞는 빌드 파일. 없거나 빌드 폴더 밖이면 index.html(화면 경로)이다.
+    로그인 없이 부르는 경로라, 밖으로 나가면 DB와 비밀 키까지 그대로 내주게 된다."""
+    index = dist / "index.html"
+    if not full_path:
+        return index
+    try:
+        f = (dist / full_path).resolve()
+        return f if dist.resolve() in f.parents and f.is_file() else index
+    except (OSError, ValueError):  # 경로에 쓸 수 없는 글자(널 문자 등)
+        return index
+
+
 if DIST.exists():
     app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str):
-        f = DIST / full_path
-        return FileResponse(f if full_path and f.is_file() else DIST / "index.html")
+        return FileResponse(spa_file(DIST, full_path))
