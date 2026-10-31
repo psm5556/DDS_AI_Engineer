@@ -11,7 +11,9 @@ from server.tests.test_api import _auth, _wait_idle, client  # noqa: F401 — �
 
 from cae_adapters import result_scan  # noqa: E402
 from cae_adapters.tabular import MAX_CELLS, TableError, analyze, cell_state, fill_guessing, join_tables, read_pasted, read_table  # noqa: E402
+from server.app import models  # noqa: E402
 from server.app.agent.link import registry  # noqa: E402
+from server.app.database import SessionLocal  # noqa: E402
 from server.app.study import recipe as recipe_mod  # noqa: E402
 from server.app.study import service  # noqa: E402
 from server.app.study.surrogate import Surrogate  # noqa: E402
@@ -713,6 +715,28 @@ def test_clone_recipe_reports_from_its_own_config(client):  # noqa: F811
     text = " ".join(rec["warnings"])
     assert "new_model.cae" in text and "run_new.py" in text and "old_model" not in text
     assert client.get(f"/api/studies/{sid}/recipe", headers=admin).json()["adapter_config"]["inputs"] == ["inputs/old_model.cae"]
+
+
+@pytest.mark.parametrize("metrics,level,warned", [
+    ({"s": {"r2": -0.82, "rmse": 1.0}}, "poor", True),
+    ({"s": {"r2": 0.95, "rmse": 1.0}, "z": {"r2": 0.5, "rmse": 1.0}}, "poor", True),  # 가장 나쁜 출력이 정한다
+    ({"s": {"r2": 0.8, "rmse": 1.0}}, "fair", False),
+    ({"s": {"r2": 0.95, "rmse": 1.0}}, "good", False),
+    ({}, None, False),
+])
+def test_old_model_without_stored_quality_still_warns(client, metrics, level, warned):  # noqa: F811
+    h, _ = _auth(client, "admin")
+    sid = _import(client, h, _project(client, h, "품질을 저장하기 전 모델")).json()["study_id"]
+    mid = client.post(f"/api/studies/{sid}/train", json={"outputs": ["s"]}, headers=h).json()["id"]
+    client.post(f"/api/models/{mid}/deploy", headers=h).raise_for_status()
+    with SessionLocal() as db:  # 품질 칸이 생기기 전에 학습한 모델과 같은 행으로 만든다
+        m = db.get(models.SurrogateModel, mid)
+        m.quality, m.metrics = None, metrics
+        db.commit()
+    item = next(x for x in client.get("/api/simulators", headers=h).json()["mine"] if x["model_id"] == mid)
+    assert item["quality"] == level
+    share = client.post(f"/api/models/{mid}/shares", json={}, headers=h).json()
+    assert bool(share["warning"]) is warned
 
 
 def test_secret_file_is_refused_as_a_secret():

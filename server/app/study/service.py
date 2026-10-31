@@ -1042,6 +1042,19 @@ QUALITY_LABEL = {"good": "좋음", "fair": "보통", "poor": "낮음"}
 _QUALITY_ORDER = {"good": 0, "fair": 1, "poor": 2}
 
 
+def _r2_level(r2: float) -> str:
+    return "good" if r2 >= 0.9 else "fair" if r2 >= 0.7 else "poor"
+
+
+def quality_level(m: models.SurrogateModel) -> str | None:
+    """정확도 수준. 품질을 저장하기 전에 학습한 옛 모델은 R²로 수준만 정한다(화면 ModelTrust와 같은 기준). 경고가 옛 모델만 건너뛰지 않게."""
+    level = (m.quality or {}).get("level")
+    if level:
+        return level
+    r2s = [v["r2"] for v in (m.metrics or {}).values() if isinstance(v, dict) and isinstance(v.get("r2"), (int, float))]
+    return max(map(_r2_level, r2s), key=_QUALITY_ORDER.get) if r2s else None
+
+
 def assess_quality(cv: dict, n_train: int, n_vars: int, adapter: str, constant: list[str]) -> dict:
     """교차검증 R²와 표본 수로 품질을 정한다. R²는 Surrogate.fit의 K겹 교차검증 값이라 학습에 안 쓴 점으로 잰 것이다.
     표본이 적으면 R²가 높게 나와도 믿기 어려워 한 단계 낮춘다. 배포를 막지는 않고 화면과 공유에 경고로 보인다."""
@@ -1052,8 +1065,7 @@ def assess_quality(cv: dict, n_train: int, n_vars: int, adapter: str, constant: 
             by_output[o] = {"level": "fair", "r2": None}
             warnings.append(f"출력 '{o}'은(는) 학습 행에서 값이 모두 같아 정확도를 잴 수 없습니다")
             continue
-        level = "good" if v["r2"] >= 0.9 else "fair" if v["r2"] >= 0.7 else "poor"
-        by_output[o] = {"level": level, "r2": round(v["r2"], 4)}
+        by_output[o] = {"level": _r2_level(v["r2"]), "r2": round(v["r2"], 4)}
     level = max((b["level"] for b in by_output.values()), key=_QUALITY_ORDER.get, default="poor")
     more = "표에 행을 더하거나 빠진 입력 변수가 없는지 확인하세요" if adapter == "data" else "점을 더 해석하거나(능동학습) 빠진 입력 변수가 없는지 확인하세요"
     if n_vars > 30:  # 입력이 많으면 행을 더해도 잘 나아지지 않는다. 듣지 않는 처방을 시키지 않는다

@@ -617,7 +617,7 @@ def create_share(model_id: int, body: schemas.ShareCreate, user=Depends(get_curr
                           expires_at=datetime.now() + timedelta(days=body.expires_days) if body.expires_days else None)
     db.add(sh)
     db.commit()
-    if (m.quality or {}).get("level") == "poor":  # 막지는 않는다. 받는 사람에게도 경고가 보인다는 것을 만든 사람이 알게 한다
+    if service.quality_level(m) == "poor":  # 막지는 않는다. 받는 사람에게도 경고가 보인다는 것을 만든 사람이 알게 한다
         sh.warning = "이 모델은 예측 정확도가 낮습니다. 받는 사람의 화면에도 같은 경고가 보입니다 → 데이터를 보강해 다시 학습한 뒤 배포하면 이 링크가 새 버전을 따라갑니다"
     return sh
 
@@ -690,7 +690,7 @@ def _sim_item(m: models.SurrogateModel, study: models.Study, **kw) -> dict:
     src = service.data_source(study)
     return {"study_id": study.id, "study_name": study.name, "model_id": m.id, "version": m.version, "outputs": m.outputs or [],
             "n_variables": len(study.variables or []), "n_train": m.n_train or 0, "updated_at": m.deployed_at or m.created_at,
-            "quality": (m.quality or {}).get("level"), "data_source": {k: src.get(k) for k in ("kind", "label", "rows", "total")}, **kw}
+            "quality": service.quality_level(m), "data_source": {k: src.get(k) for k in ("kind", "label", "rows", "total")}, **kw}
 
 
 @router.get("/simulators", response_model=schemas.SimulatorList)
