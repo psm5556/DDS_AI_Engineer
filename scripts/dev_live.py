@@ -5,6 +5,7 @@
 """
 import argparse
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -23,6 +24,12 @@ def main():
     ap.add_argument("--admin", default="admin")
     ap.add_argument("--pin", default="123456")
     a = ap.parse_args()
+    # 포트가 이미 쓰이면 서버는 곧 꺼지는데, 아래의 요청은 그 포트의 다른 서버에 닿는다. 모르고 이어 가면 남의 서버에 토큰과 Agent를 붙인다
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", a.port))
+        except OSError:
+            sys.exit(f"포트 {a.port}를 이미 다른 프로그램이 쓰고 있습니다 → --port로 다른 포트를 정하거나 그 프로그램을 끄세요")
     data = Path(a.data).resolve()  # 상대 경로로 넘기면 cwd가 다른 MCP가 설정을 찾지 못한다
     data.mkdir(parents=True, exist_ok=True)
     rt = ROOT / "data" / "agent_runtime"
@@ -43,6 +50,8 @@ def main():
                 break
             except httpx.HTTPError:
                 time.sleep(0.5)
+        if server.poll() is not None:
+            sys.exit(f"서버가 시작되지 못했습니다(코드 {server.returncode}) → 위의 오류를 확인하세요")
         c.post("/api/auth/register", json={"username": a.admin, "pin": a.pin, "display_name": "관리자"})
         r = c.post("/api/auth/login", json={"username": a.admin, "pin": a.pin})
         if r.status_code != 200:

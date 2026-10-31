@@ -11,13 +11,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import models
+from . import market_service, models
 from .agent.hub import hub
 from .agent.link import REPLACED_CODE, AgentConnection, registry
 from .config import ROOT
 from .database import Base, SessionLocal, engine, ensure_columns
-from .deps import user_from_token
-from .routers import agents, auth, devtest, flows, insights, projects, reports, sessions, studies, training
+from .deps import SCOPE_DEVTEST, effective_admin, user_from_token
+from .routers import agents, auth, devtest, flows, insights, market, projects, reports, sessions, studies, training
 from .study import dataset, service, table_job
 from .ws import manager
 
@@ -66,6 +66,7 @@ def _on_agent_hello(conn: AgentConnection, msg: dict):
             service.reconcile_cases(conn, msg["active_cases"], can_settle=bool(msg.get("settles_cases")))
     finally:  # 대화 상태를 먼저 맞춘다. 아래가 알리는 '연결됨'을 보고 화면이 다시 읽을 때 되살린 턴이 있어야 한다
         agents.record_instance(conn, msg)
+        market_service.on_hello(conn, msg)
 
 
 def _after_link_lost(conn: AgentConnection):
@@ -94,6 +95,7 @@ async def lifespan(app: FastAPI):
     registry.on("hello", _on_agent_hello)
     registry.on("heartbeat", agents.record_instance)
     table_job.resume_after_restart()
+    registry.on("market.state", market_service.on_state)
     with SessionLocal() as db:  # 서버 재시작 시 연결 상태 초기화
         db.query(models.AgentInstance).update({models.AgentInstance.connected: False})
         db.commit()
@@ -110,19 +112,33 @@ async def validation_error(request, exc: RequestValidationError):
 
 
 @app.middleware("http")
+async def limit_market_upload(request, call_next):
+    # 본문을 받기 전에 크기를 본다. 엔드포인트에 닿을 때는 이미 다 받은 뒤라, 결과 폴더를 잘못 고른 한 번이 공유 서버의 디스크와 메모리를 쓴다
+    if request.url.path == "/api/market/submissions" and request.method == "POST":
+        size = request.headers.get("content-length")
+        if size is None or not size.isdigit():
+            return JSONResponse({"detail": "올린 크기를 알 수 없습니다 → 웹앱의 등록 화면이나 scripts/market_publish.py로 올려 주세요"}, status_code=411)
+        if int(size) > market.MAX_UPLOAD_BODY:
+            return JSONResponse({"detail": f"너무 큽니다({int(size) // (1024 * 1024)}MB) → 해석 결과·모델 파일은 빼고 스크립트와 문서만 올려 주세요"}, status_code=413)
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def json_charset(request, call_next):
     # Windows PowerShell 5.1(Invoke-RestMethod)은 charset이 없으면 JSON 한글을 잘못 디코딩한다
     resp = await call_next(request)
     if resp.headers.get("content-type") == "application/json":
         resp.headers["content-type"] = "application/json; charset=utf-8"
     return resp
-for r in (auth.router, projects.router, sessions.router, flows.router, reports.router, studies.router, insights.router, training.router, agents.router, devtest.router):
+for r in (auth.router, projects.router, sessions.router, flows.router, reports.router, studies.router, insights.router, training.router, agents.router, devtest.router, market.router):
     app.include_router(r)
 
 
 def _auth_ws(token: str | None) -> models.User | None:
     with SessionLocal() as db:
-        return user_from_token(token, db)
+        user = user_from_token(token, db)
+    # 원격 검증 토큰은 /api/devtest만 쓴다. Agent로 붙으면 진짜 Agent를 밀어내고 사용자의 요청을 받게 된다
+    return None if user and user.auth_via == SCOPE_DEVTEST else user
 
 
 @app.websocket("/ws")
@@ -131,7 +147,7 @@ async def ws_browser(ws: WebSocket, token: str | None = None):
     if not user:
         await ws.close(code=4401)
         return
-    await manager.connect(ws, user.id, user.is_admin)
+    await manager.connect(ws, user.id, effective_admin(user))
     try:
         while True:
             await ws.receive_text()  # 클라이언트 ping

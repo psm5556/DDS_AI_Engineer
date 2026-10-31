@@ -11,7 +11,7 @@ from cae_adapters.train_h5 import read_info
 from .. import models, schemas
 from ..config import settings
 from ..database import get_db
-from ..deps import get_current_user, get_or_404, require_member
+from ..deps import get_current_user, get_or_404, require_ai_can_work, require_member
 from ..study import dataset as ds_service
 from .studies import _case_member, _receive, _study
 
@@ -42,6 +42,7 @@ async def upload_train_sample(case_id: int, spec_hash: str = Query(...), file: U
 def create_dataset(study_id: int, body: schemas.DatasetCreate, user=Depends(get_current_user), db: Session = Depends(get_db)):
     """완료된 케이스로 학습 데이터셋을 만든다. 오래 걸릴 수 있어 바로 돌려주고, status가 building → ready | failed로 바뀐다."""
     s = _study(study_id, user, db)
+    require_ai_can_work(s.project_id, user, db)
     try:
         return ds_service.create_dataset(db, s, body.name, body.targets, body.frames, body.step, body.flow_id, body.node_id, user.id)
     except ValueError as e:

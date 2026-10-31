@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from .. import models
+from .. import market_check, market_service, models
 from ..database import SessionLocal
 from ..ws import manager
 from .link import AgentConnection, AgentError, LinkLost, RemoteRunner, registry
@@ -66,6 +66,7 @@ class TurnState:
     ensure_locks: dict[str, threading.Lock] = field(default_factory=dict)
     ensure_turns: dict[str, str] = field(default_factory=dict)  # CLI 이름 → 지금 그 세션을 준비하는 턴
     lost_output: int = 0  # DB 문제로 저장하지 못한 출력 수(턴이 끝날 때 한 번 알린다)
+    market_read: set[str] = field(default_factory=set)  # 이 대화에서 읽었다고 이미 적은 마켓 스킬
 
 
 class AgentHub:
@@ -90,6 +91,7 @@ class AgentHub:
         registry.on("agent.live", self._on_live)
         registry.on("session.stage", self._on_stage)
         registry.on("dropped", self._on_dropped)
+        registry.on("market.note", self._on_market_note)
 
     def runner_for(self, user_id: int) -> RemoteRunner:
         return registry.runner(user_id)
@@ -442,6 +444,13 @@ class AgentHub:
             sid = self._prepare(st, turn_id, agent)
             if sid is None or not self._current(st, turn_id):
                 return  # 시작 중에 중지했다. 프롬프트는 보내지 않고 CLI는 따뜻하게 둔다
+            blocked = self._market_recall_block(st)
+            if blocked:
+                if self._current(st, turn_id):
+                    self._note(st, blocked)
+                    self._finish(st, "error")
+                return
+            self._market_recall_notes(st)
             context = ""
             if sid in self.needs_context:  # first_turn 판단은 세션을 얻은 뒤: 어떤 이유로 새로 열렸든 지난 대화를 넘긴다
                 with SessionLocal() as db:
@@ -462,6 +471,42 @@ class AgentHub:
                 self._finish(st, "error")
             else:  # 사용자가 이미 끝낸 턴이다. 여기서 낸 오류는 보여 줄 곳이 없다
                 log.info("끝난 턴의 준비 실패: %s", e)
+
+    def _market_recall_block(self, st: TurnState) -> str | None:
+        """회수를 못 받은 PC의 대화는 시작하지 않는다. 적용 자체는 PC Agent가 턴 시작 때 하므로 왕복하지 않는다. 마켓을 모르는 Agent는 그냥 지나간다."""
+        conn = registry.get(st.user_id)
+        if conn is None or not conn.info.get("market_api"):
+            return None
+        try:
+            return market_service.recall_block(st.user_id, conn)
+        except Exception:  # 확인에 실패했다고 대화를 막지 않는다. PC Agent의 관문은 그대로 돈다
+            log.exception("마켓 회수 확인 실패")
+            return None
+
+    def _market_recall_notes(self, st: TurnState):
+        """회수를 대화에도 남긴다. AI에게 주는 안내는 대화 기록에 보이지 않아, 사람은 AI가 말해 주지 않으면 모른다. 실패해도 대화를 막지 않는다."""
+        try:
+            for text in market_service.recall_notes(st.user_id, st.project_id, st.chat_id):
+                self._note(st, text)
+        except Exception:
+            log.exception("마켓 회수 안내 실패")
+
+    def _on_market_note(self, conn: AgentConnection, m: dict):
+        """PC Agent가 턴 시작 때 알게 된 일(이름 겹침 등). 그 사람의 대화에만 남긴다."""
+        st = self.by_sid.get(m.get("session_id"))
+        text = m.get("text")
+        if st and st.user_id == conn.user_id and isinstance(text, str) and text.strip():
+            self._note(st, market_check.clean_label(text)[:500])
+
+    def _note_market_read(self, st: TurnState, update: dict):
+        """읽음 기록은 부가 기능이다. 실패해도 대화 출력을 막지 않는다."""
+        conn = registry.get(st.user_id)
+        if conn is None or not conn.info.get("market_api"):
+            return
+        try:
+            market_service.note_skill_read(st.user_id, conn.info.get("hostname"), st.project_id, st.chat_id, update, st.market_read)
+        except Exception:
+            log.exception("마켓 스킬 읽음 기록 실패")
 
     def _deliver(self, st: TurnState, turn_id: str, sid: str, payload: dict):
         while True:
@@ -753,6 +798,8 @@ class AgentHub:
         now = time.time()
         if kind in ("agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update"):
             st.last_output_at = now
+        if kind in ("tool_call", "tool_call_update"):  # Claude는 경로를 뒤늦게 update로 보낸다. 메시지에는 합치지 않고 읽음만 본다
+            self._note_market_read(st, update)
         if kind in ("agent_message_chunk", "agent_thought_chunk"):
             text = (update.get("content") or {}).get("text", "")
             if kind == "agent_message_chunk":

@@ -1,5 +1,6 @@
 """dds-cae MCP: 이 PC의 CAD/CAE 툴을 배치 모드로 실행한다(스크립트 1회 실행, 툴 목록·경로 확인, 규약 조회).
 반복 실행(DOE/최적화)은 dds-study의 스터디 + script 어댑터를 쓴다."""
+import os
 import shutil
 import threading
 import time
@@ -61,8 +62,16 @@ def project_folder(project_id: int | None = None) -> dict:
     """이 PC에서 현재 프로젝트의 작업 폴더(모델·스크립트를 두는 곳)."""
     pid = resolve_pid(project_id)
     d = settings.project_dir(pid)
-    files = sorted(str(p.relative_to(d)) for p in d.rglob("*") if p.is_file() and "studies" not in p.parts)[:200]
-    return {"project_id": pid, "folder": str(d), "files": files}
+    return {"project_id": pid, "folder": str(d), "files": _project_files(d)[:200]}
+
+
+def _project_files(d: Path) -> list[str]:
+    """.claude·.agents·.gemini의 스킬 복사본만 수백 개라 그대로 세면 앞 200칸을 다 채워 AI가 실제 파일을 못 본다. 점 폴더와 studies는 내려가지 않는다."""
+    found = []
+    for folder, subdirs, names in os.walk(d):
+        subdirs[:] = [s for s in subdirs if not s.startswith(".") and s != "studies"]
+        found += [os.path.relpath(os.path.join(folder, n), d) for n in names]
+    return sorted(found)
 
 
 def _bad_script_name(filename: str) -> str | None:

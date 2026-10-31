@@ -8,6 +8,7 @@ import { useLiveInvalidation } from "./live";
 import AdminPage from "./pages/AdminPage";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
+import MarketPage from "./pages/MarketPage";
 import SettingsPage from "./pages/SettingsPage";
 import ToolsPage from "./pages/ToolsPage";
 import SimulatorPage, { SharedSimulatorPage } from "./pages/SimulatorPage";
@@ -54,6 +55,7 @@ export default function App() {
       <Route path="/simulators" element={protect(<SimulatorsPage />)} />
       <Route path="/simulator/:mid" element={protect(<SimulatorPage />)} />
       <Route path="/s/:token" element={protect(<SharedSimulatorPage />)} />
+      <Route path="/market" element={protect(<MarketPage />)} />
       <Route path="/settings" element={protect(<SettingsPage />)} />
       <Route path="/tools" element={protect(<ToolsPage />)} />
       <Route path="/admin" element={protect(<AdminPage />)} />

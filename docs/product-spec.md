@@ -422,6 +422,23 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 | 사용자 | 승인, 사용 중지, PIN 초기화 |
 | Agent 배포 | 설치 파일 올리기, "서버 코드로 첫 버전 배포", 최신 지정, 변경 내용 |
 | PC Agent 현황 | 연결 PC, 버전, 실행 중 케이스, 원격 업데이트 |
+| 마켓 | 검토 대기(파일, 직전 버전과의 차이, 표시 항목별 확인, 이름표 고치기), 공개 항목(버전별 PC 수, 이름표·내리기·회수), 회수 현황(PC별 적용, 옛 Agent는 업데이트 필요), 마켓 켜고 끄기. 쓰기는 모두 PIN을 다시 받는다. 탭 이름과 사이드바 숫자에 검토 대기 수가 보인다 |
+
+### 3-11. 마켓 (`/market`)
+사내 스킬을 찾아 설치하고, 내가 만든 것을 올린다. 형식과 기준은 `docs/market-package-spec.md`. 깊이는 페이지 하나 + 오른쪽 서랍 하나다.
+
+- **알림**: 맨 위에 회수·반려·공개 소식과(관리자) 검토 대기 수. 사이드바의 마켓 옆 숫자로도 보인다. 회수는 그 스킬을 쓴 대화에도 안내로 남고, 보고서 자료에 회수 표시가 붙는다.
+- **목록**: 검색(띄어 쓴 단어마다 찾고, 설명 전체·예시·스킬 이름·툴 이름을 본다), 탭(전체·스킬·설치됨·내가 등록. 기능(MCP)이 생기면 기능 탭이 보인다), 이 PC의 툴에 맞는 추천 줄(PC Agent가 꺼져 있거나 맞는 것이 없으면 숨김), 분류별 카드.
+- **카드**: 이름, 한 줄 설명, 등급, 코드 있음, 툴 유무(PC Agent가 꺼져 있거나 옛 버전이면 있다고도 없다고도 하지 않는다), 버튼 하나(설치 / 설치 중 / 설치 예약됨 / 설치됨 / 다시 확인 필요 / 다시 시도 / 일부 프로젝트 겹침 / 마켓 꺼짐 / 회수됨 등).
+- **서랍(자세히)**: 할 수 있는 일, 이렇게 말해 보세요(설치한 뒤에 누를 수 있고, 새 프로젝트 입력창을 채움), 필요한 툴, 내 PC에서 하는 일, 시험 기록(있으면 등록자가 적은 내용이라고 적는다), 변경 내역, 파일 보기(그림은 그대로 보임), 설치·제거. 프로젝트별 겹침, 옛 버전을 쓰는 프로젝트와 "지금 새 버전으로 바꾸기", 내린 이유, 반려 사유, 이름표 고치기(공개 전, 만든 사람), 초안 이어서 고치기.
+- **서랍(등록)**: 폴더·zip을 놓으면 왼쪽에 서버가 채운 값, 오른쪽에 검사 결과. 버튼은 나만 쓰기, 부서에 검토 요청, 관리자에게 바로 공개(PIN). 빈 화면에 SKILL.md 설명, 시작 틀 받기, 형식과 기준 보기가 있다. 5 MB를 넘는 파일은 보내기 전에 파일 이름과 함께 거절한다.
+
+문구 규칙(약속을 넘지 않는다)
+- "안전함"이라고 쓰지 않는다. "자동 검사 통과. 자동 검사는 탐지일 뿐이며 안전을 보장하지 않습니다."
+- "AI가 쓸 수 있습니다"로 쓴다. 반드시 쓴다고 약속하지 않는다.
+- 설치는 내 계정의 모든 프로젝트에 적용된다고 적는다. 제거해도 복사된 스크립트는 남는다고 적는다.
+- 자동 검사가 찾은 일을 보여 줄 때 "이 외의 일도 할 수 있습니다"를 함께 적는다. Python 외 스크립트는 자동 검사하지 않았다고 적는다.
+- "검토 완료"가 실제 툴에서 돌려 봤다는 뜻이 아님을 적는다. 기록이 없으면 "실제 툴 시험 기록 없음".
 
 ---
 
@@ -743,7 +760,7 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 
 | 표 | 주요 열 | 비고 |
 |---|---|---|
-| users · api_tokens | username, pin_hash, is_admin, is_active, 잠금 | 토큰은 해시 |
+| users · api_tokens | username, pin_hash, is_admin, is_active, 잠금 / scope | 토큰은 해시. `agent`(비어 있어도 같다)는 관리자 권한 없음, `devtest`는 `/api/devtest/*`만 |
 | projects · project_members · project_favorites | uid(PC 폴더 확인용), name, description, role | |
 | chat_sessions · chat_messages | agent, agent_session_id / role(user·agent·thought·tool·system), meta | |
 | attachments | filename, sha256 | |
@@ -756,7 +773,9 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 | share_access | share_id, user_id, hidden, last_opened | 링크를 연 사람의 공유받은 목록 |
 | training_datasets | spec, status, pending, excluded, n_samples, splits, targets, inputs, inputs_dropped, units_known, same_mesh, manifest_path | 샘플 정보는 `cases.train_samples` |
 | share_links | token, model_id, expires_at, enabled, uses | |
-| agent_releases · agent_instances | 버전·파일 / 연결 PC·버전·상태 | |
+| agent_releases · agent_instances | 버전·파일 / 연결 PC·버전·상태·마켓 항목 상태(`market`) | |
+| market_packages · market_versions · market_installs | 마켓 항목 / 내용이 고정된 버전(상태·등급·파일 목록·검사 결과) / 누가 설치했는가 | 쓰는 버전과 `rev`는 저장하지 않고 계산한다 |
+| market_events · market_calls · market_notices · market_settings | 누가 무엇을 했는지(추가만) / 스킬 읽음·대화에 회수를 알린 기록(인자 없음) / 사람에게 알릴 일 / 마켓 켜고 끄기 | |
 
 새 열은 `database.ensure_columns()`가 기존 DB에 자동으로 추가한다(nullable만). 열을 지우거나 이름을 바꿀 때는 마이그레이션을 따로 쓴다.
 
@@ -765,7 +784,7 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 ## 6. 서버 API (주요)
 | 분류 | 경로 |
 |---|---|
-| 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin` · `GET·POST·DELETE /api/tokens` · `GET·PUT /api/users` |
+| 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin`(웹 로그인만, 로그인과 같은 잠금) · `GET·POST·DELETE /api/tokens`(발급은 웹 로그인만) · `GET·PUT /api/users` · 관리자 API는 웹 로그인만 된다. 관리자의 AI도 멤버인 프로젝트에서만 일한다 |
 | 프로젝트 | `GET·POST /api/projects` · `GET·PUT·DELETE /api/projects/{p}` · 즐겨찾기 · 멤버 |
 | 대화 | `GET·POST /api/projects/{p}/sessions` · `PUT·DELETE /api/sessions/{s}` · `POST …/prompt·cancel·permission·force-restart` · `GET …/messages·status`(busy·stage·stage_detail·started_at·elapsed_sec·typical_start_sec·link·pending_permissions) · 첨부 |
 | 작업 흐름 | `GET·POST /api/projects/{p}/flows` · `GET /api/flows/{f}` · `PUT …/status` · `PUT …/nodes/{n}` |
@@ -777,15 +796,16 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 | 학습 데이터 | `POST·GET /api/studies/{s}/datasets` · `GET /api/datasets/{d}` · `GET /api/datasets/{d}/manifest` |
 | 모델·Simulator | `GET /api/projects/{p}/models` · `GET /api/models/{m}/spec`(versions·current_model_id) · `POST …/deploy`(현재 버전 지정·되돌리기) · `…/predict·predict_batch` · 공유 `/api/models/{m}/shares`, `/api/shares/{t}/…` · 필드 `/api/field-models/{f}/mesh·predict`, `GET /api/studies/{s}/field-models?model_id=` · 목록 `GET /api/simulators`, `DELETE /api/simulators/shared/{share}` · 카드 그림 `GET /api/models/{m}/thumbnail`, `GET /api/shares/{t}/thumbnail`(그림 없음은 204) |
 | PC Agent | `/api/agent/status·diagnose·install·tools…` · `/api/projects/{p}/local/folder·tree·open` · 배포 `/api/releases…` · `/api/instances…` · `/api/setup.exe`·`/api/install.ps1` |
+| 마켓 | `GET /api/market/packages[/{이름·번호}]` · `…/versions/{v}/files[/{경로}]·download·diff` · `POST /api/market/submissions`(결과는 항상 초안) · `POST …/versions/{v}/private·request-review`(웹 로그인, 본 내용의 지문 `fingerprint` 필수) · `PATCH …/versions/{v}/labels`(이름표. 공개 전 만든 사람, 공개 뒤 웹 관리자 + PIN) · `DELETE …/versions/{v}`(공개한 적 없는 버전) · `GET /api/market/review` · `POST …/versions/{v}/approve·reject·deprecate·withdraw`(웹 관리자 + PIN, approve는 `fingerprint` 필수) · `GET …/coverage` · `GET·PUT /api/market/settings` · `GET /api/market/installs/mine` · `PUT·DELETE /api/market/installs/{이름·번호}` · `POST /api/market/installs/{이름·번호}/retry`(웹 로그인: AI가 스스로 설치하지 못한다) · `GET /api/market/notices` · `POST /api/market/notices/{id}/read` · `GET /api/market/format` · `GET /api/market/templates/{이름}` |
 
 실시간 이벤트(브라우저 `/ws`)
 - `flow_updated` · `artifact_updated` · `report_updated`
 - `study_updated` · `case_updated` · `model_updated`
-- `project_updated` · `agent_event`(대화. `turn_started`·`turn_stage`·`turn_ended`·`chunk`·`tool_call`·권한 요청) · `agent_status`
+- `project_updated` · `agent_event`(대화. `turn_started`·`turn_stage`·`turn_ended`·`chunk`·`tool_call`·권한 요청) · `agent_status` · `market_updated`
 
 PC Agent 메시지(`/ws/agent`, `server/app/agent/link.py` 머리 주석)
-- 서버 → Agent: `session.new·load·prompt·cancel·force_restart`, `agent.ack`, `permission.reply`, `case.run`, `case.extract`, `case.train_sample`, `local.*`, `tools.*`, `agent.install·update`
-- Agent → 서버: `hello`(live_sessions·active_turns·boot), `heartbeat`, `agent.event`, `agent.permission`, `agent.turn_end`, `agent.runner_exit`, `agent.live`, `session.stage`, `case.status`(results·images·fields·archive, extract)
+- 서버 → Agent: `session.new·load·prompt·cancel·force_restart`, `agent.ack`, `permission.reply`, `case.run`, `case.extract`, `case.train_sample`, `local.*`, `tools.*`, `agent.install·update`, `market.sync`
+- Agent → 서버: `hello`(live_sessions·active_turns·boot·market_api·market_rev·market_recall_rev·tools_ready), `heartbeat`, `agent.event`, `agent.permission`, `agent.turn_end`, `agent.runner_exit`, `agent.live`, `session.stage`, `case.status`(results·images·fields·archive, extract), `market.state`, `market.note`
 
 ---
 

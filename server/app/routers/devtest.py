@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..agent.link import AgentError, registry
 from ..database import get_db
-from ..deps import get_current_user, require_admin
+from ..deps import get_current_user, require_admin, require_devtest_admin
+from . import agents
 from .agents import settings_message
 
 router = APIRouter(prefix="/api/devtest", tags=["devtest"])
@@ -37,7 +38,7 @@ def set_permission(body: schemas.DevTestAllow, user=Depends(require_admin), db: 
 
 
 @router.get("/targets")
-def targets(admin=Depends(require_admin), db: Session = Depends(get_db)):
+def targets(admin=Depends(require_devtest_admin), db: Session = Depends(get_db)):
     """지금 시험할 수 있는 PC"""
     out = []
     for u in db.query(models.User).filter(models.User.is_admin.is_(True)).all():
@@ -66,7 +67,7 @@ def _pick(user_id: int | None, db: Session) -> tuple[models.User, object]:
 
 
 @router.post("/run")
-def run(body: schemas.DevTestRun, admin=Depends(require_admin), db: Session = Depends(get_db)):
+def run(body: schemas.DevTestRun, admin=Depends(require_devtest_admin), db: Session = Depends(get_db)):
     target, conn = _pick(body.user_id, db)
     payload = body.model_dump(exclude={"user_id"}, exclude_none=True)
     t0 = datetime.now()
@@ -88,6 +89,27 @@ def run(body: schemas.DevTestRun, admin=Depends(require_admin), db: Session = De
     db.add(rec)
     db.commit()
     return res
+
+
+@router.post("/deploy", response_model=schemas.DevTestDeployed)
+def deploy(body: schemas.DevTestDeploy, admin=Depends(require_devtest_admin), db: Session = Depends(get_db)):
+    """pc_verify deploy: 서버에 있는 코드를 배포하고 시험할 PC에 바로 업데이트를 지시한다.
+    devtest 토큰이 일반 Agent 배포 API를 쓰게 하면 범위가 넓어지므로 이 일만 여기에 둔다. 배포되는 것은 서버 디스크의 코드뿐이다."""
+    target, conn = _pick(body.user_id, db)  # 시험할 PC가 없으면 전사 배포부터 하지 않는다
+    published = True
+    try:
+        rel = agents.release_from_server(admin=admin, db=db)
+    except HTTPException as e:
+        if e.status_code != 409:
+            raise
+        published, rel = False, agents.latest_release(db)
+        if not rel:
+            raise HTTPException(404, "배포된 Agent 버전이 없습니다 → agent/dds_agent/__init__.py의 __version__을 올린 뒤 다시 하세요")
+    agents.send_update(conn, rel)
+    db.add(models.DevTestRecord(by_user_id=admin.id, target_user_id=target.id, op="deploy", hostname=conn.info.get("hostname"), ok=True,
+                                note=f"{rel.version} {'배포' if published else '이미 있는 버전'}", created_at=datetime.now()))
+    db.commit()
+    return {"version": rel.version, "published": published, "user_id": target.id}
 
 
 @router.get("/history")

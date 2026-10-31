@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  ChevronsUpDown, Inbox, Layers, Loader2, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Send, Settings, Shield, SlidersHorizontal, SquarePen, Star, Sun, Users, Wrench, X,
+  ChevronsUpDown, Inbox, Layers, Loader2, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Send, Settings, Shield, SlidersHorizontal, SquarePen, Star, Store, Sun, Users, Wrench, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -9,7 +9,7 @@ import { get } from "../api";
 import { useAuth } from "../auth";
 import { FLOW_STATUS } from "../format";
 import { useTheme } from "../theme";
-import type { Project } from "../types";
+import type { MarketNotices, Project } from "../types";
 import { AgentStatusRow } from "./AgentBadge";
 import { ProjectMenu } from "./ProjectMenu";
 import type { PanelLayout } from "./sideLayout";
@@ -59,6 +59,10 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
   const meRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ p: Project; x: number; y: number } | null>(null);
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
+  // 검토 대기와 회수·검토 결과는 찾아가야만 보이면 안 된다. 바뀌면 market_updated로 다시 읽고, 놓쳐도 1분 안에 맞는다
+  const { data: notices } = useQuery({ queryKey: ["market", "notices"], queryFn: () => get<MarketNotices>("/api/market/notices"), refetchInterval: 60000 });
+  const marketCount = (notices?.items.length ?? 0) + (notices?.review_waiting ?? 0);
+  const marketBadge = marketCount > 0 && <span className="chip warn market-count" aria-label={`확인할 일 ${marketCount}건`}>{marketCount}</span>;
   const themeLabel = theme === "dark" ? "밝은 화면" : "어두운 화면";
   const pid = Number(loc.pathname.match(/^\/projects\/(\d+)/)?.[1]) || null;
 
@@ -77,6 +81,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
       <aside className="sidebar rail" aria-label="사이드바 (접힘)">
         <button className="icon-btn rail-btn" onClick={layout.toggle} aria-label="사이드바 펼치기" title="사이드바 펼치기 (Ctrl+B)"><PanelLeftOpen size={18} /></button>
         <NavLink className="icon-btn rail-btn" to="/simulators" aria-label="Simulator" title="Simulator"><SlidersHorizontal size={18} /></NavLink>
+        <NavLink className="icon-btn rail-btn market-rail" to="/market" aria-label="마켓" title="마켓: 사내 스킬 찾기·설치·등록"><Store size={18} />{marketBadge}</NavLink>
         <hr className="rail-sep" />
         <Link className="icon-btn rail-btn" to="/" aria-label="새 프로젝트" title="새 프로젝트"><SquarePen size={18} /></Link>
         <span className="grow" />
@@ -136,6 +141,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         </div>
         <nav className="side-nav-list" aria-label="바로 가기">
           <NavLink className="side-nav" to="/simulators" title="내 Simulator와 공유받은 Simulator"><SlidersHorizontal size={16} />Simulator</NavLink>
+          <NavLink className="side-nav" to="/market" title="사내 스킬 찾기·설치·등록"><Store size={16} />마켓{marketBadge}</NavLink>
           <hr className="side-sep" />
           <button className="side-nav" onClick={() => nav("/")}><SquarePen size={16} />새 프로젝트</button>
           <label className="side-nav side-find">

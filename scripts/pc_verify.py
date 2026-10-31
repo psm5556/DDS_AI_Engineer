@@ -2,7 +2,7 @@
 """개발 AI의 원격 검증 도구: 서버(Linux)에서 개발하는 AI가 PC의 CAD/CAE 연동을 스스로 시험한다.
 사용법과 순서는 docs/pc-verification.md. 표준 라이브러리만 쓴다(서버 가상환경 없이도 돈다. token 명령만 서버 코드가 필요하다).
 
-  python scripts/pc_verify.py token                  서버 DB로 관리자 토큰을 만들어 data/pc_verify.token에 저장
+  python scripts/pc_verify.py token                  서버 DB로 원격 검증 토큰을 만들어 data/pc_verify.token에 저장(chat용은 data/pc_verify_chat.token)
   python scripts/pc_verify.py targets                시험할 수 있는 PC
   python scripts/pc_verify.py info                   PC의 Agent 버전·찾은 툴·AI CLI
   python scripts/pc_verify.py run check.py [인자…]    PC에서 파이썬 스크립트 실행(out/ 폴더 파일을 받아 온다)
@@ -34,6 +34,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TOKEN_FILE = ROOT / "data" / "pc_verify.token"
+CHAT_TOKEN_FILE = ROOT / "data" / "pc_verify_chat.token"
 CHECKS = ROOT / "scripts" / "pc_checks"
 TAIL = 6000  # 화면에 보일 출력 끝부분. 전문은 파일로 남는다
 
@@ -82,10 +83,15 @@ class Api:
 
 
 def load_token(args) -> str:
-    if os.environ.get("DDS_VERIFY_TOKEN"):
+    # chat은 웹앱과 똑같이 일반 API를 쓰므로 AI와 같은 agent 토큰을, 나머지는 /api/devtest만 되는 토큰을 쓴다
+    env, path = ("DDS_VERIFY_CHAT_TOKEN", CHAT_TOKEN_FILE) if args.cmd == "chat" else ("DDS_VERIFY_TOKEN", TOKEN_FILE)
+    if os.environ.get(env):
+        return os.environ[env]
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
+    # 환경변수 하나로 토큰을 주는 쪽(시험 시나리오 등)도 chat을 쓸 수 있게 한다. devtest 토큰이면 서버가 403과 할 일을 알린다
+    if args.cmd == "chat" and os.environ.get("DDS_VERIFY_TOKEN"):
         return os.environ["DDS_VERIFY_TOKEN"]
-    if TOKEN_FILE.exists():
-        return TOKEN_FILE.read_text(encoding="utf-8").strip()
     raise SystemExit("토큰이 없습니다 → python scripts/pc_verify.py token")
 
 
@@ -140,7 +146,7 @@ def cmd_token(args, _api) -> int:
         os.environ["DDS_DATA_DIR"] = args.data
     from server.app import models
     from server.app.database import SessionLocal, ensure_columns
-    from server.app.deps import new_api_token
+    from server.app.deps import SCOPE_AGENT, SCOPE_DEVTEST, new_api_token
     ensure_columns()  # 서버를 새 코드로 다시 띄우기 전에도 돌게 한다
     with SessionLocal() as db:
         q = db.query(models.User).filter(models.User.is_admin.is_(True))
@@ -148,19 +154,22 @@ def cmd_token(args, _api) -> int:
         if not u:
             raise SystemExit("관리자 계정을 찾지 못했습니다")
         raw, hashed = new_api_token()
-        db.add(models.ApiToken(user_id=u.id, name="개발 AI 원격 검증", token_hash=hashed))
+        chat_raw, chat_hashed = new_api_token()
+        db.add(models.ApiToken(user_id=u.id, name="개발 AI 원격 검증", token_hash=hashed, scope=SCOPE_DEVTEST))
+        db.add(models.ApiToken(user_id=u.id, name="개발 AI 원격 검증(대화)", token_hash=chat_hashed, scope=SCOPE_AGENT))
         db.commit()
         name = u.username
     TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    TOKEN_FILE.write_text(raw, encoding="utf-8")
-    try:
-        TOKEN_FILE.chmod(0o600)
-    except OSError:
-        pass
-    print(f"{name} 계정의 토큰을 저장했습니다: {TOKEN_FILE}")
+    for path, value in ((TOKEN_FILE, raw), (CHAT_TOKEN_FILE, chat_raw)):
+        path.write_text(value, encoding="utf-8")
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
+    print(f"{name} 계정의 토큰을 저장했습니다: {TOKEN_FILE}, {CHAT_TOKEN_FILE}")
     # 서버가 다른 데이터 폴더를 쓰면 이 토큰을 모른다. 그 자리에서 알려 준다
     try:
-        Api(args.server, raw).call("GET", "/api/auth/me")
+        Api(args.server, raw).call("GET", "/api/devtest/permission")
         print(f"서버 확인 완료: {args.server}")
     except SystemExit as e:
         print(f"이 토큰을 서버가 받지 않습니다: {e}\n→ 서버의 데이터 폴더를 --data로 지정해 다시 만드세요 (개발용 실행은 --data data/dev)")
@@ -224,18 +233,9 @@ def cmd_fetch(args, api) -> int:
 
 def cmd_deploy(args, api) -> int:
     """지금 코드를 배포 → PC에 바로 업데이트 지시 → 새 버전으로 다시 붙을 때까지 기다린다"""
-    me = api.call("GET", "/api/auth/me")
-    latest = None
-    try:
-        latest = api.call("POST", "/api/agent/releases/from-server", {}, timeout=300)["version"]
-        print(f"배포: {latest}")
-    except SystemExit as e:
-        if "409" not in str(e):
-            raise
-        latest = api.call("GET", "/api/agent/releases/latest")["version"]
-        print(f"이미 배포된 버전: {latest} (코드를 고쳤다면 agent/dds_agent/__init__.py의 __version__을 올리세요)")
-    uid = args.user_id or me["id"]
-    api.call("POST", f"/api/agent/instances/{uid}/update", {})
+    res = api.call("POST", "/api/devtest/deploy", {"user_id": args.user_id} if args.user_id else {}, timeout=300)
+    latest, uid = res["version"], res["user_id"]
+    print(f"배포: {latest}" if res["published"] else f"이미 배포된 버전: {latest} (코드를 고쳤다면 agent/dds_agent/__init__.py의 __version__을 올리세요)")
     t0 = time.time()
     while time.time() - t0 < args.timeout:
         time.sleep(3)

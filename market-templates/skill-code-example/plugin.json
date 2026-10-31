@@ -1,0 +1,7 @@
+{
+  "name": "skill-code-example",
+  "displayName": "결과 CSV 요약 (예제)",
+  "description": "결과 CSV의 열마다 최솟값·최댓값·평균을 계산합니다",
+  "category": "후처리",
+  "examples": ["runs 폴더의 results.csv를 열별로 요약해 줘"]
+}

@@ -133,6 +133,7 @@ export function useLiveInvalidation() {
         qc.invalidateQueries({ queryKey: ["trust-line"] }); // 옛 모델을 다시 재면 칩과 한 줄이 함께 바뀐다
         qc.invalidateQueries({ queryKey: ["sim-spec"] });
         break;
+      case "market_updated": qc.invalidateQueries({ queryKey: ["market"] }); break;
       case "live_reconnected":
         // 끊긴 동안 놓친 변경을 모두 다시 읽는다. 무거운 내 PC 진단은 빼고
         qc.invalidateQueries({ predicate: (q) => !(q.queryKey[0] === "agent" && q.queryKey[1] === "diagnose") });

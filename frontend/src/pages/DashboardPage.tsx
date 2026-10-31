@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, Box, ChevronDown, ChevronRight, Cpu, FolderInput, FolderSearch, Loader2, Rocket, SlidersHorizontal, Table2, Target, Workflow, Wrench } from "lucide-react";
 import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { get, post, put, uploadFile } from "../api";
 import { useAuth } from "../auth";
 import { TablePasteDialog } from "../canvas/TableImport";
@@ -33,7 +33,9 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const nav = useNavigate();
   const toast = useToast();
-  const [seed, setSeed] = useState<{ text: string; n: number } | undefined>();
+  // 마켓의 "이렇게 말해 보세요"를 누르면 입력창을 채워 시작한다
+  const incoming = (useLocation().state as { seed?: string } | null)?.seed;
+  const [seed, setSeed] = useState<{ text: string; n: number } | undefined>(incoming ? { text: incoming, n: Date.now() } : undefined);
   const [name, setName] = useState("");
   const [folder, setFolder] = useState("");
   const [folderErr, setFolderErr] = useState("");

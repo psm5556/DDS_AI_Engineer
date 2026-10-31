@@ -25,6 +25,7 @@ from pathlib import Path
 
 from cae_adapters.hidden import hidden_kwargs
 
+from . import market as market_store
 from .config import REPO_ROOT
 
 log = logging.getLogger("dds_agent.context")
@@ -35,6 +36,8 @@ SKILL_DIRS = (".gemini/skills", ".claude/skills", ".agents/skills")
 MANAGED = ".dds-skills.json"  # 이 Agent가 복사한 스킬 이름 목록
 STAMP = ".dds-context-stamp"  # 1행: 마지막으로 복사한 규칙·스킬의 지문, 2행: 규칙 파일별 크기·DDS 전용 여부, 숨긴 항목, git 상태(JSON)
 GEMINI_IGNORE = ".geminiignore"
+MARKET_FILE = ".dds-market.json"  # 마켓 스킬의 지문과 목록. 기본 스킬의 지문과 따로 둔다: 설치 한 번에 기본 스킬 수백 개를 다시 복사하지 않게
+MARKET_TMP = ".dds-market-tmp"
 FORMAT = "3"  # 규칙 파일 형식이 바뀌면 올린다. 지문이 달라져 기존 프로젝트도 한 번 다시 맞춘다
 
 # 표시 구간 밖은 사용자 글이다. 파일 앞뒤 어디에 있어도 이 구간만 바꾼다
@@ -48,7 +51,7 @@ _OLD_TITLE = re.compile(r"^# DDS (?:Conversa|AI Engineer) — 에이전트 작�
 _OLD_INDEX = re.compile(r"\r?\n## 부록: 사용 가능한 스킬\r?\n")
 _OLD_LIST = ("- **", "  `", "필요할 때 아래 SKILL.md를 읽고 따르세요.")
 
-_FILES = {MANAGED, STAMP, GEMINI_IGNORE, *RULE_FILES}  # 나머지 항목은 폴더다
+_FILES = {MANAGED, STAMP, GEMINI_IGNORE, MARKET_FILE, *RULE_FILES}  # 나머지 항목은 폴더다
 _RETRY = (0.1, 0.3, 0.6, None)  # 보안 프로그램이 방금 쓴 파일을 잠깐 잡고 있을 수 있다
 _folder_locks: dict[str, threading.Lock] = {}
 _git_lock = threading.Lock()  # 같은 저장소의 프로젝트들이 제외 목록 하나를 함께 고친다
@@ -185,6 +188,9 @@ def _merge(raw: bytes | None, body: str, start: str, end: str) -> tuple[bytes, b
     """raw에 표시 구간을 넣거나 바꾼다. (새 내용, 구간 밖에 글이 없음)을 돌려준다."""
     raw = raw or b""
     enc = _codec(raw)
+    # 내용 안의 표시 글자에서 구간이 끝난 것으로 읽히면 뒤의 글이 사용자 글이 되어 지워지지 않는다(스킬 설명으로 끼워 넣는 공격)
+    while start in body or end in body:
+        body = body.replace(start, "").replace(end, "")
     block = f"{start}\n{body.strip()}\n{end}".encode(enc)
     s, e = re.escape(start.encode(enc)), re.escape(end.encode(enc))
     # 끝 표시가 지워진 시작 표시를 건너뛴다: 그 뒤의 사용자 글을 구간으로 삼키지 않게 한다
@@ -247,6 +253,8 @@ def _own_items(project_dir: Path, rules: dict, skills: set[str]) -> list[str]:
     """DDS만 만든 항목. 이름만 보고 내용은 읽지 않으며 스킬 폴더 안으로 내려가지 않는다.
     .claude 등의 위쪽 폴더에 다른 것이 있으면 사용자 폴더다. 그때는 그 안의 DDS 스킬 폴더만 고른다."""
     items = [MANAGED, STAMP, *(n for n, (_, own) in rules.items() if own)]
+    if (project_dir / MARKET_FILE).exists():
+        items.append(MARKET_FILE)
     for rel in SKILL_DIRS:
         top, sub = rel.split("/")
         try:
@@ -473,7 +481,8 @@ def _tidy(project_dir: Path, stamp: str, state: dict | None, rules: dict, dirty:
     (보안 프로그램이 읽을 때마다 검사해 대화 시작이 늦어진다). 호출 수는 항목 수만큼이다: DDS만 있으면 약 8개,
     사용자의 .claude 등에서는 그 안의 DDS 스킬 폴더마다 하나씩 는다."""
     before = set(state["hidden"]) if state else set()
-    items = _own_items(project_dir, rules, _skill_names())
+    # 마켓 스킬도 DDS가 만든 것이다. 빼면 .claude가 사용자 폴더로 보여 기본 스킬 폴더마다 따로 숨기게 된다
+    items = _own_items(project_dir, rules, _skill_names() | _market_skills(project_dir))
     if GEMINI_IGNORE in before and (project_dir / GEMINI_IGNORE).exists():
         items.append(GEMINI_IGNORE)  # 저장소가 있으면 아래에서 다시 판단한다
     repo = _find_repo(project_dir)
@@ -500,21 +509,159 @@ def _tidy(project_dir: Path, stamp: str, state: dict | None, rules: dict, dirty:
 
 
 # ---------- 동기화 ----------
-def _skill_index(skills_root: Path) -> str:
+def _skill_index(skills_root: Path, summaries: dict[str, str] | None = None) -> str:
+    """summaries: 마켓 스킬의 서버 요약. 등록자의 설명을 모든 AI의 지침에 그대로 넣지 않는다."""
     # 경로는 프로젝트 폴더 기준이다. 절대 경로를 적으면 프로젝트 이름을 바꿀 때 낡고, 규칙 파일을 커밋하면 이 PC의 경로가 함께 올라간다
+    summaries = summaries or {}
     lines = ["", "## 부록: 사용 가능한 스킬", "필요할 때 아래 SKILL.md를 읽고 따르세요. 경로는 이 프로젝트 폴더 기준입니다."]
     if os.name == "nt":  # PowerShell·ripgrep이 Hidden 항목을 건너뛰어 스킬이 없다고 오해할 수 있다
         lines.append("사용자 폴더를 깔끔하게 두려고 이 스킬 폴더에 Hidden 속성을 붙여 두었습니다. 아래 경로는 그대로 읽으면 됩니다. "
                      "목록을 볼 때 PowerShell은 `Get-ChildItem -Force`, ripgrep은 `--hidden`을 쓰세요.")
     lines.append("")
     for d in sorted(p for p in skills_root.iterdir() if (p / "SKILL.md").exists()):
+        if d.name in summaries:
+            lines.append(f"- **{d.name}** — {market_store._one_line(summaries[d.name])}  \n  `.claude/skills/{d.name}/SKILL.md`")
+            continue
         try:  # 사용자 스킬은 cp949일 수도 있다. 설명 하나 때문에 동기화 전체가 멈추면 안 된다
             text = (d / "SKILL.md").read_bytes().decode("utf-8", "replace")
-        except OSError:
-            text = ""
+        except OSError as e:  # 읽지 못한 스킬은 건너뛴다. 새 세션이 막히는 쪽이 더 나쁘다
+            log.warning("스킬 설명을 읽지 못해 목록에서 뺐습니다(%s): %s", d.name, e)
+            continue
         m = re.search(r"^description:\s*(.+)$", text, re.M)
         lines.append(f"- **{d.name}** — {m.group(1).strip() if m else ''}  \n  `.claude/skills/{d.name}/SKILL.md`")
     return "\n".join(lines) + "\n"
+
+
+# ---------- 마켓 스킬. 기본 스킬과 지문·목록을 따로 둔다 ----------
+def _market_doc(project_dir: Path) -> dict:
+    try:
+        raw = json.loads((project_dir / MARKET_FILE).read_text(encoding="utf-8"))
+        items = {}
+        for key, row in raw["items"].items():
+            # 폴더 이름만 받는다. 목록이 망가져도 스킬 폴더 밖을 지우지 않게
+            skills = [s for s in row["skills"] if isinstance(s, str) and s == Path(s).name and not s.startswith(".")]
+            items[str(key)] = {"version": str(row["version"]), "skills": skills, "summaries": dict(row.get("summaries") or {})}
+        return {"stamp": str(raw.get("stamp") or ""), "items": items, "conflicts": dict(raw.get("conflicts") or {})}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {"stamp": "", "items": {}, "conflicts": {}}
+
+
+def _market_skills(project_dir: Path) -> set[str]:
+    return {s for row in _market_doc(project_dir)["items"].values() for s in row["skills"]}
+
+
+def _market_summaries(project_dir: Path) -> dict[str, str]:
+    return {k: v for row in _market_doc(project_dir)["items"].values() for k, v in row["summaries"].items()}
+
+
+def _replace_tree(src: Path, dst: Path, tmp_root: Path, tag: str):
+    """임시 폴더에 다 복사한 뒤 이름을 바꾼다. 다른 대화가 읽는 동안 지운 폴더나 반쪽 스킬을 보지 않게 하고, 옛 파일도 남기지 않는다."""
+    new, old = tmp_root / f"new-{tag}", tmp_root / f"old-{tag}"
+    market_store.remove_tree(new)
+    market_store.remove_tree(old)
+    shutil.copytree(src, new, copy_function=_copy_file, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.exists():
+        _retry(lambda: os.rename(dst, old))
+    try:
+        _retry(lambda: os.rename(new, dst))
+    except OSError:
+        if old.exists():  # 새 것을 넣지 못했다. 쓰던 것을 되돌려 스킬이 사라지지 않게 한다
+            os.rename(old, dst)
+        raise
+    market_store.remove_tree(old)
+
+
+def _sync_market(project_dir: Path) -> dict:
+    """lock.json에 맞춰 이 프로젝트의 마켓 스킬만 맞춘다. 기본 스킬은 건드리지 않는다.
+    비어 있고 전에 복사한 것도 없으면 아무 파일도 쓰지 않는다: 빈 마켓의 프로젝트 폴더는 마켓이 없던 때와 바이트까지 같다."""
+    wanted = market_store.wanted_items(project_dir)
+    doc = _market_doc(project_dir)
+    if not wanted and not doc["items"] and not (project_dir / MARKET_FILE).exists():
+        return {"changed": False, "active": [], "conflicts": {}, "incomplete": []}
+    if _read_state(project_dir) is None:  # 세션 시작을 거치지 않고 왔다. 규칙 파일 기록이 있어야 아래 _tidy가 맞는다
+        _sync(project_dir)
+    base, managed = _skill_names(), _market_skills(project_dir)
+    active, conflicts, taken, owner = [], {}, set(), {}
+    # 공개 항목을 먼저 본다. 같은 이름의 내 비공개 항목은 충돌로 알린다
+    for w in sorted(wanted, key=lambda x: (bool(re.match(r"u\d+\.", x["key"])), x["key"])):
+        why = None
+        for s in w.get("skills") or []:
+            if s in base:
+                why = f"기본 스킬과 이름({s})이 겹쳐 쓰지 않습니다 → 기본 스킬을 씁니다. 이 항목은 관리부서에 알려 주세요"
+            elif s in taken:  # 사용자의 스킬이 아니다. 이름을 바꾸라고 하면 엉뚱한 일을 시키게 된다
+                why = f"설치한 다른 항목 {owner[s].split('.')[-1]}과(와) 스킬 이름({s})이 겹쳐 쓰지 않습니다 → 둘 중 쓰지 않을 항목을 제거하세요"
+            elif s not in managed and any((project_dir / rel / s).exists() for rel in SKILL_DIRS):
+                why = f"프로젝트에 같은 이름의 스킬({s})이 있어 덮어쓰지 않았습니다 → 내 스킬 이름을 바꾸세요"
+            if why:
+                break
+        if why:
+            conflicts[w["key"]] = why
+            continue
+        taken.update(w.get("skills") or [])
+        owner.update((s, w["key"]) for s in w.get("skills") or [])
+        active.append(w)
+    stamp = hashlib.sha1(json.dumps([[w["key"], w["version"], w.get("skills")] for w in active] + [sorted(conflicts)], ensure_ascii=False).encode()).hexdigest()
+    present = all((project_dir / rel / s).is_dir() for rel in SKILL_DIRS for s in taken)
+    gone = managed - taken
+    if stamp == doc["stamp"] and present and not gone and conflicts == doc["conflicts"]:
+        return {"changed": False, "active": active, "conflicts": conflicts, "incomplete": []}
+
+    tmp_root = project_dir / MARKET_TMP
+    market_store.remove_tree(tmp_root)  # 지난번 복사가 도중에 끊겼으면 남아 있다
+    incomplete, items, failed = [], {}, False
+    try:
+        for w in active:
+            key, skills = w["key"], list(w.get("skills") or [])
+            row = doc["items"].get(key)
+            same = row and row["version"] == w["version"] and all((project_dir / rel / s).is_dir() for rel in SKILL_DIRS for s in skills)
+            if not same:
+                try:
+                    for i, rel in enumerate(SKILL_DIRS):
+                        for s in skills:
+                            _replace_tree(w["root"] / "skills" / s, project_dir / rel / s, tmp_root, f"{i}-{s}")
+                except OSError as e:  # 다음 턴에 다시 시도한다. 쓰던 버전이 있으면 그대로 둔다
+                    log.warning("마켓 스킬을 복사하지 못했습니다(%s): %s", key, e)
+                    conflicts[key] = f"스킬을 프로젝트 폴더에 넣지 못했습니다({e}) → 다른 프로그램이 파일을 잡고 있지 않은지 확인하세요. 다음 요청 때 다시 시도합니다"
+                    failed = True
+                    if row:
+                        items[key] = row
+                    continue
+            items[key] = {"version": w["version"], "skills": skills, "summaries": dict(w.get("summaries") or {})}
+        for key, row in doc["items"].items():
+            for s in row["skills"]:
+                if s not in taken and s not in {x for r in items.values() for x in r["skills"]}:
+                    for i, rel in enumerate(SKILL_DIRS):
+                        if s in base:  # Agent 업데이트가 같은 이름의 기본 스킬을 넣었다. 지우면 기본 스킬이 사라지므로 항목이 남긴 파일 없이 기본 스킬로 되돌린다
+                            try:
+                                _replace_tree(CONTEXT_DIR / "skills" / s, project_dir / rel / s, tmp_root, f"base-{i}-{s}")
+                            except OSError as e:
+                                log.warning("기본 스킬로 되돌리지 못했습니다(%s): %s", s, e)
+                                incomplete.append(key)
+                        elif not market_store.remove_tree(project_dir / rel / s):
+                            incomplete.append(key)  # 파일이 열려 있다. 성공처럼 넘어가면 회수가 조용히 실패한다
+    finally:
+        market_store.remove_tree(tmp_root)
+    summaries = {k: v for row in items.values() for k, v in row["summaries"].items()}
+    body = (CONTEXT_DIR / "INSTRUCTIONS.md").read_text(encoding="utf-8") + _skill_index(project_dir / ".claude" / "skills", summaries)
+    rules = {name: _put_block(project_dir / name, body, RULES_START, RULES_END) for name in RULE_FILES}
+    if items or conflicts:
+        new_doc = {"stamp": "" if failed or incomplete else stamp, "items": items, "conflicts": conflicts}
+        _write_bytes(project_dir / MARKET_FILE, json.dumps(new_doc, ensure_ascii=False, indent=1).encode("utf-8"))
+    else:
+        (project_dir / MARKET_FILE).unlink(missing_ok=True)
+    state = _read_state(project_dir)
+    # 규칙 파일 크기를 기록해 둔다. 안 그러면 다음 세션이 사용자가 고친 줄 알고 기본 스킬까지 전부 다시 복사한다
+    _tidy(project_dir, state["stamp"] if state else _source_stamp(), state, rules, dirty=True)
+    # 복사에 실패한 항목은 쓰던 버전을 알린다. 새 버전이라고 안내하면 AI가 옛 파일을 새것으로 읽는다
+    active = [{**w, "version": items[w["key"]]["version"]} for w in active if w["key"] in items]
+    return {"changed": True, "active": active, "conflicts": conflicts, "incomplete": sorted(set(incomplete))}
+
+
+def sync_market(project_dir: Path) -> dict:
+    """턴 시작·회수 때 부른다. 세션 시작과 같은 잠금을 쓴다: 같은 프로젝트의 두 대화가 서로의 복사를 방해하지 않게."""
+    with _folder_locks.setdefault(os.path.normcase(os.path.abspath(project_dir)), threading.Lock()):
+        return _sync_market(project_dir)
 
 
 def _source_stamp() -> str:
@@ -554,7 +701,12 @@ def sync_project_context(project_dir: Path) -> bool:
     """복사했으면 True, 내용이 그대로라 건너뛰었으면 False. 세션마다 파일 수백 개를 복사하면 보안 검사에 걸려 대화 시작이 늦어진다."""
     # 세션 시작이 스레드에서 돌아 같은 폴더를 동시에 맞출 수 있다. 복사가 겹치면 파일 공유 위반이 난다
     with _folder_locks.setdefault(os.path.normcase(os.path.abspath(project_dir)), threading.Lock()):
-        return _sync(project_dir)
+        copied = _sync(project_dir)
+        try:
+            _sync_market(project_dir)
+        except Exception as e:  # 마켓 항목 하나 때문에 새 세션이 막히면 안 된다. 턴을 시작할 때 다시 시도한다
+            log.warning("마켓 스킬을 맞추지 못했습니다(%s): %s", project_dir, e)
+        return copied
 
 
 def _sync(project_dir: Path) -> bool:
@@ -587,7 +739,7 @@ def _sync(project_dir: Path) -> bool:
                 raise RuntimeError(_copy_failed(project_dir, skills_src / name, dst / name, e)) from e
     _write_bytes(marker, json.dumps(names, ensure_ascii=False).encode("utf-8"))
     body = (CONTEXT_DIR / "INSTRUCTIONS.md").read_text(encoding="utf-8")
-    body += _skill_index(project_dir / ".claude" / "skills")
+    body += _skill_index(project_dir / ".claude" / "skills", _market_summaries(project_dir))
     rules = {}
     for name in RULE_FILES:
         try:

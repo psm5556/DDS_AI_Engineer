@@ -30,10 +30,16 @@
   devtest.run     {op, script?, tool?, ...}            → 실행 결과 (개발 AI의 원격 검증, 응답 필요. routers/devtest.py)
   project.renamed {project_id, project_uid, project_name} (이름이 바뀌었다. Agent가 작업 폴더 이름을 맞춘다. 옛 Agent는 로그만 남긴다)
   project.names   {projects:[{project_id, project_uid, project_name}]} (hello에 대한 답. 꺼져 있는 동안 바뀐 이름을 따라간다)
+  market.sync     {rev, recall_rev, enabled, gateway_on, items:[{key, name, package_id, version, sha256, skills, summaries, code, ...}],
+                   recalled:[{key, name, display_name, versions, active, replacement}]}
+                  (이 사용자의 PC가 가져야 할 전체 목록. 연결할 때와 바뀔 때 보낸다. hello에 market_api가 있는 Agent에만)
 Agent → 서버 알림
   hello           {hostname, version, agents:[{name,label,installed,login}], default_agent, tools,
                    boot, live_sessions:[sid], active_turns:[{turn_id, chat_id, session_id, agent, started_at}],
-                   running_agents:[이름], start_times:{이름: 초}}
+                   running_agents:[이름], start_times:{이름: 초}, market_api, market_rev, market_recall_rev, tools_ready:[툴 이름]}
+  market.state    {rev, recall_rev, items:[{key, name, version, state, error, target?, conflicts?:[{project_id, project, message}], pins?:[{project_id, project, version}]}], incomplete:[key]}
+                  (state: installed·failed·conflict·agent_too_old. conflicts: 그 프로젝트에서만 못 쓴다. pins: 그 프로젝트의 대화가 옛 버전을 쓴다. incomplete: 회수했는데 파일이 남은 항목)
+  market.note     {session_id, text}                   (그 대화의 사용자에게 보일 안내. 이름 겹침 등)
   아래 seq가 붙은 메시지(agent.*·session.stage)는 끊긴 동안 Agent가 모아 두었다가 순서대로 다시 보낸다. 서버는 (boot, seq)로 중복을 거른다.
   agent.event     {session_id, update}                 (ACP session/update)
   agent.permission {session_id, request_id, params}    (ACP session/request_permission. 답이 없으면 재연결 때 다시 온다)

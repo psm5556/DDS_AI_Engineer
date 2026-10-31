@@ -25,7 +25,7 @@ import websockets
 
 from cae_adapters.hidden import console_python, hidden_kwargs, spawn_gui_detached
 
-from . import __version__, devtest, installer, toolscan, updater
+from . import __version__, devtest, installer, market, toolscan, updater
 from .acp_runner import AcpRunner
 from .config import CONFIG_PATH, REPO_ROOT, load_settings
 from .context import sync_project_context
@@ -124,6 +124,10 @@ class Agent:
         self.restart = False
         self.quit = False
         self.tray: Tray | None = None
+        self.market = market.MarketStore(self.api, self._reliable, self.s.workspace_dir, __version__, on_busy=self._market_busy)
+        self.market.send_note = lambda sid, text: self._reliable({"type": "market.note", "session_id": sid, "text": text})
+        self._market_dirs: dict[str, str] = {}  # 세션 → 프로젝트 폴더. 같은 폴더의 대화가 쓰던 코드 항목 버전을 함께 지킨다
+        market.PIN_PROVIDER = self._market_pins
 
     # ---------- 러너 ----------
     def runner(self, name: str) -> AgentRunner:
@@ -227,6 +231,7 @@ class Agent:
             self.session_runner.pop(sid, None)
             self.session_project.pop(sid, None)
             self.session_owner.pop(sid, None)
+            self._forget_market_session(sid)
         prefix = f"{name}:"
         for rid in [r for r in self.open_perms if r.startswith(prefix)]:
             self.open_perms.pop(rid, None)
@@ -249,11 +254,56 @@ class Agent:
             typical = self.state.typical_for_stage(agent, stage) if stage not in ("thinking", "attachments") else None
             self._reliable({"type": "session.stage", "turn_id": turn_id, "agent": agent, "stage": stage, "typical_start_sec": typical})
 
+    def _tools_ready(self) -> list[str]:
+        """hello.tools는 설정 키 목록이라 툴 감지 결과가 아니다. 마켓 추천은 실제로 찾은 툴을 본다."""
+        try:
+            return list(toolscan.load_state().get("ready") or [])
+        except Exception as e:
+            log.debug("툴 상태를 읽지 못했습니다: %s", e)
+            return []
+
+    def _market_busy(self, delta: int):
+        self.installing += delta  # 받는 동안 다시 시작하면 반쯤 받은 채로 끝난다. 자동 업데이트를 미룬다
+
+    def _market_pins(self, project_dir: Path) -> dict[str, str]:
+        where = os.path.normcase(str(project_dir))
+        live = set(self.live_sessions())
+        here = [sid for sid, d in list(self._market_dirs.items()) if d == where and sid in live]
+        with self._turn_lock:
+            working = {t.get("session_id") for t in self.active_turns.values()}
+        # 케이스가 도는 동안은 어느 대화가 맡긴 일인지 몰라도 스크립트가 바뀌면 안 된다
+        if self.executor.running or self.executor.queued or any(r.working_in_background() for r in list(self.runners.values())):
+            working.update(here)
+        return self.market.code_versions(here, working)
+
+    def _forget_market_session(self, sid: str):
+        self._market_dirs.pop(sid, None)
+        self.market.forget_session(sid)
+
+    def _market_notice(self, sid: str, agent: str | None) -> str:
+        """프롬프트를 보내기 직전의 관문. 세션을 다시 시작하지 않고 설치·제거·회수를 이 대화의 다음 요청에 반영한다.
+        실패해도 턴은 진행한다. 턴을 막는 판단은 회수를 받았는지 보는 서버 쪽 하나뿐이다."""
+        def folder() -> Path:
+            pid, pname, puid = self.session_project[sid]
+            d = self.s.project_dir(pid, pname, puid)
+            self._market_dirs[sid] = os.path.normcase(str(d))
+            return d
+        try:
+            if sid not in self.session_project:
+                return ""
+            pid, pname, _ = self.session_project[sid]
+            return self.market.turn_notice(sid, folder, agent, (pid, pname))
+        except Exception:
+            log.exception("마켓 관문 실패")
+            return ""
+
     def hello(self) -> dict:
         with self._turn_lock:
             turns = [{k: t.get(k) for k in ("turn_id", "chat_id", "session_id", "agent", "started_at")} for t in self.active_turns.values()]
             turns += self.outbox.ended_turns()  # 끝났어도 서버가 모르면 함께 알린다. 이어서 오는 출력을 서버가 받을 수 있게
+        rev, recall_rev = self.market.rev()
         return {"type": "hello", "hostname": socket.gethostname(), "version": __version__, "platform": platform.platform(),
+                "market_api": 1, "market_rev": rev, "market_recall_rev": recall_rev, "tools_ready": self._tools_ready(),
                 "agents": self.s.available_agents(), "default_agent": self.s.default_agent,
                 "workspace": str(self.s.workspace_dir), "tools": sorted(self.s.tools), "tools_rev": self.s.tools_rev,
                 "boot": self.boot, "live_sessions": self.live_sessions(), "active_turns": turns,
@@ -538,6 +588,7 @@ class Agent:
                 self._stage(turn_id, turn["agent"], "attachments")
                 text += self._fetch_attachments(sid, attachments)
                 self._stage(turn_id, turn["agent"], "thinking")
+            text += self._market_notice(sid, turn["agent"])
             if turn["cancelled"]:
                 stop = "cancelled"
             else:
@@ -550,6 +601,7 @@ class Agent:
             log.exception("턴 실패")
             error = str(e) or repr(e)
         finally:
+            self.market.touch(sid)  # 긴 턴이 끝난 때부터 쉬는 시간을 잰다
             with self._lock:
                 self.active_prompts -= 1
             with self._turn_lock:  # 지우기와 outbox에 넣기를 한 번에: 그 사이에 hello가 나가면 서버가 턴을 잃은 줄 안다
@@ -649,7 +701,11 @@ class Agent:
 
     def _start_warm_up(self):
         if self.s.warm_up:
-            threading.Thread(target=self._warm_up, daemon=True, name="warm-up").start()
+            def run():
+                # 미리 띄운 세션은 CLI가 죽을 때까지 간다. 첫 동기화보다 먼저 시작하면 그 세션이 옛 목록으로 오래 남는다(2단계의 입구가 빠지는 문제)
+                self.market.first_sync.wait(3)
+                self._warm_up()
+            threading.Thread(target=run, daemon=True, name="warm-up").start()
 
     # ---------- 내 PC 작업 폴더 ----------
     def _local_open(self, project_id: int, project_name: str | None, path: str, with_viewer: bool,
@@ -690,6 +746,7 @@ class Agent:
         for sid in [s for s, (_, _, uid) in self.session_project.items() if uid == project_uid]:
             self.session_project.pop(sid, None)
             self.session_runner.pop(sid, None)
+            self._forget_market_session(sid)
         # 기본 위치로 돌아왔다면 그동안 바뀐 이름을 따라간다. 직접 정한 폴더는 이름을 바꾸지 않는다
         self._known_names.pop(project_id, None)
         self._note_name({"project_id": project_id, "project_uid": project_uid, "project_name": project_name})
@@ -991,6 +1048,8 @@ class Agent:
         elif t in ("agent.release", "agent.update"):
             if self.auto_update or msg.get("force"):
                 self.schedule_update(msg["version"], msg.get("sha256"), bool(msg.get("force")))
+        elif t == "market.sync":  # 연결할 때와 목록이 바뀔 때 온다. 작업자 하나가 가장 새 것만 처리하므로 여기서 기다리지 않는다
+            self.market.on_sync(msg)
         elif t == "agent.settings":  # 연결할 때마다, 사용자가 설정을 바꿀 때마다 온다
             self.auto_update = bool(msg.get("auto_update", True))
             self.remote_test_until = float(msg.get("remote_test_until") or 0)

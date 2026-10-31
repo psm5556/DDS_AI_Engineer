@@ -13,7 +13,7 @@ from ..agent.hub import hub
 from ..agent.link import AgentError, registry
 from ..config import settings
 from ..database import get_db
-from ..deps import get_current_user, get_or_404, get_project_for_member, member_role, require_member
+from ..deps import effective_admin, get_current_user, get_or_404, get_project_for_member, member_role, require_ai_can_work, require_member
 
 router = APIRouter(prefix="/api", tags=["agent"])
 
@@ -71,6 +71,7 @@ def list_messages(session_id: int, user: models.User = Depends(get_current_user)
 def send_prompt(session_id: int, body: schemas.PromptRequest, user: models.User = Depends(get_current_user),
                 db: Session = Depends(get_db)):
     chat = _session_for_owner(session_id, user, db)
+    require_ai_can_work(chat.project_id, user, db)
     if not body.text.strip() and not body.attachment_ids:
         raise HTTPException(400, "내용을 입력하세요")
     atts = []
@@ -156,7 +157,7 @@ def active_project(user: models.User = Depends(get_current_user)):
 # ---------- 대화 이름 변경·삭제 ----------
 def _session_for_editor(session_id: int, user: models.User, db: Session) -> models.ChatSession:
     chat = _session_for_member(session_id, user, db)
-    if chat.user_id != user.id and member_role(chat.project_id, user, db) != "master" and not user.is_admin:
+    if chat.user_id != user.id and member_role(chat.project_id, user, db) != "master" and not effective_admin(user):
         raise HTTPException(403, "대화를 만든 사람이나 프로젝트 관리자만 바꿀 수 있습니다")
     return chat
 

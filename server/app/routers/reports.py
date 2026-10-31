@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .. import models, report, schemas
+from .. import market_service, models, report, schemas
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, require_member
 from ..study import insights, service
@@ -131,9 +131,13 @@ def report_context(project: models.Project = Depends(get_project_for_member), db
             "best": {"case_id": best.id, "params": best.params, "results": best.results} if best else None,
             "models": models_out, "insights": insights.report_summary(db, s, until=wait_until)})
     prev = db.query(models.Report).filter_by(project_id=project.id).order_by(models.Report.id.desc()).first()
-    return {"project": {"name": project.name, "description": project.description}, "flows": flows_out,
-            "results": results, "studies": studies_out,
-            "previous_report": {"title": prev.title, "created_at": prev.created_at.isoformat(timespec="minutes")} if prev else None}
+    out = {"project": {"name": project.name, "description": project.description}, "flows": flows_out,
+           "results": results, "studies": studies_out,
+           "previous_report": {"title": prev.title, "created_at": prev.created_at.isoformat(timespec="minutes")} if prev else None}
+    used = market_service.used_in_project(db, project.id)
+    if used:  # 나중에 잘못된 스킬로 밝혀지면 어떤 보고서가 영향을 받았는지 좇는 근거다. 쓴 적이 없으면 자료도 그대로다
+        out["market_items_read"] = used
+    return out
 
 
 @router.get("/projects/{project_id}/report")

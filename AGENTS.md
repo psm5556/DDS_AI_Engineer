@@ -50,19 +50,20 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 경로 | 내용 |
 |---|---|
 | `server/app/` | FastAPI. `main.py`(앱·정적 파일), `models.py`(SQLAlchemy), `schemas.py`, `config.py`(포트·data_dir) |
-| `server/app/routers/` | `auth` 계정·PIN · `projects` 프로젝트·멤버 · `sessions` 대화·첨부·내 PC 폴더 · `flows` 작업 흐름·결과 · `studies` DOE·케이스·모델·Simulator·공유 · `agents` PC Agent 배포·설치·모니터링 |
+| `server/app/routers/` | `auth` 계정·PIN · `projects` 프로젝트·멤버 · `sessions` 대화·첨부·내 PC 폴더 · `flows` 작업 흐름·결과 · `studies` DOE·케이스·모델·Simulator·공유 · `agents` PC Agent 배포·설치·모니터링 · `market` 마켓 등록·검토·설치·회수 |
 | `server/app/agent/` | `hub.py` 대화 턴·세션 관리(ACP 이벤트 → 메시지) · `link.py` PC Agent WebSocket 연결과 요청/응답 |
 | `server/app/study/` | `doe`(LHS/Sobol) · `surrogate`(GP) · `bayesopt`(EI·제약) · `fieldmodel`(3D 형상·필드 PCA+GP) · `thumbnail`(Simulator 카드 그림) · `service` · `importer`(표·폴더 등록) · `table_job`(표 → 학습 → 배포 서버 작업) · `recipe`(스크립트 묶음) · `insights_calc`·`insights`(판단 도우미) |
 | `server/app/report.py`·`report_md.py`·`assets/` | Word·HTML 보고서와 공통 틀 · 본문 markdown 해석 · 로고·파비콘 사본 |
-| `agent/dds_agent/` | PC Agent. `main.py`(서버 메시지 처리 `handle()`) · `acp_runner.py`(AI CLI) · `executor.py`(케이스 실행) · `workspace.py`(로컬 폴더 규칙·직접 지정 폴더) · `job_runner.py`(로컬/HPC) · `demo_agent.py` · `installer.py`·`updater.py`·`tray.py` |
+| `agent/dds_agent/` | PC Agent. `main.py`(서버 메시지 처리 `handle()`) · `acp_runner.py`(AI CLI) · `executor.py`(케이스 실행) · `workspace.py`(로컬 폴더 규칙·직접 지정 폴더) · `job_runner.py`(로컬/HPC) · `demo_agent.py` · `market.py`(마켓 항목 받기·검증·회수) · `installer.py`·`updater.py`·`tray.py` |
 | `mcp_servers/` | AI CLI가 쓰는 MCP 툴: `dds_flow`(작업 흐름·결과 게시·보고서) · `dds_cae`(스크립트·툴 실행, `list_tools`) · `dds_study`(DOE·학습·BO·배포) · `dds_live`(실행 중인 CAD/CAE와 Live Link) |
 | `cae_adapters/` | `catalog.py`(지원 툴 29종 단일 목록·기본 설치 경로·설치 흔적 단어) · `tool_commands.py`(실행 명령 키) · `script.py`(케이스 스크립트 실행) · `mock.py`(연습용 솔버) · `tabular.py`(표 읽기) · `result_scan.py`(해석 폴더 찾기) · `recipe_bundle.py`(스크립트 묶음) |
 | `agent-context/` | AI CLI에게 주는 작업 규칙(`INSTRUCTIONS.md`)과 툴별 스킬(`skills/<툴>/SKILL.md`·`scripts/`). PC Agent가 프로젝트 폴더로 동기화하고(`agent/dds_agent/context.py`), DDS만 만든 항목은 탐색기에서 숨긴다. 사용자 규칙 파일은 표시 구간만 고친다(`docs/local-data.md`) |
 | `frontend/src/` | React+TS. `pages/`(첫 화면·작업 공간·툴·Simulator·설정·관리) · `chat/`(대화·입력창) · `canvas/`(오른쪽 패널 탭) · `components/`(`HeroMesh` 로그인 3D, `AgentGlyph` 에이전트 기호·글자 로고, `Skeleton`) · `motion.ts`(움직임 도구) · `modern.css`(최종 디자인 층) |
 | `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없거나 소스가 새로우면 자동 빌드). 색은 `tokens.css` 값을 쓴다 |
+| `market-templates/` | 마켓에 올릴 스킬의 시작 틀과 예제. Agent 배포에 들어가지 않는다 |
 | `deploy/linux/` | Linux 서버 systemd 서비스 파일 |
-| `scripts/` | `dev_live.py` · `prepare_onsite.py`(사내 서버 준비, Linux 서버용 설치 묶음 `--pack`·`--import-pack`) · `fetch_runtimes.py` · `build_agent_bundle.py` · `install-agent.ps1` · `e2e_*.py` · `hero/`(로그인 화면의 해석 결과 생성기. 실행에는 쓰이지 않고, 별도 환경에 gmsh가 필요하다. 결과는 `frontend/public/hero/`) |
-| `docs/` | `handoff.md` 인수인계 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 · `cae-data-hdf5.md` 해석 데이터(case.h5) · `shape-learning-plan.md` 형상 학습 계획(train.h5·GPU 서버·PhysicsNeMo) · `product-spec.md` 디자인·기능 명세서 · `inhouse-ai-guide.md` 사내 AI 지침(기능·디자인 요구사항, 다음 일감) |
+| `scripts/` | `dev_live.py` · `prepare_onsite.py`(사내 서버 준비, Linux 서버용 설치 묶음 `--pack`·`--import-pack`) · `fetch_runtimes.py` · `build_agent_bundle.py` · `market_publish.py`(폴더를 마켓에 올리기) · `install-agent.ps1` · `e2e_*.py` · `hero/`(로그인 화면의 해석 결과 생성기. 실행에는 쓰이지 않고, 별도 환경에 gmsh가 필요하다. 결과는 `frontend/public/hero/`) |
+| `docs/` | `handoff.md` 인수인계 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 · `cae-data-hdf5.md` 해석 데이터(case.h5) · `market-package-spec.md` 마켓 패키지 형식과 기준 · `shape-learning-plan.md` 형상 학습 계획(train.h5·GPU 서버·PhysicsNeMo) · `product-spec.md` 디자인·기능 명세서 · `inhouse-ai-guide.md` 사내 AI 지침(기능·디자인 요구사항, 다음 일감) |
 | `data/`·`dist/`·`frontend/dist/` | **git에 없음**(.gitignore). DB·설치 파일·런타임·빌드 결과 |
 
 ## 4. 변경 후 반드시 검증
@@ -75,6 +76,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 표·기존 결과 등 진입 경로(E0~E16) | `.venv\Scripts\python scripts\e2e_scenarios.py [--only E1,E3]` (규칙은 [docs/entry-points.md](docs/entry-points.md)) | 마지막 줄 `전부 통과` |
 | 세션 유지·대기 표시 | `.venv\Scripts\python scripts\e2e_sessions.py` (실제 서버·Agent + 가짜 CLI `agent/tests/fake_acp.py`, 창 없는 브라우저) | 마지막 줄 `E2E 통과`, 스크린샷 `frontend\e2e\shots\sessions\` |
 | 설치·자동 업데이트 | `.venv\Scripts\python scripts\e2e_install.py` | 설치→연결→새 버전→업데이트 |
+| 마켓(등록·승인·설치·회수) | `.venv\Scripts\python scripts\e2e_market.py` (실제 서버·Agent 두 대 + 데모 AI) | 마지막 줄 `마켓 E2E 통과`, 세션 번호가 끝까지 같음 |
 | 스킬 스크립트 | `python -m py_compile <파일>` · 툴 목록 일관성은 pytest의 `test_tool_catalog_consistent` | — |
 | 실제 CAD/CAE 연동(서버에 툴 없음) | `scripts/pc_verify.py`로 사용자 PC에서 직접 시험(`deploy` → `suite --tool <툴>`·`chat "요청"`). [docs/pc-verification.md](docs/pc-verification.md) | 사람에게 눌러 보라고 하지 않고 결과를 받아 판단 |
 
@@ -127,6 +129,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 학습 데이터(train.h5·데이터셋) | 입력 덱 추출 `cae_adapters/deck.py`(다른 툴을 더하는 곳) · 샘플 `train_h5.py`(표준 이름표 `STANDARD`) · 데이터셋 `server/app/study/dataset.py` · 규약 `docs/cae-data-hdf5.md` 8절 · 계획 `docs/shape-learning-plan.md` |
 | 판단 도우미(공간 충진성·영향도·수렴·파레토·능동학습 문장) | 계산 `server/app/study/insights_calc.py` · 판단값 `THRESHOLDS`·문장 `T`·캐시 `insights.py` · API `routers/insights.py` · 화면 `frontend/src/canvas/StudyInsights.tsx`·`components/TrustLine.tsx` · 규칙 `docs/product-spec.md` 4-6-1절 |
 | Output 추가 추출 | `server/app/study/service.py` `add_outputs` → PC Agent `case.extract`(`executor.py`) → 어댑터 `extract()` · 규약 `docs/skill-contract.md` 1-2절 |
+| 마켓 | 규격 `docs/market-package-spec.md` → 검사 `server/app/market_check.py`(같이 고친다) · 계산·동기화 `server/app/market_service.py` · API `server/app/routers/market.py` · PC 보관소 `agent/dds_agent/market.py` · 프로젝트 복사 `agent/dds_agent/context.py` `_sync_market` · 턴 관문 `agent/dds_agent/main.py` `_market_notice` · 화면 `frontend/src/pages/MarketPage.tsx`·`MarketAdmin.tsx`. 빈 마켓이면 오늘과 바이트까지 같아야 한다(`test_market_empty.py`). 검사기의 정규식은 올린 사람의 글자에 도므로 선형이어야 한다(`test_scan_is_linear_on_hostile_text`) |
 | PC Agent 설치 과정 | `scripts/install-agent.ps1`(실제 설치) · `installer/DdsAgentSetup.cs`(설치 창) · `server/app/routers/agents.py`(배포·설치 파일) |
 | Live Link 속도 개선 | `.claude/skills/live-link-speedup/SKILL.md`부터 읽는다(개발용 스킬, Agent 배포에는 들어가지 않음) |
 

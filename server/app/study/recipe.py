@@ -12,7 +12,9 @@ import json
 import re
 import shutil
 import stat
+import struct
 import zipfile
+import zlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -45,6 +47,11 @@ _SECRET_KEY = re.compile(r"(?i)(password|passwd|secret|api[_-]?key|token|credent
 _CONTROL_FILES = {"agents.md", "claude.md", "gemini.md", "project.json"}
 _WINDOWS_DEVICES = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
 
+# Windows가 파일 대신 장치로 여는 이름. 뒤에 확장자가 붙어도 마찬가지다
+_WIN_RESERVED = re.compile(r"^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])$", re.I)
+# Windows에서 파일 이름에 못 쓰는 글자. zipfile은 이것을 _로 바꿔 풀므로 서로 다른 이름이 한 파일로 합쳐질 수 있다
+_WIN_BAD_CHARS = re.compile(r'[<>"|?*\x00-\x1f]')
+
 
 class RecipeRejected(ValueError):
     """받을 수 없는 묶음. 문구에 이유와 할 일이 들어 있다."""
@@ -56,6 +63,14 @@ def _safe_path(name: str) -> str:
     parts = n.split("/")
     if n.startswith("/") or re.match(r"^[A-Za-z]:", n) or ":" in n or "\x00" in n or any(not p.strip(" .") for p in parts):  # "..", "... " 처럼 점·공백뿐인 이름은 Windows에서 상위 폴더가 될 수 있다
         raise RecipeRejected(f"묶음에 안전하지 않은 경로가 있습니다: {name[:80]} → 프로젝트 폴더 안의 상대 경로만 넣어 주세요")
+    for part in parts:
+        # 이름 끝의 점·공백은 Windows와 zipfile이 지운다. helper.pyc. 가 _BLOCKED_EXT를 지나 PC에서 helper.pyc 로 풀려 실행되면 안 된다
+        if part != part.rstrip(" ."):
+            raise RecipeRejected(f"이름이 점이나 공백으로 끝나는 파일은 넣을 수 없습니다: {name[:80]} → Windows가 끝을 지워 다른 이름이 됩니다. 이름을 고쳐 주세요")
+        if _WIN_RESERVED.match(part.split(".")[0].rstrip(" ")):
+            raise RecipeRejected(f"Windows에서 쓸 수 없는 이름입니다: {name[:80]} → CON·NUL·COM1 같은 이름을 다른 이름으로 바꿔 주세요")
+        if _WIN_BAD_CHARS.search(part):
+            raise RecipeRejected(f"Windows에서 파일 이름에 쓸 수 없는 글자가 있습니다: {name[:80]} → < > \" | ? * 를 빼 주세요")
     if len(n) > 300:
         raise RecipeRejected(f"경로가 너무 깁니다: {n[:80]}… → 300자 이내로 줄여 주세요")
     return n
@@ -90,19 +105,22 @@ def _scan_config(value: Any, where: str = "adapter_config"):
         _scan_text(where, value.encode("utf-8", "ignore"))
 
 
-def check_bundle(data: bytes) -> list[tuple[str, bytes]]:
-    """zip을 풀지 않고 파일마다 메모리에서 검사한다. 통과한 파일만 돌려준다."""
+def check_bundle(data: bytes, skip=None, allow_key_files: bool = False, restorable: bool = True) -> list[tuple[str, bytes]]:
+    """zip을 풀지 않고 파일마다 메모리에서 검사한다. 통과한 파일만 돌려준다.
+    skip: 받지 않고 건너뛸 경로인지 보는 함수(마켓: .venv·__pycache__ 등). 읽지도 세지도 않는다.
+    allow_key_files: .key는 LS-DYNA 입력 덱 확장자다. 마켓은 이름으로 거절하지 않고 내용만 검사한다. 레시피 규칙은 그대로다.
+    restorable: 레시피를 받는 PC의 규칙을 함께 본다. 마켓은 프로젝트 폴더 맨 위로 풀지 않고 자기 규칙으로 고르므로(market_check._layout) 끈다."""
     if len(data) > MAX_BUNDLE:
         raise RecipeRejected(f"묶음이 {MAX_BUNDLE // (1024 * 1024)}MB를 넘습니다 → 스크립트와 설정만 넣어 주세요. 해석 결과·모델 파일은 넣지 않습니다")
     try:
         zf = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile as e:
+    except (zipfile.BadZipFile, ValueError, struct.error, EOFError, OSError, NotImplementedError) as e:  # 망가진 zip이 BadZipFile만 내는 것은 아니다
         raise RecipeRejected("zip 파일이 아닙니다 → 스크립트를 zip으로 묶어 올려 주세요") from e
     out: list[tuple[str, bytes]] = []
     seen: set[str] = set()
     total = 0
     with zf:
-        infos = [i for i in zf.infolist() if not i.is_dir()]
+        infos = [i for i in zf.infolist() if not i.is_dir() and not (skip and skip(i.filename))]
         if not infos:
             raise RecipeRejected("묶음에 파일이 없습니다 → 스크립트를 넣어 주세요")
         if len(infos) > MAX_FILES:
@@ -111,11 +129,12 @@ def check_bundle(data: bytes) -> list[tuple[str, bytes]]:
             path = _safe_path(info.filename)
             if stat.S_ISLNK(info.external_attr >> 16):
                 raise RecipeRejected(f"바로가기(심볼릭 링크)는 넣을 수 없습니다: {path} → 실제 파일을 넣어 주세요")
-            if _SECRET_NAME.search(path):
+            if _SECRET_NAME.search(path) and not (allow_key_files and path.lower().endswith(".key")):
                 raise RecipeRejected(f"비밀값이 들어 있을 수 있는 파일입니다: {path} → 묶음에서 빼 주세요")
             if _BLOCKED_EXT.search(path):
                 raise RecipeRejected(f"실행 파일은 묶음에 넣을 수 없습니다: {path} → 스크립트만 넣어 주세요")
-            _check_restorable(path)
+            if restorable:
+                _check_restorable(path)
             key = path.lower()
             if key in seen:
                 raise RecipeRejected(f"같은 경로가 두 번 있습니다: {path} → 하나만 넣어 주세요")
@@ -125,7 +144,7 @@ def check_bundle(data: bytes) -> list[tuple[str, bytes]]:
             try:
                 with zf.open(info) as f:
                     body = f.read(MAX_FILE + 1)  # 압축 폭탄: 적힌 크기를 믿지 않는다
-            except (zipfile.BadZipFile, RuntimeError, NotImplementedError, OSError, EOFError) as e:
+            except (zipfile.BadZipFile, zlib.error, RuntimeError, NotImplementedError, OSError, EOFError, ValueError) as e:  # 압축이 망가지면 zlib.error가 난다
                 raise RecipeRejected(f"묶음을 읽지 못했습니다: {path} ({e.__class__.__name__}) → 암호 없이 다시 묶어 주세요") from e
             if len(body) > MAX_FILE:
                 raise RecipeRejected(f"파일이 {MAX_FILE // (1024 * 1024)}MB를 넘습니다: {path} → 스크립트와 작은 설정만 넣어 주세요")

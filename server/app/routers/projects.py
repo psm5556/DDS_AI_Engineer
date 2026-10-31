@@ -9,7 +9,7 @@ from .. import models, schemas
 from ..agent.hub import hub
 from ..agent.link import AgentError, registry
 from ..database import get_db
-from ..deps import get_current_user, get_or_404, get_project_for_member, member_role, require_master
+from ..deps import effective_admin, get_current_user, get_or_404, get_project_for_member, member_role, require_master
 from ..study import insights
 from ..ws import manager
 
@@ -23,7 +23,7 @@ def _to_response(p: models.Project, user: models.User, db: Session) -> dict:
     last = db.query(models.Flow).filter_by(project_id=p.id).order_by(models.Flow.id.desc()).first()
     fav = db.query(models.ProjectFavorite).filter_by(user_id=user.id, project_id=p.id).first() is not None
     return {**schemas.ProjectBase.model_validate(p).model_dump(), "members": members, "is_favorite": fav,
-            "user_role": member_role(p.id, user, db) or ("master" if user.is_admin else None),
+            "user_role": member_role(p.id, user, db) or ("master" if effective_admin(user) else None),
             "flow_status": last.status if last else None, "flow_title": last.title if last else None}
 
 
@@ -61,7 +61,7 @@ def _tell_agents_renamed(p: models.Project, user: models.User):
 def list_projects(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     """최근 작업 순. updated_at에도 같은 시각을 담아 화면에 보이는 시각과 순서가 어긋나지 않게 한다."""
     q = db.query(models.Project)
-    if not user.is_admin:
+    if not effective_admin(user):
         q = q.join(models.ProjectMember).filter(models.ProjectMember.user_id == user.id)
     projects = q.all()
     last = _last_work(db, [p.id for p in projects])

@@ -1,13 +1,11 @@
-from datetime import datetime, timedelta
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..deps import (LOCK_MINUTES, MAX_FAILED_LOGINS, PIN_RE, create_access_token, get_current_user, hash_password,
-                    new_api_token, require_admin, verify_password)
+from ..deps import (PIN_RE, SCOPE_AGENT, check_pin_with_lock, create_access_token, effective_admin, get_current_user, hash_password,
+                    new_api_token, require_admin, require_jwt)
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -45,28 +43,18 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 def login(body: LoginRequest, db: Session = Depends(get_db)):
     """PIN 6자리 로그인. 연속 5회 틀리면 10분 잠금(무작위 대입 방지)."""
     u = db.query(models.User).filter_by(username=body.username).first()
-    now = datetime.now()
-    if u and u.locked_until and u.locked_until > now:
-        left = int((u.locked_until - now).total_seconds() // 60) + 1
-        raise HTTPException(423, f"PIN을 여러 번 틀려 잠겼습니다. {left}분 뒤 다시 시도하거나 관리자에게 초기화를 요청하세요")
-    if not u or not verify_password(body.pin, u.pin_hash):
-        if u:
-            u.failed_logins += 1
-            if u.failed_logins >= MAX_FAILED_LOGINS:
-                u.failed_logins, u.locked_until = 0, now + timedelta(minutes=LOCK_MINUTES)
-            db.commit()
+    if not u or not check_pin_with_lock(u, body.pin, db):
         raise HTTPException(401, "아이디 또는 PIN이 올바르지 않습니다")
     if not u.is_active:
         raise HTTPException(403, "관리자 승인을 기다리고 있습니다")
-    u.failed_logins, u.locked_until = 0, None
-    db.commit()
     return {"access_token": create_access_token(u), "user": u}
 
 
 @router.put("/auth/pin")
-def change_pin(body: schemas.PinChange, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if not verify_password(body.current_pin, user.pin_hash):
-        raise HTTPException(400, "현재 PIN이 올바르지 않습니다")
+def change_pin(body: schemas.PinChange, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
+    # 웹 로그인 전용이고 로그인과 같은 잠금을 쓴다. 맞히면 그 PIN으로 관리자 로그인까지 되므로 대입 통로가 되면 안 된다
+    if not check_pin_with_lock(user, body.current_pin, db):
+        raise HTTPException(400, "현재 PIN이 올바르지 않습니다 → 여러 번 틀리면 잠깁니다. 잊었다면 관리자에게 초기화를 요청하세요")
     _check_pin(body.new_pin)
     user.pin_hash = hash_password(body.new_pin)
     db.commit()
@@ -85,13 +73,14 @@ def list_tokens(user: models.User = Depends(get_current_user), db: Session = Dep
 
 
 @router.post("/tokens", response_model=schemas.ApiTokenCreated)
-def create_token(body: schemas.ApiTokenCreate, user: models.User = Depends(get_current_user),
+def create_token(body: schemas.ApiTokenCreate, user: models.User = Depends(require_jwt),
                  db: Session = Depends(get_db)):
+    # 토큰이 토큰을 만들지 못하게 한다. 그러지 않으면 새 나간 토큰을 폐기해도 다른 토큰이 남는다
     raw, hashed = new_api_token()
-    t = models.ApiToken(user_id=user.id, name=body.name, token_hash=hashed)
+    t = models.ApiToken(user_id=user.id, name=body.name, token_hash=hashed, scope=SCOPE_AGENT)
     db.add(t)
     db.commit()
-    return {"id": t.id, "name": t.name, "created_at": t.created_at, "last_used_at": None, "token": raw}
+    return {"id": t.id, "name": t.name, "scope": t.scope, "created_at": t.created_at, "last_used_at": None, "token": raw}
 
 
 @router.delete("/tokens/{token_id}")
@@ -108,7 +97,7 @@ def delete_token(token_id: int, user: models.User = Depends(get_current_user), d
 @router.get("/users", response_model=list[schemas.UserResponse])
 def list_users(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     q = db.query(models.User)
-    if not user.is_admin:
+    if not effective_admin(user):
         q = q.filter_by(is_active=True)
     return q.order_by(models.User.display_name).all()
 
@@ -127,6 +116,7 @@ def update_user(user_id: int, body: schemas.UserAdminUpdate, admin: models.User 
     if body.pin is not None:
         _check_pin(body.pin)
         u.pin_hash, u.failed_logins, u.locked_until = hash_password(body.pin), 0, None
+        u.reauth_failed, u.reauth_locked_until = 0, None
     db.commit()
     return u
 

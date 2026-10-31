@@ -15,10 +15,11 @@
 
 이후는 개발 AI가 서버에서 한다.
 ```bash
-.venv/bin/python scripts/pc_verify.py token     # 서버 DB로 관리자 토큰을 만들어 data/pc_verify.token에 저장 (git에 안 들어감)
+.venv/bin/python scripts/pc_verify.py token     # 서버 DB로 원격 검증 토큰을 만들어 data/pc_verify.token에 저장 (git에 안 들어감)
 python3 scripts/pc_verify.py targets            # 시험할 수 있는 PC 확인
 ```
 - 서버 주소가 7014 기본값과 다르면 `--server http://...` 또는 `DDS_SERVER_URL`. 서버가 기본이 아닌 데이터 폴더를 쓰면 `token --data <폴더>`(개발용 실행은 `data/dev`). 토큰을 만든 뒤 서버에서 받는지 바로 확인한다.
+- 토큰은 둘이다. `data/pc_verify.token`은 `/api/devtest/*`만 된다(`deploy`도 이 안의 API를 쓴다). `chat`은 웹앱과 똑같이 일반 API를 쓰므로 `data/pc_verify_chat.token`을 쓴다. 관리자 권한은 어느 쪽에도 없고, 원격 시험 허용도 사람이 웹에서 켠다. 예전에 만든 토큰이면 `token`을 다시 실행한다.
 - `targets`가 비어 있으면 위 1~2번이 안 된 것이다. 이때만 사람에게 그 두 가지를 부탁한다.
 
 ## 2. 고치고 시험하는 순서
@@ -77,6 +78,18 @@ python3 scripts/pc_verify.py run my_check.py                  # 궁금한 것을
   - 이상하면 PC의 `~/.dds-agent/live/nx/oneshot` 파일을 만들어 타이머 없이(작업마다 실행기를 다시 띄우는 방식) 확인한다.
 - 긴 해석은 `--timeout`을 늘리되, 먼저 작은 케이스로 시험한다.
 - 시험 스크립트는 PC에서 돈다. Windows 경로와 Python 3.12를 기준으로 쓴다.
+
+### 마켓 현장 시험 (아직 하지 않았다)
+`scripts/e2e_market.py`는 데모 AI로 돈다. 진짜 AI가 안내만 보고 스킬을 쓰는지는 Claude·Gemini·Codex 각각 `chat`으로 확인한다. 2단계(기능)를 시작하기 전에 한다.
+
+| 확인 | 통과 기준 | 안 되면 |
+|---|---|---|
+| 대화 중 설치 후 스킬 사용 | 다음 요청에서 안내만 보고 `SKILL.md`를 읽는다. 숨김 폴더 포함 | 안내 문구를 고치고, 그래도 안 되면 그 CLI는 "새 대화부터"로 낮춘다 |
+| 읽음 기록 | `report-context`의 `market_items_read`에 항목이 나온다 | CLI가 경로를 주는 칸을 찾아 `market_service.note_skill_read`에 더한다 |
+| 회수 안내 | 같은 대화의 다음 요청에서 그 스킬을 쓰지 않는다 | 안내 문구를 고친다 |
+| 머리말 설정 제거 | 서버가 뺀 `allowed-tools`·`hooks` 없이도 스킬이 읽히고, 승인 창이 그대로 뜬다. `` !`명령` ``은 등록에서 거절된다 | 다른 위험한 키를 `KEEP_FRONT_KEYS` 밖에서 찾으면 그 CLI의 규칙을 규격에 더한다 |
+| 버전 고정 안내 | 같은 프로젝트의 새 대화가 "새 버전은 아직 적용되지 않았습니다" 안내를 보고 옛 파일을 그대로 읽는다 | 안내 문구를 고친다 |
+| 사내 보안 프로그램 | `~/.dds-agent/market`의 파일을 받고 복사하는 데 막힘이 없다 | 위치를 옮긴다 |
 
 ## 5. 안전장치
 - PC 주인이 직접 켜야 하고, **7일 뒤 자동으로 꺼진다**. 서버와 PC Agent 양쪽에서 확인한다.

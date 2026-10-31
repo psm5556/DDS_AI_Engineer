@@ -23,7 +23,7 @@ from .. import models, schemas
 from ..agent.link import AgentError
 from ..config import settings
 from ..database import get_db
-from ..deps import get_current_user, get_or_404, get_project_for_member, require_member
+from ..deps import get_current_user, get_or_404, get_project_for_member, require_ai_can_work, require_member
 from ..study import importer, recipe, service, table_job, thumbnail
 from ..ws import manager
 
@@ -412,7 +412,7 @@ def create_doe(study_id: int, body: schemas.DoeRequest, user=Depends(get_current
 
 @router.post("/studies/{study_id}/run")
 def run_cases(study_id: int, body: schemas.RunRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    _study(study_id, user, db)
+    require_ai_can_work(_study(study_id, user, db).project_id, user, db)
     try:
         n, already = service.run_cases_async(study_id, body.case_ids, body.dry_run, user.id, body.flow_id)
     except service.NoRunMethod as e:
@@ -465,6 +465,7 @@ def delete_case(study_id: int, case_id: int, user=Depends(get_current_user), db:
 def add_outputs(study_id: int, body: schemas.OutputAddRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
     """Output 추가: 이미 해석한 케이스에서도 추출하고, 이후 케이스는 해석할 때 함께 추출한다."""
     s = _study(study_id, user, db)
+    require_ai_can_work(s.project_id, user, db)
     try:
         return service.add_outputs(db, s, [o.model_dump() for o in body.outputs], body.post, body.extract_existing, user.id)
     except PermissionError as e:

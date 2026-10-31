@@ -41,6 +41,7 @@ class ApiTokenCreate(BaseModel):
 class ApiTokenResponse(ORM):
     id: int
     name: str
+    scope: str | None = None  # agent(비어 있어도 같다) · devtest
     created_at: datetime
     last_used_at: datetime | None
 
@@ -666,6 +667,116 @@ class AgentSettings(BaseModel):
     auto_update: bool
 
 
+# ---------- 마켓 ----------
+class MarketMeta(BaseModel):
+    """이름표. 비워 두면 서버가 읽어 채운 값을 그대로 쓴다. 파일이 아니므로 버전의 내용(sha256)은 그대로다."""
+    display_name: str | None = None
+    description: str | None = None
+    category: str | None = None
+    requires_tools: list[str] | None = None
+    examples: list[str] | None = None
+    notes: str | None = None
+
+
+class MarketAction(BaseModel):
+    """fingerprint: 사람이 화면에서 본 내용의 지문. 토큰으로 초안을 몰래 바꿔치기해도 사람이 누른 결정이 그 내용에 적용되지 않게 한다."""
+    meta: MarketMeta | None = None
+    fingerprint: str | None = None
+
+
+class MarketPinNote(BaseModel):
+    pin: str
+    note: str | None = None
+
+
+class MarketApprove(BaseModel):
+    pin: str
+    acks: list[str] = []  # 검토자가 확인한 표시 항목(rule)
+    official: bool = False
+    note: str | None = None
+    meta: MarketMeta | None = None
+    fingerprint: str | None = None
+
+
+class MarketLabels(MarketMeta):
+    """초안을 벗어난 버전의 이름표를 고친다. 공개한 버전은 관리자만 PIN으로 고친다: 이름표는 AI 안내로 가므로 만든 사람이 검토 뒤에 바꾸면 안 된다."""
+    pin: str | None = None
+
+
+class MarketWithdraw(BaseModel):
+    pin: str
+    reason: str
+    fallback: Literal["none", "previous"] = "none"  # 고친 버전을 회수했을 때 옛 오류 버전으로 조용히 돌아가면 안 된다
+    replacement: str | None = None
+
+
+class MarketInstallRequest(BaseModel):
+    consent: bool = False
+    use_latest: bool = False  # 대화가 쓰던 옛 버전을 놓고 지금 새 버전으로 바꾼다
+
+
+class MarketSettings(BaseModel):
+    enabled: bool
+    gateway_on: bool = False
+
+
+class MarketSettingsUpdate(BaseModel):
+    pin: str
+    enabled: bool
+
+
+class MarketPackageView(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    id: int
+    key: str
+    name: str
+    display_name: str | None
+    description: str | None
+    kind: str
+    code: bool
+    version: str | None
+    status: str | None
+    grade: str | None
+    mine: bool
+    public: bool
+    install: dict[str, Any]
+
+
+class MarketList(BaseModel):
+    enabled: bool
+    items: list[MarketPackageView]
+    base_skills: int
+    agent: dict[str, Any]
+
+
+class MarketSubmission(BaseModel):
+    package: MarketPackageView
+    version: str
+    report: dict[str, Any]
+    self_approve_blocked: bool
+    fingerprint: str
+
+
+class MarketReview(BaseModel):
+    queue: list[dict[str, Any]]
+    published: list[dict[str, Any]]
+    settings: MarketSettings
+
+
+class MarketNoticeRow(BaseModel):
+    id: int
+    kind: str
+    text: str
+    package_id: int | None
+    version: str | None
+    created_at: datetime
+
+
+class MarketNotices(BaseModel):
+    items: list[MarketNoticeRow]
+    review_waiting: int  # 관리부서에게만 0이 아닐 수 있다
+
+
 class DevTestAllow(BaseModel):
     allow: bool
 
@@ -673,6 +784,16 @@ class DevTestAllow(BaseModel):
 class DevTestPermission(BaseModel):
     allow: bool
     until: datetime | None = None
+
+
+class DevTestDeploy(BaseModel):
+    user_id: int | None = None  # 업데이트할 PC의 계정. 허용한 PC가 하나면 비워도 된다
+
+
+class DevTestDeployed(BaseModel):
+    version: str
+    published: bool  # False: 같은 버전이 이미 있어 새로 배포하지 않았다
+    user_id: int
 
 
 class DevTestRun(BaseModel):

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -26,8 +26,11 @@ class User(TimestampMixin, Base):
     is_active = Column(Boolean, default=False, nullable=False)  # 관리자 승인 후 True
     failed_logins = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime)  # PIN 연속 실패 시 잠금
+    reauth_failed = Column(Integer)  # 로그인한 사람의 PIN 재확인 실패 수. 공개 로그인과 따로 세어야 아무나 회수를 막지 못한다
+    reauth_locked_until = Column(DateTime)
     agent_auto_update = Column(Boolean, default=True)  # PC Agent 자동 업데이트. 이 컬럼 이전 계정은 NULL이고 켜짐으로 본다
     remote_test_until = Column(DateTime)  # 개발 AI의 원격 시험을 이때까지 허용(관리자 계정만, routers/devtest.py)
+    auth_via = None  # 컬럼 아님. 이번 요청이 무엇으로 들어왔는지(deps.user_from_token이 채운다). 비어 있으면 관리자 권한 없음으로 본다
 
 
 class ApiToken(Base):
@@ -37,6 +40,7 @@ class ApiToken(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     token_hash = Column(String(100), unique=True, nullable=False)
+    scope = Column(String(20), default="agent")  # agent: 관리자 권한 없음(이 컬럼 이전 토큰의 NULL도 같다) · devtest: /api/devtest/*만
     last_used_at = Column(DateTime)
     created_at = Column(DateTime, default=_now, nullable=False)
 
@@ -262,6 +266,7 @@ class AgentInstance(Base):
     connected = Column(Boolean, default=False, nullable=False)
     last_seen = Column(DateTime, default=_now, nullable=False)
     connected_at = Column(DateTime)
+    market = Column(JSON)  # PC Agent가 알린 마켓 항목 상태(market.state). 비어 있으면 마켓을 모르는 Agent이거나 아직 알리지 않았다
 
 
 class DevTestRecord(Base):
@@ -362,4 +367,116 @@ class FieldModel(Base):
     shape_varies = Column(Boolean, default=False, nullable=False)
     info = Column(JSON, default=dict)  # modes, energy, truncation_error, mode_r2
     path = Column(String(500), nullable=False)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+# ---------- 마켓 (docs/market-package-spec.md) ----------
+class MarketPackage(TimestampMixin, Base):
+    """마켓 항목. 공개 전에는 만든 사람 안에서만 이름이 유일하다: 남의 비공개 초안이 공개 이름을 선점하면 안 된다."""
+    __tablename__ = "market_packages"
+    __table_args__ = (UniqueConstraint("owner_id", "name"), {"sqlite_autoincrement": True})  # 지운 번호를 다시 쓰면 옛 파일과 섞인다
+    id = Column(Integer, primary_key=True)
+    name = Column(String(40), nullable=False, index=True)
+    public_name = Column(String(40), unique=True)  # 처음 공개될 때 잡는다. 있으면 전체에서 유일한 이름이다
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    display_name = Column(String(100), nullable=False)
+    description = Column(Text, default="")
+    category = Column(String(40), default="")
+    official = Column(Boolean, default=False, nullable=False)  # 관리부서가 유지 책임을 지는 항목
+
+
+class MarketVersion(Base):
+    """파일이 고정된 버전. 초안이 아니면 파일을 바꾸지 않는다. 이름표는 고칠 수 있지만 공개한 뒤에는 관리부서만 고친다. 등급은 버전마다 붙는다: 새 버전은 다시 검토한다."""
+    __tablename__ = "market_versions"
+    __table_args__ = (UniqueConstraint("package_id", "version"), {"sqlite_autoincrement": True})
+    id = Column(Integer, primary_key=True)
+    package_id = Column(Integer, ForeignKey("market_packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(String(30), nullable=False)
+    status = Column(String(20), nullable=False, default="draft")  # draft·private·review·approved·rejected·deprecated·withdrawn
+    grade = Column(String(20), default="mine")  # mine·reviewed·official
+    sha256 = Column(String(64), nullable=False)
+    size = Column(Integer, nullable=False)
+    manifest = Column(JSON, default=dict)
+    files = Column(JSON, default=list)  # [{path, size, sha256}]. PC Agent가 푼 뒤 이 목록과 정확히 비교한다
+    capabilities = Column(JSON, default=list)
+    check_report = Column(JSON, default=dict)
+    acks = Column(JSON, default=list)  # 승인자가 확인한 표시 항목
+    tools_fp = Column(String(64))  # 2단계(기능) 자리. 도구 목록의 지문
+    evidence = Column(JSON)  # 실제 툴에서 시험한 기록. 없으면 화면에 "실제 툴 시험 기록 없음"
+    provenance = Column(JSON, default=dict)  # 어디서 왔는지(web·cli·chat·capture). 자산화 제출이 같은 API로 들어오는 자리
+    notes = Column(Text, default="")
+    submitted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at = Column(DateTime)
+    review_note = Column(Text, default="")
+    recall_reason = Column(Text)
+    recall_fallback = Column(Boolean)  # 회수 때 이전 버전으로 돌아갈지. 고친 버전을 회수했을 때 옛 오류 버전으로 조용히 돌아가면 안 되어 기본은 돌아가지 않는다
+    replacement_id = Column(Integer, ForeignKey("market_packages.id", ondelete="SET NULL"))
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class MarketInstall(Base):
+    """누가 무엇을 설치했는가. 어떤 버전을 쓰는지는 저장하지 않고 그때그때 계산한다(market_service.resolve)."""
+    __tablename__ = "market_installs"
+    __table_args__ = (UniqueConstraint("user_id", "package_id"),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    package_id = Column(Integer, ForeignKey("market_packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+    version_pin = Column(String(30))
+    version_floor = Column(String(30))  # 사용자가 "지금 새 버전으로"를 누른 버전. 대화가 쓰던 옛 버전을 이 아래로는 붙들지 않는다
+    consent_caps = Column(JSON, default=list)  # 사용자가 동의한 일. 새 버전이 이보다 많은 일을 하면 다시 물을 때까지 그 버전을 쓰지 않는다
+    always_allow = Column(Boolean, default=False, nullable=False)  # 2단계(기능) 자리
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class MarketEvent(Base):
+    """누가 언제 무엇을 했는지. 추가만 한다."""
+    __tablename__ = "market_events"
+    id = Column(Integer, primary_key=True)
+    actor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    via = Column(String(20))
+    kind = Column(String(30), nullable=False)
+    package_id = Column(Integer)
+    version = Column(String(30))
+    detail = Column(JSON)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class MarketNotice(Base):
+    """사람에게 알릴 일: 검토 결과와 회수. 회수 사유가 마켓 서랍에만 있으면 어제 보고서를 낸 엔지니어가 영영 모른다."""
+    __tablename__ = "market_notices"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    package_id = Column(Integer, ForeignKey("market_packages.id", ondelete="CASCADE"))
+    version = Column(String(30))
+    kind = Column(String(20), nullable=False)  # approved·rejected·recalled·deprecated
+    text = Column(Text, nullable=False)
+    read_at = Column(DateTime)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class MarketSetting(Base):
+    """마켓 스위치. 행이 없으면 켜짐이다."""
+    __tablename__ = "market_settings"
+    id = Column(Integer, primary_key=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+    gateway_on = Column(Boolean, default=False, nullable=False)  # 2단계(기능의 입구) 자리. 켜는 길은 아직 없다
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    updated_at = Column(DateTime, default=_now, onupdate=_now)
+
+
+class MarketCall(Base):
+    """항목을 언제 어느 대화에서 썼는지. 잘못된 계산이 드러났을 때 영향을 좇는 근거다. 인자 내용은 저장하지 않는다.
+    1단계는 AI가 SKILL.md를 읽은 기록(kind=skill_read)과 대화에 회수를 알린 기록(kind=recall_note)뿐이다. 읽었다고 그대로 따랐다는 뜻은 아니다."""
+    __tablename__ = "market_calls"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    hostname = Column(String(200))
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"))
+    chat_id = Column(Integer)
+    package_id = Column(Integer, ForeignKey("market_packages.id", ondelete="SET NULL"), index=True)
+    version = Column(String(30))
+    tool = Column(String(100))
+    kind = Column(String(20), default="skill_read")
     created_at = Column(DateTime, default=_now, nullable=False)

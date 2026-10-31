@@ -272,10 +272,29 @@ class DemoAgent:
         outcome = (res or {}).get("outcome") or {}
         return outcome.get("outcome") == "selected" and outcome.get("optionId") == "allow"
 
+    async def _read_market_skills(self, s: DemoSession, notice: str):
+        """실제 CLI처럼 안내만 보고 SKILL.md를 읽는다. 진짜 AI가 안내를 따르는지는 이것으로 알 수 없다(현장 시험 항목)."""
+        for path in re.findall(r"^\s*스킬: (.+SKILL\.md)\s*$", notice, re.M):
+            tcid = uuid.uuid4().hex[:8]
+            s.update({"sessionUpdate": "tool_call", "toolCallId": tcid, "title": f"Read {path}", "kind": "read", "status": "in_progress",
+                      "rawInput": {"file_path": path}})
+            try:
+                first = Path(path).read_text(encoding="utf-8").splitlines()[:3]
+                s.update({"sessionUpdate": "tool_call_update", "toolCallId": tcid, "status": "completed",
+                          "content": [{"type": "content", "content": {"type": "text", "text": "\n".join(first)}}]})
+                await s.say(f"설치된 스킬을 읽었습니다: {Path(path).parent.name}\n\n")
+            except OSError as e:
+                s.update({"sessionUpdate": "tool_call_update", "toolCallId": tcid, "status": "failed",
+                          "content": [{"type": "content", "content": {"type": "text", "text": str(e)}}]})
+        for name in re.findall(r"\[회수됨: ([^,\]]+), 쓰지 마세요\]", notice):
+            await s.say(f"회수된 스킬은 쓰지 않겠습니다: {name}\n\n")
+
     async def scenario(self, s: DemoSession, text: str):
         """가진 데이터·단순 질문은 Flow 없이 바로 처리한다. 해석을 새로 돌리는 요청만 Flow 시나리오 4가지로 간다:
         '세탁기'/'탈수' 요청(탈수 진동 최적화~보고서) · CAD~보고서 전체(브래킷 E2E) ·
         '3D'/'형상' 요청(Beam3D 형상·필드 학습) · 기본(Branin 최적화)."""
+        text, _, notice = text.partition("\n\n[마켓 안내]")  # Agent가 프롬프트 끝에 붙인 안내는 요청이 아니다
+        await self._read_market_skills(s, notice)
         body = request_text(text)
         if is_panel_request(body):  # 판단 도우미 버튼의 요청은 어떤 입구보다 먼저 본다. 문구에 '표'·'모델'이 들어 있어도 시나리오로 새지 않는다
             await s.say("데모에서는 해석을 더 돌리지 않습니다. 실제 에이전트라면 지금 요청을 그대로 진행합니다.\n\n"

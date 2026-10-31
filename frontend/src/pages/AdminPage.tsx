@@ -9,26 +9,29 @@ import { PinInput } from "../components/PinInput";
 import { SetupChecklist } from "../components/SetupReadiness";
 import { when } from "../format";
 import { useToast } from "../toast";
-import type { AgentInstance, AgentRelease, User } from "../types";
+import type { AgentInstance, AgentRelease, MarketNotices, User } from "../types";
+import MarketAdmin from "./MarketAdmin";
 
-/** 관리: 사용자 승인 · PC Agent 현황(버전·연결·작업) · Agent 배포 버전 */
+/** 관리: 사용자 승인 · PC Agent 현황(버전·연결·작업) · Agent 배포 버전 · 마켓 검토 */
 export default function AdminPage() {
   const { user } = useAuth();
   const [params] = useSearchParams();
-  const [tab, setTab] = useState<"agents" | "users" | "releases">(() => {
+  const [tab, setTab] = useState<"agents" | "users" | "releases" | "market">(() => {
     const t = params.get("tab");
-    return t === "users" || t === "releases" ? t : "agents";
+    return t === "users" || t === "releases" || t === "market" ? t : "agents";
   });
+  const { data: notices } = useQuery({ queryKey: ["market", "notices"], queryFn: () => get<MarketNotices>("/api/market/notices"), enabled: !!user?.is_admin });
+  const waiting = notices?.review_waiting ?? 0;
   if (!user?.is_admin) return <Navigate to="/" replace />;
   return (
     <div className="page wide">
-      <div className="proj-head"><div className="grow"><h1>관리</h1><div className="proj-sub">사용자 승인 · PC Agent 모니터링 · 버전 배포</div></div></div>
+      <div className="proj-head"><div className="grow"><h1>관리</h1><div className="proj-sub">사용자 승인 · PC Agent 모니터링 · 버전 배포 · 마켓 검토</div></div></div>
       <nav className="stepper proj-tabs">
-        {([["agents", "PC Agent 현황"], ["users", "사용자"], ["releases", "Agent 배포"]] as const).map(([k, l]) => (
+        {([["agents", "PC Agent 현황"], ["users", "사용자"], ["releases", "Agent 배포"], ["market", waiting ? `마켓 (검토 ${waiting})` : "마켓"]] as const).map(([k, l]) => (
           <button key={k} className={`ptab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </nav>
-      {tab === "agents" ? <Agents /> : tab === "users" ? <Users /> : <Releases />}
+      {tab === "agents" ? <Agents /> : tab === "users" ? <Users /> : tab === "market" ? <MarketAdmin /> : <Releases />}
     </div>
   );
 }

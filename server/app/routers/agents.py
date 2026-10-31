@@ -20,7 +20,7 @@ from .. import models, schemas
 from ..agent.link import AgentConnection, registry
 from ..config import ROOT, settings
 from ..database import SessionLocal, get_db
-from ..deps import get_current_user, require_admin
+from ..deps import effective_admin, get_current_user, require_admin
 from ..ws import manager
 
 router = APIRouter(prefix="/api/agent", tags=["agent-releases"])
@@ -159,16 +159,20 @@ def my_instances(user=Depends(get_current_user), db: Session = Depends(get_db)):
 @router.post("/instances/{user_id}/update")
 def request_update(user_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
     """해당 사용자의 Agent에 지금 업데이트하도록 지시(본인 또는 관리자)."""
-    if user_id != user.id and not user.is_admin:
-        raise HTTPException(403, "본인 또는 관리자만 할 수 있습니다")
+    if user_id != user.id and not effective_admin(user):
+        raise HTTPException(403, "본인 또는 관리자만 할 수 있습니다 → 그 사람에게 요청하거나 관리자 계정으로 웹앱에서 하세요")
     conn = registry.get(user_id)
     if not conn:
         raise HTTPException(409, "Agent가 연결되어 있지 않습니다")
     r = latest_release(db)
     if not r:
         raise HTTPException(404, "배포된 Agent 버전이 없습니다")
-    conn.send({"type": "agent.update", "version": r.version, "sha256": r.sha256, "force": True})
+    send_update(conn, r)
     return {"ok": True, "version": r.version}
+
+
+def send_update(conn, release) -> None:
+    conn.send({"type": "agent.update", "version": release.version, "sha256": release.sha256, "force": True})
 
 
 def _auto_update_on(user: models.User) -> bool:
@@ -342,7 +346,7 @@ def setup_status(user=Depends(get_current_user), db: Session = Depends(get_db)):
     rel = latest_release(db)
     exe, runtime = _setup_exe() is not None, _runtime_ready()
     return {"setup_exe": exe, "runtime": runtime, "release": rel.version if rel else None, "ready": exe and runtime and bool(rel),
-            "runtime_dir": str(runtime_dir()) if user.is_admin else None,
+            "runtime_dir": str(runtime_dir()) if effective_admin(user) else None,
             "server_windows": os.name == "nt"}  # Linux 서버는 설치 프로그램·런타임을 Windows PC에서 만들어 넣는다
 
 
