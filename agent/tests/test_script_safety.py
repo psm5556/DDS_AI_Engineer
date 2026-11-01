@@ -58,7 +58,7 @@ def test_agent_refuses_script_reached_through_a_junction(tmp_path):
     (project / "run").mkdir(parents=True)
     subprocess.run(["cmd", "/c", "mklink", "/J", str(project / "link"), str(outside)], check=True, capture_output=True,
                    creationflags=subprocess.CREATE_NO_WINDOW)
-    with pytest.raises(ValueError, match="프로젝트 폴더 밖"):
+    with pytest.raises(ValueError, match="Task 폴더 밖"):
         ScriptAdapter._commands([{"tool": "python", "script": "link/evil.py"}], project / "run", project, {}, None, None)
 
 

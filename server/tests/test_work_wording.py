@@ -46,13 +46,13 @@ def test_conversation_switcher_is_gone():
     assert "RotateCcw" not in (SRC / "canvas" / "views.tsx").read_text(encoding="utf-8"), "이 흐름을 새 모델로 다시 버튼은 없앴다"
 
 
-def test_project_menu_separates_folders_and_task_folder_is_hidden_until_it_exists():
+def test_project_menu_separates_folders_and_legacy_task_has_no_folder_item():
     menu = (SRC / "components" / "ProjectMenu.tsx").read_text(encoding="utf-8")
     assert "폴더 열기" in menu and "폴더 바꾸기" in menu
     # 폴더를 바꾸는 곳은 Project 메뉴 한 곳이다
     assert "폴더 바꾸기" not in (SRC / "canvas" / "LocalFiles.tsx").read_text(encoding="utf-8")
-    assert "taskFolder: false" in COPY, "Task별 폴더(2단계)가 들어오기 전에는 Task 메뉴에 없는 폴더를 보이지 않는다"
-    assert "FEATURE.taskFolder" in (SRC / "work" / "WorkMenu.tsx").read_text(encoding="utf-8")
+    # 이전 기록은 자기 폴더가 없다. 없는 폴더를 메뉴에 보이지 않는다
+    assert "work.mine && !work.legacy" in (SRC / "work" / "WorkMenu.tsx").read_text(encoding="utf-8")
 
 
 def test_delete_dialog_says_what_goes_and_what_stays():
