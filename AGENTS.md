@@ -71,7 +71,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 |---|---|---|
 | Python(서버·Agent·MCP·스킬 규약) | `.venv\Scripts\python -m pytest server/tests agent/tests -q` | 모두 passed |
 | 프론트엔드 | `cd frontend; npm run build` | TypeScript 오류 없음 |
-| 화면·흐름 | 서버를 띄운 뒤 `cd frontend; npm run smoke` (흐름까지: `npm run smoke -- --demo`). 표 화면을 고쳤으면 `node e2e/table_layout.mjs`(열 60개·긴 이름·막는 문구)·`node e2e/table_job.mjs`(만드는 중 입력창·새로고침 뒤 알림) | 마지막 줄 `PASS`, `frontend\e2e\shots\` 스크린샷을 직접 열어 확인 |
+| 화면·흐름 | 서버를 띄운 뒤 `cd frontend; npm run smoke` (흐름까지: `npm run smoke -- --demo`). 표 화면을 고쳤으면 `node e2e/table_layout.mjs`(열 60개·긴 이름·막는 문구)·`node e2e/table_job.mjs`(만드는 중 입력창·새로고침 뒤 알림). 판단의 자리를 고쳤으면 `node e2e/judgement_place.mjs`(서버 없이)·`npm run smoke -- --insights` | 마지막 줄 `PASS`, `frontend\e2e\shots\` 스크린샷을 직접 열어 확인 |
 | ACP·MCP 실제 프로세스 | `.venv\Scripts\python scripts\e2e_demo.py` | 시나리오 완료 |
 | 표·기존 결과 등 진입 경로(E0~E16) | `.venv\Scripts\python scripts\e2e_scenarios.py [--only E1,E3]` (규칙은 [docs/entry-points.md](docs/entry-points.md)) | 마지막 줄 `전부 통과` |
 | 세션 유지·대기 표시 | `.venv\Scripts\python scripts\e2e_sessions.py` (실제 서버·Agent + 가짜 CLI `agent/tests/fake_acp.py`, 창 없는 브라우저) | 마지막 줄 `E2E 통과`, 스크린샷 `frontend\e2e\shots\sessions\` |
@@ -127,7 +127,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 보고서 | AI가 새로 쓰는 보고서: 자료·저장 `server/app/routers/reports.py`, 틀(표지·목차·맺음말·머리글)과 Word·HTML `server/app/report.py`, 본문 해석 `server/app/report_md.py`, 로고·파비콘 사본 `server/app/assets/`(`frontend/public`과 같아야 한다), 웹 탭 `frontend/src/canvas/ReportView.tsx`, 쓰는 규칙(AI는 제목과 본문만, `##`부터) `agent-context/INSTRUCTIONS.md` 1-0절·`mcp_servers/dds_flow.py` `write_report`, 검사 `server/tests/test_report_template.py` |
 | 해석 데이터 저장(HDF5) | `cae_adapters/h5store.py`(case.h5 쓰기·읽기·묶기·검증) → PC Agent `executor._archive` → 서버 `/api/cases/{id}/archive` · 규약 `docs/cae-data-hdf5.md` · 툴별 전체 추출 `dyna_to_h5.py`·`op2_to_h5.py`·`abq_odb_to_npz.py` |
 | 학습 데이터(train.h5·데이터셋) | 입력 덱 추출 `cae_adapters/deck.py`(다른 툴을 더하는 곳) · 샘플 `train_h5.py`(표준 이름표 `STANDARD`) · 데이터셋 `server/app/study/dataset.py` · 규약 `docs/cae-data-hdf5.md` 8절 · 계획 `docs/shape-learning-plan.md` |
-| 판단 도우미(공간 충진성·영향도·수렴·파레토·능동학습 문장) | 계산 `server/app/study/insights_calc.py` · 판단값 `THRESHOLDS`·문장 `T`·캐시 `insights.py` · API `routers/insights.py` · 화면 `frontend/src/canvas/StudyInsights.tsx`·`components/TrustLine.tsx` · 규칙 `docs/product-spec.md` 4-6-1절 |
+| 판단 도우미(공간 충진성·영향도·수렴·파레토·능동학습 문장) | 계산 `server/app/study/insights_calc.py` · 판단값 `THRESHOLDS`·문장 `T`·캐시 `insights.py` · API `routers/insights.py` · 화면 `frontend/src/canvas/StudyInsights.tsx`(작업 흐름 탭의 단계 곁)·놓는 자리 `canvas/judgement.ts`·`components/TrustLine.tsx` · 규칙 `docs/product-spec.md` 4-6-1절 |
 | Output 추가 추출 | `server/app/study/service.py` `add_outputs` → PC Agent `case.extract`(`executor.py`) → 어댑터 `extract()` · 규약 `docs/skill-contract.md` 1-2절 |
 | 마켓 | 규격 `docs/market-package-spec.md` → 검사 `server/app/market_check.py`(같이 고친다) · 계산·동기화 `server/app/market_service.py` · API `server/app/routers/market.py` · PC 보관소 `agent/dds_agent/market.py` · 프로젝트 복사 `agent/dds_agent/context.py` `_sync_market` · 턴 관문 `agent/dds_agent/main.py` `_market_notice` · 화면 `frontend/src/pages/MarketPage.tsx`·`MarketAdmin.tsx`. 빈 마켓이면 오늘과 바이트까지 같아야 한다(`test_market_empty.py`). 검사기의 정규식은 올린 사람의 글자에 도므로 선형이어야 한다(`test_scan_is_linear_on_hostile_text`) |
 | PC Agent 설치 과정 | `scripts/install-agent.ps1`(실제 설치) · `installer/DdsAgentSetup.cs`(설치 창) · `server/app/routers/agents.py`(배포·설치 파일) |

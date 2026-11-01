@@ -14,13 +14,15 @@ export function useTrustLine(url: string) {
 export function TrustLine({ url, onMore, moreTo, moreState, onMoreLink }: { url: string; onMore?: () => void; moreTo?: string; moreState?: unknown; onMoreLink?: () => void }) {
   const data = useTrustLine(url);
   if (!data) return null;
+  // 아직 판단하지 못했으면 작업 흐름 탭에도 그 줄이 없다. 눌러도 아무것도 펼쳐지지 않을 링크를 내지 않는다
+  const more = data.state !== "unknown";
   return (
     <div className="trust-line">
       <b>이 예측을 믿어도 되나요?</b>
       <span className={`chip ${CHIP[data.state] ?? ""}`}>{data.state_label}</span>
       <span>{data.sentence}</span>
-      {onMore && <button className="trust-more" onClick={onMore}>자세히</button>}
-      {moreTo && <Link className="trust-more" to={moreTo} state={moreState} onClick={onMoreLink}>자세히</Link>}
+      {more && onMore && <button className="trust-more" onClick={onMore}>자세히</button>}
+      {more && moreTo && <Link className="trust-more" to={moreTo} state={moreState} onClick={onMoreLink}>자세히</Link>}
     </div>
   );
 }

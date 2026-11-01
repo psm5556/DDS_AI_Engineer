@@ -5,7 +5,7 @@
 //   npm run smoke                        # 화면 둘러보기 (로그인 → 첫 화면 → 표로 바로 Simulator → 툴 → 프로젝트 탭들 → 사이드바 순서·프로젝트 보기 → Simulator 카드·목록·검색 → 설정 → 관리)
 //   npm run smoke -- --demo              # + 데모 에이전트로 전체 과정(CAD→보고서)을 실제로 돌려 승인·실행·완료까지 확인 (3~5분)
 //   npm run smoke -- --reduced           # '움직임 줄이기' 설정으로 점검(애니메이션 0개여야 통과)
-//   npm run smoke -- --insights          # + 데모로 두 목표·능동학습을 돌린 뒤 판단 도우미를 펼쳐 점검(1~2분)
+//   npm run smoke -- --insights          # + 데모로 두 목표·능동학습을 돌린 뒤 단계 곁의 판단을 펼쳐 점검(1~2분)
 //   환경변수: DDS_URL(기본 http://127.0.0.1:7014) · DDS_USER(admin) · DDS_PIN(123456) · DDS_SHOTS(스크린샷 폴더, 기본 e2e/shots) · DDS_THEME(light|dark)
 //   Edge가 없으면 DDS_BROWSER=chrome
 import { chromium } from "playwright-core";
@@ -283,12 +283,17 @@ await step("넓은 Simulator의 ±와 자세히", async () => {
   if (both.length !== 2) throw new Error(`±의 근거가 툴팁에 없습니다: ${title}`);
   if (num(shown.match(/± ([\d.,e+-]+)/)[1]) !== Math.max(...both)) throw new Error(`±(${shown})가 큰 값이 아닙니다: ${title}`);
   await shot("simulator-wide-error-bar");
-  // 넓은 화면의 자세히: 프로젝트만 여는 것이 아니라 데이터 탭의 그 항목을 펼친다
+  // 넓은 화면의 자세히: 프로젝트만 여는 것이 아니라 작업 흐름 탭의 그 판단을 펼친다. 표로 만들어 흐름이 없어도 같다
   await page.locator(".trust-line a.trust-more").click();
   await page.waitForURL(/\/projects\/\d+/, { timeout: 15000 });
-  await page.locator("#insight-trust .insight-body").waitFor({ timeout: 30000 });
-  if ((await page.getByRole("tab", { name: "데이터" }).first().getAttribute("aria-selected")) !== "true") throw new Error("자세히가 데이터 탭을 열지 않습니다");
+  await page.locator('.insight-sec[data-insight="trust"] .insight-body').waitFor({ timeout: 30000 });
+  if ((await page.getByRole("tab", { name: "작업 흐름" }).first().getAttribute("aria-selected")) !== "true") throw new Error("자세히가 작업 흐름 탭을 열지 않습니다");
   await shot("simulator-more-trust");
+  // 데이터 탭은 데이터만 보여 준다
+  await page.getByRole("tab", { name: "데이터" }).first().click();
+  await page.locator(".io-block").waitFor({ timeout: 15000 });
+  if (await page.locator(".insight-sec").count()) throw new Error("데이터 탭에 판단이 남아 있습니다");
+  await page.getByRole("tab", { name: "작업 흐름" }).first().click();
 });
 
 await step("넓은 Simulator에서 프로젝트로 돌아오기", async () => {
@@ -409,11 +414,16 @@ if (INSIGHTS) {
     await page.getByRole("button", { name: /승인하고 실행/ }).first().click({ timeout: 90000 });
     await page.getByRole("button", { name: "허용" }).click({ timeout: 90000 });
     await page.getByText("두 목표 최적화와 능동학습을 마쳤습니다").waitFor({ timeout: 420000 });
-    await page.getByRole("tab", { name: "데이터" }).first().click();
-    for (const q of ["지금 어디까지 왔나요?", "설계 범위를 고르게 살폈나요?", "무엇이 결과를 좌우하나요?", "이 예측을 믿어도 되나요?", "더 돌리면 좋아질까요?", "두 목표를 함께 좋게 할 수 있나요?", "정확도를 높이려고 더 돌린 해석이 효과가 있었나요?"]) {
-      await page.getByText(q, { exact: false }).first().waitFor({ timeout: 20000 });
+    await page.getByRole("tab", { name: "작업 흐름" }).first().click();
+    // 판단은 그 단계의 결과 곁에 있다. 공간 충진은 DOE 단계, 수렴은 최적화 단계
+    for (const [step, key] of [["doe", "coverage"], ["doe", "quality"], ["train", "trust"], ["al", "active"], ["opt", "convergence"], ["opt", "pareto"]]) {
+      await page.locator(`#step-${step} .insight-sec[data-insight="${key}"]`).waitFor({ timeout: 60000 });
     }
-    await page.locator(".insight-sec .chip", { hasText: "계산 중" }).first().waitFor({ state: "detached", timeout: 60000 }).catch(() => {});
+    await page.locator(".flow-next .chip", { hasText: "계산 중" }).waitFor({ state: "detached", timeout: 60000 }).catch(() => {});
+    if (await page.locator(".insight-sec .chip", { hasText: "아직 판단 못 함" }).count()) throw new Error("아직 판단하지 못한 항목이 보입니다");
+    if (await page.locator(".insight-sec .chip", { hasText: "계산 중" }).count()) throw new Error("계산 중인 항목이 판단처럼 보입니다");
+    if ((await page.locator(".flow-next").count()) > 1) throw new Error("다음 할 일이 두 곳에 있습니다");
+    if ((await page.locator(".insight-body button.primary, .insight-sec button.primary").count()) > 0) throw new Error("판단 안에 할 일 버튼이 있습니다");
     await shot("insights-closed");
     await page.setViewportSize({ width: 1440, height: 1600 }); // 펼친 그림 전체가 한 장에 들어오게
     const heads = page.locator(".insight-head:not([disabled])");
@@ -427,6 +437,10 @@ if (INSIGHTS) {
     }
     await page.setViewportSize({ width: 1440, height: 900 });
     if (await page.locator(".insight-sec .js-plotly-plot").count()) throw new Error("접으면 그림이 사라져야 합니다");
+    await page.getByRole("tab", { name: "데이터" }).first().click();
+    await page.locator(".io-block").waitFor({ timeout: 15000 });
+    if (await page.locator(".insight-sec").count()) throw new Error("데이터 탭에 판단이 남아 있습니다");
+    await shot("insights-data-only");
     // 이 시나리오는 단위를 note에만 적는다("스프링 강성 [%]"). 입력 칸에도 단위가 보여야 한다
     await page.getByRole("tab", { name: "Simulator" }).first().click();
     await page.locator(".sim-tab .sim-var-unit").first().waitFor({ timeout: 15000 });

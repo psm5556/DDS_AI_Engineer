@@ -3002,7 +3002,7 @@ def report_summary(db: Session, study: models.Study, until: float | None = None)
 
 
 # ---------- 옛 모델을 한 번 다시 재기 ----------
-# 저장된 품질은 최적화 점까지 넣어 잰 값이라 설계 범위 전체의 정확도보다 좋게 나온다. 데이터 탭을 열어야만 다시 재면
+# 저장된 품질은 최적화 점까지 넣어 잰 값이라 설계 범위 전체의 정확도보다 좋게 나온다. 판단을 열어야만 다시 재면
 # 공유받은 사람은 영영 옛 값을 보고, 판정이 나중에 뒤집힌다. 요청 경로에서는 재지 않으므로 처음 보는 쪽에서 뒤로 넘기고 그동안 '계산 중'이라고 말한다
 _cv_lock = threading.Lock()
 _cv_gate = threading.Semaphore(1)  # 작업 스레드가 몇 분씩 묶이지 않게 한 번에 하나씩
@@ -3137,8 +3137,10 @@ def publish(db: Session, study: models.Study, flow_id: int | None, node_id: str 
         out.append({"artifact_id": a.id, "kind": kind, "title": title, "embed": f"![{caption}](artifact:{a.id})"})
 
     if want is None or "summary" in want:
-        rows = [[x["title"], x["state_label"], x["sentence"]] for x in secs.values() if not x.get("pending") and not x.get("collapsed")]
-        put("table", f"[{name}] 판단 요약 (자세히 보기: 데이터 탭)", {"columns": ["질문", "상태", "결론"], "rows": rows})
+        # 화면과 같은 규칙이다. 아직 판단하지 못한 줄은 보고서에도 숙제처럼 남기지 않는다
+        rows = [[x["title"], x["state_label"], x["sentence"]] for x in secs.values() if not x.get("pending") and not x.get("collapsed") and x["state"] != "unknown"]
+        if rows:
+            put("table", f"[{name}] 판단 요약 (자세히 보기: 작업 흐름 탭)", {"columns": ["질문", "상태", "결론"], "rows": rows})
     inf = secs.get("influence")
     if inf and (want is None or "influence" in want):
         for v in (inf.get("variants") or [])[:2]:
@@ -3155,7 +3157,7 @@ def publish(db: Session, study: models.Study, flow_id: int | None, node_id: str 
     if par and (want is None or "pareto" in want):
         ch = next((c for c in par.get("charts") or [] if c["kind"] == "pareto"), None)
         if ch and ch["front"]:
-            # 데이터 탭과 색의 뜻을 맞춘다: 첫 번째 계열(주황)이 좋은 후보다
+            # 작업 흐름 탭의 그림과 색의 뜻을 맞춘다: 첫 번째 계열(주황)이 좋은 후보다
             on_front = {p[0] for p in ch["front"]}
             series = [{"name": "좋은 후보(해석 확인)", "points": [{"x": p[1], "y": p[2]} for p in ch["front"]]},
                       {"name": "해석한 설계", "points": [{"x": p[1], "y": p[2]} for p in ch["all"] if p[0] not in on_front]}]
