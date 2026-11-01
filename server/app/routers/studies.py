@@ -217,9 +217,9 @@ def _table_job(job_id: int, user, db: Session) -> models.TableJob:
 @router.get("/table-jobs", response_model=list[schemas.TableJobResponse])
 def table_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
     """화면이 돌아와 읽는 목록: 도는 작업과, 끝났지만 아직 확인하지 않은 작업.
-    프로젝트를 지운 뒤의 완료는 뺀다. 만든 Simulator가 함께 사라져 '만들었습니다 [열기]'가 거짓이 된다."""
+    Project나 Task를 지운 뒤의 완료는 뺀다. 만든 Simulator가 함께 사라져 '만들었습니다 [열기]'가 거짓이 된다."""
     j = models.TableJob
-    rows = (db.query(j).filter(j.user_id == user.id, (j.status == "running") | (j.seen.is_(False) & ((j.status != "done") | j.project_id.isnot(None))))
+    rows = (db.query(j).filter(j.user_id == user.id, (j.status == "running") | (j.seen.is_(False) & ((j.status != "done") | (j.project_id.isnot(None) & j.study_id.isnot(None)))))
             .order_by(j.id.desc()).limit(20).all())
     return [table_job.view(j) for j in rows]
 
@@ -731,12 +731,13 @@ def my_simulators(user=Depends(get_current_user), db: Session = Depends(get_db))
         if study.id in seen:
             continue
         seen.add(study.id)
-        own = m.created_by == user.id
-        owner = None if own else db.get(models.User, m.created_by) if m.created_by else None
         work = db.get(models.Work, study.work_id) if study.work_id else None
+        # 누구의 Simulator인가는 Task의 주인이 정한다. Task가 없는 옛 행은 만든 사람이다
+        own = work_service.is_mine(work, user.id) if work else m.created_by == user.id
+        by = db.get(models.User, work.owner_id if work else m.created_by) if (work or m.created_by) else None
         (mine if own else shared).append(_sim_item(m, study, url=f"/simulator/{m.id}", source="mine" if own else "project", project_id=project.id,
-                                                   project_name=project.name, work_id=study.work_id, work_name=work.name if work else None, shared_by=owner.display_name if owner else None,
-                                                   thumbnail_url=f"/api/models/{m.id}/thumbnail"))
+                                                   project_name=project.name, work_id=study.work_id, work_name=work.name if work else None, owner_name=by.display_name if by else None,
+                                                   shared_by=by.display_name if by and not own else None, thumbnail_url=f"/api/models/{m.id}/thumbnail"))
     now = datetime.now()
     access = (db.query(models.ShareAccess, models.ShareLink).join(models.ShareLink, models.ShareAccess.share_id == models.ShareLink.id)
               .filter(models.ShareAccess.user_id == user.id, models.ShareAccess.hidden.is_(False))

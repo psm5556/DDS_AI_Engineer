@@ -542,7 +542,8 @@ def reconcile_cases(conn, active: list[int], can_settle: bool = False):
                     if not ids:
                         _extracting.pop(study_id, None)
         # 상태만 보면 안 된다. cancelled는 위의 정리로도 되고, 이전 값으로 되돌린 중지는 complete다
-        stray = [i for i in running if (c := db.get(models.Case, i)) is not None and (c.run_by != user_id or c.stopped_by is not None)]
+        # 끊긴 사이 Task가 지워졌으면 행이 없다. 결과가 갈 곳이 없으니 솔버를 끝낸다
+        stray = [i for i in running if (c := db.get(models.Case, i)) is None or c.run_by != user_id or c.stopped_by is not None]
     if settle:
         conn.send({"type": "case.settle", "cases": settle})
     if stray:  # 다른 멤버가 넘겨받았거나 실행한 사람이 중지한 케이스: 이 PC의 솔버를 끝낸다
@@ -1068,6 +1069,31 @@ def publish_convergence(db, study, flow_id=None, node_id=None):
 
 
 # ---------- 학습 ----------
+def training_now(study_id: int) -> bool:
+    with _train_lock:
+        return any(j["study_id"] == study_id and j["status"] == "running" for j in _train_jobs.values())
+
+
+def study_files(db: Session, study: models.Study) -> list[Path]:
+    """이 스터디가 서버에 둔 파일과 폴더. 행을 지우면 찾을 길이 없으므로 지우기 전에 모은다. 번호가 다시 쓰여 옛 모델이 새 모델로 읽히면 안 된다."""
+    from .dataset import sample_rel, training_dir
+    from .recipe import recipe_path
+
+    pid, sid = study.project_id, study.id
+    out = [archive_path(pid, sid, 0).parent, field_path(pid, sid, 0, "x").parent.parent, recipe_path(study),
+           training_dir() / Path(sample_rel(pid, sid, 0, "x")).parent]
+    for m in db.query(models.SurrogateModel).filter_by(study_id=sid):
+        if m.path:
+            out.append(model_file(m.path))
+        out += list((settings.data_dir / "thumbnails").glob(f"m{m.id}_*"))
+    for fm in db.query(models.FieldModel).filter_by(study_id=sid):
+        if fm.path:
+            out.append(model_file(fm.path))
+    for ds in db.query(models.TrainingDataset).filter_by(study_id=sid):
+        out.append(training_dir() / "datasets" / str(ds.id))
+    return out
+
+
 def _model_path(model_id: int) -> Path:
     return settings.data_dir / "models" / f"model_{model_id}.joblib"
 

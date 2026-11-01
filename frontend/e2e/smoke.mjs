@@ -755,6 +755,23 @@ await step("Project > Task", async () => {
     await page.waitForURL(new RegExp(`/projects/${p.id}(/w/\\d+)?$`), { timeout: 15000 });
     await page.goto(`${BASE}/projects/${p.id}/new`);
     await page.waitForURL(new RegExp(`/projects/${p.id}/w/new$`), { timeout: 15000 });
+    // 지난 Task처럼 시작: 새 Task 화면에 목록이 있고, 고르면 가져오는 것과 안 가져오는 것을 적는다. 고르지 않으면 처음부터다
+    await page.goto(`${BASE}/projects/${p.id}/w/new`);
+    const srcRow = page.locator(".src-row").first();
+    await srcRow.waitFor({ timeout: 8000 });
+    await srcRow.click();
+    await page.locator(".src-card").getByText("가져오지 않는 것: 결과, 모델 파일").waitFor({ timeout: 5000 });
+    await shot("task-source-card");
+    await page.locator(".src-card").getByRole("button", { name: "고르지 않기" }).click();
+    await page.locator(".src-row").first().waitFor({ timeout: 5000 });
+    // 이 Task의 AI 끝내기: 기록과 결과는 그대로라고 말한다
+    await page.goto(`${BASE}/projects/${p.id}/w/${a.id}`);
+    await page.locator("button.ws-task").click();
+    await page.getByRole("menuitem", { name: "이 Task의 AI 끝내기" }).click();
+    await page.getByText("기록과 결과는 그대로이고").waitFor({ timeout: 5000 });
+    await shot("task-end-ai");
+    await page.getByRole("button", { name: "끝내기" }).click();
+    await page.getByText("AI를 끝냈습니다").first().waitFor({ timeout: 8000 });
     // 남의 Task: 머리글에 주인과 '보기만 가능'을 보인다. 적어 보내면 카드로 묻고, 말없이 내 Task로 넘어가지 않는다
     const uname = `tasker${Date.now()}`;
     const anon = await page.evaluate(async ([u]) => {

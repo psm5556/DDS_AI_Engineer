@@ -85,3 +85,33 @@ def test_server_sentences_use_the_new_words():
 def test_errors_for_others_work_say_what_to_do():
     text = (ROOT / "server" / "app" / "work_service.py").read_text(encoding="utf-8")
     assert "보기만 할 수 있습니다" in text and "→" in text
+
+
+def _copy_line(key: str) -> str:
+    text = (ROOT / "frontend" / "src" / "work" / "copy.ts").read_text(encoding="utf-8")
+    line = next((ln for ln in text.splitlines() if ln.strip().startswith(f"{key}:")), None)
+    assert line, f"copy.ts에 {key}가 없습니다"
+    return line
+
+
+def test_route_cards_are_one_breath_and_say_the_old_stays():
+    """카드 문장은 두 문장까지이고, 지난 것이 다치지 않는다고 말한다. 문구는 copy.ts 한 곳에 있다."""
+    for key in ("cardA", "cardANoFile", "cardB", "cardC", "cardD"):
+        line = _copy_line(key)
+        body = line.split("`", 1)[1]
+        assert "그대로" in line, key
+        assert body.count(".") <= 2, f"{key}: 문장이 너무 많습니다"
+
+
+def test_takeover_is_called_copy_not_continue():
+    """사용자 결정: '이어서'를 쓰지 않는다. 복사이며 연결이 아니다."""
+    for key in ("copyToPc", "cardC", "cardD", "copyCases", "copyAgentOff", "copied", "readOnly", "sourceBring", "sourceRowTip"):
+        assert "이어서" not in _copy_line(key) and "이어받" not in _copy_line(key), key
+    assert "내 PC로 복사해서 하기" in _copy_line("copyToPc")
+    server = (ROOT / "server" / "app" / "work_service.py").read_text(encoding="utf-8")
+    assert "내 PC로 복사해서 하기" in server and "왼쪽 '+ 새 Task'" not in server
+
+
+def test_end_ai_says_what_stays():
+    line = _copy_line("endAiBody")
+    assert "그대로" in line and "몇 분" in line

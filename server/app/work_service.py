@@ -584,14 +584,18 @@ def counts_for_delete(db: Session, work_id: int) -> dict[str, int]:
 
 def delete_work(db: Session, work: models.Work) -> list[int]:
     """Task와 그 안의 모든 것을 코드로 지운다. 기존 DB의 work_id 열에는 외래 키가 없어(ensure_columns는 열만 더한다) DB에 맡길 수 없다.
-    PC 폴더는 건드리지 않는다. 지운 스터디 id를 돌려준다(판단 도우미 기억을 비우려고)."""
+    서버 파일(해석 데이터·필드·모델·스크립트 묶음·학습 샘플·첨부)도 함께 지운다. PC 폴더는 건드리지 않는다. 지운 스터디 id를 돌려준다(판단 도우미 기억을 비우려고)."""
     wid = work.id
-    for model in (models.Report, models.Artifact, models.Flow):
+    for model in (models.Report, models.Artifact):
         db.query(model).filter_by(work_id=wid).delete(synchronize_session=False)
-    study_ids = []
-    for s in db.query(models.Study).filter_by(work_id=wid).all():  # ORM으로 지워야 케이스까지 함께 지워진다
+    study_ids, files = [], []
+    for s in db.query(models.Study).filter_by(work_id=wid).all():  # ORM으로 지워야 케이스까지 함께 지워진다. 모델·공유 링크는 DB의 외래 키가 지운다
         study_ids.append(s.id)
+        files += service.study_files(db, s)
         db.delete(s)
+    db.flush()
+    db.query(models.Flow).filter_by(work_id=wid).delete(synchronize_session=False)  # 스터디가 흐름을 가리키므로 그 뒤에 지운다
+    db.query(models.Work).filter_by(source_work_id=wid).update({models.Work.source_work_id: None}, synchronize_session=False)  # 복사해 간 Task는 그대로, 이름(source_label)만 남는다
     for c in db.query(models.ChatSession).filter_by(work_id=wid).all():
         hub.forget_chat(c.id)
         db.delete(c)
@@ -604,11 +608,14 @@ def delete_work(db: Session, work: models.Work) -> list[int]:
     db.delete(work)
     db.commit()
     shutil.rmtree(carried, ignore_errors=True)
-    for rel in stored:
+    for path in [*(settings.files_dir / rel for rel in stored), *files]:
         try:
-            (settings.files_dir / rel).unlink(missing_ok=True)
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink(missing_ok=True)
         except OSError as e:  # 지운 뒤라 되돌릴 수 없다. 파일이 잠겨 남아도 Task 삭제는 끝난 것이다
-            log.warning("첨부 파일을 지우지 못했습니다: %s (%s)", rel, e)
+            log.warning("서버 파일을 지우지 못했습니다: %s (%s)", path, e)
     return study_ids
 
 

@@ -3,7 +3,7 @@ import { FolderOpen, Pencil, Power, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { api, del, get, put } from "../api";
+import { api, del, get, post, put } from "../api";
 import { Confirm } from "../components/Modal";
 import { RenameModal } from "../components/ProjectMenu";
 import { useToast } from "../toast";
@@ -13,7 +13,7 @@ import { COPY, FEATURE, taskPath } from "./copy";
 /** Task 메뉴(사이드바 ⋯, 머리글 ▾): 이름 바꾸기 · Task 폴더 열기 · 이 Task의 AI 끝내기 · 삭제.
  *  남의 Task는 일반 멤버에게 메뉴가 없고, master·관리자에게는 이름 바꾸기·삭제만 보인다. 서버가 같은 규칙을 다시 본다. */
 export function WorkMenu({ work, at, onClose }: { work: WorkBrief; at: { x: number; y: number }; onClose: () => void }) {
-  const [dialog, setDialog] = useState<"rename" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"rename" | "delete" | "end" | null>(null);
   const [detail, setDetail] = useState<WorkDetail | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
@@ -46,6 +46,11 @@ export function WorkMenu({ work, at, onClose }: { work: WorkBrief; at: { x: numb
     },
     onError: (e: Error) => { err(e); onClose(); },
   });
+  const endAi = useMutation({
+    mutationFn: () => post(`/api/works/${work.id}/end-session`),
+    onSuccess: () => { toast(COPY.endAiDone); onClose(); },
+    onError: (e: Error) => { err(e); onClose(); },
+  });
   const openFolder = useMutation({
     mutationFn: () => api(`/api/projects/${work.project_id}/local/open?work_id=${work.id}`, { method: "POST", body: { path: "" } }),
     onSuccess: () => onClose(),
@@ -61,13 +66,16 @@ export function WorkMenu({ work, at, onClose }: { work: WorkBrief; at: { x: numb
     return <Confirm title={COPY.deleteTitle(work.name)} danger confirmLabel={COPY.remove} onClose={onClose} onConfirm={() => remove.mutate()}
       message={<>{COPY.deleteBody(detail?.n_simulators ?? 0, detail?.n_share_links ?? 0)}<br />{COPY.deleteKeep}</>} />;
   }
+  if (dialog === "end") {
+    return <Confirm title={COPY.endAi} confirmLabel={COPY.endAiConfirm} onClose={onClose} onConfirm={() => endAi.mutate()} message={COPY.endAiBody} />;
+  }
   const askDelete = () => { void get<WorkDetail>(`/api/works/${work.id}`).then(setDetail, () => setDetail(null)); setDialog("delete"); };
   const style = { left: Math.min(at.x, window.innerWidth - 230), top: Math.min(at.y, window.innerHeight - 200) };
   return createPortal(
     <div ref={ref} className="ctx-menu" role="menu" style={style} aria-label={COPY.menuTask}>
       {work.can_manage && <button role="menuitem" onClick={() => setDialog("rename")}><Pencil size={14} />{COPY.renameTask}</button>}
       {work.mine && !work.legacy && <button role="menuitem" onClick={() => openFolder.mutate()}><FolderOpen size={14} />{COPY.openTaskFolder}</button>}
-      {FEATURE.endAi && work.mine && <button role="menuitem"><Power size={14} />{COPY.endAi}</button>}
+      {FEATURE.endAi && work.mine && <button role="menuitem" onClick={() => setDialog("end")}><Power size={14} />{COPY.endAi}</button>}
       {work.can_manage && <><div className="ctx-sep" /><button role="menuitem" className="danger" onClick={askDelete}><Trash2 size={14} />{COPY.remove}</button></>}
     </div>,
     document.body,

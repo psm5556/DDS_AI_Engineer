@@ -3,9 +3,8 @@
  *  서버가 보내는 문장은 server/app/work_service.py에 같은 낱말로 있다. server/tests/test_work_wording.py가 옛말을 막는다. */
 export const W = { project: "Project", task: "Task", flow: "Task Flow" } as const;
 
-/** 아직 없는 기능을 있는 척하지 않게 한 곳에서 켜고 끈다.
- *  endAi: 'AI 끝내기'(session.close, 8단계)가 들어오면 켠다. */
-export const FEATURE = { endAi: false };
+/** 아직 없는 기능을 있는 척하지 않게 한 곳에서 켜고 끈다. */
+export const FEATURE = { endAi: true };
 
 const { project: P, task: T, flow: F } = W;
 
@@ -26,6 +25,9 @@ export const COPY = {
   openTaskFolder: `${T} 폴더 열기`,
   openProjectFolder: `${P} 폴더 열기`,
   endAi: `이 ${T}의 AI 끝내기`,
+  endAiBody: `AI를 끝냅니다. 기록과 결과는 그대로이고, 다음 요청은 몇 분 걸릴 수 있습니다.`,
+  endAiConfirm: `끝내기`,
+  endAiDone: `AI를 끝냈습니다. 다음 요청을 보내면 다시 시작합니다.`,
   remove: `삭제`,
   viewOnly: `보기만 가능`,
   // 첫 화면
@@ -64,7 +66,7 @@ export const COPY = {
   cardAStart: `새 ${T}로 시작`,
   cardB: `다른 부품으로 보입니다. 새 ${P}로 폴더와 결과를 따로 시작하고, 지금 ${P}는 그대로입니다.`,
   cardBStart: `새 ${P}로 시작`,
-  cardD: (project: string) => `'${project}' ${P}가 이미 있습니다. 그 안에 새 ${T}로 시작하면 지난 스크립트·설정을 이어 쓰고, 그 ${P}의 지난 것은 그대로입니다.`,
+  cardD: (project: string) => `'${project}' ${P}가 이미 있습니다. 그 안에 새 ${T}로 시작하면 지난 스크립트·설정을 가져와 쓰고, 그 ${P}의 지난 것은 그대로입니다.`,
   cardDStart: `그 ${P}에 새 ${T}`,
   cardDKeep: `새 ${P}로 계속`,
   keepHere: `여기서 계속`,
@@ -81,7 +83,7 @@ export const COPY = {
   toolMissing: (label: string) => `이 PC에 없는 툴: ${label} →`,
   toolMissingLink: `CAD·CAE 툴 화면에서 경로를 지정하세요`,
   rawLeft: (n: number, owner: string) => `원본 해석 파일 ${n}건은 ${owner}님 PC에만 있어 받을 수 없습니다. 숫자·이미지·3D 필드는 볼 수 있습니다.`,
-  copyAgentOff: `PC Agent가 꺼져 있습니다. 복사는 되고, 요청은 PC Agent가 연결되면 이어서 보냅니다.`,
+  copyAgentOff: `PC Agent가 꺼져 있습니다. 복사는 되고, 요청은 PC Agent가 연결되면 보냅니다.`,
   copied: (name: string) => `'${name}'로 복사했습니다. 원래 ${T}는 그대로입니다.`,
   // 빈 화면
   emptyOthers: `아직 기록이 없습니다`,

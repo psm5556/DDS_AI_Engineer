@@ -130,13 +130,19 @@ def delete_work(work_id: int, user: models.User = Depends(require_jwt), db: Sess
     """서버의 기록·흐름·결과·보고서·Simulator를 지운다. PC 폴더는 건드리지 않는다. 돌고 있으면 막는다: 끝나지 않은 일의 결과가 갈 곳을 잃는다."""
     w = _manageable(work_id, user, db)
     studies = [sid for sid, in db.query(models.Study.id).filter_by(work_id=w.id)]
-    if any(service.is_running(sid) for sid in studies):
+    # 서버가 다시 시작하면 도는 목록을 잊는다. PC가 꺼진 채 '실행 중'으로 남은 케이스도 표로 본다. 중지는 PC 없이 된다
+    active = db.query(models.Case.id).filter(models.Case.study_id.in_(studies), models.Case.status.in_(service.ACTIVE)).first() if studies else None
+    if active or any(service.is_running(sid) for sid in studies):
         raise HTTPException(409, "해석이 돌고 있어 지울 수 없습니다 → 데이터 탭에서 먼저 중지하세요")
+    if any(service.training_now(sid) for sid in studies):
+        raise HTTPException(409, "예측 모델을 학습하는 중이라 지울 수 없습니다 → 끝난 뒤에 지우세요")
     chats = [cid for cid, in db.query(models.ChatSession.id).filter_by(work_id=w.id)]
     if any(hub.status(cid).get("busy") for cid in chats):
         raise HTTPException(409, "AI가 답을 쓰는 중이라 지울 수 없습니다 → 먼저 중지하세요")
     if db.query(models.TableJob.id).filter_by(work_id=w.id, status="running").first():
         raise HTTPException(409, "표로 Simulator를 만드는 중이라 지울 수 없습니다 → 끝난 뒤에 지우세요")
+    for cid in chats:  # 끊긴 PC Agent에는 전하지 못한다. 그 CLI 세션은 다음 시작까지 떠 있을 뿐 결과는 갈 곳이 없어 받지 않는다
+        hub.end_session(cid)
     pid, wid = w.project_id, w.id
     insights.forget(work_service.delete_work(db, w))
     _changed(pid, wid, deleted=True)

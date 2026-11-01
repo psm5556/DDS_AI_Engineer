@@ -205,7 +205,11 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 
 **이전 기록.** 기존 Project의 대화·흐름·결과는 `이전 기록` Task 하나로 묶는다(서버 시작 때 `migrate_works`, 여러 번 돌아도 같고 처음 한 번 DB를 백업한다). 옛 대화를 가진 멤버는 함께 쓰며, 입력창은 그 기록 안 내 최근 대화로 보낸다. 대화 사이에는 `이전 기록 · 박프로 · 9월 12일` 경계 줄이 보인다.
 
-**Task 삭제.** 주인·master·관리자가 한다. 기록·Task Flow·결과·보고서·Simulator가 서버에서 지워지고 공유 링크도 끊어진다. PC 폴더는 지우지 않고 번호는 다시 쓰지 않는다. 해석 중이거나 AI가 답하는 중이거나 표로 Simulator를 만드는 중이면 막는다. Task가 0개가 된 Project는 남고 누르면 새 Task 화면이 열린다.
+**Task 삭제.** 주인·master·관리자가 한다. 기록·Task Flow·결과·보고서·Simulator가 서버에서 지워지고 공유 링크도 끊어진다(공유 링크가 있어도 막지 않고 수를 창에 알린다). 서버 파일(해석 데이터·필드·모델·스크립트 묶음·학습 샘플·복사해 둔 몫·첨부)도 지운다. PC 폴더는 지우지 않고 번호는 다시 쓰지 않는다. 해석 중(PC가 꺼져 실행 중으로 남은 케이스 포함, 중지는 PC 없이 된다), 예측 모델 학습 중, AI가 답하는 중, 표로 Simulator를 만드는 중이면 막는다. AI를 끝내고, 끊긴 PC Agent가 나중에 돌아와도 지운 케이스의 솔버는 끝내고 결과를 받지 않는다. 이 Task에서 복사해 간 Task는 그대로이고 이름(`source_label`)이 남는다. 다른 Task의 보고서가 인용한 값은 그 판에 저장되어 있어 사라지지 않는다. Task가 0개가 된 Project는 남고 누르면 새 Task 화면이 열린다.
+
+**이 Task의 AI 끝내기.** 작업 메뉴 한 곳이다(`POST /api/works/{id}/end-session`). 확인 창: `AI를 끝냅니다. 기록과 결과는 그대로이고, 다음 요청은 몇 분 걸릴 수 있습니다.` 답하는 중이거나 해석 중이면 막는다. Claude·Codex는 `session/close`, Gemini는 잊기만 한다. 다음 요청이 세션을 불러오고, 못 불러오면 요약으로 잇는다. 세션은 Task마다 유지하고 다른 Task로 옮겨 다녀도 끊지 않는다.
+
+**미리 띄우기.** 입력창에 첫 글자를 치면 뒤에서 AI를 준비한다(`POST /api/works/{id}/warm`). 구경만으로는 세션이 살아나지 않는다.
 
 **지난 Task처럼 시작.** 새 Task 화면과 첫 화면의 입력창 곁에 목록을 보인다(`GET /api/works/sources`, 내가 멤버인 Project의 것만, 지난 Task가 없으면 보이지 않는다). 고르면 카드에 가져오는 것(작업 순서, 스크립트, 설계변수·범위, 목적·구속)과 가져오지 않는 것(결과, 모델 파일)을 적는다. 고르지 않으면 처음부터 한다. 복사이며 연결이 아니다. 서버가 스크립트 묶음과 설정을 그 Task 몫으로 복사해 두고(`Work.carry`), PC Agent가 CLI를 띄우기 전에 Task 폴더로 받는다(내 PC에 원본 폴더가 있으면 그 `scripts`, 없으면 서버 묶음, 상한 50 MB, 있는 파일은 덮지 않는다). 첫 턴에 AI에게 `[시작점]`을 알리고, AI는 새 모델을 살핀 뒤 `clone_study`로 복제한다. 원본을 지워도 `source_label`이 남고 데이터 탭 맨 위에 `시작점: '1차 경량화'에서 가져옴 · 열기`가 보인다. 다른 Project에서 가져오면 치수·경로·품번이 함께 옮겨질 수 있다고 알린다. 레시피가 없으면 작업 순서와 설정만 가져온다.
 
@@ -229,7 +233,7 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 | A | `새 모델 spider_m9.prt로 보입니다. 새 Task는 '1차 경량화'의 작업 순서·스크립트·설정을 가져와 시작하고, 지금 Task는 그대로입니다.`(파일이 없으면 `새 모델 이야기로 보입니다. …`) | `새 Task로 시작` | `여기서 계속` |
 | B | `다른 부품으로 보입니다. 새 Project로 폴더와 결과를 따로 시작하고, 지금 Project는 그대로입니다.` | `새 Project로 시작`(요청과 첨부가 옮겨 간다) | `여기서 계속` |
 | C | `박프로님의 Task라 보기만 할 수 있습니다. 이 요청은 내 이름의 새 Task로 내 PC에서 하고, 원래 Task는 그대로입니다.` | `내 PC로 복사해서 하기` | `취소` |
-| D | `'스파이더 경량화' Project가 이미 있습니다. 그 안에 새 Task로 시작하면 지난 스크립트·설정을 이어 쓰고, 그 Project의 지난 것은 그대로입니다.` | `그 Project에 새 Task` | `새 Project로 계속` |
+| D | `'스파이더 경량화' Project가 이미 있습니다. 그 안에 새 Task로 시작하면 지난 스크립트·설정을 가져와 쓰고, 그 Project의 지난 것은 그대로입니다.` | `그 Project에 새 Task` | `새 Project로 계속` |
 
 - 카드가 떠 있을 때 Enter를 한 번 더 누르면 글자 링크다. 실수로 폴더가 생기지 않게 하기 위해서다.
 - `여기서 계속`을 고른 파일은 다시 묻지 않고, 요청에 `[경로]` 줄을 붙여 AI에도 알린다. 그 뒤 `suggest_route`는 카드를 올리지 않는다.
@@ -512,6 +516,8 @@ AI가 쓰는 MCP(AI가 쓰는 도구 연결)를 카드로 본다. 사용자가 �
   - 프로젝트 권한은 master(관리)와 member(사용)다.
   - 다른 멤버의 PC에서 해석한 케이스 폴더는 열 수 없다.
 - **코드:** `routers/auth.py` · `deps.py` · `routers/projects.py`
+
+**Simulator 목록·보고서.** Simulator 목록은 전체 그대로이고 항목에 Task 이름과 주인을 더한다(`박프로님의 Task`, `Project / Task`). 내 것인지는 Task의 주인이 정한다. 링크로 받은 항목에는 Project 정보가 없다. 보고서는 Task에 속하고 표지는 `Project · Task`다(이전 기록은 Project만). 문서 번호는 그대로이고 판은 그 Task 안에서 센다. 비교 보고서가 다른 Task의 결과를 인용하면 판에 저장한 값으로 그린다.
 
 **Task 권한 표(사용자 확정).** 서버가 쓰기 경로마다 막는다. 새 쓰기 경로가 이 표에 빠지면 `server/tests/test_work_permissions.py`가 실패한다. 이전 기록(`legacy_users`)에서 일하던 멤버는 주인으로 친다.
 
@@ -857,6 +863,7 @@ AI가 쓰는 MCP(AI가 쓰는 도구 연결)를 카드로 본다. 사용자가 �
 | Task Flow | `GET·POST /api/projects/{p}/flows` · `GET /api/flows/{f}` · `PUT …/status`(승인·반려를 서버가 `session_id` 대화로 전한다. 아직 못 전했으면 `start_queued`) · `PUT …/nodes/{n}` |
 | 결과 | `GET·POST /api/projects/{p}/artifacts` · `DELETE /api/artifacts/{a}` · `POST /api/projects/{p}/files`(이미지) · `GET …/files/{path}` |
 | 보고서 | `GET /api/projects/{p}/reports` · `GET …/reports/latest` · `GET /api/reports/{r}` · `POST /api/projects/{p}/reports` · `GET …/report-context` · `GET …/report?format=docx|html&report_id=` |
+| Task | `GET·POST /api/projects/{p}/works`(`from_work_id`로 지난 Task처럼 시작) · `GET·PUT·DELETE /api/works/{w}` · `GET /api/works/{w}/messages` · `POST /api/works/{w}/chat` · `GET /api/works/search` · `GET /api/works/sources?project_id=&q=` · `GET /api/works/{w}/takeover-preview` · `POST /api/works/{w}/takeover`(웹 로그인만) · `GET /api/works/{w}/carry/{study}`(PC Agent가 받는 묶음) · `POST /api/route-check` · `POST /api/projects/{p}/route-suggestion`(AI) · `POST /api/projects/{p}/attachments/adopt`(카드 B) · `POST /api/works/{w}/undo`(웹 로그인만) · `POST /api/works/{w}/warm` · `POST /api/works/{w}/end-session`(웹 로그인만) |
 | 스터디 | `GET·POST /api/projects/{p}/studies` · `GET /api/studies/{s}`(counts·best·running·extracting) · `…/cases` · `…/doe` · `…/run` · `…/stop`(대기·실행 중 케이스 중지) · `…/train` · `…/suggest` · `…/outputs` · `…/train_field` · `…/field-models` |
 | 판단 도우미 | `GET /api/studies/{s}/insights`(`?detail=summary`는 그림 자료 없이; status·stale·overview·sections) · `GET …/insights/pareto?a&a_goal&b&b_goal` · `POST …/insights/publish`(flow_id·node_id·keys) · `GET /api/models/{m}/trust-line` · `GET /api/shares/{t}/trust-line` |
 | 케이스 데이터 | `POST /api/cases/{c}/fields` · `POST·GET /api/cases/{c}/archive` · `GET …/archive/file` · `POST /api/cases/{c}/train_sample?spec_hash=` |
@@ -880,7 +887,7 @@ PC Agent 메시지(`/ws/agent`, `server/app/agent/link.py` 머리 주석)
 ## 7. MCP 툴 (AI가 쓰는 것)
 | 서버 | 툴 |
 |---|---|
-| dds-flow | `propose_flow` · `get_flow` · `update_node` · `publish_artifact` · `publish_image` · `set_project_info` · `get_report_context` · `write_report` · `make_report` |
+| dds-flow | `propose_flow` · `get_flow` · `update_node` · `publish_artifact` · `publish_image` · `set_project_info` · `list_works` · `set_work_info` · `suggest_route`(새 모델·다른 부품이 확실할 때, 돌리지 않고 부른 뒤 턴을 끝낸다) · `get_report_context` · `write_report` · `make_report` |
 | dds-cae | `case_contract` · `list_tools` · `project_folder` · `run_script` · `script_status` |
 | dds-study | `list_adapters` · `create_study`(outputs) · `add_outputs` · `generate_doe` · `run_cases`(flow_id) · `delete_case` · `get_study` · `case_data` · `train_surrogate` · `suggest_next` · `optimize` · `study_insights` · `train_field_model` · `build_dataset` · `deploy_model` · `predict` |
 | dds-live | `live_status` · `live_launch` · `live_info` · `live_set_params` · `live_view` · `live_undo` · `live_exec` · `live_result` · `live_capture` |

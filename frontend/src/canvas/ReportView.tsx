@@ -194,7 +194,7 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
         <header className="report-cover">
           <Wordmark size="l" />
           <h1>{rep.title}</h1>
-          <p className="report-project">{rep.project_name}</p>
+          <p className="report-project">{rep.project_name}{rep.work_name ? ` · ${rep.work_name}` : ""}</p>
           <dl className="report-issue">
             <div><dt>문서 번호</dt><dd className="report-no">{rep.doc_no}</dd></div>
             <div><dt>판</dt><dd>{rep.edition}판</dd></div>
@@ -221,7 +221,9 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
               if ("md" in p) return <Markdown key={i} text={p.md} />;
               // 판에 저장된 값으로 그린다. 같은 제목으로 다시 게시되어도 이 판의 숫자는 글과 같아야 한다. 지운 결과는 어느 판에서도 빠진다
               const live = byId.get(p.id);
-              const a = live && rep.frozen?.[p.id] ? { ...live, ...rep.frozen[p.id] } : live;
+              // 비교 보고서는 다른 Task의 결과를 인용한다. 이 Task 목록에 없어도 판에 저장한 값으로 그린다
+              const saved = rep.frozen?.[p.id];
+              const a = saved ? { id: p.id, project_id: rep.project_id, flow_id: null, node_id: null, created_at: rep.created_at, ...live, ...saved } as Artifact : live;
               if (!a) return <p key={i} className="small muted rep-missing">(삭제된 결과입니다: {p.caption})</p>;
               const label = a.kind === "table" ? `표 ${++tbl}` : `그림 ${++fig}`;
               return (

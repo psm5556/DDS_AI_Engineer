@@ -176,8 +176,13 @@ class FakeCli:
     def _call(self, method: str, params: dict) -> dict:
         if method == "initialize":
             self.log("initialize")
-            return {"protocolVersion": 1, "agentCapabilities": {"loadSession": self.load_ok}, "authMethods": [],
+            return {"protocolVersion": 1, "agentCapabilities": {"loadSession": self.load_ok, "sessionCapabilities": {"close": {}}}, "authMethods": [],
                     "agentInfo": {"name": "fake-acp", "version": "1"}}
+        if method == "session/close":
+            sid = params.get("sessionId")
+            self.log("session_close", sid=sid)
+            self.live.discard(sid)
+            return {}
         if method == "session/new":
             if self.auth_error:
                 raise RuntimeError("-32000:Authentication required")

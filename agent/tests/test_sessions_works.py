@@ -245,3 +245,62 @@ def test_gemini_session_copies_skills_only_for_gemini(tmp_path):
         raise
     finally:
         s.down()
+
+
+# ---------- 미리 띄우기 · 끝내기 ----------
+def test_looking_does_not_start_ai_and_warm_does(s):
+    """구경만으로는 세션이 살아나지 않는다. 타자를 치기 시작하면 뒤에서 준비하고, 보낼 때 다시 열지 않는다."""
+    w = _task(s, "미리")
+    chat = _chat(w)
+    made = count(s.state, "session_new")
+    s.c.get(f"/api/works/{w['id']}").raise_for_status()
+    s.c.get(f"/api/works/{w['id']}/messages").raise_for_status()
+    s.c.get(f"/api/projects/{s.pid}/local/tree", params={"work_id": w["id"]})
+    assert count(s.state, "session_new") == made
+    assert s.c.post(f"/api/works/{w['id']}/warm").json()["warming"] is True
+    wait_for(lambda: count(s.state, "session_new") == made + 1, what="미리 띄우기", timeout=30)
+    wait_for(lambda: s.c.post(f"/api/works/{w['id']}/warm").json()["warming"] is False, what="이미 떠 있음", timeout=10)
+    s.turn(chat, "시작")
+    assert count(s.state, "session_new") == made + 1, "보낼 때 세션을 또 열지 않는다"
+
+
+def test_end_session_closes_and_next_turn_comes_back(s):
+    w = _task(s, "끝내기")
+    chat = _chat(w)
+    s.turn(chat, "시작")
+    loads = count(s.state, "session_load")
+    closes = count(s.state, "session_close")
+    assert s.c.post(f"/api/works/{w['id']}/end-session").json() == {"ok": True}
+    wait_for(lambda: count(s.state, "session_close") == closes + 1, what="session/close", timeout=20)
+    assert len(s.c.get(f"/api/works/{w['id']}/messages").json()) >= 2, "기록은 그대로다"
+    s.turn(chat, "다시")
+    assert count(s.state, "session_load") == loads + 1, "다음 요청이 세션을 다시 불러온다"
+
+
+def test_end_session_on_other_task_leaves_this_one(s):
+    a, b = _task(s, "가"), _task(s, "나")
+    s.turn(_chat(a), "시작")
+    s.turn(_chat(b), "시작")
+    loads = count(s.state, "session_load")
+    s.c.post(f"/api/works/{a['id']}/end-session").raise_for_status()
+    s.turn(_chat(b), "이어서")
+    assert count(s.state, "session_load") == loads, "옆 Task의 AI는 그대로다"
+
+
+def test_gemini_has_no_close_so_it_only_forgets():
+    """표시하지 않은 CLI에는 보내지 않는다. 다음 요청이 session/load로 잇는다."""
+    from types import SimpleNamespace
+
+    from agent.dds_agent.acp_runner import AcpRunner
+
+    r = AcpRunner(["x"], lambda *a: None, lambda *a: None)
+    sent = []
+    r._request = lambda cli, method, params, **k: sent.append(method)
+    r._cli = SimpleNamespace(sessions={"s"}, proc=SimpleNamespace(poll=lambda: None))
+    r.agent_info = {"agentCapabilities": {}}
+    r.close_session("s")
+    assert sent == [] and "s" not in r._cli.sessions
+    r._cli.sessions.add("t")
+    r.agent_info = {"agentCapabilities": {"sessionCapabilities": {"close": {}}}}
+    r.close_session("t")
+    assert sent == ["session/close"] and "t" not in r._cli.sessions

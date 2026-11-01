@@ -15,7 +15,7 @@ import type { DataSource, QualityLevel } from "../types";
 interface Item {
   study_id: number; study_name: string; model_id: number; version: number | null; outputs: string[]; n_variables: number; n_train: number; url: string;
   thumbnail_url: string | null;
-  source: "mine" | "project" | "link"; status: "active" | "stopped" | "expired"; project_id: number | null; project_name: string | null; work_id?: number | null; work_name?: string | null;
+  source: "mine" | "project" | "link"; status: "active" | "stopped" | "expired"; project_id: number | null; project_name: string | null; work_id?: number | null; work_name?: string | null; owner_name?: string | null;
   shared_by: string | null; note: string; share_id: number | null; updated_at: string | null;
   quality?: QualityLevel | null; data_source?: Partial<DataSource> | null;
 }
@@ -29,7 +29,7 @@ function savedView(): ViewMode {
 }
 
 function meta(x: Item): string {
-  const who = x.source === "link" ? `${x.shared_by ?? "다른 사용자"}님이 공유` : x.source === "project" ? `${x.shared_by ?? "멤버"}님이 배포` : "";
+  const who = x.source === "link" ? `${x.shared_by ?? "다른 사용자"}님이 공유` : x.source === "project" ? `${x.owner_name ?? x.shared_by ?? "멤버"}님의 ${W.task}` : "";
   const where = x.project_name && x.work_name ? `${x.project_name} / ${x.work_name}` : x.project_name;
   return [who, where, x.note, dataSourceText(x.data_source)].filter(Boolean).join(" · ");
 }

@@ -29,13 +29,19 @@ def _new_results(db: Session, rep: models.Report) -> int:
 
 
 def _issue(db: Session, project: models.Project, rep: models.Report | None, user: models.User | None = None) -> report.Issue:
-    """틀(표지·머리글·맺음말)에 쓰는 발행 정보. 판은 프로젝트 안에서 몇 번째인지다."""
+    """틀(표지·머리글·맺음말)에 쓰는 발행 정보. 판은 그 Task 안에서 몇 번째인지다. 문서 번호는 Project 번호와 보고서 번호로 그대로다."""
     practice = service.practice_note(db, project.id, rep.work_id if rep else None)
     if rep is None:
         return report.make_issue(project, requester=user.display_name if user else "", practice=practice)
     who = db.get(models.User, rep.created_by) if rep.created_by else None
-    edition = db.query(models.Report).filter(models.Report.project_id == project.id, models.Report.id <= rep.id).count()
+    edition = db.query(models.Report).filter(models.Report.project_id == project.id, models.Report.work_id == rep.work_id, models.Report.id <= rep.id).count()  # 이 Task의 몇 번째 판인가
     return report.make_issue(project, rep, edition, who.display_name if who else "", practice=practice)
+
+
+def _cover_work(db: Session, work_id: int | None) -> str | None:
+    """표지의 Task 이름. 이전 기록은 Project 전체의 기록이라 적지 않는다."""
+    w = db.get(models.Work, work_id) if work_id else None
+    return w.name if w and not w.legacy else None
 
 
 def _response(db: Session, rep: models.Report) -> dict:
@@ -43,7 +49,7 @@ def _response(db: Session, rep: models.Report) -> dict:
     project = db.get(models.Project, rep.project_id)
     i = _issue(db, project, rep)
     return {**schemas.ReportResponse.model_validate(rep).model_dump(), "new_results": _new_results(db, rep),
-            "body": report.clean_body(rep.body, rep.title), "project_name": project.name, "doc_no": i.doc_no,
+            "body": report.clean_body(rep.body, rep.title), "project_name": project.name, "work_name": _cover_work(db, rep.work_id), "doc_no": i.doc_no,
             "edition": int(i.edition.removesuffix("판")), "issued_at": i.issued_at, "author": i.author,
             "provenance": i.provenance, "colophon": i.colophon}
 
@@ -174,9 +180,10 @@ def download_report(format: str = "html", flow_id: int | None = None, report_id:
     arts = q.all()
     name = f"{project.name}_보고서_{date.today():%Y%m%d}"
     issue = _issue(db, project, rep, user)
+    cover = _cover_work(db, rep.work_id if rep else work_id)
     if format == "docx":
-        data = report.build_docx(project, arts, flow, rep, issue)
+        data = report.build_docx(project, arts, flow, rep, issue, work_name=cover)
         return Response(data, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.docx"})
-    return HTMLResponse(report.build_html(project, arts, flow, rep, issue),
+    return HTMLResponse(report.build_html(project, arts, flow, rep, issue, work_name=cover),
                         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.html"})

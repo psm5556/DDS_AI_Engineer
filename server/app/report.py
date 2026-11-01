@@ -362,6 +362,12 @@ COVER_PROJECT, COVER_SUMMARY = 120, 240
 STALE_NOTE = "이 판을 쓴 뒤 바뀐 결과가 있습니다. 이 판은 쓸 때의 값을 저장하지 않아 그림과 표는 지금 값으로 보입니다. 글의 숫자와 다를 수 있습니다."
 
 
+def _from_saved(project: models.Project, aid: int, saved: dict | None) -> models.Artifact | None:
+    """판에 저장해 둔 값만 남은 결과(그 Task를 지웠다). 세션에 넣지 않는다."""
+    item = (saved or {}).get(str(aid))
+    return models.Artifact(id=aid, project_id=project.id, kind=item.get("kind"), title=item.get("title"), payload=item.get("payload"), created_at=datetime.min) if item else None
+
+
 def _as_written(a: models.Artifact, saved: dict | None) -> models.Artifact:
     """판에 저장된 값으로 만든 복사본. 세션에 넣지 않으므로 카드(최신 값)는 그대로다."""
     if not saved:
@@ -370,7 +376,8 @@ def _as_written(a: models.Artifact, saved: dict | None) -> models.Artifact:
                            payload=saved.get("payload"), created_at=a.created_at, updated_at=a.updated_at)
 
 
-def compose(project: models.Project, arts: list[models.Artifact], flow: models.Flow | None, rep: models.Report | None = None) -> Composed:
+def compose(project: models.Project, arts: list[models.Artifact], flow: models.Flow | None, rep: models.Report | None = None, work_name: str | None = None) -> Composed:
+    """work_name: 표지의 Task 이름. 이전 기록은 비워 둔다(Project 전체의 기록이다)."""
     toc = report_md.Toc()
     blocks: list[Block] = []
     if rep:
@@ -381,7 +388,7 @@ def compose(project: models.Project, arts: list[models.Artifact], flow: models.F
         for kind, text, aid in split_body(clean_body(rep.body, rep.title)):
             if kind == "md":
                 blocks.append(Block("md", parsed=report_md.parse(text, toc)))
-            elif (a := by_id.get(aid)) is not None:  # 지워진 결과는 파일에서 빠지고 번호도 세지 않는다
+            elif (a := by_id.get(aid) or _from_saved(project, aid, saved)) is not None:  # 지워진 결과는 파일에서 빠지고 번호도 세지 않는다. 판에 저장해 둔 값이 있으면 다른 Task를 지워도 그린다
                 shown.append(a)
                 a = _as_written(a, (saved or {}).get(str(aid)))
                 blocks.append(Block("figure", art=a, text=f"{_figure_label(a.kind, counters)}. {text or a.title}"))
@@ -399,7 +406,9 @@ def compose(project: models.Project, arts: list[models.Artifact], flow: models.F
         if len(desc := safe_text(project.description or "")) > COVER_SUMMARY:
             blocks.insert(0, Block("note", text=desc))  # 표지에는 앞부분만 두고 전문은 본문 첫머리에 둔다
     # 결과 모음은 프로젝트 이름이 곧 제목이므로 표지에 두 번 쓰지 않는다. 표지 한 쪽에 발행 정보까지 들어가게 긴 글은 줄인다
-    return Composed(safe_text(rep.title if rep else project.name), _cut(safe_text(project.name), COVER_PROJECT) if rep else "",
+    pname = safe_text(project.name)
+    line = f"{pname} · {safe_text(work_name)}" if rep and work_name else pname if rep else safe_text(work_name or "")
+    return Composed(safe_text(rep.title if rep else project.name), _cut(line, COVER_PROJECT),
                     "" if rep else _cut(safe_text(project.description or ""), COVER_SUMMARY), blocks, toc.items)
 
 
@@ -552,9 +561,9 @@ def _cover_class(title: str) -> str:
 
 
 def build_html(project: models.Project, arts: list[models.Artifact], flow: models.Flow | None,
-               rep: models.Report | None = None, issue: Issue | None = None) -> str:
+               rep: models.Report | None = None, issue: Issue | None = None, work_name: str | None = None) -> str:
     """파일 하나로 끝나는 문서: 파비콘·로고·그림을 안에 넣어 외부 요청이 없다. 목차는 스크립트 없이도 동작하고, 스크립트는 현재 위치 표시만 한다."""
-    d, i = compose(project, arts, flow, rep), issue or make_issue(project, rep)
+    d, i = compose(project, arts, flow, rep, work_name), issue or make_issue(project, rep)
     logo = _logo_svg()
     wordmark = f'<span class="mark">{logo}<b>DDS</b><span>Conversa</span></span>'
     body = "".join(_block_html(project.id, b) for b in d.blocks)
@@ -1122,8 +1131,8 @@ def _properties(doc, d: Composed, i: Issue) -> None:
 
 
 def build_docx(project: models.Project, arts: list[models.Artifact], flow: models.Flow | None,
-               rep: models.Report | None = None, issue: Issue | None = None) -> bytes:
-    d, i = compose(project, arts, flow, rep), issue or make_issue(project, rep)
+               rep: models.Report | None = None, issue: Issue | None = None, work_name: str | None = None) -> bytes:
+    d, i = compose(project, arts, flow, rep, work_name), issue or make_issue(project, rep)
     doc = Document()
     _setup_styles(doc)
     _setup_page(doc, d, i)

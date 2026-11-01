@@ -49,13 +49,13 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 ## 3. 디렉터리 지도
 | 경로 | 내용 |
 |---|---|
-| `server/app/` | FastAPI. `main.py`(앱·정적 파일), `models.py`(SQLAlchemy), `schemas.py`, `config.py`(포트·data_dir) |
+| `server/app/` | FastAPI. `main.py`(앱·정적 파일), `models.py`(SQLAlchemy), `schemas.py`, `config.py`(포트·data_dir), `work_service.py`(Task 권한·가져오기·삭제), `route_check.py`(경로 규칙) |
 | `server/app/work_service.py` | Project > Task(`Work`): 어느 Task에 넣고 읽을지(`work_scope`·`write_work`, 헤더 `X-DDS-Work`), 이전 `migrate_works`, 합산 상태, 검색, 삭제 |
 | `server/app/routers/` | `auth` 계정·PIN · `projects` 프로젝트·멤버 · `works` Task · `sessions` 대화·첨부·내 PC 폴더 · `flows` 작업 흐름·결과 · `studies` DOE·케이스·모델·Simulator·공유 · `agents` PC Agent 배포·설치·모니터링 · `market` 이전 방식의 스킬 등록·설치·회수(화면 없음, 등록은 관리자만) · `market_options` 마켓 옵션 항목과 켜고 끄기 |
 | `server/app/agent/` | `hub.py` 대화 턴·세션 관리(ACP 이벤트 → 메시지) · `link.py` PC Agent WebSocket 연결과 요청/응답 |
 | `server/app/study/` | `doe`(LHS/Sobol) · `surrogate`(GP) · `bayesopt`(EI·제약) · `fieldmodel`(3D 형상·필드 PCA+GP) · `thumbnail`(Simulator 카드 그림) · `service` · `importer`(표·폴더 등록) · `table_job`(표 → 학습 → 배포 서버 작업) · `recipe`(스크립트 묶음) · `insights_calc`·`insights`(판단 도우미) |
 | `server/app/report.py`·`report_md.py`·`assets/` | Word·HTML 보고서와 공통 틀 · 본문 markdown 해석 · 로고·파비콘 사본 |
-| `agent/dds_agent/` | PC Agent. `main.py`(서버 메시지 처리 `handle()`) · `acp_runner.py`(AI CLI) · `executor.py`(케이스 실행) · `workspace.py`(로컬 폴더 규칙·직접 지정 폴더) · `job_runner.py`(로컬/HPC) · `demo_agent.py` · `market.py`(마켓 항목 받기·검증·회수) · `installer.py`·`updater.py`·`tray.py` |
+| `agent/dds_agent/` | PC Agent. `main.py`(서버 메시지 처리 `handle()`) · `acp_runner.py`(AI CLI) · `executor.py`(케이스 실행) · `workspace.py`(로컬 폴더 규칙·직접 지정 폴더) · `carry.py`(새 Task의 첫 AI 전에 스크립트·입력 복사) · `job_runner.py`(로컬/HPC) · `demo_agent.py` · `market.py`(마켓 항목 받기·검증·회수) · `installer.py`·`updater.py`·`tray.py` |
 | `mcp_servers/` | AI CLI가 쓰는 MCP 툴: `dds_flow`(작업 흐름·결과 게시·보고서) · `dds_cae`(스크립트·툴 실행, `list_tools`) · `dds_study`(DOE·학습·BO·배포) · `dds_live`(실행 중인 CAD/CAE와 Live Link) |
 | `cae_adapters/` | `catalog.py`(지원 툴 29종 단일 목록·기본 설치 경로·설치 흔적 단어) · `tool_commands.py`(실행 명령 키) · `script.py`(케이스 스크립트 실행) · `mock.py`(연습용 솔버) · `tabular.py`(표 읽기) · `result_scan.py`(해석 폴더 찾기) · `recipe_bundle.py`(스크립트 묶음) |
 | `agent-context/` | AI CLI에게 주는 작업 규칙(`INSTRUCTIONS.md`)과 툴별 스킬(`skills/<툴>/SKILL.md`·`scripts/`). PC Agent가 프로젝트 폴더로 동기화하고(`agent/dds_agent/context.py`), DDS만 만든 항목은 탐색기에서 숨긴다. 사용자 규칙 파일은 표시 구간만 고친다(`docs/local-data.md`) |
@@ -132,6 +132,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | Task 권한 | 입구 `server/app/work_service.py` `require_mine`·`require_study_write` · 표 `docs/product-spec.md` 4-1절 · 시험 `server/tests/test_work_permissions.py`(새 쓰기 경로를 표에 넣어야 통과한다) |
 | 지난 Task처럼 시작·내 PC로 복사해서 하기 | 서버 `work_service.py` `start_from`·`take_over`·`sources` · PC로 복사 `agent/dds_agent/carry.py` · AI에게 알리기 `agent/hub.py` `_carry_text` · 화면 `frontend/src/work/SourcePicker.tsx`·`RouteCard.tsx` · 시험 `server/tests/test_work_sources.py`·`agent/tests/test_work_carry.py`·E22·E23 |
 | 경로 카드 | 규칙 `server/app/route_check.py` · 되돌리기 `work_service.py` `undo_work` · AI `mcp_servers/dds_flow.py` `suggest_route`·`INSTRUCTIONS.md` 1-1-1절 · 화면 `frontend/src/work/RouteCard.tsx`·`ChatView.tsx` `submit` · 시험 `server/tests/test_route_check.py`(문장 표) |
+| Task 삭제·AI 끝내기·미리 띄우기 | 삭제 `work_service.py` `delete_work`(서버 파일까지 코드로 지운다, PC 폴더는 남긴다) · 끝내기 `routers/works.py` `/end-session`, `hub.end_session`, `session.close` · 미리 띄우기 `/warm`, `hub.warm` · 시험 `server/tests/test_work_delete.py`·`agent/tests/test_sessions_works.py` |
 | Simulator | 화면 `frontend/src/pages/SimulatorPage.tsx`(`SimulatorView`를 탭과 넓은 화면이 함께 쓴다) · 목록 `SimulatorsPage.tsx` · 버전·3D 묶기 `server/app/study/service.py` `deploy_version`·`field_models_for` · 목록·공유 `server/app/routers/studies.py` · 규칙 `docs/product-spec.md` 3-7절 |
 | DOE·학습·최적화 로직 | `server/app/study/*` + `server/tests` |
 | 보고서 | AI가 새로 쓰는 보고서: 자료·저장 `server/app/routers/reports.py`, 틀(표지·목차·맺음말·머리글)과 Word·HTML `server/app/report.py`, 본문 해석 `server/app/report_md.py`, 로고·파비콘 사본 `server/app/assets/`(`frontend/public`과 같아야 한다), 웹 탭 `frontend/src/canvas/ReportView.tsx`, 쓰는 규칙(AI는 제목과 본문만, `##`부터) `agent-context/INSTRUCTIONS.md` 1-0절·`mcp_servers/dds_flow.py` `write_report`, 검사 `server/tests/test_report_template.py` |

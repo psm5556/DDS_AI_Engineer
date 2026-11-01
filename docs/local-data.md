@@ -70,6 +70,8 @@
 ## 폴더 이름
 기본 위치의 Project 폴더는 항상 `P0012_<이름>`, Task 폴더는 항상 `T01_<이름>`이다. 번호만 있는 폴더는 만들지 않고, 이름을 모르면 `P0012_untitled`로 시작해 이름을 알게 되면 바꾼다. 코드는 `agent/dds_agent/workspace.py` `sync_name`·`sync_work_name`이고 절차는 같다(놓이는 곳과 기록 파일만 다르다). 아래 표는 Project 기준이고 Task도 같다. Task의 "살아 있는 세션"은 **그 Task의 세션**만 본다: 옆 Task의 세션은 이 폴더를 잡지 않는다. 해석은 어느 Task든 돌면 기다린다.
 
+**가져온 Task(`지난 Task처럼 시작`, `내 PC로 복사해서 하기`):** CLI가 뜨기 전에 PC Agent가 Task 폴더로 복사한다. 내 PC에 원본 Task 폴더가 있으면 그 `scripts/`(상한 50 MB, 지침 파일·숨김 폴더는 뺀다), 없으면 서버의 그 Task 몫 묶음을 받고, `내 PC로 복사해서 하기`는 입력 첨부도 `inputs/`로 받는다. 이미 있는 파일은 덮지 않는다. 복사이며 연결이 아니다. 경로 카드의 `되돌리기`는 폴더에 가져온 파일과 규칙 파일뿐일 때만 지우고, CLI가 잡고 있으면 PC Agent가 다음 시작 때 지운다(`.dds-discard.json`). Task를 삭제해도 PC 폴더는 지우지 않는다.
+
 **이름을 바꾸는 순서:** Task → Project → 안쪽 접합 재생성. Project의 실제 이름을 바꾸면 Task 접합의 대상 경로가 낡는다(옛 이름 접합이 지워지면 끊긴다). 바꾼 직후 새 경로로 다시 만든다. Task 세션이 살아 있으면 Project 폴더도 잠겨 있으므로 둘 다 접합으로 보인다. 서버 메시지는 `work.renamed`(이름이 바뀔 때)·`work.names`(연결할 때)이고, 기다리는 Task는 `index.json`의 `works_pending`에 남아 Agent를 다시 시작해도 이어 간다.
 
 **이름을 바꾸면 무슨 일이 일어나나**

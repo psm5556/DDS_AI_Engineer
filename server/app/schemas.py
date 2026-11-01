@@ -408,6 +408,7 @@ class ReportResponse(ORM):
     frozen: dict[str, dict] | None = None  # 본문에 넣은 결과의 쓸 때 값. 화면도 파일과 같은 값을 그린다. 이 기능 전에 쓴 판은 없다
     # 보고서 틀(표지·맺음말): 파일(report.py)과 웹 화면이 같은 글을 쓰도록 서버가 만들어 준다
     project_name: str = ""
+    work_name: str | None = None  # 표지의 Task. 이전 기록은 비어 있다
     doc_no: str = ""  # DDS-P0012-R003
     edition: int = 1  # 프로젝트 안에서 몇 번째 판인지
     issued_at: str = ""  # 발행 일시 'YYYY-MM-DD HH:MM'
@@ -786,6 +787,7 @@ class SimulatorItem(BaseModel):
     project_name: str | None = None
     work_id: int | None = None  # 카드를 누르면 그 Task로 간다
     work_name: str | None = None
+    owner_name: str | None = None  # 그 Task의 주인. 링크로 받은 것에는 없다
     shared_by: str | None = None
     note: str = ""
     share_id: int | None = None
