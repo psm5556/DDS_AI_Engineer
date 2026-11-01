@@ -71,7 +71,7 @@ def field_jobs(db: Session, m: models.SurrogateModel, study: models.Study) -> li
     for fm in service.field_models_for(db, study.id, m):
         if not fm.path:
             continue
-        rom = Path(fm.path)
+        rom = service.model_file(fm.path)
         try:
             stamp = rom.stat().st_mtime_ns
         except OSError:

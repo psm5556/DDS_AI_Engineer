@@ -935,7 +935,7 @@ def test_optimum_is_not_good_when_the_search_never_happened(tmp_path):
         out = insights.compute(_ishigami_snap(tmp_path, seed), True)
         opt = _section_of(out, "optimum")
         assert opt["state"] == "caution" and opt["state_label"] == "아직 쓰지 마세요", opt["sentence"]
-        assert opt["sentence"].startswith("아직 정하지 마세요") and "케이스" in opt["sentence"]
+        assert opt["sentence"].removeprefix(insights.PRACTICE_MARK).startswith("아직 정하지 마세요") and "케이스" in opt["sentence"]
         assert out["overview"]["next"]["key"] == "poor"
 
 

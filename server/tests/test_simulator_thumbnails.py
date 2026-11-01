@@ -15,7 +15,7 @@ from server.tests.test_simulators import _deploy, _study, _train
 from server.app import models
 from server.app.config import settings
 from server.app.database import SessionLocal
-from server.app.study import thumbnail
+from server.app.study import service, thumbnail
 
 PNG = b"\x89PNG\r\n\x1a\n"
 
@@ -233,7 +233,7 @@ def test_failed_render_falls_back_and_is_not_retried(client, monkeypatch):  # no
     viewer, _ = _auth(client, "thumb_viewer5", admin)
     pid, sid, v1, fm = _sim_3d(client, admin, "실패")
     with SessionLocal() as db:
-        Path(db.get(models.FieldModel, fm["id"]).path).write_bytes(b"not a joblib file")
+        service.model_file(db.get(models.FieldModel, fm["id"]).path).write_bytes(b"not a joblib file")
     calls = []
     real = thumbnail._render
     monkeypatch.setattr(thumbnail, "_render", lambda job: (calls.append(1), real(job))[1])
@@ -257,7 +257,7 @@ def test_failed_render_falls_back_and_is_not_retried(client, monkeypatch):  # no
 
     # 모델 파일이 아예 없어도 같다
     with SessionLocal() as db:
-        Path(db.get(models.FieldModel, fm["id"]).path).unlink()
+        service.model_file(db.get(models.FieldModel, fm["id"]).path).unlink()
     assert client.get(f"/api/shares/{tok}/thumbnail", headers=viewer).status_code == 204
     assert len(calls) == 2
 

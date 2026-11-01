@@ -36,6 +36,7 @@ export function ModelTrust({ model, source }: { model: SurrogateModel; source?: 
         ))}</span>
         <span className="small muted">R²(결정계수)는 1에 가까울수록 정확합니다</span>
       </div>
+      {source?.notice && <div className="notice warn" role="status"><AlertTriangle size={15} /><span>{source.notice}</span></div>}
       {q.warnings.length > 0 && (
         <div className={`notice ${q.level === "good" ? "info" : "warn"}`} role="status">
           <AlertTriangle size={15} />

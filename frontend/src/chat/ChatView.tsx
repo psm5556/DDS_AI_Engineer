@@ -17,7 +17,7 @@ import { clockOf, WaitingBubble, type TurnClock } from "./WaitingBubble";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
 import { clip, readableArgs, toolLabel } from "./labels";
 import { Skeleton } from "../components/Skeleton";
-import { AGENT_PREFILL, AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, localIso, type Prefill } from "../format";
+import { AGENT_PREFILL, AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, PRACTICE_EXAMPLES, localIso, toolName, type Prefill } from "../format";
 import { useLive, useServerDown } from "../live";
 import { useToast } from "../toast";
 import { orderNodes } from "../flow/order";
@@ -32,11 +32,8 @@ type Item =
   | { kind: "flow"; at: string; f: Flow }
   | { kind: "arts"; at: string; items: Artifact[] };
 
-export const CHAT_SUGGEST = [
-  "NX 브래킷 모델의 두께·리브 높이를 바꿔가며 Abaqus 응력·질량 DOE를 하고 예측 모델까지 만들어 줘",
-  "Abaqus 모델에서 하중을 바꿔 해석하고 최대 응력과 컨투어 이미지를 보여 줘",
-  "mock 솔버(beam)로 질량 최소화 최적화를 해보고 Simulator로 배포해 줘",
-];
+// 누르면 바로 보낸다. 그래서 CAD·CAE 툴도 모델 파일도 없이 끝까지 되는 것만 둔다
+export const CHAT_SUGGEST = [PRACTICE_EXAMPLES.washer, PRACTICE_EXAMPLES.whole, PRACTICE_EXAMPLES.two];
 
 const SENDING_TURN: TurnStatus = {
   stage: "sending", stage_detail: null, started_at: null, elapsed_sec: 0, stage_elapsed_sec: 0, idle_sec: 0,
@@ -467,7 +464,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
             const enter = fresh(key) && !(it.kind === "msg" && it.m.role === "user" && it.m.id > 0);
             return (
               <div key={key} className={`tl-item ${enter ? "enter" : ""}`}>
-                {it.kind === "flow" ? <FlowCard pid={pid} f={it.f} readOnly={readOnly} />
+                {it.kind === "flow" ? <FlowCard pid={pid} sid={sid} f={it.f} readOnly={readOnly} connected={!!agent?.connected} />
                   : it.kind === "arts" ? <ArtifactChips items={it.items} />
                   : it.kind === "tools" ? <ToolGroup items={it.items} />
                   : <Message m={it.m} streaming={it.m.id === streamId} />}
@@ -522,9 +519,9 @@ function ArtifactChips({ items }: { items: Artifact[] }) {
 }
 
 /** 대화 속 작업 흐름 카드: 실행 순서대로 단계 목록 + 진행률 + 승인/반려 (그래프는 캔버스에서) */
-function FlowCard({ pid, f, readOnly }: { pid: number; f: Flow; readOnly: boolean }) {
+function FlowCard({ pid, sid, f, readOnly, connected }: { pid: number; sid: number | null; f: Flow; readOnly: boolean; connected: boolean }) {
   const canvas = useCanvas();
-  const decide = useFlowDecision(pid);
+  const decide = useFlowDecision(pid, sid, connected);
   const [more, setMore] = useState(false);
   const st = FLOW_STATUS[f.status];
   const steps = orderNodes(f);
@@ -550,7 +547,7 @@ function FlowCard({ pid, f, readOnly }: { pid: number; f: Flow; readOnly: boolea
               <span className="fs-label">{n.label}</span>
               {n.detail && <span className="fs-detail">{n.detail}</span>}
             </span>
-            <span className="fs-tag">{NODE_TYPE[n.type] ?? n.type}{n.tool ? ` · ${n.tool}` : ""}</span>
+            <span className="fs-tag">{NODE_TYPE[n.type] ?? n.type}{n.tool ? ` · ${toolName(n.tool)}` : ""}</span>
           </li>
         ))}
       </ol>
@@ -560,13 +557,19 @@ function FlowCard({ pid, f, readOnly }: { pid: number; f: Flow; readOnly: boolea
           aria-label="진행률"><div style={{ width: `${(100 * done) / Math.max(1, steps.length)}%` }} /></div>
       )}
       <div className="row chat-card-foot">
-        <span className="small muted">{review ? "고칠 점은 아래 입력창에 적어 보내면 다시 제안합니다" : `${steps.length}단계 중 ${done}단계 완료`}</span>
+        <span className="small muted">{review ? "승인하면 묻지 않고 끝까지 진행합니다. 고칠 점은 아래 입력창에 적어 보내면 다시 제안합니다"
+          : f.status === "approved" && f.start_queued ? (connected ? "승인했습니다. 지금 답이 끝나면 바로 시작합니다" : "승인했습니다. PC Agent가 연결되면 바로 시작합니다")
+          : f.status === "stopped" ? `${steps.length}단계 중 ${done}단계에서 멈췄습니다. 이어 가려면 입력창에 '이어서 진행해 줘'라고 보내세요`
+          : `${steps.length}단계 중 ${done}단계 완료`}</span>
         <span className="grow" />
         {review && !readOnly && (
           <>
             <button className="small" onClick={() => decide.mutate({ flow: f, status: "rejected" })} disabled={decide.isPending}><X size={13} />반려</button>
             <button className="small primary" onClick={() => decide.mutate({ flow: f, status: "approved" })} disabled={decide.isPending}><Check size={13} />승인하고 실행</button>
           </>
+        )}
+        {f.status === "approved" && f.start_queued && !readOnly && (
+          <button className="small" onClick={() => decide.mutate({ flow: f, status: "review" })} disabled={decide.isPending}><X size={13} />승인 취소</button>
         )}
       </div>
     </div>
@@ -601,6 +604,8 @@ function ToolGroup({ items }: { items: ChatMessage[] }) {
 
 function Message({ m, streaming }: { m: ChatMessage; streaming?: boolean }) {
   const [openTool, setOpenTool] = useState(false);
+  // 서버가 이어서 하라고 보낸 말. 사용자가 한 말처럼 보이면 안 된다
+  if (m.role === "user" && m.meta?.auto === "continue") return <div className="chat-msg agent"><span className="small muted">{m.content}</span></div>;
   if (m.role === "user") return (
     <div className="chat-msg user">
       <div className="bubble">{m.content}</div>

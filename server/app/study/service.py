@@ -14,7 +14,7 @@ import uuid
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import numpy as np
 from scipy.stats import qmc
@@ -27,7 +27,7 @@ from cae_adapters.data import NOT_RUNNABLE
 from cae_adapters.recipe_bundle import config_scripts
 
 from .. import models
-from ..config import settings
+from ..config import ROOT, settings
 from ..database import SessionLocal
 from ..ws import manager
 from . import bayesopt, doe
@@ -213,16 +213,43 @@ def fixed_values(study: models.Study) -> dict:
     return (study.import_info or {}).get("fixed") or {}
 
 
+PRACTICE = "연습용 계산"  # mock 어댑터의 화면 이름. 실제 해석으로 읽히면 안 된다
+PRACTICE_NOTE = "이 값은 실제 해석이 아니라 연습용 계산으로 만든 값입니다 → 설계 판단에 쓰지 말고, 실제 해석으로 다시 돌린 뒤 쓰세요."
+
+
+def is_practice(study: models.Study) -> bool:
+    return study.practice
+
+
+def tool_label(study: models.Study) -> str:
+    """해석 방법의 화면 이름. 어댑터 이름은 코드의 말이라 사용자에게 보이지 않는다."""
+    if is_practice(study):
+        return PRACTICE
+    tool = (study.adapter_config or {}).get("tool")
+    if tool:
+        return str(tool)
+    return "" if study.adapter == "data" else "해석 방법 미정"
+
+
+def practice_note(db: Session, project_id: int) -> str | None:
+    """프로젝트에 연습용 스터디가 있으면 그 안내. 보고서·AI 자료가 함께 쓴다."""
+    has = db.query(models.Study.id).filter(models.Study.project_id == project_id, models.Study.adapter == "mock").first()
+    return PRACTICE_NOTE if has else None
+
+
 def data_source(study: models.Study) -> dict:
-    """학습 데이터가 어디서 왔는가. Simulator를 받은 사람이 해석 결과인지 표인지 알 수 있게 한다."""
+    """학습 데이터가 어디서 왔는가. Simulator를 받은 사람이 해석 결과인지 표인지 연습용 계산인지 알 수 있게 한다."""
     done = sum(c.status == "complete" for c in study.cases)
     imported = [c for c in study.cases if c.source == "import" or c.origin]
+    notice = {"notice": PRACTICE_NOTE} if is_practice(study) else {}
     if not imported:
+        if is_practice(study):
+            return {"kind": "practice", "label": PRACTICE, "rows": done, "total": done, **notice}
         return {"kind": "solver", "label": "해석 결과", "rows": done, "total": done}
     info = study.import_info or {}
     folders = info.get("kind") == "folders" or any(c.run_dir for c in imported)
     label = "불러온 해석 결과" if folders else "불러온 표"
-    return {"kind": "folders" if folders else "table", "label": label, "rows": len(imported), "total": done, "source": info.get("source") or ""}
+    return {"kind": "folders" if folders else "table", "label": label, "rows": len(imported), "total": done, "source": info.get("source") or "", **notice}
 
 
 def doe_csv(study: models.Study, status: str | None = None) -> str:
@@ -960,7 +987,7 @@ def train_field(db: Session, study: models.Study, field: str, flow_id=None, node
     db.flush()
     path = settings.data_dir / "models" / f"field_{fm.id}.joblib"
     rom.save(path)
-    fm.path = str(path)
+    fm.path = stored_path(path)
     live = current_model(db, study.id)
     if live is not None:  # 배포 중에 다시 학습한 3D는 현재 버전에 붙인다
         live.field_models = {**(live.field_models or {}), field: fm.id}
@@ -999,6 +1026,40 @@ def publish_convergence(db, study, flow_id=None, node_id=None):
 # ---------- 학습 ----------
 def _model_path(model_id: int) -> Path:
     return settings.data_dir / "models" / f"model_{model_id}.joblib"
+
+
+class ModelFileError(Exception):
+    """예측 모델 파일을 읽지 못했다. 문구는 그대로 사용자에게 보인다(main.py가 JSON으로 돌려준다)."""
+
+    def __init__(self, detail: str, status: int = 404):
+        super().__init__(detail)
+        self.status = status
+
+
+def stored_path(path: Path) -> str:
+    """DB에 적는 경로: data 폴더 기준 상대 경로. 서버를 다른 폴더에서 띄우거나 data 폴더를 옮겨도 그대로 읽힌다."""
+    return Path(path).resolve().relative_to(settings.data_dir.resolve()).as_posix()
+
+
+def model_file(stored: str | None) -> Path:
+    """DB의 경로 → 실제 파일. 세 가지가 섞여 있다: data 기준 상대(지금), 서버를 띄운 폴더 기준 상대(data\\dev\\models\\…),
+    절대(그 뒤 옮겼을 수 있다). 파일은 언제나 data/models 아래 같은 이름으로 만든다. 없으면 표준 위치를 돌려주어 부른 쪽이 '없다'고 말하게 한다."""
+    text = stored or ""
+    name = PureWindowsPath(text).name  # Windows에서 만든 data 폴더를 Linux 서버로 옮겨도 이름을 읽는다
+    standard = settings.data_dir / "models" / name
+    tried = [standard, settings.data_dir / text, Path(text), ROOT / text] if text else [standard]
+    return next((p for p in tried if p.is_file()), standard)
+
+
+def load_surrogate(m: models.SurrogateModel) -> Surrogate:
+    f = model_file(m.path)
+    if not f.is_file():
+        raise ModelFileError(f"예측 모델 파일이 서버에 없습니다(모델 #{m.id}) → 해석 결과는 그대로 있으니 이 스터디를 다시 학습하면 Simulator를 다시 쓸 수 있습니다.")
+    try:
+        return Surrogate.load(f)
+    except Exception as e:  # noqa: BLE001 — 파일이 망가졌거나 다른 버전에서 만들었다. 맨 500 대신 이유와 할 일을 말한다
+        log.warning("모델 파일을 읽지 못했습니다: %s", f, exc_info=True)
+        raise ModelFileError(f"예측 모델 파일을 읽지 못했습니다(모델 #{m.id}, {type(e).__name__}) → 이 스터디를 다시 학습하면 새 파일을 만듭니다.", status=500) from e
 
 
 def _latest_model(db: Session, study_id: int) -> models.SurrogateModel | None:
@@ -1208,8 +1269,8 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
     db.flush()
     path = _model_path(m.id)
     sur.save(path)
-    m.path = str(path)
-    m.metrics = {o: {"r2": v["r2"], "rmse": v["rmse"]} for o, v in cv.items()}
+    m.path = stored_path(path)
+    m.metrics ={o: {"r2": v["r2"], "rmse": v["rmse"]} for o, v in cv.items()}
     m.quality = quality
     db.commit()
 
@@ -1232,10 +1293,6 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
         publish_artifact(db, study.project_id, "markdown", note_title, {"text": f"- 정확도: **{quality['label']}**\n- 이번 학습에는 경고가 없습니다"}, flow_id, node_id)
     manager.publish({"type": "model_updated", "project_id": study.project_id, "data": {"id": m.id}})
     return m
-
-
-def load_surrogate(m: models.SurrogateModel) -> Surrogate:
-    return Surrogate.load(m.path)
 
 
 def model_variables(study: models.Study, m: models.SurrogateModel) -> list[dict]:

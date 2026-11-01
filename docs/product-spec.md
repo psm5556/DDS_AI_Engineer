@@ -188,10 +188,23 @@ PIDO 툴의 스크립트 작성과 프로세스 연결을 사람 대신 AI가 �
 | 내 메시지 | 오른쪽 말풍선 + 첨부 칩 |
 | AI 답변 | 왼쪽 마크다운. 3~5줄 요약 |
 | AI 생각·툴 호출 | 한 줄 묶음 "✓ 작업 N건 · 자세히". 진행 중이면 "스크립트 실행 중…", 실패가 있으면 "· 실패 n". 생각만 있는 묶음은 숨긴다 |
-| 작업 흐름 카드 | 단계 번호 목록(1, 2, 3…)과 진행률. 승인 대기면 **[반려] [승인하고 실행]**. "흐름도" 버튼은 캔버스를 연다 |
-| 실행 확인 카드 | "내 PC에서 실행해도 될까요?" — 쉬운 이름과 입력값 표, 허용·거부 |
+| 작업 흐름 카드 | 단계 번호 목록(1, 2, 3…)과 진행률. 승인 대기면 **[반려] [승인하고 실행]**. 승인이 아직 전해지지 않았으면 "지금 답이 끝나면 바로 시작합니다"·"PC Agent가 연결되면 바로 시작합니다"와 **[승인 취소]**. "흐름도" 버튼은 캔버스를 연다 |
+| 실행 확인 카드 | "내 PC에서 실행해도 될까요?" — 쉬운 이름과 입력값 표, 허용·거부. AI 도구 자체가 물을 때와, 다른 멤버가 만든 스크립트를 내 PC에서 돌릴 때 나온다 |
 | 결과 칩 | "결과 N개" 목록(4개 + 더 보기). 누르면 작업 흐름 탭의 그 단계 결과로 이동한다 |
 | 대기 말풍선 | 단계 문구 + 1초마다 흐르는 시간 + 안내(아래 표). 진행 중이면 입력창이 막히고 중지 버튼이 보인다 |
+
+**승인한 작업 흐름은 서버가 끝까지 책임진다**(`server/app/agent/hub.py`, 시험 `server/tests/test_flow_handoff.py`). 화면은 상태만 바꾸고, 에이전트에게 전하는 일은 서버가 한다. 승인 뒤에는 AI가 사용자에게 묻지 않고 끝까지 간다. 사용자는 중지한 뒤 입력창으로 계획을 바꿀 수 있다.
+
+| 상태 \ 사건 | 승인 | 턴 끝(정상·오류·끊김) | 중지 | PC Agent 연결 |
+|---|---|---|---|---|
+| 답하는 중 | 줄 세운다(카드: 지금 답이 끝나면 시작) | 곧바로 보낸다 | 승인을 되돌린다(승인 대기) | — |
+| 쉬는 중 | 곧바로 보낸다 | — | — | — |
+| PC Agent 없음 | 줄 세운다(카드: 연결되면 시작) | — | — | 곧바로 보낸다(서버를 다시 시작했어도 DB에 남아 있다) |
+| 흐름 진행 중 | — | 남은 단계가 있으면 다시 시킨다. 진전 없이 2번 넘으면 실패로 표시하고 원인과 할 일을 남긴다 | 멈춤(`stopped`). AI가 단계를 다시 움직이면 진행 중으로 돌아간다 | 사라진 턴이면 다시 시킨다 |
+
+새 흐름이 승인을 기다리면 옛 흐름은 멈춤이 된다. 대화를 지우면 줄 서 있던 승인은 승인 대기로 돌아간다. 이 규칙이 생기기 전에 approved로 멈춘 흐름은 서버가 시작할 때 승인 대기로 되돌린다.
+
+**연습용 계산**: `mock` 어댑터의 화면 이름이다(`service.PRACTICE`). 실제 해석이 아니라는 것을 서버가 어디서나 적는다: 캔버스 위 알림, 데이터 탭의 해석 방법, 흐름 단계의 툴 이름, 판단 문장 앞머리("연습용 계산 기준: "), Simulator·공유 화면의 안내, Simulator 카드의 "연습용 계산 N건", 보고서 표지·맺음말, AI가 읽는 자료(`practice`, `practice_note`, `data_source.notice`).
 
 대기 말풍선은 서버의 `/status`·`turn_stage`를 그대로 보여 준다. 새 대화의 첫 메시지·새로고침·브라우저 재연결 뒤에도 같은 경과 시간으로 이어진다.
 
@@ -768,7 +781,7 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 | 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin` · `GET·POST·DELETE /api/tokens` · `GET·PUT /api/users` |
 | 프로젝트 | `GET·POST /api/projects` · `GET·PUT·DELETE /api/projects/{p}` · 즐겨찾기 · 멤버 |
 | 대화 | `GET·POST /api/projects/{p}/sessions` · `PUT·DELETE /api/sessions/{s}` · `POST …/prompt·cancel·permission·force-restart` · `GET …/messages·status`(busy·stage·stage_detail·started_at·elapsed_sec·typical_start_sec·link·pending_permissions) · 첨부 |
-| 작업 흐름 | `GET·POST /api/projects/{p}/flows` · `GET /api/flows/{f}` · `PUT …/status` · `PUT …/nodes/{n}` |
+| 작업 흐름 | `GET·POST /api/projects/{p}/flows` · `GET /api/flows/{f}` · `PUT …/status`(승인·반려를 서버가 `session_id` 대화로 전한다. 아직 못 전했으면 `start_queued`) · `PUT …/nodes/{n}` |
 | 결과 | `GET·POST /api/projects/{p}/artifacts` · `DELETE /api/artifacts/{a}` · `POST /api/projects/{p}/files`(이미지) · `GET …/files/{path}` |
 | 보고서 | `GET /api/projects/{p}/reports` · `GET …/reports/latest` · `GET /api/reports/{r}` · `POST /api/projects/{p}/reports` · `GET …/report-context` · `GET …/report?format=docx|html&report_id=` |
 | 스터디 | `GET·POST /api/projects/{p}/studies` · `GET /api/studies/{s}`(counts·best·running·extracting) · `…/cases` · `…/doe` · `…/run` · `…/stop`(대기·실행 중 케이스 중지) · `…/train` · `…/suggest` · `…/outputs` · `…/train_field` · `…/field-models` |
@@ -861,7 +874,7 @@ PC Agent 메시지(`/ws/agent`, `server/app/agent/link.py` 머리 주석)
 ### 10-3. 데모로 직접 확인(세탁기 시나리오)
 1. `scripts\dev_live.cmd`(데모)를 띄운다.
 2. 첫 화면에 "탈수 진동이 줄도록 스프링·댐퍼를 최적화해 줘. 탈수 1,200 rpm 기준, 현재 부품 범위 안에서 보고서까지 만들어 줘."를 보낸다.
-3. 승인 → 허용 → 완료(1~2분)를 기다린다. 다음을 확인한다.
+3. 승인 → 완료(1~2분)를 기다린다. 승인 뒤에는 묻지 않는다. 다음을 확인한다.
    - 작업 흐름 탭: 7단계, 결과
    - 보고서 탭: 그림 1~3, 표 1
    - 데이터 탭: 입력 4·출력 1, HDF5 68건

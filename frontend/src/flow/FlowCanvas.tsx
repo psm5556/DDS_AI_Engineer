@@ -2,7 +2,7 @@ import { Background, Controls, Handle, MarkerType, Position, ReactFlow, type Edg
 import "@xyflow/react/dist/style.css";
 import { Box, Brain, CheckCircle2, Cpu, FileOutput, Grid3x3, Loader2, Rocket, Settings2, Target, Workflow, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { NODE_STATUS, NODE_TYPE } from "../format";
+import { NODE_STATUS, NODE_TYPE, toolName } from "../format";
 import type { Flow, FlowNode } from "../types";
 import { stepNumbers } from "./order";
 
@@ -24,7 +24,7 @@ function StepNode({ data }: NodeProps<Node<StepData>>) {
   if (data.compact) {
     // 고정된 흐름도용 작은 노드: 번호 · 이름 · 상태 · 결과 수만(설명은 아래 단계별 결과에 있다)
     return (
-      <div className={`flow-node compact st-${data.status} ${data.selected ? "sel" : ""}`} title={`${NODE_TYPE[data.type] ?? data.type}${data.tool ? ` · ${data.tool}` : ""}${data.detail ? ` — ${data.detail}` : ""}`}>
+      <div className={`flow-node compact st-${data.status} ${data.selected ? "sel" : ""}`} title={`${NODE_TYPE[data.type] ?? data.type}${data.tool ? ` · ${toolName(data.tool)}` : ""}${data.detail ? ` — ${data.detail}` : ""}`}>
         <Handle type="target" position={data.rtl ? Position.Right : Position.Left} />
         <div className="fn-top">
           {data.no != null && <span className="fn-no" aria-label={`${data.no}단계`}>{data.no}</span>}
@@ -42,7 +42,7 @@ function StepNode({ data }: NodeProps<Node<StepData>>) {
       <div className="fn-top">
         {data.no != null && <span className="fn-no" aria-label={`${data.no}단계`}>{data.no}</span>}
         <span className="fn-icon"><Icon size={14} /></span>
-        <span className="fn-type">{NODE_TYPE[data.type] ?? data.type}{data.tool ? ` · ${data.tool}` : ""}</span>
+        <span className="fn-type">{NODE_TYPE[data.type] ?? data.type}{data.tool ? ` · ${toolName(data.tool)}` : ""}</span>
         {st}
       </div>
       <b className="fn-label">{data.label}</b>

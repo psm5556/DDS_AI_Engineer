@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
+from ..agent.hub import hub
 from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, require_member
@@ -40,14 +41,14 @@ def flow_summary(project: models.Project = Depends(get_project_for_member), db: 
 
 @router.post("/projects/{project_id}/flows", response_model=schemas.FlowResponse)
 def create_flow(body: schemas.FlowCreate, project: models.Project = Depends(get_project_for_member),
-                db: Session = Depends(get_db)):
+                user=Depends(get_current_user), db: Session = Depends(get_db)):
     ids = [n.id for n in body.nodes]
     if len(set(ids)) != len(ids):
         raise HTTPException(400, "노드 id가 중복됩니다")
     for e in body.edges:
         if e.source not in ids or e.target not in ids:
             raise HTTPException(400, f"엣지가 없는 노드를 가리킵니다: {e.source} → {e.target}")
-    f = models.Flow(project_id=project.id, title=body.title, goal=body.goal,
+    f = models.Flow(project_id=project.id, title=body.title, goal=body.goal, chat_id=hub.active_chat(user.id, project.id),
                     nodes=[n.model_dump() for n in body.nodes], edges=[e.model_dump() for e in body.edges])
     db.add(f)
     db.commit()
@@ -66,13 +67,35 @@ def set_flow_status(flow_id: int, body: schemas.FlowStatusUpdate, user=Depends(g
     f = _flow_for_member(flow_id, user, db)
     if f.version != body.version:
         raise HTTPException(409, "다른 사용자가 수정했습니다. 새로고침 후 다시 시도하세요.")
+    if body.status == "review" and f.status == "approved" and not f.start_queued:  # 이미 에이전트에게 전한 승인은 되돌릴 수 없다. 멈추려면 중지다
+        raise HTTPException(409, "에이전트가 이미 시작했습니다 → 멈추려면 대화의 중지 버튼을 누르세요.")
     f.status = body.status
     if body.status == "approved":
         f.approved_by = user.id
+    # 승인·반려는 서버가 에이전트에게 전한다. 답하는 중이거나 PC Agent가 없으면 줄을 세우고, 턴이 끝나거나 다시 연결될 때 보낸다(hub)
+    chat_id = _decision_chat(db, f, user, body.session_id) if body.status in ("approved", "rejected") else None
+    if chat_id:
+        f.chat_id = chat_id
+    f.handoff = {"state": "queued", "kind": body.status} if chat_id else None
+    if body.status == "review":
+        f.approved_by = None
     f.version += 1
     db.commit()
     _changed(f)
+    if chat_id:
+        hub.flow_decided(chat_id)
+        db.refresh(f)
     return f
+
+
+def _decision_chat(db: Session, f: models.Flow, user, session_id: int | None) -> int | None:
+    """승인을 전할 대화: 지금 보는 대화 → 흐름을 제안한 대화. 내 대화만이다(남의 PC에서 돌리지 않는다).
+    흐름을 REST로 직접 만든 스크립트처럼 대화가 없으면 전할 곳도 없다."""
+    for cid in (session_id, f.chat_id):
+        chat = db.get(models.ChatSession, cid) if cid else None
+        if chat and chat.user_id == user.id and chat.project_id == f.project_id:
+            return chat.id
+    return None
 
 
 @router.put("/flows/{flow_id}/nodes/{node_id}", response_model=schemas.FlowResponse)
@@ -90,7 +113,7 @@ def update_node(flow_id: int, node_id: str, body: schemas.FlowNodeUpdate, user=D
         node["detail"] = body.detail
     f.nodes = nodes
     states = {n["status"] for n in nodes}
-    if f.status in ("approved", "in_progress", "review"):
+    if f.status in ("approved", "in_progress", "review", "stopped", "failed"):  # 멈춘·실패한 흐름도 AI가 다시 움직이면 진행 중이다
         if states <= {"complete", "skipped"}:
             f.status = "complete"
         elif "failed" in states:
@@ -100,6 +123,8 @@ def update_node(flow_id: int, node_id: str, body: schemas.FlowNodeUpdate, user=D
     f.version += 1
     db.commit()
     _changed(f)
+    if f.status == "in_progress":
+        hub.adopt_flow(f.id, f.chat_id, user.id, f.project_id)
     return f
 
 

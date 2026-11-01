@@ -74,12 +74,18 @@ if (DEMO) {
     await page.getByRole("button", { name: /승인하고 실행/ }).first().waitFor({ timeout: 90000 });
     await shot("demo-review");
     await page.getByRole("button", { name: /승인하고 실행/ }).first().click();
-    const allow = page.getByRole("button", { name: "허용" });
-    await allow.waitFor({ timeout: 90000 });
-    await shot("demo-permission");
-    await allow.click();
+    // 승인 뒤에는 묻지 않고 끝까지 간다: 여기서 허용 카드가 나오면 실패다
     await page.getByText("전체 과정을 마쳤습니다").waitFor({ timeout: 420000 });
+    if (await page.getByRole("button", { name: "허용" }).count()) throw new Error("승인 뒤에 또 묻습니다");
     await shot("demo-done");
+    // 연습용 값은 실제 해석으로 읽히면 안 된다
+    await page.locator(".canvas .notice", { hasText: "연습용 계산" }).first().waitFor({ timeout: 15000 });
+    await page.locator(".flow-card .fs-tag", { hasText: "연습용 계산" }).first().waitFor({ timeout: 5000 });
+    for (const tab of ["작업 흐름", "데이터"]) {
+      await page.getByRole("tab", { name: tab }).click();
+      await page.waitForTimeout(400);
+      if (/\bmock\b/i.test(await page.locator(".chat, .canvas").allInnerTexts().then((x) => x.join(" ")))) throw new Error(`${tab} 탭에 mock이 그대로 보입니다`);
+    }
   });
   await step("이 흐름을 새 모델로 다시", async () => {
     await page.getByRole("tab", { name: "작업 흐름" }).click();
@@ -406,7 +412,6 @@ if (INSIGHTS) {
     await input.press("Enter");
     await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 30000 });
     await page.getByRole("button", { name: /승인하고 실행/ }).first().click({ timeout: 90000 });
-    await page.getByRole("button", { name: "허용" }).click({ timeout: 90000 });
     await page.getByText("두 목표 최적화와 능동학습을 마쳤습니다").waitFor({ timeout: 420000 });
     await page.getByRole("tab", { name: "데이터" }).first().click();
     for (const q of ["지금 어디까지 왔나요?", "설계 범위를 고르게 살폈나요?", "무엇이 결과를 좌우하나요?", "이 예측을 믿어도 되나요?", "더 돌리면 좋아질까요?", "두 목표를 함께 좋게 할 수 있나요?", "정확도를 높이려고 더 돌린 해석이 효과가 있었나요?"]) {

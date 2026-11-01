@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, Box, ChevronDown, ChevronRight, Cpu, FolderInput, FolderSearch, Loader2, Rocket, SlidersHorizontal, Table2, Target, Workflow, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowRight, ChevronDown, ChevronRight, Cpu, FolderInput, FolderSearch, Loader2, Rocket, SlidersHorizontal, Table2, Target, Workflow, Wrench } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { get, post, put, uploadFile } from "../api";
@@ -9,16 +9,16 @@ import { Composer, type Outgoing } from "../chat/Composer";
 import { AgentGlyph } from "../components/AgentGlyph";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
 import { folderName } from "../components/FolderModal";
-import { FLOW_STATUS, when } from "../format";
+import { FLOW_STATUS, PRACTICE_EXAMPLES, when } from "../format";
 import { useToast } from "../toast";
 import type { AgentStatus, Attachment, Project } from "../types";
 
-const STARTERS = [
-  { icon: Rocket, t: "처음부터 끝까지", p: "브래킷 CAD를 만들고 해석 모델을 구성한 뒤 DOE로 데이터를 쌓아 형상·응력을 학습하고, 3D Simulator로 배포한 다음 보고서까지 작성해 줘" },
-  { icon: Box, t: "CAD로 만들기", p: "NX에서 브래킷 형상을 만들고, 두께·리브 높이를 파라미터로 바꿀 수 있게 정리해 줘" },
-  { icon: Workflow, t: "해석 모델링·실행", p: "이 CAD 모델로 Abaqus 정적 해석 모델을 만들고(재료·하중·경계조건·메쉬) 해석해서 최대 응력을 알려 줘" },
-  { icon: Cpu, t: "DOE·예측 모델", p: "두께 2~6mm, 리브 높이 5~20mm로 DOE를 돌려 데이터를 쌓고, 질량·응력 예측 모델을 만들어 Simulator로 배포해 줘" },
-  { icon: Target, t: "최적 설계 찾기", p: "응력 250MPa 이하에서 질량이 최소가 되는 설계를 베이지안 최적화로 찾아 줘" },
+// 앞의 셋은 CAD·CAE 툴과 모델 파일 없이 끝까지 된다(연습용 계산). 마지막만 내 모델과 툴이 필요하다고 말하고 파일을 먼저 받는다
+const STARTERS: { icon: typeof Rocket; t: string; p: string; askFile?: string }[] = [
+  { icon: Rocket, t: "전체 과정 연습", p: PRACTICE_EXAMPLES.whole },
+  { icon: Target, t: "세탁기 진동 줄이기 연습", p: PRACTICE_EXAMPLES.washer },
+  { icon: Cpu, t: "두 목표 함께 보기 연습", p: PRACTICE_EXAMPLES.two },
+  { icon: Workflow, t: "내 모델로 해석", p: "첨부한 모델로 응력 해석을 돌려 최대 응력을 알려 줘", askFile: "해석할 모델 파일을 첨부해 주세요. 내 PC에 그 CAD·CAE 툴이 있어야 합니다." },
 ];
 /** 이미 해석을 마친 사람의 시작점. 어디서 시작하든 받아 준다는 것을 첫 화면에서 보여 준다 */
 const FOLDER_PROMPT = "이 폴더에 이미 해석한 케이스들이 있어. 해석은 다시 돌리지 말고 결과를 모아 예측 모델을 만들어 Simulator로 배포해 줘. 폴더: ";
@@ -33,7 +33,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const nav = useNavigate();
   const toast = useToast();
-  const [seed, setSeed] = useState<{ text: string; n: number } | undefined>();
+  const [seed, setSeed] = useState<{ text: string; n: number; askFile?: string } | undefined>();
   const [name, setName] = useState("");
   const [folder, setFolder] = useState("");
   const [folderErr, setFolderErr] = useState("");
@@ -104,7 +104,7 @@ export default function DashboardPage() {
           <Composer big autoFocus typing onSimulator={openSimulator} suggestions={[...STARTERS.map((x) => x.p), TABLE_PROMPT, FOLDER_PROMPT]} seed={seed} busy={start.isPending}
             onSend={(o) => start.mutateAsync(o).then(() => true, () => false)}
             leftBar={<AgentPicker value={resolveAgent(agent, preferred) ?? ""} onChange={setPreferred} disabled={!connected} />}
-            placeholder="예: NX 브래킷 모델의 두께를 바꿔가며 Abaqus로 응력을 보고, 질량 최소 설계를 찾아 줘" />
+            placeholder="예: 내 브래킷 모델의 두께를 바꿔 가며 응력을 보고, 가장 가벼운 설계를 찾아 줘" />
           <div className={`np-opts ${showOpts ? "open" : ""}`}>
             <button type="button" className="np-opts-toggle" aria-expanded={showOpts} onClick={() => setOpts(!showOpts)}
               title="프로젝트 이름과 내 PC 작업 폴더 — 비워 두면 자동으로 정합니다">
@@ -142,8 +142,8 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="starters">
-          {STARTERS.map(({ icon: Icon, t, p }) => (
-            <button key={t} className="starter" onClick={() => setSeed({ text: p, n: Date.now() })} title={p}><Icon size={16} /><span>{t}</span></button>
+          {STARTERS.map(({ icon: Icon, t, p, askFile }) => (
+            <button key={t} className="starter" onClick={() => setSeed({ text: p, n: Date.now(), askFile })} title={p}><Icon size={16} /><span>{t}</span></button>
           ))}
         </div>
         <div className="starters-data" aria-label="이미 가진 데이터로 시작">

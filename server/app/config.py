@@ -46,6 +46,7 @@ def load_settings() -> Settings:
                 setattr(s, key, Path(value) if isinstance(getattr(s, key), Path) else value)
     if os.environ.get("DDS_DATA_DIR"):
         s.data_dir = Path(os.environ["DDS_DATA_DIR"])
+    s.data_dir = s.data_dir.resolve()  # 상대 경로(DDS_DATA_DIR=data\dev)를 그대로 두면 파일 경로가 서버를 띄운 폴더에 묶인다
     s.data_dir.mkdir(parents=True, exist_ok=True)
     s.files_dir.mkdir(parents=True, exist_ok=True)
     if not s.secret_key:

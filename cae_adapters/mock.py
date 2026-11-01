@@ -213,8 +213,8 @@ def _compute(fn_name: str, params: dict):
 
 class MockAdapter(CaeAdapter):
     name = "mock"
-    label = "Mock 솔버"
-    description = ("해석함수 기반 가짜 솔버. adapter_config.outputs를 주면 그 출력만 남긴다(나중에 Output 추가로 늘릴 수 있다). "
+    label = "연습용 계산"
+    description = ("연습용 계산: 실제 해석이 아니라 수식으로 값을 만든다. 사용자에게는 '연습용 계산'이라고 말한다. adapter_config.outputs를 주면 그 출력만 남긴다(나중에 Output 추가로 늘릴 수 있다). "
                    + " / ".join(f"{k}: {v[1]}" for k, v in FUNCTIONS.items()))
     config_example = {"function": "branin", "delay_sec": 0.2, "noise": 0.0, "outputs": ["f"]}
 

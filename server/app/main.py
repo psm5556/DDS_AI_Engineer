@@ -5,7 +5,7 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
@@ -59,6 +59,19 @@ def _backfill_model_versions():
         db.commit()
 
 
+def _recover_stranded_flows():
+    """예전 서버에서 승인만 되고 에이전트에게 전해지지 않아 멈춘 흐름을 승인 대기로 되돌린다. 며칠 뒤 저절로 돌면 안 되니 다시 승인을 받는다.
+    전하던 중인 대화가 지워진 승인도 같다. 전할 곳이 없다."""
+    with SessionLocal() as db:
+        for f in db.query(models.Flow).filter(models.Flow.status == "approved"):
+            started = any(n.get("status") not in (None, "pending") for n in f.nodes or [])
+            if started or (f.handoff and f.chat_id):
+                continue
+            f.status, f.approved_by, f.handoff = "review", None, None
+            f.version += 1
+        db.commit()
+
+
 def _on_agent_hello(conn: AgentConnection, msg: dict):
     try:
         hub.on_hello(conn, msg)
@@ -81,6 +94,7 @@ async def lifespan(app: FastAPI):
     ensure_columns()
     _backfill_project_uids()
     _backfill_model_versions()
+    _recover_stranded_flows()
     loop = asyncio.get_running_loop()
     manager.bind_loop(loop)
 
@@ -109,6 +123,18 @@ async def validation_error(request, exc: RequestValidationError):
     return JSONResponse(status_code=422, content={"detail": jsonable_encoder([{k: e[k] for k in ("type", "loc", "msg") if k in e} for e in exc.errors()])})
 
 
+@app.exception_handler(service.ModelFileError)
+async def model_file_error(request, exc: service.ModelFileError):
+    return JSONResponse(status_code=exc.status, content={"detail": str(exc)})
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request, exc: Exception):
+    # 맨 "Internal Server Error"는 화면이 원인도 할 일도 보여 주지 못한다. 자세한 내용은 서버 로그에 남는다
+    return JSONResponse(status_code=500, media_type="application/json; charset=utf-8",
+                        content={"detail": f"서버에서 처리하지 못했습니다({type(exc).__name__}) → 잠시 뒤 다시 해 보고, 계속되면 관리자에게 서버 로그를 확인해 달라고 하세요."})
+
+
 @app.middleware("http")
 async def json_charset(request, call_next):
     # Windows PowerShell 5.1(Invoke-RestMethod)은 charset이 없으면 JSON 한글을 잘못 디코딩한다
@@ -118,6 +144,14 @@ async def json_charset(request, call_next):
     return resp
 for r in (auth.router, projects.router, sessions.router, flows.router, reports.router, studies.router, insights.router, training.router, agents.router, devtest.router):
     app.include_router(r)
+
+
+@app.api_route("/api", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
+@app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
+def no_such_api(request: Request):
+    """없는 API는 JSON 404다. 화면 경로로 넘기면 index.html이 200으로 가서 받는 쪽이 'Expecting value...'만 보게 된다.
+    실제로 PC Agent(MCP)가 서버보다 새 버전이라 없는 주소를 부를 때 그랬다."""
+    return JSONResponse(status_code=404, content={"detail": f"서버에 없는 API입니다({request.method} {request.url.path}) → 서버가 PC Agent보다 옛 버전일 수 있습니다. 서버를 최신 코드로 다시 시작하세요."})
 
 
 def _auth_ws(token: str | None) -> models.User | None:

@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Database, FileText, FolderTree, SlidersHorizontal, Workflow, X } from "lucide-react";
+import { AlertTriangle, Database, FileText, FolderTree, SlidersHorizontal, Workflow, X } from "lucide-react";
 import { useEffect } from "react";
 import { get } from "../api";
 import { startPanelResize, type PanelLayout } from "../components/sideLayout";
 import { useLive } from "../live";
-import type { Artifact, Flow } from "../types";
+import type { Artifact, Flow, Study } from "../types";
 import { useCanvas, type CanvasTab } from "./CanvasContext";
 import { LocalFiles } from "./LocalFiles";
 import { ReportView } from "./ReportView";
@@ -22,6 +22,9 @@ export function CanvasPanel({ pid, layout }: { pid: number; layout: PanelLayout 
   const c = useCanvas();
   const { data: flows } = useQuery({ queryKey: ["flows", pid], queryFn: () => get<Flow[]>(`/api/projects/${pid}/flows`) });
   const { data: arts } = useQuery({ queryKey: ["artifacts", pid], queryFn: () => get<Artifact[]>(`/api/projects/${pid}/artifacts`) });
+  // 결과가 어느 탭에 있든 연습용 값을 실제 해석으로 읽지 않게 탭 위에 한 번만 알린다
+  const { data: studies } = useQuery({ queryKey: ["studies", pid], queryFn: () => get<Study[]>(`/api/projects/${pid}/studies`) });
+  const practice = !!studies?.some((s) => s.practice);
   const { setCollapsed } = layout;
 
   // 대화 카드에서 결과를 누르면 닫혀 있어도 연다
@@ -64,6 +67,7 @@ export function CanvasPanel({ pid, layout }: { pid: number; layout: PanelLayout 
         </nav>
         <button className="icon-btn canvas-close" onClick={() => setCollapsed(true)} title="캔버스 닫기 (Ctrl+J)" aria-label="캔버스 닫기"><X size={17} /></button>
       </header>
+      {practice && <div className="notice warn" role="status"><AlertTriangle size={15} /><span>이 프로젝트에는 <b>연습용 계산</b> 결과가 있습니다. 실제 해석이 아니므로 설계 판단에 쓰지 마세요.</span></div>}
       {/* 작업 흐름 탭: 흐름도는 고정하고 아래 단계별 결과만 스크롤한다(pinned) */}
       <div key={tab} className={`canvas-body ${tab === "flow" ? "pinned" : ""}`}>
         {tab === "flow" ? <FlowView pid={pid} flows={flows} arts={arts ?? []} />

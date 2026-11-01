@@ -1,7 +1,6 @@
 """판단 도우미 검토에서 나온 문제들. 문장이 같은 화면의 다른 사실과 어긋나거나, 보이지 않는 것을 믿게 하면 안 된다."""
 import re
 import time
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -136,7 +135,7 @@ def _old_model(db, sid, r2=0.95):
     m = service.train(db, db.get(models.Study, sid), None)
     sur = service.load_surrogate(m)
     sur.cv = {}
-    sur.save(Path(m.path))
+    sur.save(service.model_file(m.path))
     m.metrics = {o: {**v, "r2": r2} for o, v in m.metrics.items()}
     m.quality = {"level": "good", "label": "좋음", "by_output": {o: {"level": "good", "r2": r2} for o in m.metrics}, "warnings": [], "method": "K겹 교차검증 R²"}
     db.commit()

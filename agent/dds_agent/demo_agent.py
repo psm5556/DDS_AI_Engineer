@@ -1,8 +1,9 @@
-"""데모 에이전트: Gemini CLI 없이 전체 경로(ACP → MCP 서버 → DDS 서버 → 웹앱)를 검증하기 위한 가짜 ACP 에이전트.
-Gemini처럼 session/new로 받은 MCP 서버를 실제로 띄워서 툴을 호출하며, 정해진 시나리오
-(Flow 제안 → 승인 대기 → 권한 요청 → mock DOE → GP 학습 → BO → Simulator 배포)를 수행한다.
-시나리오는 요청에 따라 고른다(pick_mode): 세탁기 두 목표·능동학습 · 세탁기 탈수 진동 · 브래킷 E2E · 3D 외팔보 · Branin.
-표·해석 폴더·단순 질문은 Flow 없이 바로 처리한다(pick_entry). 그래야 "표로 Simulator"를 시험할 때 엉뚱하게 Branin을 돌려 거짓 통과하지 않는다.
+"""데모 에이전트: 실제 AI 없이 전체 경로(ACP → MCP 서버 → DDS 서버 → 웹앱)를 검증하기 위한 가짜 ACP 에이전트.
+실제 AI처럼 session/new로 받은 MCP 서버를 띄워서 툴을 호출하며, 정해진 시나리오
+(Flow 제안 → 승인 대기 → 연습용 계산 DOE → 예측 모델 → 최적화 → Simulator 배포 → 보고서)를 수행한다. 승인 뒤에는 묻지 않고 끝까지 간다.
+모든 값은 연습용 계산(mock 어댑터)이고 그렇게 말한다. 실제 CAD/CAE 툴을 쓰는 것처럼 보이면 안 된다.
+시나리오는 요청에 따라 고른다(pick_mode): 드럼 세탁기 탈수 진동(기본) · 세탁기 두 목표·능동학습 · 브래킷 전체 과정 · 3D 외팔보 · Branin(시험용).
+표·해석 폴더·단순 질문은 Flow 없이 바로 처리한다(pick_entry). 그래야 "표로 Simulator"를 시험할 때 엉뚱하게 시나리오를 돌려 거짓 통과하지 않는다.
 agent.toml 에 agent_mode = "demo" 로 사용한다.
 """
 from __future__ import annotations
@@ -40,14 +41,24 @@ def is_panel_request(body: str) -> bool:
 
 
 def pick_mode(body: str) -> str:
-    """요청에 맞는 시나리오: 세탁기 두 목표·능동학습 · 세탁기 탈수 진동 · CAD~보고서 전체(브래킷) · 3D 형상(외팔보) · 기본(Branin)."""
+    """요청에 맞는 시나리오: 세탁기 두 목표·능동학습 · CAD~보고서 전체(브래킷) · 3D 형상(외팔보) · 시험용 수식(Branin) · 기본(드럼 세탁기 탈수 진동)."""
     if any(k in body for k in ("능동학습", "파레토", "두 목표")):
         return "washer2"
     if "세탁기" in body or "탈수" in body:
         return "washer"
-    if wants_e2e(body):
+    if wants_e2e(body) or "브래킷" in body:
         return "bracket"
-    return "beam3d" if ("3D" in body or "형상" in body) else "branin"
+    if "branin" in body.lower():  # 수식 이름을 말한 시험만 쓴다. 처음 보는 사람에게 Branin은 뜻이 없다
+        return "branin"
+    return "beam3d" if ("3D" in body or "형상" in body) else "washer"
+
+
+def mode_of_title(title: str) -> str | None:
+    """이 데모가 올린 흐름의 시나리오. 따로 묶어 둔 계획(connect·rerun·takeover)은 제목만으로 되살릴 수 없어 None이다."""
+    for word, mode in (("이어서 해석", None), ("이어받아", None), ("신규 모델", None), ("함께 보기", "washer2"), ("탈수", "washer"), ("브래킷", "bracket"), ("외팔보", "beam3d"), ("Branin", "branin")):
+        if word in title:
+            return mode
+    return None
 
 
 TABLE_EXT = (".csv", ".tsv", ".xlsx", ".xlsm")
@@ -92,6 +103,11 @@ def _named_paths(body: str) -> list[str]:
     return found
 
 
+def names_scenario(body: str) -> bool:
+    """요청이 정해진 시나리오를 콕 집었는가. 아니면 '이 프로젝트에 스터디 있어?' 같은 말은 해석 요청이 아니라 질문이다."""
+    return pick_mode(body) != "washer" or "세탁기" in body or "탈수" in body
+
+
 def pick_entry(body: str) -> tuple[str, str | None]:
     """사용자가 무엇을 가지고 왔는가: table·folder(가진 데이터로 바로) · question(바로 답) · flow(해석부터, Flow 승인).
     경로를 함께 돌려준다. 데이터를 말했는데 경로가 없으면 None이다."""
@@ -122,7 +138,7 @@ def pick_entry(body: str) -> tuple[str, str | None]:
         return "table", None
     if any(k in body for k in _FOLDER_WORD):
         return "folder", None
-    if any(k in body for k in _ASKING_WORD) and not any(k in body for k in _DOING_WORD) and pick_mode(body) == "branin":
+    if any(k in body for k in _ASKING_WORD) and not any(k in body for k in _DOING_WORD) and not names_scenario(body):
         return "question", None
     return "flow", None
 
@@ -273,16 +289,18 @@ class DemoAgent:
         return outcome.get("outcome") == "selected" and outcome.get("optionId") == "allow"
 
     async def scenario(self, s: DemoSession, text: str):
-        """가진 데이터·단순 질문은 Flow 없이 바로 처리한다. 해석을 새로 돌리는 요청만 Flow 시나리오 4가지로 간다:
-        '세탁기'/'탈수' 요청(탈수 진동 최적화~보고서) · CAD~보고서 전체(브래킷 E2E) ·
-        '3D'/'형상' 요청(Beam3D 형상·필드 학습) · 기본(Branin 최적화)."""
+        """가진 데이터·단순 질문은 Flow 없이 바로 처리한다. 해석을 새로 돌리는 요청만 Flow 시나리오로 간다:
+        기본(드럼 세탁기 탈수 진동 최적화~보고서) · 두 목표·능동학습 · 브래킷·CAD~보고서 전체 ·
+        '3D'/'형상' 요청(Beam3D 형상·필드 학습) · 'Branin'(시험용 수식)."""
         body = request_text(text)
         if is_panel_request(body):  # 판단 도우미 버튼의 요청은 어떤 입구보다 먼저 본다. 문구에 '표'·'모델'이 들어 있어도 시나리오로 새지 않는다
             await s.say("데모에서는 해석을 더 돌리지 않습니다. 실제 에이전트라면 지금 요청을 그대로 진행합니다.\n\n"
                         f"> {body.strip()}\n\n실제로 돌려 보려면 설정에서 Claude·Gemini·Codex 중 하나를 고르세요.")
             return
         entry, target = pick_entry(body)
-        approved = "승인했습니다" in body or "승인되었습니다" in body
+        approved = any(k in body for k in ("승인했습니다", "승인되었습니다", "아직 끝나지 않았습니다"))  # 마지막은 서버가 남은 단계를 이어서 하라고 보낸 말
+        if approved and s.flow_id is None and not await self._find_flow(s, body):
+            return
         if not approved and s.pending_table and await self._outputs_answer(s, body):
             return
         if not approved and entry == "table":
@@ -314,7 +332,7 @@ class DemoAgent:
         if not approved and s.from_data:
             await self._data_follow_up(s, body)
             return
-        if not approved and s.flow_id is None and "보고서" in body and pick_mode(body) == "branin" and not any(k in body for k in ("돌려", "해석해", "DOE")):
+        if not approved and s.flow_id is None and "보고서" in body and not names_scenario(body) and not any(k in body for k in ("돌려", "해석해", "DOE")):
             await self._report_without_flow(s)  # 있는 결과로 쓰는 보고서: 해석이 없으니 승인이 필요 없다
             return
         if s.flow_id is None:
@@ -324,7 +342,7 @@ class DemoAgent:
             if "[첨부 파일" in body:
                 await s.say(f"첨부하신 파일을 작업 폴더에서 확인했습니다: {', '.join(attached_files(body))}\n\n")
             if s.mode == "washer2":
-                title, desc = "세탁기 진동과 바닥 전달력 함께 보기", "DOE 24건 → 예측 모델 → 능동학습 6건 → 두 목표 최적화 8건 → 판단 정리 → 보고서"
+                title, desc = "세탁기 진동과 바닥 전달력 함께 보기", "연습용 계산: DOE 24건 → 예측 모델 → 능동학습 6건 → 두 목표 최적화 8건 → 판단 정리 → 보고서"
                 nodes = [
                     {"id": "doe", "label": "DOE 24케이스 (LHS)", "type": "doe", "tool": "mock", "detail": "스프링 강성·댐퍼 감쇠력·밸런서·스프링 위치"},
                     {"id": "train", "label": "첫 예측 모델", "type": "train", "detail": "GP"},
@@ -336,12 +354,13 @@ class DemoAgent:
                 ]
                 pairs = [("doe", "train"), ("train", "al"), ("al", "opt"), ("opt", "judge"), ("judge", "deploy"), ("deploy", "report")]
             elif s.mode == "washer":
-                title, desc = "드럼세탁기 탈수 진동 저감", "RecurDyn 탈수 모델 → DOE 60케이스 → 진동 예측 모델 → 최적화 → Simulator → 보고서"
+                n_doe = s.points or 60  # 반려하며 "10점으로"라고 하면 그대로 따른다. 그렇게 말하라고 안내한다
+                title, desc = "드럼세탁기 탈수 진동 저감", f"연습용 계산: 탈수 모델 → DOE {n_doe}케이스 → 진동 예측 모델 → 최적화 → Simulator → 보고서"
                 nodes = [
-                    {"id": "model", "label": "탈수 해석 모델 불러오기", "type": "pre", "tool": "recurdyn",
+                    {"id": "model", "label": "연습용 탈수 모델 준비", "type": "pre", "tool": "mock",
                      "detail": "드럼·통 · 스프링 2 · 댐퍼 2 · 1,200 rpm"},
-                    {"id": "doe", "label": "DOE 60케이스 (LHS)", "type": "doe", "detail": "스프링 강성·댐퍼 감쇠력·밸런서·스프링 위치"},
-                    {"id": "solve", "label": "케이스 해석 60건", "type": "solve", "tool": "recurdyn", "detail": "통 진동 변위 추출"},
+                    {"id": "doe", "label": f"DOE {n_doe}케이스 (LHS)", "type": "doe", "tool": "mock", "detail": "스프링 강성·댐퍼 감쇠력·밸런서·스프링 위치"},
+                    {"id": "solve", "label": f"케이스 계산 {n_doe}건", "type": "solve", "tool": "mock", "detail": "통 진동 변위 추출"},
                     {"id": "train", "label": "진동 예측 모델", "type": "train", "detail": "GP"},
                     {"id": "opt", "label": "최적화 8회", "type": "optimize", "detail": "진동 최소 · 베이지안"},
                     {"id": "deploy", "label": "Simulator 배포", "type": "deploy"},
@@ -349,12 +368,12 @@ class DemoAgent:
                 ]
                 pairs = [("model", "doe"), ("doe", "solve"), ("solve", "train"), ("train", "opt"), ("opt", "deploy"), ("deploy", "report")]
             elif s.mode == "bracket":
-                title, desc = "브래킷 E2E 설계", "CAD → 해석 모델 → DOE → 형상·응력 학습 → 3D Simulator → 보고서"
+                title, desc = "브래킷 전체 과정", "연습용 계산: 형상 → 해석 모델 → DOE → 형상·응력 학습 → 3D Simulator → 보고서"
                 nodes = [
-                    {"id": "cad", "label": "브래킷 CAD 생성", "type": "cad", "tool": "nx", "detail": "플레이트+리브, 두께·리브 높이 파라미터"},
-                    {"id": "pre", "label": "해석 모델 구성", "type": "pre", "tool": "abaqus", "detail": "강재 · 벽 고정 · 끝단 2 kN"},
-                    {"id": "doe", "label": "DOE 20점 (LHS)", "type": "doe", "detail": "두께 6~14, 리브 10~40 mm"},
-                    {"id": "solve", "label": "케이스 해석 20건", "type": "solve", "tool": "abaqus", "detail": "응력 필드 저장"},
+                    {"id": "cad", "label": "브래킷 형상 만들기", "type": "cad", "tool": "mock", "detail": "플레이트+리브, 두께·리브 높이 파라미터"},
+                    {"id": "pre", "label": "해석 모델 구성", "type": "pre", "tool": "mock", "detail": "강재 · 벽 고정 · 끝단 2 kN"},
+                    {"id": "doe", "label": "DOE 20점 (LHS)", "type": "doe", "tool": "mock", "detail": "두께 6~14, 리브 10~40 mm"},
+                    {"id": "solve", "label": "케이스 계산 20건", "type": "solve", "tool": "mock", "detail": "응력 필드 저장"},
                     {"id": "train", "label": "질량·응력 예측 모델", "type": "train", "detail": "GP"},
                     {"id": "field", "label": "형상·응력 필드 학습", "type": "train", "detail": "PCA + GP"},
                     {"id": "deploy", "label": "3D Simulator 배포", "type": "deploy"},
@@ -363,21 +382,21 @@ class DemoAgent:
                 pairs = [("cad", "pre"), ("pre", "doe"), ("doe", "solve"), ("solve", "train"), ("solve", "field"),
                          ("train", "deploy"), ("field", "deploy"), ("deploy", "report")]
             elif s.mode == "beam3d":
-                title, desc = "외팔보 3D 응력 예측", "mock 3D 외팔보로 DOE → 형상·필드 학습 → 3D Simulator 검증"
+                title, desc = "외팔보 3D 응력 예측", "연습용 계산: 3D 외팔보 DOE → 형상·필드 학습 → 3D Simulator"
                 nodes = [
                     {"id": "doe", "label": "DOE 16점 (LHS)", "type": "doe", "tool": "mock", "detail": "폭 10~40, 높이 20~80 mm"},
-                    {"id": "solve", "label": "3D 외팔보 해석", "type": "solve", "tool": "mock", "detail": "케이스마다 응력 필드 저장"},
+                    {"id": "solve", "label": "3D 외팔보 계산", "type": "solve", "tool": "mock", "detail": "케이스마다 응력 필드 저장"},
                     {"id": "train", "label": "스칼라 예측 모델", "type": "train"},
                     {"id": "field", "label": "형상·응력 필드 학습", "type": "train", "detail": "PCA + GP"},
                     {"id": "deploy", "label": "3D Simulator 배포", "type": "deploy"},
                 ]
                 pairs = [("doe", "solve"), ("solve", "train"), ("solve", "field"), ("train", "deploy"), ("field", "deploy")]
             else:
-                title, desc = "Branin 최적화 데모", "mock 솔버로 DOE → GP → BO → Simulator 검증"
+                title, desc = "Branin 최적화 데모", "연습용 계산: DOE → 예측 모델 → 최적화 → Simulator"
                 nodes = [
                     {"id": "doe", "label": f"DOE {s.points or 20}점 (LHS)", "type": "doe", "tool": "mock", "detail": "x1∈[-5,10], x2∈[0,15]"},
-                    {"id": "solve", "label": "Mock 솔버 실행", "type": "solve", "tool": "mock"},
-                    {"id": "train", "label": "GP Surrogate 학습", "type": "train"},
+                    {"id": "solve", "label": "연습용 계산 실행", "type": "solve", "tool": "mock"},
+                    {"id": "train", "label": "예측 모델 학습", "type": "train"},
                     {"id": "opt", "label": "베이지안 최적화 6회", "type": "optimize"},
                     {"id": "deploy", "label": "Simulator 배포", "type": "deploy"},
                 ]
@@ -386,7 +405,7 @@ class DemoAgent:
             r = await s.tool("dds-flow", "propose_flow", {"title": title, "goal": body[:200], "nodes": nodes,
                                                          "edges": [{"source": x, "target": y} for x, y in pairs]})
             s.flow_id = r["flow_id"]
-            await s.say("작업 흐름을 캔버스에 올렸습니다. 확인 후 **승인**을 눌러 주시면 실행을 시작하겠습니다.")
+            await s.say("작업 흐름을 캔버스에 올렸습니다. 값은 실제 해석이 아니라 **연습용 계산**입니다. 확인 후 **승인**을 눌러 주시면 끝까지 진행합니다.")
             return
 
         flow = await s.tool("dds-flow", "get_flow", {"flow_id": s.flow_id})
@@ -406,15 +425,18 @@ class DemoAgent:
             s.points, s.revising = int(n.group(1)) if n else s.points, True
             await self.scenario(s, text)
             return
-        if flow["status"] not in ("approved", "in_progress"):
+        if flow["status"] not in ("approved", "in_progress", "stopped"):
             await s.say("작업 흐름이 아직 승인 전입니다. 카드에서 **승인**을 누르면 시작합니다. 고칠 점이 있으면 반려한 뒤 입력창에 적어 주세요.")
             return
-        n_cases = {"beam3d": 16, "washer": 60, "washer2": 24}.get(s.mode, 20)
-        title = s.plan.get("permission") if s.mode in PLANNED_MODES else None
-        title = title or {"bracket": "CAD·해석 모델 생성 후 케이스 해석 실행",
-                          "washer": "RecurDyn 탈수 해석 60케이스 실행",
-                          "washer2": "세탁기 예시 식으로 케이스 24건 실행"}.get(s.mode, "Mock 솔버로 케이스 실행")
-        if not await self.ask_permission(s, title, {"study": s.mode, "cases": n_cases}):
+        started = next((n for n in flow["nodes"] if n["status"] not in ("pending", "complete", "skipped")), None)
+        if started or any(n["status"] == "complete" for n in flow["nodes"]):
+            # 데모의 시나리오는 처음부터만 돈다. 이어 간다고 하고 처음부터 돌리면 같은 결과가 두 벌 생긴다. 실패로 적으면 서버도 더 시키지 않는다
+            left = started or next(n for n in flow["nodes"] if n["status"] != "complete")
+            await s.tool("dds-flow", "update_node", {"flow_id": s.flow_id, "node_id": left["id"], "status": "failed", "detail": "데모는 중간부터 이어 갈 수 없습니다"})
+            await s.say("데모 시나리오는 중간부터 이어 갈 수 없습니다 → 새 프로젝트에서 처음부터 다시 시작해 주세요.")
+            return
+        # 승인 뒤에는 끝까지 간다. 다만 다른 멤버가 만든 스크립트는 내 PC에서 돌기 전에 한 번 더 확인한다(서버의 승인 확인과 별개인 안전장치)
+        if s.mode == "takeover" and not await self.ask_permission(s, s.plan.get("permission") or "케이스 실행", {"study": s.mode, "cases": s.plan.get("doe")}):
             await s.say("실행 권한이 거부되어 중단했습니다.")
             return
         fid = s.flow_id
@@ -431,6 +453,24 @@ class DemoAgent:
             await self._beam3d(s, fid, node)
         else:
             await self._branin(s, fid, node)
+
+    async def _find_flow(self, s: DemoSession, body: str) -> bool:
+        """PC Agent가 다시 시작되면 세션이 새로 열려 어떤 흐름을 승인받았는지 잊는다. 승인 말에 적힌 번호로 다시 찾는다.
+        찾지 않으면 처음부터 새 흐름을 제안해, 승인한 흐름은 돌지 않고 또 승인을 받는다."""
+        m = re.search(r"\(#(\d+)\)", body)
+        if not m:
+            return True
+        fid = int(m.group(1))
+        flow = await s.tool("dds-flow", "get_flow", {"flow_id": fid})
+        mode = mode_of_title(flow["title"])
+        if mode is None:  # 묶어 둔 계획은 세션과 함께 사라졌다. 다시 묻지 않고 이유와 할 일을 남긴다
+            left = next((n for n in flow["nodes"] if n["status"] != "complete"), None)
+            if left:
+                await s.tool("dds-flow", "update_node", {"flow_id": fid, "node_id": left["id"], "status": "failed", "detail": "연결이 끊겨 이 데모 계획을 잊었습니다"})
+            await s.say("연결이 끊긴 사이 이 데모의 계획을 잊어 이어 갈 수 없습니다 → 같은 요청을 다시 보내 주세요.")
+            return False
+        s.flow_id, s.mode = fid, mode
+        return True
 
     # ---------- 가진 데이터로 바로: Flow 없음, 해석 없음 ----------
     async def _from_table(self, s, path: str | None, body: str):
@@ -514,7 +554,7 @@ class DemoAgent:
         await s.tool("dds-study", "set_study_adapter", {"study_id": target["study_id"], "adapter": "mock", "adapter_config": {"function": "branin", "delay_sec": 0.02}})
         s.study_id, s.mode = target["study_id"], "connect"
         n = target["counts"]["pending"]
-        s.plan = {"permission": f"대기 중인 {n}점 해석 실행"}
+        s.plan = {}
         r = await s.tool("dds-flow", "propose_flow", {"title": f"{target['name']} 이어서 해석", "goal": f"대기 중인 {n}점을 이 PC에서 해석합니다", "nodes": self._solve_nodes(f"대기 {n}점"),
                                                      "edges": [{"source": "solve", "target": "train"}, {"source": "train", "target": "deploy"}]})
         s.flow_id = r["flow_id"]
@@ -589,12 +629,12 @@ class DemoAgent:
         # 새 모델을 설정에 넣지 않으면 새 모델이라고 말하면서 옛 모델로 돈다
         models = {"model_files": attached} if old["adapter"] == "script" and attached else {}
         if new_files and old["adapter"] != "script":
-            changes.append("연습용 솔버는 모델 파일을 읽지 않아 해석 값은 범위로만 달라집니다")
+            changes.append("연습용 계산은 모델 파일을 읽지 않아 값은 범위로만 달라집니다")
         new = await s.tool("dds-study", "clone_study", {"study_id": old["study_id"], "name": f"{old['name']} 신규 모델"[:60], "variables": variables, **models})
         if new.get("warning"):
             changes.append(new["warning"])
         s.study_id, s.mode = new["study_id"], "rerun"
-        s.plan = {"doe": sum(old["counts"].values()), "old_study": old["study_id"], "permission": f"신규 모델로 {sum(old['counts'].values())}케이스 해석"}
+        s.plan = {"doe": sum(old["counts"].values()), "old_study": old["study_id"]}
         detail = "달라진 점: " + " · ".join(changes)
         nodes = [{"id": "doe", "label": "DOE 다시 뽑기", "type": "doe", "detail": detail}, *self._solve_nodes("지난 흐름과 같은 방법")]
         r = await s.tool("dds-flow", "propose_flow", {"title": f"{last['title']} (신규 모델)", "goal": body[:200], "nodes": nodes,
@@ -884,16 +924,16 @@ class DemoAgent:
         await node("report", "complete", f"보고서 탭 · Word·HTML {len(files['files'])}개 저장")
         lines = [f"- **{by[k]['question']}** {by[k]['state']}. {by[k]['sentence']}" for k in ("pareto", "active", "convergence") if k in by]
         await s.say("두 목표 최적화와 능동학습을 마쳤습니다.\n\n" + "\n".join(lines)
-                    + "\n\n값은 예시 식으로 만든 것입니다. 자세한 판단은 오른쪽 **데이터** 탭에 있습니다.")
+                    + "\n\n값은 실제 해석이 아니라 연습용 계산입니다. 자세한 판단은 오른쪽 **데이터** 탭에 있습니다.")
 
     async def _washer(self, s, fid, node):
         """드럼세탁기 탈수 진동: 해석 모델 → DOE 60·해석 → 진동 예측 모델 → 베이지안 최적화 → Simulator → 보고서."""
         variables = [{"name": "spring_k", "lower": -10, "upper": 30, "note": "스프링 강성 [%]"}, {"name": "damper_c", "lower": -10, "upper": 50, "note": "댐퍼 감쇠력 [%]"},
                      {"name": "balancer_m", "lower": -20, "upper": 20, "note": "밸런서 질량 [%]"}, {"name": "spring_pos", "lower": -20, "upper": 20, "note": "스프링 위치 [mm]"}]
         await node("model", "in_progress")
-        await s.say("RecurDyn 탈수 모델에서 바꿀 수 있는 부품 값을 설계 변수로 잡습니다.\n\n", thought=True)
+        await s.say("연습용 탈수 모델에서 바꿀 수 있는 부품 값을 설계 변수로 잡습니다.\n\n", thought=True)
         await s.tool("dds-flow", "publish_artifact", {
-            "kind": "table", "title": "탈수 해석 모델과 설계 변수", "flow_id": fid, "node_id": "model",
+            "kind": "table", "title": "연습용 탈수 모델과 설계 변수", "flow_id": fid, "node_id": "model",
             "payload": {"columns": ["이름", "범위·값", "설명"], "rows": [
                 ["rpm", "1,200 rpm", "탈수 회전수 — 해석 조건"], ["unbalance", "0.5 kg", "세탁물 편심 — 해석 조건"],
                 ["spring_k", "-10 ~ +30 %", "스프링 강성 변화 — 설계 변수"], ["damper_c", "-10 ~ +50 %", "댐퍼 감쇠력 변화 — 설계 변수"],
@@ -907,7 +947,7 @@ class DemoAgent:
             "variables": variables, "objectives": [{"name": "vibration", "goal": "min"}],
             "outputs": [{"name": "vibration", "note": "통 진동 변위 [mm]"}]})
         sid = s.study_id = study["study_id"]
-        await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": 60, "seed": 12, "flow_id": fid, "node_id": "doe"})
+        await s.tool("dds-study", "generate_doe", {"study_id": sid, "n": s.points or 60, "seed": 12, "flow_id": fid, "node_id": "doe"})
         await node("doe", "complete")
         await node("solve", "in_progress")
         r = await s.tool("dds-study", "run_cases", {"study_id": sid})
@@ -933,11 +973,11 @@ class DemoAgent:
         judged = await self._judge(s, ("convergence",))
         said = f"- {judged['convergence']['sentence']}\n" if judged.get("convergence") else ""
         await s.say(
-            "탈수 진동 최적화를 마쳤습니다.\n\n"
+            "탈수 진동 최적화를 마쳤습니다. 값은 실제 해석이 아니라 연습용 계산입니다.\n\n"
             f"- 진동 {rep['now']:.1f} mm → {rep['best']:.1f} mm (**{rep['cut']:.0f}% 감소**), "
             f"스프링 강성 {bp['spring_k']:+.0f}% · 댐퍼 감쇠력 {bp['damper_c']:+.0f}%\n"
             + said +
-            "- 보고서는 오른쪽 **보고서** 탭에 있습니다. 다음으로 최적 설계 검증 해석을 권합니다.")
+            "- 보고서는 오른쪽 **보고서** 탭에 있습니다. 실제 과제라면 다음은 실제 해석으로 확인하는 일입니다.")
 
     async def _washer_report(self, s) -> dict:
         """세탁기 보고서: 자료를 읽고 결론·해석을 쓰며, 결과(표·그래프)를 본문에 넣는다."""
@@ -973,25 +1013,26 @@ class DemoAgent:
             + trade
             + "\n## 목적과 조건\n"
             "- 목적: 탈수 중 통 진동을 줄이는 스프링·댐퍼 설계\n"
-            "- 조건: 탈수 1,200 rpm, 세탁물 편심 0.5 kg, RecurDyn 탈수 해석 모델\n"
+            "- 조건: 탈수 1,200 rpm, 세탁물 편심 0.5 kg, 연습용 계산(실제 해석 아님)\n"
             f"{art('설계 변수', 'table')}\n"
             "\n## 수행 내용\n" + steps + "\n"
             f"\n## 결과\n### 설계 공간 탐색\n{art('DOE 샘플 분포')}\n"
-            f"해석 {n}건 중 처음 60건은 LHS로 설계 범위를 고르게 채웠고, 나머지는 최적화가 고른 점입니다.\n"
+            f"계산 {n}건 중 처음 {s.points or 60}건은 LHS로 설계 범위를 고르게 채웠고, 나머지는 최적화가 고른 점입니다.\n"
             f"\n### 진동 예측 모델\n{art('예측 정확도')}\n"
-            f"교차검증에서 예측값이 해석값과 거의 한 줄 위에 놓여(R² {r2:.3f}) 설계 범위 안에서는 해석 대신 예측 모델을 써도 됩니다.\n"
+            f"교차검증에서 예측값이 계산값과 거의 한 줄 위에 놓여(R² {r2:.3f}) 설계 범위 안에서는 계산 대신 예측 모델을 써도 됩니다.\n"
             f"\n### 최적화\n{art('수렴 이력')}\n"
             f"베이지안 최적화 8회 동안 진동이 {br['vibration']:.2f} mm까지 내려갔고, 마지막 몇 회는 거의 바뀌지 않아 수렴했다고 봅니다.\n"
             "\n## 결론과 권고\n"
-            f"1. 스프링 강성 {bp['spring_k']:+.0f}%, 댐퍼 감쇠력 {bp['damper_c']:+.0f}%를 설계안으로 제안합니다.\n"
-            "2. 최적 설계로 실제 해석을 1건 더 돌려 예측을 확인합니다.\n"
-            "3. Simulator로 회전수·부품 값을 바꿔 보며 설계팀과 함께 검토합니다.\n"
-            "\n## 한계\n- 이 데모의 해석 값은 예시 식으로 만든 값입니다. 실제 과제에서는 RecurDyn 해석 결과로 바뀝니다.\n")
+            f"1. 연습용 계산에서는 스프링 강성 {bp['spring_k']:+.0f}%, 댐퍼 감쇠력 {bp['damper_c']:+.0f}% 조합이 가장 좋았습니다.\n"
+            "2. 실제 과제라면 이 조합을 실제 해석으로 먼저 확인합니다.\n"
+            "3. Simulator로 부품 값을 바꿔 보며 값이 어떻게 변하는지 살펴봅니다.\n"
+            "\n## 한계\n- 이 보고서의 값은 실제 해석이 아니라 연습용 계산입니다. 설계 판단에 쓰지 마세요.\n")
         await s.tool("dds-flow", "write_report", {"title": "드럼세탁기 탈수 진동 저감 보고서", "body": body, "flow_id": s.flow_id})
         return {"now": now, "best": br["vibration"], "cut": cut}
 
-    async def _generic_report(self, s):
-        """다른 시나리오의 보고서: 스터디 요약 + 단계 순서대로 결과를 넣는다."""
+    async def _generic_report(self, s, conclusion: list[str] | None = None, advice: list[str] | None = None):
+        """다른 시나리오의 보고서: 스터디 요약 + 단계 순서대로 결과를 넣는다.
+        결론은 '결론과 권고' 한 절에만 쓴다. 보고서 단계에 올린 결론 카드를 결과 절에 또 넣으면 권고가 두 번 나온다."""
         ctx = await s.tool("dds-flow", "get_report_context", {})
         # 표·해석 폴더로 시작한 대화에는 Flow가 없다. 보고서는 Flow 없이도 쓴다
         flow = next((f for f in ctx["flows"] if f["flow_id"] == s.flow_id), {"title": "기존 데이터 예측 모델", "steps": []})
@@ -1004,19 +1045,23 @@ class DemoAgent:
                     lines.append(f"- {st['name']}: 데이터 {st['cases'].get('complete', 0)}건, 예측 모델 R² {r2}")
                 continue
             obj = next((o["name"] for o in st["outputs"] if o["role"].startswith("목적")), next(iter(best["results"]), ""))
-            lines.append(f"- {st['name']}: 해석 {st['cases'].get('complete', 0)}건, 최적 {obj} **{best['results'].get(obj, 0):.4g}** "
+            lines.append(f"- {st['name']}: {'연습용 계산' if st.get('practice') else '해석'} {st['cases'].get('complete', 0)}건, 최적 {obj} **{best['results'].get(obj, 0):.4g}** "
                          f"({', '.join(f'{k}={v:.3g}' for k, v in best['params'].items())})" + (f", 예측 모델 R² {r2}" if r2 else ""))
         lines += ["", "## 수행 내용", *[f"{x['no']}. {x['label']}{' — ' + x['detail'] if x['detail'] else ''}" for x in flow["steps"]],
                   "", "## 결과"]
         for x in flow["steps"]:
+            if x["id"] == "report":
+                continue
             embeds = [r["embed"] for r in ctx["results"] if r["step"] == f"{x['no']}단계 · {x['label']}"]
             if embeds:
                 lines += [f"### {x['no']}단계 · {x['label']}", *embeds, ""]
         judged = await self._judge(s) if s.study_id else {}
         if judged:  # 화면과 같은 문장을 그대로 넣는다
             lines += ["## 판단 요약", *[f"- **{x['question']}** {x['state']}. {x['sentence']}" for x in judged.values() if x["key"] != "active" or x["facts"].get("al")], ""]
-        lines += ["## 결론과 권고", "1. 최적 설계점에서 실제 해석으로 검증 해석을 1건 더 수행합니다.",
-                  "2. Simulator로 설계 변수를 바꿔 보며 설계팀과 함께 검토합니다."]
+        lines += ["## 결론과 권고", *(conclusion or []), *(advice or ["1. 실제 과제라면 가장 좋았던 설계를 실제 해석으로 먼저 확인합니다.",
+                                                                      "2. Simulator로 설계 변수를 바꿔 보며 값이 어떻게 변하는지 살펴봅니다."])]
+        if ctx.get("practice_note"):
+            lines += ["", "## 한계", f"- {ctx['practice_note']}"]
         await s.tool("dds-flow", "write_report", {"title": f"{flow['title']} 보고서", "body": "\n".join(lines), "flow_id": s.flow_id})
 
     async def _follow_up(self, s, body: str):
@@ -1065,7 +1110,7 @@ class DemoAgent:
                                 f"- Simulator: 모델 #{d['model_id']}"}})
         judged = await self._judge(s, ("convergence",))
         said = f" {judged['convergence']['sentence']}" if judged.get("convergence") else ""
-        await s.say(f"완료했습니다. 최적 f = {best['results']['f']:.4f} 이고, Simulator(모델 #{d['model_id']})를 배포했습니다.{said}")
+        await s.say(f"완료했습니다. 연습용 계산에서 최적 f = {best['results']['f']:.4f} 이고, Simulator(모델 #{d['model_id']})를 배포했습니다.{said}")
 
     async def _beam3d(self, s, fid, node):
         await node("doe", "in_progress")
@@ -1089,7 +1134,7 @@ class DemoAgent:
         await node("deploy", "in_progress")
         d = await s.tool("dds-study", "deploy_model", {"model_id": m["model_id"]})
         await node("deploy", "complete")
-        await s.say(f"완료했습니다. 응력 필드와 처짐 형상을 학습했고, 3D Simulator(모델 #{d['model_id']})에서 폭·높이를 바꾸며 바로 볼 수 있습니다.")
+        await s.say(f"완료했습니다. 연습용 계산으로 응력 필드와 처짐 형상을 학습했고, 3D Simulator(모델 #{d['model_id']})에서 폭·높이를 바꾸며 바로 볼 수 있습니다.")
 
 
     async def _bracket(self, s, fid, node):
@@ -1109,10 +1154,10 @@ class DemoAgent:
 
         # 1) CAD
         await node("cad", "in_progress")
-        await s.say("브래킷 CAD를 파라메트릭으로 만듭니다(두께·리브 높이를 expression으로).\n\n", thought=True)
-        cad = await script("cad", "bracket_cad.py", "브래킷 CAD 형상", base)
+        await s.say("연습용 브래킷 형상을 파라메트릭으로 만듭니다(두께·리브 높이를 변수로).\n\n", thought=True)
+        cad = await script("cad", "bracket_cad.py", "브래킷 형상(연습용)", base)
         await s.tool("dds-flow", "publish_artifact", {
-            "kind": "table", "title": "CAD 파라미터 (expression)", "flow_id": fid, "node_id": "cad",
+            "kind": "table", "title": "형상 파라미터", "flow_id": fid, "node_id": "cad",
             "payload": {"columns": ["이름", "값", "설명"], "rows": [
                 ["L", 200, "브래킷 길이 [mm]"], ["W", 60, "플레이트 폭 [mm]"], ["rib_t", 6, "리브 두께 [mm]"],
                 ["thickness", base["thickness"], "플레이트 두께 [mm] — 설계변수"],
@@ -1121,7 +1166,7 @@ class DemoAgent:
 
         # 2) 해석 모델
         await node("pre", "in_progress")
-        pre = await script("pre", "bracket_model.py", "해석 모델 (메쉬·경계조건·하중)", base)
+        pre = await script("pre", "bracket_model.py", "해석 모델(연습용): 메쉬·경계조건·하중", base)
         await node("pre", "complete", f"S3 {pre['elements']:,}요소 · 고정 {pre['fixed_nodes']}절점 · model/bracket.inp")
 
         # 3) DOE + 케이스 해석
@@ -1161,28 +1206,26 @@ class DemoAgent:
         bp, br = best["params"], best["results"]
         pred = await s.tool("dds-study", "predict", {"model_id": m["model_id"], "params": base})
         mean = pred.get("mean", pred)
-        await s.tool("dds-flow", "publish_artifact", {
-            "kind": "markdown", "title": "결론 및 권고", "flow_id": fid, "node_id": "report",
-            "payload": {"text": (
-                "## 브래킷 설계 결론\n"
-                f"- 하중 2 kN, 응력 제한 {STRESS_LIMIT:.0f} MPa 조건에서 DOE {len(done)}건 중 "
-                f"**{len(ok)}건**이 제한을 만족했습니다.\n"
-                f"- 최경량 설계: 두께 **{bp['thickness']:.1f} mm**, 리브 높이 **{bp['rib_height']:.1f} mm** → "
-                f"질량 {br['mass']:.0f} g, 최대 응력 {br['max_stress']:.0f} MPa, 처짐 {br['deflection']:.2f} mm\n"
-                f"- 기준 설계(두께 10, 리브 25) 예측: 질량 {mean.get('mass', 0):.0f} g, 응력 {mean.get('max_stress', 0):.0f} MPa\n"
-                f"- 예측 모델 정확도(교차검증 R²): 질량 {r2['mass']:.3f}, 응력 {r2['max_stress']:.3f}, 처짐 {r2['deflection']:.3f}\n"
-                "- 리브 높이가 응력·처짐을 가장 크게 줄이고 질량 증가는 작습니다. 두께보다 리브를 키우는 쪽이 효율적입니다.\n\n"
-                "### 권고\n"
-                "1. 최경량 설계점 부근에서 실제 해석으로 검증 해석을 1~2건 수행합니다.\n"
-                f"2. 3D Simulator(모델 #{d['model_id']})로 설계팀이 두께·리브를 바꿔 응력 분포를 바로 확인하게 공유합니다.")}})
-        await self._generic_report(s)  # 결론 요약(위 markdown)과 단계별 결과를 넣어 보고서 탭에 쓴다
+        conclusion = [
+            f"- 하중 2 kN, 응력 제한 {STRESS_LIMIT:.0f} MPa 조건에서 DOE {len(done)}건 중 **{len(ok)}건**이 제한을 만족했습니다.",
+            f"- 가장 가벼운 설계: 두께 **{bp['thickness']:.1f} mm**, 리브 높이 **{bp['rib_height']:.1f} mm** → "
+            f"질량 {br['mass']:.0f} g, 최대 응력 {br['max_stress']:.0f} MPa, 처짐 {br['deflection']:.2f} mm",
+            f"- 기준 설계(두께 10, 리브 25) 예측: 질량 {mean.get('mass', 0):.0f} g, 응력 {mean.get('max_stress', 0):.0f} MPa",
+            f"- 예측 모델 정확도(교차검증 R²): 질량 {r2['mass']:.3f}, 응력 {r2['max_stress']:.3f}, 처짐 {r2['deflection']:.3f}",
+            "- 리브 높이가 응력·처짐을 가장 크게 줄이고 질량 증가는 작습니다. 두께보다 리브를 키우는 쪽이 효율적입니다."]
+        await s.tool("dds-flow", "publish_artifact", {  # 작업 흐름의 보고서 단계에서 바로 보는 결론. 권고는 보고서 한 곳에만 둔다
+            "kind": "markdown", "title": "브래킷 설계 결론(연습용 계산)", "flow_id": fid, "node_id": "report", "payload": {"text": "\n".join(conclusion)}})
+        await self._generic_report(s, conclusion, [
+            "",
+            "1. 실제 과제라면 가장 가벼운 설계 부근을 실제 해석으로 1~2건 먼저 확인합니다.",
+            f"2. 3D Simulator(모델 #{d['model_id']})로 두께·리브를 바꿔 응력 분포가 어떻게 변하는지 살펴봅니다."])
         rep = await s.tool("dds-flow", "make_report", {"formats": ["docx", "html"], "flow_id": fid})
         names = [Path(f).name for f in rep["files"]]
         await node("report", "complete", f"보고서 탭 · Word·HTML {len(names)}개 저장")
         # 대화에는 핵심만: 파일 경로·단계별 내용은 작업 흐름·보고서 탭에 있다
         await s.say(
-            "전체 과정을 마쳤습니다.\n\n"
-            f"- 응력 {STRESS_LIMIT:.0f} MPa 이하 최경량 설계: 두께 {bp['thickness']:.1f} mm, 리브 {bp['rib_height']:.1f} mm "
+            "전체 과정을 마쳤습니다. 값은 실제 해석이 아니라 연습용 계산입니다.\n\n"
+            f"- 응력 {STRESS_LIMIT:.0f} MPa 이하에서 가장 가벼운 설계: 두께 {bp['thickness']:.1f} mm, 리브 {bp['rib_height']:.1f} mm "
             f"(질량 {br['mass']:.0f} g)\n"
             f"- 예측 모델 R² 질량 {r2['mass']:.3f} · 응력 {r2['max_stress']:.3f}, 3D Simulator로 응력 분포를 바로 봅니다\n"
             "- 보고서는 오른쪽 **보고서** 탭에 있습니다.")

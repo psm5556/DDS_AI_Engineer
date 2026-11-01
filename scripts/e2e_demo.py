@@ -51,19 +51,26 @@ def main():
         pid = c.post("/api/projects", json={"name": "E2E 데모"}).json()["id"]
         # 에이전트를 직접 고른다: 연결 직후에는 서버가 Agent의 기본값(hello)을 아직 몰라 실제 Gemini CLI를 띄울 수 있다
         sid = c.post(f"/api/projects/{pid}/sessions", json={"agent": "demo"}).json()["id"]
-        c.post(f"/api/sessions/{sid}/prompt", json={"text": "mock 솔버로 Branin 최적화하고 Simulator 배포해줘"}).raise_for_status()
+        c.post(f"/api/sessions/{sid}/prompt", json={"text": "연습용 계산으로 Branin 최적화하고 Simulator 배포해줘"}).raise_for_status()
         wait_for(lambda: not c.get(f"/api/sessions/{sid}/status").json()["busy"] and
                  c.get(f"/api/projects/{pid}/flows").json(), what="플로우 제안")
         flow = c.get(f"/api/projects/{pid}/flows").json()[0]
         assert flow["status"] == "review", flow
         print(f"✓ 플로우 제안: {flow['title']} ({len(flow['nodes'])}단계)")
 
-        c.put(f"/api/flows/{flow['id']}/status", json={"status": "approved", "version": flow["version"]}).raise_for_status()
-        c.post(f"/api/sessions/{sid}/prompt", json={"text": "플로우를 승인했습니다. 진행하세요."}).raise_for_status()
-        perm = wait_for(lambda: c.get(f"/api/sessions/{sid}/status").json()["pending_permissions"], what="권한 요청")[0]
-        print(f"✓ 권한 요청 수신: {perm['title']}")
-        c.post(f"/api/sessions/{sid}/permission", json={"request_id": perm["request_id"], "option_id": "allow"}).raise_for_status()
-        wait_for(lambda: not c.get(f"/api/sessions/{sid}/status").json()["busy"], timeout=300, what="시나리오 완료")
+        # 승인만 한다. 에이전트에게 전하는 일은 서버가 하고, 승인 뒤에는 묻지 않고 끝까지 간다
+        c.put(f"/api/flows/{flow['id']}/status", json={"status": "approved", "version": flow["version"], "session_id": sid}).raise_for_status()
+        print("✓ 승인: 서버가 에이전트에게 전함")
+        seen_perm = False
+
+        def finished():
+            nonlocal seen_perm
+            st = c.get(f"/api/sessions/{sid}/status").json()
+            seen_perm = seen_perm or bool(st["pending_permissions"])
+            return not st["busy"]
+        wait_for(finished, timeout=300, what="시나리오 완료")
+        assert not seen_perm, "승인 뒤에 권한을 또 물었습니다"
+        assert any("승인했습니다" in m["content"] for m in c.get(f"/api/sessions/{sid}/messages").json() if m["role"] == "user"), "승인 메시지가 대화에 없습니다"
 
         flow = c.get(f"/api/flows/{flow['id']}").json()
         msgs = c.get(f"/api/sessions/{sid}/messages").json()

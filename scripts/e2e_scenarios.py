@@ -288,6 +288,10 @@ def chat(who: Who, sid: int, text: str, attach: list[int] | None = None, timeout
     n = len(who.get(f"/api/sessions/{sid}/messages"))
     t0 = time.time()
     who.post(f"/api/sessions/{sid}/prompt", {"text": text, "attachment_ids": attach or []})
+    return follow(who, sid, n, t0, text, timeout, allow)
+
+
+def follow(who: Who, sid: int, n: int, t0: float, text: str, timeout: float = 400, allow: bool = True) -> Turn:
     first, perms = None, []
     while True:
         if time.time() - t0 > timeout:
@@ -308,10 +312,14 @@ def chat(who: Who, sid: int, text: str, attach: list[int] | None = None, timeout
 
 
 def approve(who: Who, sid: int, flow_id: int) -> Turn:
+    wait_for(lambda: not who.get(f"/api/sessions/{sid}/status")["busy"], timeout=60, what="앞 턴 끝")
     f = who.get(f"/api/flows/{flow_id}")
-    r = who.c.put(f"/api/flows/{flow_id}/status", json={"status": "approved", "version": f["version"]})
+    n = len(who.get(f"/api/sessions/{sid}/messages"))
+    t0 = time.time()
+    # 승인만 한다. 에이전트에게 전하는 일은 서버가 한다(웹앱 카드와 같다)
+    r = who.c.put(f"/api/flows/{flow_id}/status", json={"status": "approved", "version": f["version"], "session_id": sid})
     r.raise_for_status()
-    return chat(who, sid, f"작업 흐름 '{f['title']}'(#{flow_id})을 승인했습니다. 계획대로 진행해 주세요.")
+    return follow(who, sid, n, t0, f"승인 #{flow_id}")
 
 
 def flows(who: Who, pid: int) -> list[dict]:
@@ -394,7 +402,7 @@ def e0(w: World, tmp: Path, c: Check):
     c(len(fl) == 1 and fl[0]["status"] == "review", "Flow 제안 후 검토 대기")
     c(o.get(f"/api/projects/{pid}/studies") == [], "승인 전에는 스터디·해석 없음")
     done = approve(o, sid, fl[0]["id"])
-    c(len(done.permissions) == 1, "실행 권한 요청 1회")
+    c(len(done.permissions) == 0, "승인 뒤에는 묻지 않음")
     f = o.get(f"/api/flows/{fl[0]['id']}")
     st = study_of(o, pid)
     cnt = counts(o, st["id"])
@@ -409,6 +417,59 @@ def e0(w: World, tmp: Path, c: Check):
     c["r2"] = r2_of(live[0])
     c["propose_sec"] = t.sec
     c["run_sec"] = done.sec
+
+
+@scenario("E0b", "승인: 답하는 중에 눌러도, PC Agent가 꺼졌을 때 눌러도 멈추지 않고 끝까지 간다")
+def e0b(w: World, tmp: Path, c: Check):
+    o = w.owner
+    text = "연습용 계산으로 Branin 최적화하고 Simulator 배포해줘"
+
+    def finished(pid, fid, sid):
+        wait_for(lambda: o.get(f"/api/flows/{fid}")["status"] == "complete" and not o.get(f"/api/sessions/{sid}/status")["busy"], timeout=300, what="흐름 끝")
+
+    # 답하는 중: 제안이 보이자마자 누른다. 예전에는 '승인했습니다'가 409로 사라져 approved로 멈췄다
+    pid = o.project("E0b")
+    sid = o.new_chat(pid)
+    o.post(f"/api/sessions/{sid}/prompt", {"text": text})
+    fl = wait_for(lambda: flows(o, pid), timeout=120, interval=0.01, what="흐름 제안")[0]
+    during = o.get(f"/api/sessions/{sid}/status")["busy"]
+    r = o.c.put(f"/api/flows/{fl['id']}/status", json={"status": "approved", "version": fl["version"], "session_id": sid}).json()
+    c(r["status"] == "approved", "승인됨")
+    finished(pid, fl["id"], sid)
+    said = [m["content"] for m in o.get(f"/api/sessions/{sid}/messages") if m["role"] == "user"]
+    c(sum("승인했습니다" in x for x in said) == 1, f"승인을 한 번만 전함 {said}")
+    c(any(m["deployed"] for m in models_of(o, pid)), "끝까지 가서 배포됨")
+    c["turn_running_when_approved"] = during
+    c["queued"] = r["start_queued"]
+
+    # PC Agent 없음: 켜지면 저절로 시작한다
+    pid = o.project("E0b2")
+    sid = o.new_chat(pid)
+    chat(o, sid, text)
+    fl = flows(o, pid)[0]
+    w.owner_pc.stop()
+    wait_for(lambda: not o.get("/api/agent/status").get("connected"), timeout=30, what="끊김")
+    r = o.c.put(f"/api/flows/{fl['id']}/status", json={"status": "approved", "version": fl["version"], "session_id": sid}).json()
+    c(r["status"] == "approved" and r["start_queued"] is True, "PC Agent가 없으면 기다린다고 표시")
+    w.owner_pc.start()
+    wait_for(lambda: o.get(f"/api/flows/{fl['id']}")["status"] == "complete", timeout=300, what="연결된 뒤 끝까지")
+    finished(pid, fl["id"], sid)
+    c(any(m["deployed"] for m in models_of(o, pid)), "연결되자 시작해 끝까지 감")
+
+    # 중지: 멈춤으로 표시하고 다시 시키지 않는다
+    pid = o.project("E0b3")
+    sid = o.new_chat(pid)
+    chat(o, sid, text)
+    fl = flows(o, pid)[0]
+    o.c.put(f"/api/flows/{fl['id']}/status", json={"status": "approved", "version": fl["version"], "session_id": sid}).raise_for_status()
+    wait_for(lambda: o.get(f"/api/flows/{fl['id']}")["status"] == "in_progress", timeout=60, interval=0.05, what="진행 시작")
+    o.post(f"/api/sessions/{sid}/cancel")
+    wait_for(lambda: not o.get(f"/api/sessions/{sid}/status")["busy"], timeout=120, what="중지")
+    got = o.get(f"/api/flows/{fl['id']}")
+    c(got["status"] == "stopped", f"중지하면 멈춤 {got['status']}")
+    time.sleep(1)
+    c(not o.get(f"/api/sessions/{sid}/status")["busy"], "중지한 뒤 다시 시키지 않음")
+    c(any("멈췄습니다" in m["content"] and "→" in m["content"] for m in o.get(f"/api/sessions/{sid}/messages") if m["role"] == "system"), "멈춘 이유와 할 일을 말함")
 
 
 @scenario("E1", "표 붙여넣기 → Simulator: 해석 0건, PC Agent·AI 없이", pc=False)
@@ -1266,7 +1327,7 @@ def pv(w: World, tmp: Path, c: Check):
     c(saved()["session"] == m["session"], "같은 대화")
     p3 = run("이 프로젝트에 모델 몇 개 있어?", "--session", str(m["session"]), "--expect", "flows=3,tool:import_table")
     c(p3.returncode == 1 and "불합격" in p3.stdout, "기대가 틀리면 종료 코드 1")
-    p4 = run("mock 솔버로 Branin 최적화하고 Simulator 배포해줘", "--expect", "flows=1,flows_approved=1,deployed,permissions=1")
+    p4 = run("mock 솔버로 Branin 최적화하고 Simulator 배포해줘", "--expect", "flows=1,flows_approved=1,deployed,permissions=0")
     c(p4.returncode == 0, f"현재 대화 Flow는 자동 승인: {p4.stdout[-500:]}")
     c(o.get(f"/api/flows/{other_flow}")["status"] == "review", "여전히 다른 대화 Flow는 그대로")
     p5 = run("mock 솔버로 Branin 최적화하고 Simulator 배포해줘", "--no-approve", "--expect", "flows=1,flows_approved=0,no_cases_run")

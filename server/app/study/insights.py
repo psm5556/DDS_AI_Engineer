@@ -29,7 +29,7 @@ from .surrogate import Surrogate, _make_gp
 
 log = logging.getLogger(__name__)
 
-SCHEMA = 3  # 결과 모양이 바뀌면 올린다. 저장된 옛 결과를 쓰지 않게 한다
+SCHEMA = 4  # 결과 모양이 바뀌면 올린다. 저장된 옛 결과를 쓰지 않게 한다. 4: 모델 파일을 못 읽은 때 '모델이 없다'고 저장한 결과를 버린다
 
 # 판단값. 몇 개 시험 함수로 정한 값이고 실제 CAE 데이터로 검증되지 않았다. 사내 검증 뒤 조정한다
 THRESHOLDS: dict[str, float] = {
@@ -158,6 +158,7 @@ T = {
     "inf_no_value": "{out} 값이 있는 해석이 {n}건이라 아직 판단하지 못합니다. {m}건 더 있어야 봅니다.",
     "inf_no_model": "예측 모델이 아직 없습니다. 해석 결과만 놓고 보면 {out|은는} {var|과와} 가장 함께 움직입니다(원인이라는 뜻은 아닙니다).",
     "inf_no_model_none": "예측 모델이 아직 없습니다. 해석 결과만 놓고 봐도 {out|과와} 뚜렷하게 함께 움직이는 변수는 없습니다.",
+    "model_unreadable": "예측 모델 파일을 읽지 못해 판단하지 못했습니다 → 이 스터디를 다시 학습하면 다시 볼 수 있습니다.",
     "inf_flat": "{out} 값이 거의 변하지 않아 영향도를 계산하지 않았습니다.",
     "inf_good": "{out|은는} {var1|이가} {p1}%, {var2|이가} {p2}%를 좌우합니다.",
     "inf_good_one": "{out|은는} {var1|이가} {p1}%를 좌우합니다.",
@@ -712,7 +713,13 @@ class Ctx:
             except Exception:
                 log.warning("모델 %s를 불러오지 못했습니다", m.id, exc_info=True)
                 self._sur[m.id] = None
+                # 저장하지 않고 다시 잰다. '모델이 없다'는 결론이 캐시에 남으면 파일을 되살려도 상태 키가 같아 영영 그대로다
+                self.had_error = True
         return self._sur[m.id]
+
+    def unreadable_for(self, output: str) -> bool:
+        """그 출력의 모델이 있는데 파일을 읽지 못했다. '아직 없다'고 말하면 거짓이고, 사용자가 쓸데없이 학습을 다시 요청한다."""
+        return any(output in m.outputs and self.surrogate(m) is None for m in self.s.models)
 
     def model_for(self, output: str) -> ModelRow | None:
         """그 출력을 가진 가장 최근 모델. 재학습에서 빠진 출력도 앞 버전으로 볼 수 있다."""
@@ -1289,6 +1296,8 @@ def _influence_one(ctx: Ctx, o: str) -> dict:
     related = None
     if n >= ctx.need:
         related = calc.top_related(np.array([ctx.x(c) for c, _ in rows]), y, T_["related_p"])
+    if m is None and ctx.unreadable_for(o):
+        return out("unknown", T["model_unreadable"], facts={"n": n}, next_=_ask(ctx, "학습 요청", "스터디 '{name}'의 완료된 케이스로 예측 모델을 학습해 줘.", "train"))
     if m is None:
         if n < ctx.need:
             # 완료 건수가 충분한데 값이 모자라면 '해석이 0건'이 아니라 값이 없는 것이다
@@ -1486,6 +1495,9 @@ def trust(ctx: Ctx) -> dict:
     if ctx.s.models and not ctx.use_models:
         return _pending("trust")
     have = [o for o in names if ctx.model_for(o) is not None]
+    if not have and any(ctx.unreadable_for(o) for o in names):
+        return _section("trust", "unknown", T["model_unreadable"], facts={"need": ctx.need}, basis="predicted",
+                        next_=_ask(ctx, "학습 요청", "스터디 '{name}'의 완료된 케이스로 예측 모델을 학습해 줘.", "train"))
     if not have:
         ready = len(ctx.complete) >= ctx.need
         next_ = _ask(ctx, "학습 요청", "스터디 '{name}'의 완료된 케이스로 예측 모델을 학습해 줘.", "train") if ready else None
@@ -2721,6 +2733,25 @@ def _say_data_instead_of_solver(sections: list[dict], ov: dict):
         ov["next"]["text"] = _data_words(ov["next"]["text"])
 
 
+PRACTICE_MARK = "연습용 계산 기준: "
+
+
+def _practice_words(text: str) -> str:
+    """연습용 값을 '해석으로 확인됐다'고 하면 실제 해석으로 읽는다."""
+    return PRACTICE_MARK + text.replace("해석으로 확인된", "연습용 계산으로 확인된").replace("해석으로 확인한", "연습용 계산으로 확인한")
+
+
+def _say_practice(sections: list[dict], ov: dict):
+    """문장마다 표시한다. 화면·AI·보고서가 이 문장을 그대로 쓰므로 어디에 인용돼도 연습용임이 따라간다."""
+    not_a_verdict = {T["error"], T["model_unreadable"]}  # 판단이 아니라 판단하지 못했다는 말에는 붙이지 않는다
+    for x in sections:
+        for holder in [x, *(x.get("variants") or [])]:
+            if holder["sentence"] not in not_a_verdict and not x.get("pending"):
+                holder["sentence"] = _practice_words(holder["sentence"])
+    ov["practice"] = service.PRACTICE_NOTE
+    ov["word"] = service.PRACTICE  # '해석 20건 완료'가 '연습용 계산 20건 완료'로 보인다
+
+
 # ---------- 전체 계산 ----------
 def compute(snap: Snap, use_models: bool = True) -> dict:
     ctx = Ctx(snap, use_models)
@@ -2760,6 +2791,8 @@ def compute(snap: Snap, use_models: bool = True) -> dict:
             seen.add(x["next"].get("action"))
     if snap.imported:
         _say_data_instead_of_solver(sections, ov)
+    if snap.adapter == "mock":
+        _say_practice(sections, ov)
     if use_models:  # 교차검증이 저장되기 전 모델의 칩도 지금 잰 값을 따르게 한다. 이미 불러온 모델만 보므로 추가 비용이 없다
         for m in snap.models:
             if _needs_backfill(ctx._sur.get(m.id), m.quality):
@@ -3113,6 +3146,8 @@ def trust_line(db: Session, m: models.SurrogateModel) -> dict:
         if o in pool and (best is None or _RANK[line[0]] > _RANK[best[0]]):
             best = line
     sentence = _data_words(best[1]) if snap.imported else best[1]
+    if snap.adapter == "mock":
+        sentence = _practice_words(sentence)
     label = "계산 중" if computing and best[0] == "unknown" else state_label("trust", best[0])
     return {"state": best[0], "state_label": label, "sentence": sentence, "basis": "predicted", "outputs": per,
             "gaps": sorted(gaps.values(), key=lambda g: -g["gap"]), "computing": computing}
