@@ -415,7 +415,7 @@ class Workspace:
                     if not _is_alias(p) or p.exists():
                         continue
                     if not self._our_alias(p):  # 사용자가 이어 둔 드라이브가 빠졌다. 빈 폴더로 대신하면 돌아왔을 때 링크가 없어진다
-                        raise FileNotFoundError(f"프로젝트 폴더 '{p.name}'가 가리키는 '{os.path.realpath(p)}'에 연결할 수 없습니다 → "
+                        raise FileNotFoundError(f"Project 폴더 '{p.name}'가 가리키는 '{os.path.realpath(p)}'에 연결할 수 없습니다 → "
                                                 "외장 드라이브나 네트워크 연결을 확인한 뒤 다시 시도하세요.")
                     _drop_alias(p)  # 실제 폴더가 지워졌다. 끊긴 접합이 새 폴더의 이름을 막지 않게 한다
                 slot = self._project_slot(project_id)
@@ -1006,7 +1006,7 @@ class Workspace:
         sysroots = [Path(os.environ[k]).resolve() for k in ("SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramData")
                     if os.environ.get(k)]
         if any(p == s or s in p.parents for s in sysroots):
-            raise ValueError("Windows·프로그램 설치 폴더는 작업 폴더로 쓸 수 없습니다")
+            raise ValueError("Windows·프로그램 설치 폴더는 Project 폴더로 쓸 수 없습니다")
         if p == self.root:
             raise ValueError("작업 공간 최상위 폴더 자체는 쓸 수 없습니다. 그 안의 폴더를 고르세요")
         if p.exists() and not p.is_dir():

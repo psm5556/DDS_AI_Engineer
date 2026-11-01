@@ -71,9 +71,9 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
   const [opened, setOpened] = useState<Set<number>>(savedOpen);
   const [longList, setLongList] = useState<Set<number>>(new Set()); // '이전 Task 더 보기'를 누른 Project
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
-  // 검토 대기와 회수·검토 결과는 찾아가야만 보이면 안 된다. 바뀌면 market_updated로 다시 읽고, 놓쳐도 1분 안에 맞는다
+  // 내려간 옵션 소식은 찾아가야만 보이면 안 된다. 바뀌면 market_updated로 다시 읽고, 놓쳐도 1분 안에 맞는다
   const { data: notices } = useQuery({ queryKey: ["market", "notices"], queryFn: () => get<MarketNotices>("/api/market/notices"), refetchInterval: 60000 });
-  const marketCount = (notices?.items.length ?? 0) + (notices?.review_waiting ?? 0);
+  const marketCount = notices?.items.length ?? 0;
   const marketBadge = marketCount > 0 && <span className="chip warn market-count" aria-label={`확인할 일 ${marketCount}건`}>{marketCount}</span>;
   const themeLabel = theme === "dark" ? "밝은 화면" : "어두운 화면";
   const pid = Number(loc.pathname.match(/^\/projects\/(\d+)/)?.[1]) || null;
@@ -106,7 +106,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
       <aside className="sidebar rail" aria-label="사이드바 (접힘)">
         <button className="icon-btn rail-btn" onClick={layout.toggle} aria-label={needsMe ? "사이드바 펼치기 · 승인 대기나 실패 있음" : "사이드바 펼치기"} title="사이드바 펼치기 (Ctrl+B)"><PanelLeftOpen size={18} />{needsMe && <i className="rail-dot" aria-hidden="true" />}</button>
         <NavLink className="icon-btn rail-btn" to="/simulators" aria-label="Simulator" title="Simulator"><SlidersHorizontal size={18} /></NavLink>
-        <NavLink className="icon-btn rail-btn market-rail" to="/market" aria-label="마켓" title="마켓: 사내 스킬 찾기·설치·등록"><Store size={18} />{marketBadge}</NavLink>
+        <NavLink className="icon-btn rail-btn market-rail" to="/market" aria-label="마켓" title="마켓: 쓸 수 있는 MCP 보기·선택"><Store size={18} />{marketBadge}</NavLink>
         <hr className="rail-sep" />
         <Link className="icon-btn rail-btn" to="/" aria-label={COPY.newProject} title={COPY.newProjectTip}><SquarePen size={18} /></Link>
         <span className="grow" />
@@ -221,7 +221,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         </div>
         <nav className="side-nav-list" aria-label="바로 가기">
           <NavLink className="side-nav" to="/simulators" title="내 Simulator와 공유받은 Simulator"><SlidersHorizontal size={16} />Simulator</NavLink>
-          <NavLink className="side-nav" to="/market" title="사내 스킬 찾기·설치·등록"><Store size={16} />마켓{marketBadge}</NavLink>
+          <NavLink className="side-nav" to="/market" title="쓸 수 있는 MCP 보기·선택"><Store size={16} />마켓{marketBadge}</NavLink>
           <hr className="side-sep" />
           <button className="side-nav" title={COPY.newProjectTip} onClick={() => nav("/")}><SquarePen size={16} />{COPY.newProject}</button>
           <label className="side-nav side-find">

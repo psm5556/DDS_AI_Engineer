@@ -39,7 +39,7 @@ class ScriptAdapter(CaeAdapter):
                 root = Path(project_dir).resolve()
                 src = (root / step["script"]).resolve()
                 if root not in src.parents:  # 글자로는 상대 경로여도 접합·바로가기로 밖을 가리킬 수 있다
-                    raise ValueError(f"프로젝트 폴더 밖의 스크립트입니다: {step['script']} → 파일을 프로젝트 폴더의 scripts/로 복사해 주세요")
+                    raise ValueError(f"Task 폴더 밖의 스크립트입니다: {step['script']} → 파일을 Task 폴더의 scripts/로 복사해 주세요")
                 if not src.exists():
                     raise ValueError(f"스크립트가 없습니다: {step['script']} → 다른 멤버가 만든 스터디라면 대화에서 '스크립트 묶음을 내려받아 줘'라고 요청하세요(dds-study.restore_recipe)")
                 shutil.copy2(src, run_dir / src.name)

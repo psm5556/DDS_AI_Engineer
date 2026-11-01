@@ -46,12 +46,12 @@ def explain_failure(e: Exception) -> str:
     if e.errno == errno.ENOSPC or code in (39, 112):
         return f"디스크 공간이 부족해 케이스를 기록하지 못했습니다{at} → 공간을 비운 뒤 {_AGAIN}"
     if code == 206 or e.errno == errno.ENAMETOOLONG:
-        return f"작업 폴더 경로가 너무 길어 케이스를 기록하지 못했습니다{at} → 프로젝트 작업 폴더를 더 짧은 경로로 정한 뒤 {_AGAIN}"
+        return f"폴더 경로가 너무 길어 케이스를 기록하지 못했습니다{at} → Project 폴더를 더 짧은 경로로 정한 뒤 {_AGAIN}"
     if isinstance(e, PermissionError):
-        return f"작업 폴더의 파일에 쓰지 못했습니다{at}. 다른 프로그램이 열었거나 권한이 없습니다 → 그 파일을 닫거나 폴더 권한을 확인한 뒤 {_AGAIN}"
+        return f"폴더의 파일에 쓰지 못했습니다{at}. 다른 프로그램이 열었거나 권한이 없습니다 → 그 파일을 닫거나 폴더 권한을 확인한 뒤 {_AGAIN}"
     if isinstance(e, (FileNotFoundError, NotADirectoryError)) or code in (3, 21, 53, 67, 1231):
-        return f"작업 폴더에 접근할 수 없습니다{at} → 드라이브·네트워크 연결을 확인하거나 프로젝트 작업 폴더를 다시 정한 뒤 {_AGAIN}"
-    return f"작업 폴더에 기록하지 못했습니다: {e} → 폴더 상태를 확인한 뒤 {_AGAIN}"
+        return f"폴더에 접근할 수 없습니다{at} → 드라이브·네트워크 연결을 확인하거나 Project 폴더를 다시 정한 뒤 {_AGAIN}"
+    return f"폴더에 기록하지 못했습니다: {e} → 폴더 상태를 확인한 뒤 {_AGAIN}"
 
 
 class CaseExecutor:

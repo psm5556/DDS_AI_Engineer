@@ -239,7 +239,7 @@ const CaseRow = memo(function CaseRow({ c, vars, outs, best, extracting, pulse, 
 }) {
   const { user } = useAuth();
   const toast = useToast();
-  const open = useOpenLocal(pid);
+  const open = useOpenLocal(pid, useCanvas().workId);
   const imported = c.source === "import";
   const rel = imported ? null : relFromRunDir(c.run_dir); // 불러온 케이스의 폴더는 작업 폴더 밖 원본이라 웹앱에서 열 수 없다
   const mine = c.run_by === user?.id;

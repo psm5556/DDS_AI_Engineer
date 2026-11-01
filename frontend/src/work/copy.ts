@@ -4,8 +4,8 @@
 export const W = { project: "Project", task: "Task", flow: "Task Flow" } as const;
 
 /** 아직 없는 기능을 있는 척하지 않게 한 곳에서 켜고 끈다.
- *  taskFolder: Task별 PC 폴더(2단계)가 들어오면 켠다. endAi: 'AI 끝내기'(session.close, 8단계)가 들어오면 켠다. */
-export const FEATURE = { taskFolder: false, endAi: false };
+ *  endAi: 'AI 끝내기'(session.close, 8단계)가 들어오면 켠다. */
+export const FEATURE = { endAi: false };
 
 const { project: P, task: T, flow: F } = W;
 
@@ -14,9 +14,8 @@ export const COPY = {
   newTask: `새 ${T}`,
   addTask: `+ 새 ${T}`,
   projectSearch: `${P} 검색`,
-  // newTaskTip: 2단계가 들어오면 '폴더가 새로 생기고'를 넣는다. 지금은 새 Task도 Project 폴더에서 돌아서 없는 폴더를 말하지 않는다
   newProjectTip: `다른 부품이나 제품을 시작합니다. 폴더가 새로 생깁니다`,
-  newTaskTip: `이 부품으로 새 일을 시작합니다. 결과는 이 ${T}에만 모이고 다른 ${T}는 그대로입니다`,
+  newTaskTip: `이 부품으로 새 일을 시작합니다. 폴더가 새로 생기고 다른 ${T}는 그대로입니다`,
   moreTasks: (n: number) => `이전 ${T} ${n}개 더 보기`,
   fewerTasks: `접기`,
   menuProject: `${P} 메뉴`,
@@ -25,6 +24,7 @@ export const COPY = {
   renameTaskTitle: `${T} 이름 바꾸기`,
   renamed: `이름을 바꿨습니다.`,
   openTaskFolder: `${T} 폴더 열기`,
+  openProjectFolder: `${P} 폴더 열기`,
   endAi: `이 ${T}의 AI 끝내기`,
   remove: `삭제`,
   viewOnly: `보기만 가능`,
@@ -34,9 +34,9 @@ export const COPY = {
   homeDefaultFolder: `기본 ${P} 폴더`,
   homeFolder: `${P} 폴더`,
   homeRecent: `최근 ${T} 이어서 하기`,
-  // 새 Task 화면. 2단계가 들어오면 '보내면 Task와 폴더가 하나 생기고'로 바꾼다
+  // 새 Task 화면
   newTaskTitle: `이 부품으로 새 일을 시작합니다`,
-  newTaskBody: `보내면 ${T}가 하나 생기고, 결과는 이 ${T}에만 모입니다. 다른 ${T}는 그대로입니다.`,
+  newTaskBody: `보내면 ${T}와 폴더가 하나 생기고, 결과는 이 ${T}에만 모입니다. 다른 ${T}는 그대로입니다.`,
   // 입력창
   askHere: `이 ${T}에 요청하세요. 모델 파일은 끌어 놓으면 됩니다`,
   askNew: `할 일을 적으세요. 모델 파일은 끌어 놓으면 됩니다`,

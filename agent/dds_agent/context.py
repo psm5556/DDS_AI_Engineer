@@ -642,7 +642,7 @@ def _sync_market(project_dir: Path) -> dict:
                             _replace_tree(w["root"] / "skills" / s, project_dir / rel / s, tmp_root, f"{i}-{s}")
                 except OSError as e:  # 다음 턴에 다시 시도한다. 쓰던 버전이 있으면 그대로 둔다
                     log.warning("마켓 스킬을 복사하지 못했습니다(%s): %s", key, e)
-                    conflicts[key] = f"스킬을 프로젝트 폴더에 넣지 못했습니다({e}) → 다른 프로그램이 파일을 잡고 있지 않은지 확인하세요. 다음 요청 때 다시 시도합니다"
+                    conflicts[key] = f"스킬을 Project 폴더에 넣지 못했습니다({e}) → 다른 프로그램이 파일을 잡고 있지 않은지 확인하세요. 다음 요청 때 다시 시도합니다"
                     failed = True
                     if row:
                         items[key] = row
@@ -721,10 +721,10 @@ def _copy_failed(project_dir: Path, src: Path, dst: Path, err: OSError) -> str:
     """Windows는 경로 260자를 넘으면 복사가 실패한다. 스킬 폴더는 작업 폴더보다 수십 자 더 깊다."""
     deepest = max((len(str(dst / p.relative_to(src))) for p in src.rglob("*")), default=len(str(dst)))
     if deepest >= 260:
-        return (f"작업 폴더 경로가 너무 길어 AI 작업 규칙을 복사하지 못했습니다(가장 긴 경로 {deepest}자, Windows 한도 260자): {project_dir} "
-                "→ 작업 폴더를 더 짧은 경로(예: C:\\DDS)로 바꾼 뒤 다시 요청하세요")
+        return (f"Project 폴더 경로가 너무 길어 AI 작업 규칙을 복사하지 못했습니다(가장 긴 경로 {deepest}자, Windows 한도 260자): {project_dir} "
+                "→ Project 폴더를 더 짧은 경로(예: C:\\DDS)로 바꾼 뒤 다시 요청하세요")
     first = (err.args[0][0][2] if isinstance(err, shutil.Error) and err.args and err.args[0] else str(err))[:200]
-    return f"AI 작업 규칙을 작업 폴더로 복사하지 못했습니다: {project_dir} ({first}) → 폴더 쓰기 권한과 남은 디스크 용량을 확인한 뒤 다시 요청하세요"
+    return f"AI 작업 규칙을 Project 폴더로 복사하지 못했습니다: {project_dir} ({first}) → 폴더 쓰기 권한과 남은 디스크 용량을 확인한 뒤 다시 요청하세요"
 
 
 def sync_project_context(project_dir: Path) -> bool:
@@ -775,7 +775,7 @@ def _sync(project_dir: Path) -> bool:
         try:
             rules[name] = _put_block(project_dir / name, body, RULES_START, RULES_END, legacy)
         except OSError as e:
-            raise OSError(f"작업 폴더의 {name}에 DDS 규칙을 넣지 못했습니다({e}). "
+            raise OSError(f"Project 폴더의 {name}에 DDS 규칙을 넣지 못했습니다({e}). "
                           "다른 프로그램이 파일을 잠그고 있거나 쓰기 권한이 없는지 확인한 뒤 다시 시도하세요") from e
     _tidy(project_dir, stamp, state, rules, dirty=True)
     return True

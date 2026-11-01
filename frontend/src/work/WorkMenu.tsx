@@ -47,7 +47,7 @@ export function WorkMenu({ work, at, onClose }: { work: WorkBrief; at: { x: numb
     onError: (e: Error) => { err(e); onClose(); },
   });
   const openFolder = useMutation({
-    mutationFn: () => api(`/api/projects/${work.project_id}/local/open`, { method: "POST", body: { path: "" } }),
+    mutationFn: () => api(`/api/projects/${work.project_id}/local/open?work_id=${work.id}`, { method: "POST", body: { path: "" } }),
     onSuccess: () => onClose(),
     onError: (e: Error) => { err(e); onClose(); },
   });
@@ -66,7 +66,7 @@ export function WorkMenu({ work, at, onClose }: { work: WorkBrief; at: { x: numb
   return createPortal(
     <div ref={ref} className="ctx-menu" role="menu" style={style} aria-label={COPY.menuTask}>
       {work.can_manage && <button role="menuitem" onClick={() => setDialog("rename")}><Pencil size={14} />{COPY.renameTask}</button>}
-      {FEATURE.taskFolder && work.mine && <button role="menuitem" onClick={() => openFolder.mutate()}><FolderOpen size={14} />{COPY.openTaskFolder}</button>}
+      {work.mine && !work.legacy && <button role="menuitem" onClick={() => openFolder.mutate()}><FolderOpen size={14} />{COPY.openTaskFolder}</button>}
       {FEATURE.endAi && work.mine && <button role="menuitem"><Power size={14} />{COPY.endAi}</button>}
       {work.can_manage && <><div className="ctx-sep" /><button role="menuitem" className="danger" onClick={askDelete}><Trash2 size={14} />{COPY.remove}</button></>}
     </div>,
@@ -75,4 +75,4 @@ export function WorkMenu({ work, at, onClose }: { work: WorkBrief; at: { x: numb
 }
 
 /** 메뉴를 보여 줄 것이 있는 Task인가 */
-export const hasWorkMenu = (w: WorkBrief) => w.can_manage || (w.mine && (FEATURE.taskFolder || FEATURE.endAi));
+export const hasWorkMenu = (w: WorkBrief) => w.can_manage || (w.mine && (!w.legacy || FEATURE.endAi));

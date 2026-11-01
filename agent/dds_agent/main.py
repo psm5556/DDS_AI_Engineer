@@ -864,7 +864,7 @@ class Agent:
         """작업 폴더를 바꾼다. 에이전트 CLI 세션은 시작 폴더(cwd)가 고정이라 이 프로젝트의 세션은 잊는다
         — 서버가 다음 요청에서 새 폴더로 세션을 새로 열고 지난 대화 내용을 넘긴다."""
         if self.executor.running or self.executor.queued:
-            raise ValueError("이 PC에서 케이스를 실행하는 중에는 작업 폴더를 바꿀 수 없습니다. 끝난 뒤 다시 시도하세요")
+            raise ValueError("이 PC에서 케이스를 실행하는 중에는 Project 폴더를 바꿀 수 없습니다. 끝난 뒤 다시 시도하세요")
         info = self.s.workspace.set_folder(project_id, project_name, project_uid, path)
         for sid in [s for s, (_, _, uid) in self.session_project.items() if uid == project_uid]:
             self.session_project.pop(sid, None)
@@ -896,7 +896,7 @@ class Agent:
     def _pick_folder(self, initial: str | None, title: str | None) -> dict:
         try:
             path = self._dialog("filedialog.askdirectory(parent=r, initialdir=sys.argv[1] or None, title=sys.argv[2], mustexist=False)",
-                                initial or "", title or "작업 폴더 선택")
+                                initial or "", title or "Project 폴더 선택")
         except RuntimeError:
             raise RuntimeError("폴더 선택 창을 열지 못했습니다. 경로를 직접 입력하세요") from None
         return {"path": path}

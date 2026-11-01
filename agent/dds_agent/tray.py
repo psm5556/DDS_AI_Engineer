@@ -57,7 +57,7 @@ class Tray:
             item(lambda _: f"상태: {LABELS.get(self.state, self.state)}{(' · ' + self.detail) if self.detail else ''}", None, enabled=False),
             item(lambda _: f"버전 {self.version}", None, enabled=False),
             pystray.Menu.SEPARATOR,
-            item("작업 폴더 열기", lambda: _open(self.workspace)),
+            item("DDS 저장 위치 열기", lambda: _open(self.workspace)),
             item("로그 보기", lambda: _open(self.log_dir or self.workspace), visible=bool(self.log_dir)),
             item("업데이트 확인", lambda: self.on_check_update()),
             item("다시 시작", lambda: self.on_restart()),

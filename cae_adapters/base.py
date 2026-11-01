@@ -51,7 +51,7 @@ def check_script_path(script) -> str:
     parts = n.split("/")
     # 점·공백뿐인 이름은 Windows가 끝을 지워 상위 폴더가 될 수 있다. ':'은 드라이브(c:a.py)와 대체 스트림(a.py:b)이다
     if not n.strip() or n.startswith("/") or ":" in n or "\x00" in n or any(p not in ("", ".") and not p.strip(" .") for p in parts):
-        raise ValueError(f"스크립트 경로는 프로젝트 폴더 안의 상대 경로만 씁니다: {str(script)[:120]} → 파일을 scripts/에 두고 'scripts/이름.py'처럼 적어 주세요")
+        raise ValueError(f"스크립트 경로는 Task 폴더 안의 상대 경로만 씁니다: {str(script)[:120]} → 파일을 scripts/에 두고 'scripts/이름.py'처럼 적어 주세요")
     return n
 
 

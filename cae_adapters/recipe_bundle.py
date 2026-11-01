@@ -15,7 +15,7 @@ def member_path(name: str) -> PurePosixPath:
     """묶음 안의 경로를 검사한다. 서버도 검사하지만 다른 사람이 만든 파일을 이 PC에 쓰는 일이라 받는 쪽에서 다시 막는다.
     점으로 시작하는 폴더와 지침 파일도 막는다. 그 자리에 쓰면 이 프로젝트에서 도는 AI 도구의 지침을 바꿀 수 있다."""
     n = str(name).replace("\\", "/")
-    bad = f"안전하지 않은 경로입니다: {str(name)[:80]} → 프로젝트 폴더 안의 스크립트 경로만 받습니다"
+    bad = f"안전하지 않은 경로입니다: {str(name)[:80]} → Task 폴더 안의 스크립트 경로만 받습니다"
     if not n or n.startswith("/") or ":" in n or "\x00" in n or len(n) > 300:
         raise ValueError(bad)
     for part in n.split("/"):
@@ -29,7 +29,7 @@ def inside(root: Path, rel: PurePosixPath) -> Path:
     base = root.resolve()
     target = (base / Path(*rel.parts)).resolve()
     if base not in target.parents:
-        raise ValueError(f"프로젝트 폴더 밖 경로입니다: {rel} → 프로젝트 폴더 안의 경로만 씁니다")
+        raise ValueError(f"Task 폴더 밖 경로입니다: {rel} → Task 폴더 안의 경로만 씁니다")
     return target
 
 
@@ -50,7 +50,7 @@ def build_bundle(root: Path, wanted: list[str]) -> tuple[bytes, dict[str, str]]:
                 try:
                     rel = p.resolve().relative_to(root.resolve()).as_posix()
                 except ValueError:
-                    raise ValueError(f"프로젝트 폴더 밖 파일은 묶지 않습니다: {rel} → scripts/ 폴더로 복사하고 프로젝트 폴더 기준 경로를 쓰세요") from None
+                    raise ValueError(f"Task 폴더 밖 파일은 묶지 않습니다: {rel} → scripts/ 폴더로 복사하고 Task 폴더 기준 경로를 쓰세요") from None
             full = inside(root, member_path(rel))
             if not full.exists():
                 raise ValueError(f"스크립트가 없습니다: {rel} → 파일을 scripts/에 두거나 경로를 고쳐 주세요")

@@ -20,11 +20,11 @@ function webViewerUrl(tpl: string, root: string, rel: string, host: string, pid:
 }
 
 /** 내 PC 폴더 열기(탐색기) / CAE 뷰어로 열기 — PC Agent 경유 */
-export function useOpenLocal(pid: number) {
+export function useOpenLocal(pid: number, wid?: number | null) {
   const toast = useToast();
   return useMutation({
     mutationFn: (v: { path: string; viewer?: boolean }) =>
-      api<{ opened: string; with?: string }>(`/api/projects/${pid}/local/open`, { method: "POST", body: { path: v.path, with_viewer: !!v.viewer } }),
+      api<{ opened: string; with?: string }>(`/api/projects/${pid}/local/open${wid ? `?work_id=${wid}` : ""}`, { method: "POST", body: { path: v.path, with_viewer: !!v.viewer } }),
     onSuccess: (r) => toast(r.with ? `뷰어로 열었습니다: ${r.opened}` : `내 PC에서 열었습니다: ${r.opened}`),
     onError: (e: Error) => toast(e.message ?? "열지 못했습니다", true),
   });
@@ -39,14 +39,16 @@ export function relFromRunDir(runDir: string | null): string | null {
 }
 
 /** '파일' 탭: 내 PC의 폴더 (규칙: inputs·scripts·runs·studies/S…/cases/C…·live·reports). 폴더를 바꾸는 곳은 Project 메뉴 한 곳이다.
- *  Task별 폴더가 없는 동안(2단계 전)은 Project 폴더를 보인다. 남의 Task의 파일은 그 사람 PC에 있으므로 내 PC를 뒤지지 않는다 */
+ *  지금 Task의 폴더를 본다. 이전 기록은 자기 폴더가 없어 Project 폴더를 본다. 남의 Task의 파일은 그 사람 PC에 있으므로 내 PC를 뒤지지 않는다 */
 export function LocalFiles({ pid, work }: { pid: number; work?: WorkDetail | null }) {
   const others = !!work && !work.mine;
   const [path, setPath] = useState("");
   const [hidden, setHidden] = useState(false);
-  const open = useOpenLocal(pid);
+  const wid = work && !work.legacy ? work.id : null;
+  const root = wid ? W.task : W.project;
+  const open = useOpenLocal(pid, wid);
   const { data, error, refetch, isFetching } = useQuery({
-    queryKey: ["local-tree", pid, path], queryFn: () => get<LocalTree>(`/api/projects/${pid}/local/tree?path=${encodeURIComponent(path)}`),
+    queryKey: ["local-tree", pid, wid, path], queryFn: () => get<LocalTree>(`/api/projects/${pid}/local/tree?path=${encodeURIComponent(path)}${wid ? `&work_id=${wid}` : ""}`),
     retry: false, enabled: !others,
   });
   const { data: cfg } = useQuery({ queryKey: ["config"], queryFn: () => get<{ web_viewer_url: string }>("/api/config/public"), staleTime: 600_000 });
@@ -56,13 +58,13 @@ export function LocalFiles({ pid, work }: { pid: number; work?: WorkDetail | nul
   const nHidden = (data?.entries.length ?? 0) - entries.length;
   if (others) return <div className="empty-hero"><HardDrive size={28} /><p>{COPY.filesOfOther(work.owner_name)}</p></div>;
   if (error) {
-    return <div className="empty-hero"><HardDrive size={28} /><b>내 PC의 {W.project} 폴더를 볼 수 없습니다</b><p>{(error as Error).message}</p></div>;
+    return <div className="empty-hero"><HardDrive size={28} /><b>내 PC의 {root} 폴더를 볼 수 없습니다</b><p>{(error as Error).message}</p></div>;
   }
   return (
     <div className="local-files">
       <div className="row local-head">
         <nav className="local-crumb" aria-label="폴더 경로">
-          <button className="link-btn" onClick={() => setPath("")}>{W.project} 폴더</button>
+          <button className="link-btn" onClick={() => setPath("")}>{root} 폴더</button>
           {crumbs.map((c, i) => (
             <span key={i}><ChevronRight size={12} /><button className="link-btn" onClick={() => setPath(crumbs.slice(0, i + 1).join("/"))}>{c}</button></span>
           ))}
