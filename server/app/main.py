@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import market_service, models
+from . import log_redact, market_service, models
 from .agent.hub import hub
 from .agent.link import REPLACED_CODE, AgentConnection, registry
 from .config import ROOT
@@ -23,6 +23,7 @@ from .ws import manager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("dds")
+log_redact.install()
 
 
 def _backfill_project_uids():
