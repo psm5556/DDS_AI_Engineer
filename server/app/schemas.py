@@ -122,6 +122,7 @@ class WorkDetail(WorkBrief):
     active_chat_id: int | None = None  # 내가 보내는 곳(내 최근 기록). 남의 Task면 주인의 기록
     n_simulators: int = 0  # 지우면 함께 사라지는 것(삭제 확인 창)
     n_share_links: int = 0
+    can_undo: bool = False  # 경로 카드로 만든 Task를 아직 되돌릴 수 있다(승인·결과 전)
 
 
 class WorkCreate(BaseModel):
@@ -145,6 +146,50 @@ class WorkSource(BaseModel):
     script_author: str | None = None  # 내가 아닌 사람이 만든 스크립트면 그 이름
     other_project: bool = False  # 지금 Project 밖에서 온다. 치수·경로·품번이 함께 옮겨질 수 있다
     created_at: datetime
+
+
+class RouteFile(BaseModel):
+    name: str = Field(max_length=300)
+    sha256: str | None = None
+
+
+class RouteCheck(BaseModel):
+    """이 요청을 어디서 할까. 아무것도 저장하지 않는다."""
+    work_id: int | None = None
+    project_id: int | None = None  # 새 Task 화면. 둘 다 없으면 첫 화면이다
+    text: str = Field("", max_length=200000)
+    files: list[RouteFile] = []
+    kept: list[str] = []  # '여기서 계속'을 고른 파일의 sha256. 다시 묻지 않는다
+
+
+class RouteRef(BaseModel):
+    id: int
+    name: str
+
+
+class RouteResult(BaseModel):
+    card: Literal["A", "B", "C", "D"] | None = None
+    kind: str | None = None  # file | text | others | project
+    file: str | None = None
+    owner_name: str | None = None
+    source_work: RouteRef | None = None
+    project: RouteRef | None = None
+
+
+class RouteSuggestion(BaseModel):
+    kind: Literal["new_model", "other_part"]
+    reason: str = Field("", max_length=500)
+
+
+class AttachmentAdopt(BaseModel):
+    ids: list[int]
+
+
+class WorkUndone(BaseModel):
+    ok: bool = True
+    source_work_id: int | None = None
+    text: str = ""
+    attachment_ids: list[int] = []
 
 
 class TakeoverTool(BaseModel):
@@ -240,6 +285,7 @@ class ChatMessageResponse(ORM):
 class PromptRequest(BaseModel):
     text: str
     attachment_ids: list[int] = []
+    route_kept: bool = False  # 경로 카드에서 '여기서 계속'을 골랐다. AI가 다시 묻지 않게 알린다
 
 
 class SessionUpdate(BaseModel):

@@ -418,8 +418,53 @@ class AgentHub:
         finally:
             lock.release()
 
+    # ---------- 미리 띄우기 · 끝내기 ----------
+    def warm(self, chat_id: int) -> bool:
+        """입력창에 타자를 치기 시작했다. 요청을 보낼 때 기다리지 않게 AI를 뒤에서 준비한다. 도는 턴이나 준비 중이면 건드리지 않는다."""
+        with SessionLocal() as db:
+            chat = db.get(models.ChatSession, chat_id)
+            if chat is None or not chat.work_id:
+                return False
+            st = self._state(chat)
+            agent, sid = chat.agent, chat.agent_session_id
+        conn = registry.get(st.user_id)
+        if st.busy or conn is None or not conn.ready.is_set() or (sid and sid in self.live.get(st.user_id, set())):
+            return False
+        lock = st.ensure_locks.setdefault(agent, threading.Lock())
+        if not lock.acquire(blocking=False):
+            return False
+
+        def run():
+            try:
+                self._ensure_session(st, conn, None, agent)
+            except Exception as e:  # noqa: BLE001 — 미리 띄우기가 실패해도 요청을 보낼 때 다시 한다
+                log.info("AI를 미리 띄우지 못했습니다(대화 %s): %s", chat_id, e)
+            finally:
+                lock.release()
+        threading.Thread(target=run, daemon=True, name=f"warm-{chat_id}").start()
+        return True
+
+    def end_session(self, chat_id: int):
+        """이 기록의 AI를 끝낸다. 기록은 그대로이고 세션 id도 남긴다: 다음 요청이 불러오고, 못 불러오면 요약으로 잇는다. 옛 Agent는 메시지를 무시한다."""
+        with SessionLocal() as db:
+            chat = db.get(models.ChatSession, chat_id)
+            if chat is None:
+                return
+            uid, sid = chat.user_id, chat.agent_session_id
+        if not sid:
+            return
+        conn = registry.get(uid)
+        if conn:
+            try:
+                conn.send({"type": "session.close", "session_id": sid})
+            except AgentError as e:
+                log.info("AI를 끝내라고 알리지 못했습니다: %s", e)
+        self.live.get(uid, set()).discard(sid)
+        self.forget_session(sid)
+
     # ---------- 턴 ----------
-    def send_prompt(self, chat_id: int, text: str, attachments: list[dict] | None = None, flow_id: int | None = None, shown: str | None = None, auto: str | None = None) -> str:
+    def send_prompt(self, chat_id: int, text: str, attachments: list[dict] | None = None, flow_id: int | None = None, shown: str | None = None, auto: str | None = None,
+                    route_kept: bool = False) -> str:
         """요청을 저장하고 바로 돌아온다. CLI 준비와 전달은 뒤의 스레드에서 한다. 이미 진행 중이면 AgentError.
         attachments: [{id, filename, size, sha256}] — PC Agent가 그 세션의 inputs/(Task 폴더)로 내려받은 뒤 에이전트에 전달한다.
         flow_id·shown·auto: 서버가 사용자를 대신해 보내는 말(_flush_flows). shown은 대화에 보이는 글, auto는 그 종류다."""
@@ -451,7 +496,7 @@ class AgentHub:
                 # turn_open: 서버가 다시 시작되면 끝을 알 길이 없다. 끝날 때 turn_done으로 바꿔 끊긴 요청을 가린다
                 m = models.ChatMessage(session_id=chat.id, role="user", content=shown or text,
                                        meta={"turn_open": True, **({"attachments": attachments} if attachments else {}),
-                                             **({"flow_id": flow_id} if flow_id else {}), **({"auto": auto} if auto else {})})
+                                             **({"flow_id": flow_id} if flow_id else {}), **({"auto": auto} if auto else {}), **({"route_kept": True} if route_kept else {})})
                 db.add(m)
                 db.commit()
                 msg_id = st.user_msg_id = m.id

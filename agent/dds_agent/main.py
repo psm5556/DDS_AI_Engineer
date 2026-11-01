@@ -770,6 +770,19 @@ class Agent:
         if ev:
             ev.wait(timeout=60)
 
+    def _close_session(self, session_id: str):
+        name = self.session_runner.pop(session_id, None)
+        self.session_project.pop(session_id, None)
+        self.session_owner.pop(session_id, None)
+        self.session_work.pop(session_id, None)
+        if name:
+            self.runner(name).close_session(session_id)
+        self._settle_soon()  # 이 세션이 잡고 있어 미뤄 둔 폴더 이름을 맞춘다
+
+    def _discard_work(self, msg: dict):
+        state = self.s.workspace.discard_work(msg.get("project_id"), msg.get("project_uid"), msg.get("work"), msg.get("keep") or [])
+        log.info("되돌린 Task 폴더: %s", state)
+
     def _force_restart(self, name: str):
         """사용자가 멈췄는데 응답이 없다. CLI와 그 아래(멈춘 스크립트·솔버)를 끝낸다. 창이 보이는 CAD는 Job.stop이 남긴다.
         끝나면 다시 띄워 다음 요청을 기다리지 않게 한다."""
@@ -1163,6 +1176,10 @@ class Agent:
             asyncio.create_task(self._respond(rid, self._devtest, msg))
         elif t == "session.cancel":
             self._background_task(self._cancel_session, msg["session_id"], msg.get("turn_id"))
+        elif t == "session.close":  # 이 Task의 AI 끝내기·되돌리기·삭제. 서버는 답을 기다리지 않는다
+            self._background_task(self._close_session, msg["session_id"])
+        elif t == "work.discard":  # 되돌린 Task의 폴더. 가져온 파일뿐일 때만 지운다
+            self._background_task(self._discard_work, msg)
         elif t == "session.force_restart":
             name = msg.get("agent") or ""
             self._begin_force(name)
@@ -1207,6 +1224,7 @@ class Agent:
         self._start_tray()
         # 지금은 이 Agent가 띄운 CLI가 없다. 미리 띄우기가 폴더를 잡기 전에 기다리던 이름을 바꾼다
         await asyncio.to_thread(self._settle_quietly)
+        await asyncio.to_thread(self.s.workspace.retry_discards)  # 지난번에 CLI가 잡고 있던 되돌린 Task 폴더
         asyncio.create_task(self._background())
         asyncio.create_task(self._watch_tools())
         while not (self.restart or self.quit):

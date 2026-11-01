@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import stat
 import threading
 import time
@@ -838,6 +839,63 @@ class Workspace:
             for sub in SUBDIRS:
                 (d / sub).mkdir(parents=True, exist_ok=True)
             return d
+
+    # ---------- 되돌린 Task ----------
+    def _discard_file(self) -> Path:
+        return self.root / ".dds-discard.json"
+
+    @staticmethod
+    def _only_ours(d: Path, keep: list[str]) -> bool:
+        """가져온 파일과 규칙 파일뿐인가. 사람이나 AI가 만든 것이 하나라도 있으면 지우지 않는다."""
+        ours = {WORK_FILE, "AGENTS.md", "GEMINI.md", ".dds-work-stamp", *(k.replace("\\", "/") for k in keep)}
+        for f in d.rglob("*"):
+            rel = f.relative_to(d).as_posix()
+            if f.is_file() and rel not in ours and not rel.startswith((".gemini/", ".agents/")):
+                return False
+        return True
+
+    def discard_work(self, project_id: int, project_uid: str | None, work: dict, keep: list[str]) -> str:
+        """되돌린 Task의 폴더를 지운다. 돌려주는 값: gone(없음·지움) | kept(내용이 있어 둠) | later(CLI가 잡고 있어 다음 시작 때)."""
+        if not real_work(work):
+            return "gone"
+        with _guard(self.root):
+            pdir = self._find(project_id, None, project_uid)
+            d = self._find_work(pdir, work) if pdir and pdir.is_dir() else None
+            if d is None:
+                return "gone"
+            if not self._only_ours(d, keep):
+                return "kept"
+            tag = work_tag(work)
+            try:
+                shutil.rmtree(d)
+            except OSError as e:
+                log.info("되돌린 Task 폴더를 아직 지우지 못했습니다(%s): %s", d, e)
+                rows = _read_json(self._discard_file()).get("rows") or []
+                _write_json(self._discard_file(), {"rows": [*rows, {"path": str(d), "keep": keep}]})
+                return "later"
+            for stale in pdir.glob(f"{tag}_*"):  # 옛 이름 접합이 끊긴 채 남지 않게 한다
+                if _is_alias(stale) and not stale.exists():
+                    _drop_alias(stale)
+            return "gone"
+
+    def retry_discards(self):
+        """지난번에 못 지운 되돌린 Task 폴더. 그사이 내용이 생겼으면 두고, 또 못 지우면 다음에 다시 본다."""
+        rows = _read_json(self._discard_file()).get("rows") or []
+        if not rows:
+            return
+        left = []
+        for r in rows:
+            d = Path(r["path"])
+            if not d.is_dir() or not self._only_ours(d, r.get("keep") or []):
+                continue
+            try:
+                shutil.rmtree(d)
+            except OSError:
+                left.append(r)
+        if left:
+            _write_json(self._discard_file(), {"rows": left})
+        else:
+            self._discard_file().unlink(missing_ok=True)
 
     def sync_work_name(self, project_id: int, project_uid: str | None, work: dict, may_move=False) -> dict:
         """Task 폴더 이름을 Task 이름에 맞춘다. 규칙은 sync_name과 같다. 이 PC에 폴더가 없으면 만들지 않는다."""

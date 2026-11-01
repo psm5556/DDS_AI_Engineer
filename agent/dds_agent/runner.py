@@ -62,6 +62,9 @@ class AgentRunner(ABC):
         """지금 프로세스 안에 살아 있는 세션. session/load 없이 그대로 쓸 수 있다."""
         return set()
 
+    def close_session(self, session_id: str) -> None:
+        """세션을 끝낸다. 할 일이 없는 러너는 그대로 둔다."""
+
     def alive(self) -> bool:
         """CLI 프로세스가 떠 있는지."""
         return False

@@ -11,8 +11,9 @@ import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/Agen
 import { folderName } from "../components/FolderModal";
 import { FLOW_STATUS, PRACTICE_EXAMPLES, when } from "../format";
 import { useToast } from "../toast";
-import type { AgentStatus, Attachment, Project, WorkBrief, WorkSource } from "../types";
+import type { AgentStatus, Attachment, Project, RouteResult, WorkBrief, WorkSource } from "../types";
 import { COPY, taskPath, W } from "../work/copy";
+import { RouteCard, routeCheck } from "../work/RouteCard";
 import { pickWork } from "../work/scope";
 import { SourcePicker } from "../work/SourcePicker";
 
@@ -46,6 +47,9 @@ export default function DashboardPage() {
   const [opts, setOpts] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
   const [source, setSource] = useState<WorkSource | null>(null); // 지난 Task처럼 시작. 고르지 않으면 처음부터
+  // 카드 D: 글에 내 Project 이름이 있으면 묻는다. 카드가 떠 있을 때 Enter를 또 누르면 글자 링크(새 Project로 계속)다
+  const [route, setRoute] = useState<{ r: RouteResult; o: Outgoing } | null>(null);
+  const [submitNow, setSubmitNow] = useState(0);
   const openSimulator = (pid: number, studyId: number, modelId: number, workId?: number | null) => nav(taskPath(pid, workId), { state: { canvasTab: "simulator", studyId, modelId } });
   const showOpts = opts || !!folderErr; // 폴더 오류가 나면 펼쳐서 보여 준다
   const folderRef = useRef<HTMLInputElement>(null);
@@ -94,6 +98,24 @@ export default function DashboardPage() {
     },
   });
 
+  const submit = async (o: Outgoing): Promise<boolean> => {
+    if (!route && !start.isPending) {
+      const r = await routeCheck({ text: o.text });
+      if (r.card === "D") { setRoute({ r, o }); return false; }
+    }
+    setRoute(null);
+    return start.mutateAsync(o).then(() => true, () => false);
+  };
+  const intoProject = async () => {
+    if (!route?.r.project) return;
+    const { r, o } = route;
+    try {
+      const ids: number[] = [...o.attachmentIds];
+      for (const f of o.pendingFiles) ids.push((await uploadFile<Attachment>(`/api/projects/${r.project!.id}/attachments`, f)).id);
+      nav(`/projects/${r.project!.id}/w/new`, { state: { prompt: o.text, attachmentIds: ids, fromWorkId: source?.work_id ?? r.source_work?.id } });
+    } catch (e) { toast((e as Error).message, true); }
+  };
+
   return (
     <div className="home">
       <div className="home-hero">
@@ -107,8 +129,9 @@ export default function DashboardPage() {
         )}
 
         <div className="np-card">
+          {route?.r.project && <RouteCard text={COPY.cardD(route.r.project.name)} primary={COPY.cardDStart} link={COPY.cardDKeep} onPrimary={() => void intoProject()} onLink={() => setSubmitNow((n) => n + 1)} />}
           <Composer big autoFocus typing onSimulator={openSimulator} suggestions={[...STARTERS.map((x) => x.p), TABLE_PROMPT, FOLDER_PROMPT]} seed={seed} busy={start.isPending}
-            onSend={(o) => start.mutateAsync(o).then(() => true, () => false)}
+            onSend={submit} submitNow={submitNow}
             leftBar={<AgentPicker value={resolveAgent(agent, preferred) ?? ""} onChange={setPreferred} disabled={!connected} />}
             placeholder="예: 내 브래킷 모델의 두께를 바꿔 가며 응력을 보고, 가장 가벼운 설계를 찾아 줘" />
           <p className="small muted np-send">{COPY.homeSend}</p>

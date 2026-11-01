@@ -76,8 +76,8 @@ def test_server_sentences_use_the_new_words():
     for f in (ROOT / "server" / "app").rglob("*.py"):
         for text in _strings(f):
             for w in SERVER_BANNED:
-                # 대화의 내부 기본 제목은 화면에 쓰지 않는다
-                if w in text and not (w == "새 대화" and f.name in ("models.py", "hub.py")):
+                # 대화의 내부 기본 제목은 화면에 쓰지 않는다. 경로 규칙의 낱말은 사용자가 적는 말을 알아보는 것이다
+                if w in text and not (w == "새 대화" and f.name in ("models.py", "hub.py")) and not (w == "프로젝트" and f.name == "route_check.py" and text == "새 프로젝트"):
                     bad.append(f"{f.relative_to(ROOT)}: {text[:60]}")
     assert not bad, "서버가 화면으로 보내는 문장의 옛말: " + " | ".join(bad[:15])
 

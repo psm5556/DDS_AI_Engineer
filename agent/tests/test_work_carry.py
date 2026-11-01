@@ -147,3 +147,43 @@ def test_input_attachment_lands_in_inputs_and_is_not_overwritten(tmp_path):
     assert (d / "inputs" / "other.dat").read_bytes() == b"mine" and (d / "inputs" / "m.dat").read_bytes() == body
     again = apply_carry(api, ws, d, {**work, "carry": {"attachments": att[:1]}})
     assert again["inputs"] == ["inputs/m.dat"]
+
+
+# ---------- 되돌린 Task의 폴더 ----------
+def test_discard_removes_only_when_just_what_we_brought(tmp_path):
+    ws, work, d = _world(tmp_path)
+    (d / "scripts" / "run.py").write_bytes(BODY)
+    (d / "AGENTS.md").write_text("규칙", encoding="utf-8")
+    assert ws.discard_work(1, "p" * 32, work, ["scripts/run.py"]) == "gone"
+    assert not d.exists()
+    assert ws.discard_work(1, "p" * 32, work, []) == "gone", "두 번 해도 같다"
+
+
+def test_discard_keeps_folder_with_anything_else(tmp_path):
+    ws, work, d = _world(tmp_path)
+    (d / "scripts" / "run.py").write_bytes(BODY)
+    (d / "scripts" / "mine.py").write_text("사람이 만든 것", encoding="utf-8")
+    assert ws.discard_work(1, "p" * 32, work, ["scripts/run.py"]) == "kept"
+    assert (d / "scripts" / "mine.py").exists()
+
+
+def test_discard_held_by_cli_waits_for_next_start(tmp_path, monkeypatch):
+    import shutil as sh
+
+    ws, work, d = _world(tmp_path)
+    real = sh.rmtree
+    monkeypatch.setattr("agent.dds_agent.workspace.shutil.rmtree", lambda p, **k: (_ for _ in ()).throw(PermissionError("잠김")))
+    assert ws.discard_work(1, "p" * 32, work, []) == "later"
+    assert d.exists()
+    monkeypatch.setattr("agent.dds_agent.workspace.shutil.rmtree", real)
+    # 그사이 사람이 파일을 넣었으면 지우지 않는다
+    (d / "scripts" / "mine.py").write_text("x", encoding="utf-8")
+    ws.retry_discards()
+    assert d.exists() and not ws._discard_file().exists()
+    # 비어 있으면 다음 시작 때 지운다
+    (d / "scripts" / "mine.py").unlink()
+    monkeypatch.setattr("agent.dds_agent.workspace.shutil.rmtree", lambda p, **k: (_ for _ in ()).throw(PermissionError("잠김")))
+    assert ws.discard_work(1, "p" * 32, work, []) == "later"
+    monkeypatch.setattr("agent.dds_agent.workspace.shutil.rmtree", real)
+    ws.retry_discards()
+    assert not d.exists() and not ws._discard_file().exists()

@@ -1458,3 +1458,4 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .route-lines p { margin: var(--sp-1) 0 0; }
 .route-actions { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-2); }
 .np-card .src-pick, .np-card .src-card { margin: var(--sp-2) 0 0; }
+.tl-source { margin: 0 0 var(--sp-2); }

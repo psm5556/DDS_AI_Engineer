@@ -1080,6 +1080,14 @@ def e15(w: World, tmp: Path, c: Check):
     before = task_snapshot(o, pid, old_work["id"], point, token)
     before_hash = digest(before)
 
+    # 입력창의 규칙: 새 모델을 말하거나 다른 내용의 모델 파일을 놓으면 카드 A다. 고르기 전에는 아무것도 생기지 않는다
+    works_before = len(o.get(f"/api/projects/{pid}/works"))
+    said = o.post("/api/route-check", {"work_id": old_work["id"], "text": "신규 모델 나왔어. 지난번처럼 다시 돌려 줘"})
+    dropped = o.post("/api/route-check", {"work_id": old_work["id"], "text": "", "files": [{"name": "신형.prt", "sha256": "a" * 64}]})
+    c(said["card"] == "A" and dropped["card"] == "A" and dropped["file"] == "신형.prt", "카드 A")
+    c(o.post("/api/route-check", {"work_id": old_work["id"], "text": "새 모델 학습해 줘"})["card"] is None, "예측 모델 이야기는 묻지 않음")
+    c(len(o.get(f"/api/projects/{pid}/works")) == works_before, "카드만으로는 아무것도 생기지 않음")
+
     # 새 모델은 새 Task에서 한다. 지난 흐름과 설정을 복사해 시작하고 지난 것은 그대로다
     task = new_task(o, pid, "신규 모델", old_work["id"])
     c(task["seq"] == old_work["seq"] + 1 and task["source_label"] == old_work["name"], "새 Task + 어디서 가져왔는지 기록")

@@ -15,7 +15,7 @@ export interface WorkBrief {
   source_label: string | null; source_work_id: number | null; source_kind: "same_again" | "takeover" | null; version: number; created_at: string; updated_at: string;
 }
 export interface WorkChat { id: number; user_id: number; display_name: string; agent: string; created_at: string }
-export interface WorkDetail extends WorkBrief { chats: WorkChat[]; active_chat_id: number | null; n_simulators: number; n_share_links: number }
+export interface WorkDetail extends WorkBrief { chats: WorkChat[]; active_chat_id: number | null; n_simulators: number; n_share_links: number; can_undo: boolean }
 export interface WorkSource {
   work_id: number; project_id: number; project_name: string; name: string; owner_name: string; mine: boolean; n_steps: number; result: string;
   has_recipe: boolean; script_author: string | null; other_project: boolean; created_at: string;
@@ -23,6 +23,10 @@ export interface WorkSource {
 export interface TakeoverPreview {
   work_id: number; name: string; owner_name: string; agent_connected: boolean; missing_tools: { key: string; label: string }[]; n_raw: number; n_copied: number;
   has_recipe: boolean; script_author: string | null; n_inputs: number;
+}
+export interface RouteResult {
+  card: "A" | "B" | "C" | "D" | null; kind?: string | null; file?: string | null; owner_name?: string | null;
+  source_work?: { id: number; name: string } | null; project?: { id: number; name: string } | null;
 }
 export interface WorkSearchHit { project_id: number; project_name: string; work_id: number; work_name: string; owner_name: string; created_at: string; model_file: string | null; matched: "name" | "file" | "result"; matched_text: string }
 export interface WorkSearchResult { projects: number[]; works: WorkSearchHit[] }
@@ -54,9 +58,10 @@ export interface ReportSummary { id: number; title: string; created_at: string }
 
 export interface ChatSession { id: number; project_id: number; work_id?: number | null; user_id: number; title: string; agent: string; agent_session_id: string | null; created_at: string }
 export interface ChatMessage {
-  id: number; session_id: number; role: "user" | "agent" | "thought" | "tool" | "system"; content: string;
+  id: number; session_id: number; role: "user" | "agent" | "thought" | "tool" | "system" | "route"; content: string;
   meta: { tool_call_id?: string; title?: string; kind?: string; status?: string; raw_input?: unknown; output?: string;
-    attachments?: { id: number; filename: string; size: number }[]; auto?: string } | null;
+    attachments?: { id: number; filename: string; size: number }[]; auto?: string;
+    card?: "A" | "B"; request?: string; source_work?: { id: number; name: string } } | null;
   created_at: string;
 }
 export interface PermissionOption { optionId: string; name: string; kind: string }

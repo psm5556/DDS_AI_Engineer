@@ -502,8 +502,10 @@ def takeover_preview(db: Session, source: models.Work, user: models.User) -> dic
 
     studies = db.query(models.Study).filter_by(work_id=source.id).order_by(models.Study.id).all()
     conn = registry.get(user.id)
-    have = {str(t).lower() for t in (conn.info.get("tools") or [])} if conn else None
-    # 스터디는 실행 명령 키(abaqus_cae)나 툴 id를 적는다. PC Agent는 실행 파일 키를 알린다. 파이썬은 PC Agent가 늘 가지고 있고, 연습용 계산에는 툴이 없다
+    # 설정 키(tools)는 감지 결과가 아니다. 실제로 찾은 툴(tools_ready)을 본다. 옛 Agent는 몰라서 없다고 말하지 않는다
+    ready = conn.info.get("tools_ready") if conn else None
+    have = {str(t).lower() for t in ready} if ready is not None else None
+    # 스터디는 실행 명령 키(abaqus_cae)나 툴 id를 적는다. 파이썬은 PC Agent가 늘 가지고 있고, 연습용 계산에는 툴이 없다
     missing: list[dict] = []
     if have is not None:
         for used in sorted({str((s.adapter_config or {}).get("tool") or "").lower() for s in studies} - {"", "python", "mock"}):
@@ -523,6 +525,50 @@ def takeover_preview(db: Session, source: models.Work, user: models.User) -> dic
     return {"work_id": source.id, "name": source.name, "owner_name": owner_label(db, source), "agent_connected": conn is not None, "missing_tools": missing, "n_raw": raw, "n_copied": copied,
             "has_recipe": bool(author), "script_author": author.get("created_by_name") if author.get("created_by") not in (None, user.id) else None,
             "n_inputs": db.query(models.Attachment.id).filter_by(work_id=source.id).count()}
+
+
+# ---------- 되돌리기 ----------
+def undo_blocker(db: Session, work: models.Work) -> str | None:
+    """되돌릴 수 없는 이유. 경로 카드나 '지난 Task처럼 시작'으로 만들고 아직 아무것도 돌지 않은 Task만 되돌린다. 돈 것이 있으면 지우는 것은 삭제다."""
+    if work.source_kind != "same_again":
+        return "되돌릴 수 있는 Task가 아닙니다 → 지우려면 Task 메뉴의 삭제를 쓰세요"
+    if db.query(models.Flow.id).filter(models.Flow.work_id == work.id, models.Flow.status.notin_(("review", "rejected"))).first():
+        return "이미 승인한 Task Flow가 있어 되돌릴 수 없습니다 → 지우려면 Task 메뉴의 삭제를 쓰세요"
+    if db.query(models.Artifact.id).filter_by(work_id=work.id).first() or db.query(models.Report.id).filter_by(work_id=work.id).first():
+        return "이미 결과가 있어 되돌릴 수 없습니다 → 지우려면 Task 메뉴의 삭제를 쓰세요"
+    if db.query(models.Case.id).join(models.Study, models.Case.study_id == models.Study.id).filter(models.Study.work_id == work.id, models.Case.status != "pending").first():
+        return "이미 해석한 케이스가 있어 되돌릴 수 없습니다 → 지우려면 Task 메뉴의 삭제를 쓰세요"
+    if db.query(models.SurrogateModel.id).join(models.Study, models.SurrogateModel.study_id == models.Study.id).filter(models.Study.work_id == work.id).first():
+        return "이미 예측 모델이 있어 되돌릴 수 없습니다 → 지우려면 Task 메뉴의 삭제를 쓰세요"
+    return None
+
+
+def undo_work(db: Session, work: models.Work) -> dict:
+    """요청과 첨부를 원래 Task의 입력창으로 돌려놓고 Task를 지운다. 번호는 다시 쓰지 않는다."""
+    M, C = models.ChatMessage, models.ChatSession
+    first = db.query(M).join(C, M.session_id == C.id).filter(C.work_id == work.id, M.role == "user").order_by(M.id).first()
+    atts = db.query(models.Attachment).filter_by(work_id=work.id).all()
+    # 입력창에 돌려놓는 첨부는 지우지 않는다. 복사해 온 것(carry)은 원본이 따로 있어 함께 지운다
+    copied = {a.get("id") for a in (work.carry or {}).get("attachments") or []}
+    ids, names = [], [a.filename for a in atts]
+    for a in atts:
+        if a.id not in copied:
+            a.work_id = None
+            ids.append(a.id)
+    db.flush()  # delete_work가 이 Task의 첨부를 찾아 지우기 전에 돌려놓은 것을 뺀다
+    out = {"source_work_id": work.source_work_id, "text": (first.content if first else "").strip(), "attachment_ids": ids}
+    seen = (work.carry or {}).get("carried") or {}
+    tell = {"type": "work.discard", "project_id": work.project_id, "project_uid": db.get(models.Project, work.project_id).uid, "work": work.folder_view(),
+            "keep": [*(seen.get("scripts") or []), *(seen.get("inputs") or []), *(f"inputs/{n}" for n in names)]}
+    owner = work.owner_id
+    insights_ids = delete_work(db, work)
+    conn = registry.get(owner)
+    if conn and conn.info.get("work_folders"):
+        try:
+            conn.send(tell)
+        except AgentError as e:  # 폴더가 남을 뿐이다. 지우는 것은 끝났다
+            log.info("Task 폴더 정리를 PC Agent에 알리지 못했습니다: %s", e)
+    return {**out, "_studies": insights_ids}
 
 
 # ---------- 삭제 ----------

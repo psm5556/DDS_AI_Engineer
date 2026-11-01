@@ -8,7 +8,7 @@ import { reducedMotion } from "../motion";
 import type { Attachment } from "../types";
 
 /** 보낼 때 넘기는 첨부: 이미 올린 것(id)과, 프로젝트가 아직 없어 나중에 올릴 파일 */
-export interface Outgoing { text: string; attachmentIds: number[]; pendingFiles: File[]; fileName?: string }
+export interface Outgoing { text: string; attachmentIds: number[]; pendingFiles: File[]; fileName?: string; files: { name: string; sha256: string }[] }
 
 interface Item { key: string; file: File; progress: number; att?: Attachment; error?: string }
 
@@ -40,8 +40,16 @@ const fmtSize = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math
 /** 입력창: → 키로 추천 프롬프트 받기(회색 글자로 미리 보임) · 파일 첨부(버튼·끌어 놓기·붙여넣기) · Enter 보내기
  *  projectId가 있으면 첨부를 바로 올리고, 없으면(첫 화면) 보낼 때 pendingFiles로 넘긴다. */
 export function Composer({
-  projectId, workId, workMine, suggestions, onSend, busy, stopping, onStop, disabled, placeholder, big, leftBar, autoFocus, hint, seed, typing, onSimulator,
+  projectId, workId, workMine, suggestions, onSend, busy, stopping, onStop, disabled, placeholder, big, leftBar, autoFocus, hint, seed, typing, onSimulator, onFile, onTyping, submitNow, peek,
 }: {
+  /** 파일을 다 올렸다(경로 카드는 놓는 즉시 묻는다) */
+  onFile?: (file: { name: string; sha256: string }) => void;
+  /** 타자를 치기 시작했다(AI를 미리 띄운다) */
+  onTyping?: () => void;
+  /** 밖에서 '보내기'를 누른 것처럼(경로 카드의 글자 링크). 값이 바뀔 때마다 한 번 보낸다 */
+  submitNow?: number;
+  /** 지금 적힌 요청과 첨부를 비우지 않고 읽는다(경로 카드의 주 버튼) */
+  peek?: React.MutableRefObject<(() => Outgoing) | null>;
   /** 지금 연 Task. 붙여 넣은 표가 들어갈 곳을 정한다 */
   workId?: number | null; workMine?: boolean;
   /** 표를 붙여 넣으면 AI 없이 만든 Simulator를 여는 곳 */
@@ -155,7 +163,7 @@ export function Composer({
     for (const it of fresh) {
       uploadFile<Attachment>(`/api/projects/${projectId}/attachments`, it.file,
         (r) => setItems((xs) => xs.map((x) => (x.key === it.key ? { ...x, progress: r } : x))))
-        .then((att) => setItems((xs) => xs.map((x) => (x.key === it.key ? { ...x, att, progress: 1 } : x))))
+        .then((att) => { setItems((xs) => xs.map((x) => (x.key === it.key ? { ...x, att, progress: 1 } : x))); onFile?.({ name: att.filename, sha256: att.sha256 }); })
         .catch((e: Error) => {
           setItems((xs) => xs.map((x) => (x.key === it.key ? { ...x, error: e.message } : x)));
           toast(`${it.file.name}: ${e.message}`, true);
@@ -163,6 +171,13 @@ export function Composer({
     }
   };
 
+  const outgoing = (): Outgoing => ({
+    text: text.trim(), attachmentIds: items.filter((i) => i.att).map((i) => i.att!.id),
+    pendingFiles: projectId ? [] : items.filter((i) => !i.error).map((i) => i.file),
+    fileName: items.find((i) => !i.error)?.file.name, // 글 없이 모델 파일만 놓았을 때 Task 이름이 된다
+    files: items.filter((i) => i.att).map((i) => ({ name: i.att!.filename, sha256: i.att!.sha256 })),
+  });
+  if (peek) peek.current = outgoing;
   const uploading = items.some((i) => projectId && !i.att && !i.error);
   const canSend = !disabled && !busy && !making && !uploading && (text.trim() || table != null || items.some((i) => (i.att || !projectId) && !i.error));
   const submit = async () => {
@@ -171,11 +186,7 @@ export function Composer({
     answered();
     const t = text.trim();
     if (t) rememberPrompt(t);
-    const out: Outgoing = {
-      text: t, attachmentIds: items.filter((i) => i.att).map((i) => i.att!.id),
-      pendingFiles: projectId ? [] : items.filter((i) => !i.error).map((i) => i.file),
-      fileName: items.find((i) => !i.error)?.file.name, // 글 없이 모델 파일만 놓았을 때 Task 이름이 된다
-    };
+    const out = outgoing();
     // AI로 보내기로 한 표만 서버에 첨부로 저장한다. 행은 AI 도구 인자가 아니라 파일로 간다
     if (table != null) {
       const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, "");
@@ -198,6 +209,12 @@ export function Composer({
       setTable(keep.table);
     }
   };
+
+  // 경로 카드의 글자 링크: 적어 둔 그대로 보낸다
+  const lastSubmit = useRef(submitNow);
+  useEffect(() => {
+    if (submitNow !== lastSubmit.current) { lastSubmit.current = submitNow; void submit(); }
+  }); // eslint-disable-line react-hooks/exhaustive-deps -- submit은 매번 새로 만들어진다. 값이 바뀔 때만 부른다
 
   return (
     <form className={`composer ${big ? "big" : ""} ${drag ? "drag" : ""}`}
@@ -238,7 +255,7 @@ export function Composer({
         {/* PC Agent가 없거나 AI가 일하는 중에도 표는 붙여 넣을 수 있어야 한다. disabled면 붙여넣기 이벤트가 오지 않아 readOnly로 막는다 */}
         <textarea ref={ta} value={text} rows={big ? 3 : 1} readOnly={disabled || busy}
           placeholder={making ? MAKING_TEXT : table != null ? (busy ? AI_BUSY_TABLE_TEXT : disabled ? "AI에게 맡기려면 PC Agent 연결이 필요합니다. 위 버튼으로 바로 만들 수 있습니다" : "AI에게 맡기려면 요청을 적어 보내세요. 이 표를 첨부합니다") : ghost ? "" : placeholder}
-          aria-label="에이전트에게 요청" onChange={(e) => setText(e.target.value)}
+          aria-label="에이전트에게 요청" onChange={(e) => { if (!text && e.target.value) onTyping?.(); setText(e.target.value); }}
           onPaste={(e) => {
             // 표를 먼저 본다. 엑셀 복사에는 그림 파일도 함께 들어 있어 파일부터 보면 표가 그림으로 첨부된다
             const pasted = e.clipboardData.getData("text/plain");

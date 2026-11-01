@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { get } from "../api";
-import type { TakeoverPreview } from "../types";
+import { post } from "../api";
+import type { RouteResult, TakeoverPreview } from "../types";
 import { COPY } from "./copy";
 
 /** 입력창 위의 한 문장 카드: 주 버튼 하나, 글자 링크 하나. 카드가 떠 있을 때 Enter를 한 번 더 누르면 글자 링크로 처리한다(입력창이 맡는다). */
@@ -36,4 +37,9 @@ export function TakeoverCard({ wid, owner, busy, onPrimary, onLink }: { wid: num
         </div>
       )} />
   );
+}
+
+/** 규칙 검사. 모르거나 묻지 못했으면 묻지 않고 "여기서 계속"이다 */
+export function routeCheck(body: { work_id?: number | null; project_id?: number | null; text: string; files?: { name: string; sha256: string }[]; kept?: string[] }): Promise<RouteResult> {
+  return post<RouteResult>("/api/route-check", body).catch(() => ({ card: null }));
 }

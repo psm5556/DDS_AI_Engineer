@@ -186,12 +186,12 @@ def test_takeover_preview_lists_missing_tools_and_raw_files(client, team):
     assert off["n_raw"] == 5 and off["n_copied"] == 5 and off["has_recipe"] and off["owner_name"] == team["ua"]["display_name"] and off["n_inputs"] == 1
 
     class Conn:
-        info = {"tools": ["python"]}
+        info = {"tools_ready": []}
     registry.conns[team["ub"]["id"]] = Conn()
     try:
         on = client.get(f"/api/works/{src['wid']}/takeover-preview", headers=b).json()
         assert on["agent_connected"] and on["missing_tools"] == [{"key": "abaqus", "label": "Abaqus"}]
-        Conn.info = {"tools": ["abaqus", "python"]}
+        Conn.info = {"tools_ready": ["abaqus"]}
         assert client.get(f"/api/works/{src['wid']}/takeover-preview", headers=b).json()["missing_tools"] == []
     finally:
         registry.conns.pop(team["ub"]["id"], None)

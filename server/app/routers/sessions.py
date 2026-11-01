@@ -97,7 +97,8 @@ def send_prompt(session_id: int, body: schemas.PromptRequest, user: models.User 
     db.commit()
     try:
         # 바로 돌아온다. CLI 준비는 뒤에서 하고 화면은 turn_started·turn_stage로 단계를 본다
-        turn_id = hub.send_prompt(session_id, text, atts)
+        told = f"{text}\n\n[경로] 사용자가 경로 카드에서 '여기서 계속'을 골랐습니다. 이 Task에서 진행하고 suggest_route를 다시 부르지 않습니다." if body.route_kept else text
+        turn_id = hub.send_prompt(session_id, told, atts, shown=text, route_kept=body.route_kept)
     except AgentError as e:
         raise HTTPException(409, str(e))
     return {"ok": True, "turn_id": turn_id}

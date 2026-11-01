@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
-from .. import models, schemas, work_service
+from .. import models, route_check, schemas, work_service
 from ..agent.hub import hub
 from ..agent.link import registry
 from ..database import get_db
@@ -51,7 +51,8 @@ def _detail(db: Session, w: models.Work, user: models.User) -> dict:
     mine = [c for c in chats if c["user_id"] == user.id]
     # 내 Task면 내 최근 기록으로 보낸다. 남의 Task면 주인의 기록을 본다(진행 상황을 그대로 볼 수 있게)
     active = mine[-1] if brief["mine"] and mine else None if brief["mine"] else next((c for c in reversed(chats) if c["user_id"] == w.owner_id), chats[-1] if chats else None)
-    return {**brief, "chats": chats, "active_chat_id": active["id"] if active else None, **work_service.counts_for_delete(db, w.id)}
+    can_undo = brief["mine"] and work_service.undo_blocker(db, w) is None
+    return {**brief, "chats": chats, "active_chat_id": active["id"] if active else None, "can_undo": can_undo, **work_service.counts_for_delete(db, w.id)}
 
 
 def _changed(w_project_id: int, work_id: int, deleted: bool = False):
@@ -194,6 +195,90 @@ def carry_recipe(work_id: int, study_id: int, user: models.User = Depends(get_cu
     if not path.is_file():
         raise HTTPException(404, "받을 스크립트 묶음이 서버에 없습니다 → AI가 스크립트를 새로 만들게 요청하세요")
     return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
+@router.post("/route-check", response_model=schemas.RouteResult)
+def check_route(body: schemas.RouteCheck, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """이 요청을 어디서 할까. AI 없이 바로 답하고 아무것도 만들지 않는다. 모르면 card가 비어 있고, 그대로 보내면 된다."""
+    work = _visible(body.work_id, user, db) if body.work_id else None
+    if body.project_id and not work:
+        require_member(body.project_id, user, db)
+    return route_check.check(db, user, work, body.project_id, body.text, [f.model_dump() for f in body.files], body.kept)
+
+
+@router.post("/projects/{project_id}/route-suggestion")
+def suggest_route(body: schemas.RouteSuggestion, scope: work_service.WorkScope = Depends(work_service.work_scope), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """AI가 첫 단계에서 새 모델이나 다른 부품을 알아본 경우(dds-flow.suggest_route). 기록에 같은 카드를 남긴다. 고르는 것은 사람이다."""
+    w = scope.write()
+    chat_id = hub.active_chat(user.id, scope.project.id, w.id) or (lambda c: c.id if c else None)(work_service.my_chat(db, w, user.id))
+    if chat_id is None:
+        raise HTTPException(409, "이 Task에 기록이 없습니다 → 먼저 요청을 보내세요")
+    M = models.ChatMessage
+    last = db.query(M).filter(M.session_id == chat_id, M.role == "user").order_by(M.id.desc()).first()
+    if last and (last.meta or {}).get("route_kept"):  # 사람이 이미 골랐다. 다시 묻지 않는다
+        return {"shown": False, "note": "사용자가 이미 '여기서 계속'을 골랐습니다. 다시 묻지 말고 이 Task에서 진행하세요"}
+    if db.query(M.id).filter(M.session_id == chat_id, M.role == "route", M.id > (last.id if last else 0)).first():
+        return {"shown": False, "note": "이미 카드를 올렸습니다. 턴을 끝내세요"}
+    card = "A" if body.kind == "new_model" else "B"
+    attachments = (last.meta or {}).get("attachments") or [] if last else []
+    db.add(M(session_id=chat_id, role="route", content=body.reason.strip(), meta={"card": card, "request": last.content if last else "", "attachments": attachments,
+                                                                                  "source_work": {"id": w.id, "name": w.name}}))
+    db.commit()
+    return {"shown": True, "note": "카드를 올렸습니다. 아무것도 돌리지 말고 턴을 끝내세요. 사용자가 고릅니다"}
+
+
+@router.post("/projects/{project_id}/attachments/adopt")
+def adopt_attachments(body: schemas.AttachmentAdopt, project: models.Project = Depends(get_project_for_member), user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
+    """요청과 첨부를 새 Project로 옮긴다(카드 B). 내가 올리고 아직 어느 Task에도 보내지 않은 첨부만 된다."""
+    for aid in body.ids:
+        a = db.get(models.Attachment, aid)
+        if a is None or a.user_id != user.id or a.work_id is not None:
+            raise HTTPException(404, "옮길 수 있는 첨부가 아닙니다 → 파일을 다시 끌어 놓으세요")
+        require_member(a.project_id, user, db)
+        a.project_id = project.id
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/works/{work_id}/undo", response_model=schemas.WorkUndone)
+def undo(work_id: int, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
+    """새 Task를 잘못 시작했을 때. 승인·결과 전에만 된다. AI를 끝내고 Task를 지우고 요청과 첨부를 원래 Task의 입력창으로 돌려놓는다. 폴더는 가져온 파일뿐일 때만 지운다."""
+    w = work_service.require_mine(db, _visible(work_id, user, db), user)
+    why = work_service.undo_blocker(db, w)
+    if why:
+        raise HTTPException(409, why)
+    chats = [c for c, in db.query(models.ChatSession.id).filter_by(work_id=w.id)]
+    if any(hub.status(c).get("busy") for c in chats):
+        raise HTTPException(409, "AI가 답을 쓰는 중이라 되돌릴 수 없습니다 → 먼저 중지하세요")
+    for c in chats:
+        hub.end_session(c)
+    pid, wid = w.project_id, w.id
+    out = work_service.undo_work(db, w)
+    insights.forget(out.pop("_studies"))
+    _changed(pid, wid, deleted=True)
+    return out
+
+
+@router.post("/works/{work_id}/warm")
+def warm(work_id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """입력창에 처음 타자를 칠 때 AI를 뒤에서 준비한다. 구경만으로는 세션이 살아나지 않는다(주인이 타자를 칠 때만)."""
+    w = work_service.require_mine(db, _visible(work_id, user, db), user)
+    chat = work_service.my_chat(db, w, user.id)
+    return {"warming": bool(chat) and hub.warm(chat.id)}
+
+
+@router.post("/works/{work_id}/end-session")
+def end_session(work_id: int, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
+    """이 Task의 AI 끝내기. 기록과 결과는 그대로이고, 다음 요청은 AI를 다시 띄우는 시간이 걸린다. 끝내는 길은 이 하나다."""
+    w = work_service.require_mine(db, _visible(work_id, user, db), user)
+    chats = [c for c, in db.query(models.ChatSession.id).filter_by(work_id=w.id, user_id=user.id)]
+    if any(hub.status(c).get("busy") for c in chats):
+        raise HTTPException(409, "AI가 답을 쓰는 중이라 끝낼 수 없습니다 → 먼저 중지하세요")
+    if any(service.is_running(s) for s, in db.query(models.Study.id).filter_by(work_id=w.id)):
+        raise HTTPException(409, "해석이 돌고 있어 AI를 끝낼 수 없습니다 → 데이터 탭에서 먼저 중지하세요")
+    for c in chats:
+        hub.end_session(c)
+    return {"ok": True}
 
 
 @router.get("/works/{work_id}/messages", response_model=list[schemas.ChatMessageResponse])

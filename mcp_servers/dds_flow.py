@@ -114,6 +114,13 @@ def list_works(project_id: int | None = None) -> dict:
 
 
 @mcp.tool()
+def suggest_route(kind: Literal["new_model", "other_part"], reason: str = "", project_id: int | None = None) -> dict:
+    """요청이 새 모델(kind=new_model)이나 다른 부품(kind=other_part)으로 확실할 때 첫 단계에서 부른다. 아무것도 돌리지 않고 부른 뒤 턴을 끝낸다. 기록에 카드가 나오고 사용자가 고른다.
+    확실하지 않으면 부르지 않고 이 Task에서 진행한다. reason: 왜 그렇게 봤는지 한 문장(사용자에게 보인다). 사용자가 이미 '여기서 계속'을 골랐으면 shown=False로 돌아온다."""
+    return api.post(f"/api/projects/{resolve_pid(project_id)}/route-suggestion", {"kind": kind, "reason": reason})
+
+
+@mcp.tool()
 def set_work_info(name: str, force: bool = False, project_id: int | None = None) -> dict:
     """지금 Task의 이름(20자 안팎)을 일에 맞게 정한다. 새 Task는 '첫 Task'·'새 Task'나 요청문 앞부분이 임시 이름이므로 첫 응답 때 부른다.
     폴더 이름도 따라가지만 지금 세션의 경로는 그대로 쓸 수 있다. 이미 정한 이름은 바꾸지 않는다. 사용자가 바꿔 달라고 했을 때만 force=True."""

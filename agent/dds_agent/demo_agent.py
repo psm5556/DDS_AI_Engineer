@@ -77,6 +77,7 @@ _OBJECTIVE = re.compile(r"([A-Za-z_]\w*)\s*(?:을|를|이|가)?\s*(최소|최대
 PLANNED_MODES = ("connect", "rerun", "takeover")  # 승인을 받은 뒤 _run_planned로 도는 일
 
 
+_OTHER_PART = re.compile(r"^이번엔 .*(부품|베어링|모터)")  # 데모만의 규칙. 실제 AI는 이름을 읽고 판단한다
 _START = re.compile(r"^\[시작점\].*$", re.M)
 
 
@@ -94,7 +95,7 @@ def request_text(text: str) -> str:
         body = body.split("\n\n", 1)[-1]
     if "[이전 대화 끝]" in body:  # 새 세션에 넘긴 지난 대화 요약도 제외(이번 요청만)
         body = body.split("[이전 대화 끝]", 1)[1]
-    return body.strip()
+    return body.split("\n\n[경로]", 1)[0].strip()
 
 
 def attached_files(body: str) -> list[str]:
@@ -328,6 +329,12 @@ class DemoAgent:
                         f"> {body.strip()}\n\n실제로 돌려 보려면 설정에서 Claude·Gemini·Codex 중 하나를 고르세요.")
             return
         entry, target = pick_entry(body)
+        if "[경로]" not in text and _OTHER_PART.search(body) and s.flow_id is None and s.study_id is None:
+            # 실제 AI가 부품 이름으로 알아보는 일의 흉내: 이 Project와 다른 부품이면 돌리지 않고 카드를 올린 뒤 턴을 끝낸다
+            r = await s.tool("dds-flow", "suggest_route", {"kind": "other_part", "reason": "지금 Project와 다른 부품 이야기로 보입니다."})
+            if r.get("shown"):
+                await s.say("다른 부품으로 보여 아무것도 돌리지 않았습니다. 아래 카드에서 골라 주세요.")
+                return
         approved = any(k in body for k in ("승인했습니다", "승인되었습니다", "아직 끝나지 않았습니다"))  # 마지막은 서버가 남은 단계를 이어서 하라고 보낸 말
         if approved and s.flow_id is None and not await self._find_flow(s, body):
             return

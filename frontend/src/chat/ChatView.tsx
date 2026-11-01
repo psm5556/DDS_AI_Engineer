@@ -11,7 +11,7 @@ import { useFlowDecision } from "../canvas/views";
 import { AgentGlyph } from "../components/AgentGlyph";
 import { Markdown } from "../components/Markdown";
 import { scrollMode, useFreshKeys } from "../motion";
-import { Composer } from "./Composer";
+import { Composer, type Outgoing } from "./Composer";
 import { clockOf, WaitingBubble, type TurnClock } from "./WaitingBubble";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
 import { clip, readableArgs, toolLabel } from "./labels";
@@ -20,9 +20,9 @@ import { AGENT_PREFILL, AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, PRACTIC
 import { useLive, useServerDown } from "../live";
 import { useToast } from "../toast";
 import { orderNodes } from "../flow/order";
-import type { AgentInstance, AgentStatus, Artifact, Attachment, ChatMessage, ChatSession, Flow, PermissionRequest, SessionStatus, TurnStatus, WorkDetail, WorkSource } from "../types";
+import type { AgentInstance, AgentStatus, Artifact, Attachment, ChatMessage, ChatSession, Flow, PermissionRequest, Project, RouteResult, SessionStatus, TurnStatus, WorkDetail, WorkSource } from "../types";
 import { autoTaskName, COPY, taskPath, W } from "../work/copy";
-import { TakeoverCard } from "../work/RouteCard";
+import { RouteCard, routeCheck, TakeoverCard } from "../work/RouteCard";
 import { useWorkList } from "../work/scope";
 import { SourcePicker } from "../work/SourcePicker";
 
@@ -65,7 +65,11 @@ function fillPieces(xs: ChatMessage[], pieces: Map<number, { off: number; text: 
   return changed ? out : xs;
 }
 
-export interface InitialPrompt { text: string; attachmentIds: number[]; fromWorkId?: number }
+export interface InitialPrompt {
+  text: string; attachmentIds: number[]; fromWorkId?: number;
+  /** 보내지 않고 입력창만 채운다(되돌리기, 새 모델 파일을 기다릴 때) */
+  fillOnly?: boolean; askFile?: string;
+}
 
 export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onInitialSent }: {
   pid: number; wid: number | null; work: WorkDetail | null; firstTask?: boolean; onWork: (id: number) => void;
@@ -109,6 +113,15 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
   // 남의 Task에 적은 요청: 보내지 않고 카드로 묻는다. 복사하면 새 Task에서 이 요청을 그대로 보낸다
   const [takeoverAsk, setTakeoverAsk] = useState<{ text: string; attachmentIds: number[] } | null>(null);
   const [copying, setCopying] = useState(false);
+  // 경로 카드: 보내기 전에 규칙을 본다. 카드가 떠 있을 때 Enter를 한 번 더 누르면 글자 링크로 처리한다(실수로 폴더가 생기지 않게)
+  const [route, setRoute] = useState<RouteResult | null>(null);
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const kept = useRef<Set<string>>(new Set());
+  const keepNext = useRef(false); // 다음 보내기는 '여기서 계속'을 고른 것이다
+  const [submitNow, setSubmitNow] = useState(0);
+  const peek = useRef<(() => Outgoing) | null>(null);
+  const warmed = useRef(false);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status"),
@@ -329,7 +342,7 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
     }
   });
 
-  const send = useCallback(async (text: string, attachmentIds: number[] = [], fileName?: string) => {
+  const send = useCallback(async (text: string, attachmentIds: number[] = [], fileName?: string, routeKept = false) => {
     const t = text.trim();
     if (!t && !attachmentIds.length) return true;
     const tempId = -Date.now();
@@ -370,7 +383,7 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
         { id: tempId, session_id: id!, role: "user", content: t || "첨부한 파일을 확인해 주세요.", meta: null, created_at: localIso() }]);
       // 서버가 CLI를 기다리지 않고 바로 답한다. 새 Task는 답을 받은 뒤에 주소를 바꾼다:
       // 새 화면이 읽는 상태에 이 턴이 있고, 실패하면 적은 요청과 첨부가 그대로 남은 입력창으로 돌아올 수 있다
-      await post(`/api/sessions/${id}/prompt`, { text: t, attachment_ids: attachmentIds });
+      await post(`/api/sessions/${id}/prompt`, { text: t, attachment_ids: attachmentIds, ...(routeKept ? { route_kept: true } : {}) });
       sending.current = false;
       if (stopWanted.current) { // 서버가 받기 전에 누른 중지를 이제 전달한다
         stopWanted.current = false;
@@ -400,10 +413,15 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
 
   // 첫 화면에서 입력한 요청(과 첨부)을 이어서 보낸다
   useEffect(() => {
-    if (initialPrompt && agentKnown && !sentInitial.current) {
+    if (initialPrompt && (agentKnown || initialPrompt.fillOnly) && !sentInitial.current) {
       sentInitial.current = true;
       onInitialSent?.(); // 새 Task가 만들어지며 화면이 다시 그려져도 두 번 보내지 않게 먼저 비운다
-      const { text, attachmentIds } = initialPrompt;
+      const { text, attachmentIds, fillOnly, askFile } = initialPrompt;
+      if (fillOnly) {
+        void (attachmentIds.length ? get<Attachment[]>(`/api/projects/${pid}/attachments?all_works=true`).catch(() => [] as Attachment[]) : Promise.resolve([] as Attachment[]))
+          .then((all) => setSeed((s) => ({ text, n: (s?.n ?? 0) + 1, askFile, attachments: all.filter((a) => attachmentIds.includes(a.id)) })));
+        return;
+      }
       void send(text, attachmentIds).then(async (ok) => {
         if (ok) return;
         // 입력창에 쓴 적 없는 요청이라 Composer가 되돌려 줄 수 없다. 첫 화면에서 쓴 요청과 첨부를 잃지 않게 여기서 채운다
@@ -412,6 +430,77 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
       });
     }
   }, [initialPrompt, agentKnown, send, onInitialSent, pid]);
+
+  /** 입력창의 보내기: 남의 Task는 send가 카드로 묻는다. 내 Task와 새 Task 화면은 규칙을 먼저 본다 */
+  const submit = async (o: Outgoing): Promise<boolean> => {
+    if (readOnly) return send(o.text, o.attachmentIds, o.fileName);
+    const keep = keepNext.current || !!routeRef.current; // 글자 링크를 눌렀거나, 카드가 떠 있는데 Enter를 또 눌렀다
+    keepNext.current = false;
+    if (keep) {
+      o.files.forEach((f) => kept.current.add(f.sha256));
+      setRoute(null);
+      return send(o.text, o.attachmentIds, o.fileName, true);
+    }
+    const r = await routeCheck({ work_id: wid, project_id: pid, text: o.text, files: o.files, kept: [...kept.current] });
+    if (r.card === "A" || r.card === "B") { setRoute(r); return false; }
+    return send(o.text, o.attachmentIds, o.fileName);
+  };
+  /** 파일을 놓는 즉시 묻는다. 지금 Task에 결과가 있고 내용이 다른 모델 파일일 때만 카드가 뜬다 */
+  const onFile = (file: { name: string; sha256: string }) => {
+    if (!wid || readOnly) return;
+    void routeCheck({ work_id: wid, text: "", files: [file], kept: [...kept.current] }).then((r) => { if (r.card === "A") setRoute((now) => now ?? r); });
+  };
+  const keepHere = () => {
+    const o = peek.current?.();
+    o?.files.forEach((f) => kept.current.add(f.sha256));
+    if (o?.text) { keepNext.current = true; setSubmitNow((n) => n + 1); } else setRoute(null); // 파일만 놓았으면 요청을 적을 때까지 기다린다
+  };
+  /** 카드 A: 지금 Task의 작업 순서·스크립트·설정을 가져온 새 Task. 지금 Task는 그대로다 */
+  const startNewTask = async (o: { text: string; attachmentIds: number[]; fileName?: string; file?: string | null }, from: number) => {
+    if (!o.file) { // 파일이 없으면 AI를 띄우지 않는다. 새 Task 화면에서 파일을 받는다
+      nav(`/projects/${pid}/w/new`, { state: { prompt: o.text, attachmentIds: o.attachmentIds, fromWorkId: from, fillOnly: true, askFile: COPY.askModelFile } });
+      return;
+    }
+    setCopying(true);
+    try {
+      const made = await post<WorkDetail>(`/api/projects/${pid}/works`, { name: autoTaskName("", o.file), name_auto: true, agent: chosen, from_work_id: from });
+      qc.setQueryData(["work", made.id], made);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["project", pid] });
+      nav(taskPath(pid, made.id), { state: { prompt: o.text, attachmentIds: o.attachmentIds } });
+    } catch (e) { toast((e as Error).message, true); setCopying(false); }
+  };
+  /** 카드 B: 요청과 첨부를 새 Project로 옮긴다. 지금 Project는 그대로다 */
+  const startNewProject = async (o: { text: string; attachmentIds: number[]; fileName?: string }) => {
+    setCopying(true);
+    try {
+      const first = (o.text || o.fileName || "").split(/[\n.!?]/)[0].trim();
+      const made = await post<{ id: number }>("/api/projects", { name: (first.length > 28 ? `${first.slice(0, 28)}…` : first) || COPY.newProject, description: "" });
+      if (o.attachmentIds.length) await post(`/api/projects/${made.id}/attachments/adopt`, { ids: o.attachmentIds });
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      nav(`/projects/${made.id}/w/new`, { state: { prompt: o.text, attachmentIds: o.attachmentIds } });
+    } catch (e) { toast((e as Error).message, true); setCopying(false); }
+  };
+  const primary = () => {
+    const o = peek.current?.() ?? { text: "", attachmentIds: [], fileName: undefined, files: [], pendingFiles: [] };
+    if (route?.card === "B") void startNewProject(o);
+    else void startNewTask({ ...o, file: route?.file ?? null }, route?.source_work?.id ?? wid!);
+  };
+  const undo = async () => {
+    if (!wid) return;
+    try {
+      const r = await post<{ source_work_id: number | null; text: string; attachment_ids: number[] }>(`/api/works/${wid}/undo`);
+      qc.removeQueries({ queryKey: ["work", wid] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["project", pid] });
+      toast(COPY.undone(work?.source_label ?? null));
+      nav(r.source_work_id ? taskPath(pid, r.source_work_id) : `/projects/${pid}/w/new`, { replace: true, state: { prompt: r.text, attachmentIds: r.attachment_ids, fillOnly: true } });
+    } catch (e) { toast((e as Error).message, true); }
+  };
+  const prefillKeep = () => { void send(COPY.keepHere, [], undefined, true); };
+  // 이 Task에서 시작한 새 Task. 옛 기록 끝에서 어디로 갔는지 보인다
+  const { data: projectNow } = useQuery({ queryKey: ["project", pid], queryFn: () => get<Project>(`/api/projects/${pid}`) });
+  const nextTasks = (projectNow?.works ?? []).filter((w) => wid && w.source_work_id === wid && w.mine && w.source_kind === "same_again");
 
   /** 내 PC로 복사해서 하기: 내 이름의 새 Task를 만들고, 적어 둔 요청은 그 Task에서 보낸다. 원래 Task는 그대로다 */
   const copyToPc = async () => {
@@ -484,6 +573,9 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
     <section className="chat" aria-label="이 Task의 기록">
       <div className="chat-body" ref={bodyRef} onScroll={onScroll}>
         <div className="chat-col" ref={colRef}>
+          {work?.source_kind === "same_again" && work.source_label && (
+            <p className="tl-source small muted">{COPY.startedFrom(work.source_label)}{work.can_undo && <> · <button className="link-btn" onClick={() => void undo()}>{COPY.undo}</button></>}</p>
+          )}
           {serverDown ? (
             <div className="notice warn chat-offline" role="status"><AlertTriangle size={15} />
               <span>웹앱 서버에 연결할 수 없습니다. 다시 연결을 시도하고 있습니다. 내용은 그대로이고, 연결되면 이어서 보여 줍니다.</span>
@@ -511,6 +603,8 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
               <p>{COPY.newTaskBody}</p>
               {!source && !disabled && !busy && statusKnown && <div className="chat-suggest">{CHAT_SUGGEST.map((s) => <button key={s} onClick={() => void send(s)}>{s}</button>)}</div>}
             </div>
+          ) : !timeline.length && work?.can_undo ? (
+            <div className="chat-empty"><AgentGlyph size={32} /><b>{COPY.askHere}</b></div>
           ) : !timeline.length && readOnly ? (
             <div className="chat-empty"><AgentGlyph size={32} /><b>{COPY.emptyOthers}</b></div>
           ) : !timeline.length ? (
@@ -520,7 +614,13 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
               <p>해석을 새로 돌리거나 내 모델을 바꾸는 일은 {W.flow}를 먼저 보여 주고 승인을 받습니다. 조회·후처리, 가진 데이터로 예측 모델·Simulator 만들기, 보고서는 바로 합니다.</p>
               {!disabled && !busy && statusKnown && !readOnly && <div className="chat-suggest">{CHAT_SUGGEST.map((s) => <button key={s} onClick={() => void send(s)}>{s}</button>)}</div>}
             </div>
-          ) : timeline.map((it) => {
+          ) : timeline.map((it, i) => {
+            if (it.kind === "msg" && it.m.role === "route") return <div key={`m${it.m.id}`} className="tl-item"><RouteInHistory m={it.m} last={i === timeline.length - 1} readOnly={readOnly} busy={copying} onPick={(from) => {
+              const a = it.m.meta?.attachments ?? [];
+              const o = { text: it.m.meta?.request ?? "", attachmentIds: a.map((x) => x.id), fileName: a[0]?.filename };
+              if (it.m.meta?.card === "B") void startNewProject(o);
+              else void startNewTask({ ...o, file: a[0]?.filename ?? null }, from ?? wid!);
+            }} onKeep={() => prefillKeep()} /></div>;
             if (it.kind === "divider") return <div key={`d${it.chat}-${it.at}`} className="tl-divider" role="separator">{it.text}</div>;
             const key = it.kind === "flow" ? `f${it.f.id}` : it.kind === "arts" ? `a${it.items[0].id}` : it.kind === "tools" ? `t${it.items[0].id}` : `m${it.m.id}`;
             // 내 메시지는 임시 id로 먼저 붙고 서버 id로 바뀐다 — 바뀔 때 다시 등장하지 않게 임시일 때만 움직인다
@@ -534,6 +634,7 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
               </div>
             );
           })}
+          {nextTasks.map((w) => <p key={w.id} className="tl-source small muted">{COPY.movedTo(w.name)} · <Link to={taskPath(pid, w.id)}>{COPY.sourceOpen}</Link></p>)}
           {perms.map((p) => <PermissionCard key={p.request_id} p={p} readOnly={readOnly} onAnswer={(o) => void answer(p, o)} />)}
           {clock && !perms.length && (
             <WaitingBubble clock={clock} agentLabel={agentLabel(clock.turn.agent ?? session?.agent ?? chosen ?? "")} flowActivity={flowActivity}
@@ -544,12 +645,17 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
 
       <div className="chat-composer">
         <div className="chat-col">
-          {!wid && !pendingFirst && <SourcePicker pid={pid} picked={source} onPick={setSource} />}
+          {!wid && !pendingFirst && <SourcePicker pid={pid} picked={source} onPick={(s) => { if (!s) homeSource.current = undefined; setSource(s); }} preselect={homeSource.current} />}
+          {route && (route.card === "A" || route.card === "B") && (
+            <RouteCard text={route.card === "B" ? COPY.cardB : route.file ? COPY.cardA(route.file, route.source_work?.name ?? "") : COPY.cardANoFile(route.source_work?.name ?? "")}
+              primary={route.card === "B" ? COPY.cardBStart : COPY.cardAStart} link={COPY.keepHere} busy={copying} onPrimary={primary} onLink={keepHere} />
+          )}
           {readOnly && takeoverAsk && wid && <TakeoverCard wid={wid} owner={work?.owner_name ?? ""} busy={copying} onPrimary={() => void copyToPc()} onLink={() => setTakeoverAsk(null)} />}
           <Composer projectId={pid} workId={wid} workMine={!!work?.mine} suggestions={readOnly ? [] : suggestions} busy={busy && !readOnly} stopping={!!clock?.turn.cancelling} onStop={cancel}
             onSimulator={(p, s, m, w) => { if (w != null && w !== wid) nav(taskPath(p, w), { state: { canvasTab: "simulator", studyId: s, modelId: m } }); else canvas.openSimulator(s, m); }}
             disabled={readOnly ? false : disabled || !statusKnown} seed={seed}
-            onSend={(o) => send(o.text, o.attachmentIds, o.fileName)}
+            onSend={submit} onFile={onFile} submitNow={submitNow} peek={peek}
+            onTyping={() => { if (wid && !readOnly && !warmed.current) { warmed.current = true; post(`/api/works/${wid}/warm`).catch(() => undefined); } }}
             placeholder={readOnly ? COPY.readOnly(work?.owner_name ?? "") : busy ? "진행 중입니다. 끝나면 이어서 요청할 수 있습니다"
               : !statusKnown ? "기록을 불러오는 중입니다" : agent?.connected && !agentKnown ? "PC Agent가 준비되는 중입니다"
               : disabled ? "PC Agent 연결 후 요청할 수 있습니다. 표는 지금 붙여 넣어 Simulator를 만들 수 있습니다" : wid ? COPY.askHere : COPY.askNew}
@@ -559,6 +665,17 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
       </div>
     </section>
   );
+}
+
+/** AI가 첫 단계에서 알아본 경로 카드. 기록에 남는다. 그 뒤에 다른 말이 오갔으면 글만 남기고 버튼은 거둔다 */
+function RouteInHistory({ m, last, readOnly, busy, onPick, onKeep }: { m: ChatMessage; last: boolean; readOnly: boolean; busy: boolean; onPick: (from?: number) => void; onKeep: () => void }) {
+  const file = m.meta?.attachments?.[0]?.filename;
+  const b = m.meta?.card === "B";
+  const source = m.meta?.source_work;
+  const text = b ? COPY.cardB : file ? COPY.cardA(file, source?.name ?? "") : COPY.cardANoFile(source?.name ?? "");
+  if (!last || readOnly) return <p className="small muted">{text}</p>;
+  return <RouteCard text={text} lines={m.content ? <p className="route-lines small muted">{m.content}</p> : undefined} primary={b ? COPY.cardBStart : COPY.cardAStart} link={COPY.keepHere} busy={busy}
+    onPrimary={() => onPick(source?.id)} onLink={onKeep} />;
 }
 
 const KIND_ICON = { table: Table2, scatter: ScatterChart, line: LineChart, bar: BarChart3, parallel: LineChart, markdown: FileText, image: ImageIcon };

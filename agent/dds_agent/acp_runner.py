@@ -417,6 +417,20 @@ class AcpRunner(AgentRunner):
             if sid == session_id:
                 self.respond_permission(request_id, None)
 
+    def close_session(self, session_id: str) -> None:
+        """표시한 CLI에는 session/close를 보낸다. Gemini처럼 없는 CLI는 잊기만 한다: 다음 요청이 불러온다."""
+        cli = self._cli
+        if not cli or cli.proc.poll() is not None:
+            return
+        cli.sessions.discard(session_id)
+        caps = (self.agent_info.get("agentCapabilities") or {}).get("sessionCapabilities") or {}
+        if caps.get("close") is None:
+            return
+        try:
+            self._request(cli, "session/close", {"sessionId": session_id}, timeout=10)
+        except AgentError as e:  # 끝내려는 세션이다. CLI가 답하지 않아도 잊는 것으로 충분하다
+            log.info("세션을 닫지 못했습니다(%s): %s", session_id, e)
+
     def respond_permission(self, request_id: str, option_id: str | None) -> None:
         entry = self._perm.pop(request_id, None)
         if entry is None:

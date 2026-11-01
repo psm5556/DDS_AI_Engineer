@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { get } from "../api";
 import type { WorkSource } from "../types";
 import { COPY, W } from "./copy";
 
 /** 지난 Task처럼 시작: 입력창 곁의 목록. 창을 띄워 막지 않고, 고르지 않으면 처음부터 한다. 지난 Task가 없으면 아예 보이지 않는다.
  *  pid가 없으면 첫 화면이다. 내가 멤버인 Project 전체에서 고르고, 그 값은 새 Project로 옮겨 간다(서버가 other_project로 알린다). */
-export function SourcePicker({ pid, picked, onPick }: { pid: number | null; picked: WorkSource | null; onPick: (s: WorkSource | null) => void }) {
+export function SourcePicker({ pid, picked, onPick, preselect }: { pid: number | null; picked: WorkSource | null; onPick: (s: WorkSource | null) => void; preselect?: number }) {
   const [searching, setSearching] = useState(false);
   const [q, setQ] = useState("");
   const term = q.trim();
@@ -15,6 +15,14 @@ export function SourcePicker({ pid, picked, onPick }: { pid: number | null; pick
     queryKey: ["work-sources", pid, term],
     queryFn: () => get<WorkSource[]>(`/api/works/sources?${new URLSearchParams({ ...(pid ? { project_id: String(pid) } : {}), ...(term ? { q: term } : {}) })}`),
   });
+  // 경로 카드에서 왔으면 그 Task를 고른 채로 시작한다
+  const applied = useRef(false);
+  useEffect(() => {
+    if (!preselect || applied.current || !data) return;
+    applied.current = true;
+    const hit = data.find((s) => s.work_id === preselect);
+    if (hit) onPick(hit);
+  }, [preselect, data, onPick]);
   if (picked) return <SourceCard s={picked} onClear={() => onPick(null)} />;
   if (!data?.length && !searching) return null;
   return (

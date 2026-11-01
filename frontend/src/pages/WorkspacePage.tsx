@@ -41,10 +41,19 @@ export default function WorkspacePage() {
   const oldNew = !widS && !sidS && loc.pathname.endsWith("/new");
   const wid = widS && !isNew ? Number(widS) : null;
   // 첫 화면에서 넘어온 요청(과 첨부)
-  const [initial, setInitial] = useState<InitialPrompt | null>(() => {
-    const st = loc.state as { prompt?: string; attachmentIds?: number[]; fromWorkId?: number } | null;
-    return st?.prompt || st?.attachmentIds?.length || st?.fromWorkId ? { text: st.prompt ?? "", attachmentIds: st.attachmentIds ?? [], fromWorkId: st.fromWorkId } : null;
-  });
+  const [initial, setInitial] = useState<InitialPrompt | null>(() => promptFrom(loc.state));
+  // 이 화면 안에서 다른 Task로 넘어올 때도(복사, 경로 카드, 되돌리기) 요청을 받는다. 그리기 전에 맞춰 새 Task 화면이 고른 시작점을 놓치지 않게 한다
+  const seenKey = useRef(loc.key);
+  if (seenKey.current !== loc.key) {
+    seenKey.current = loc.key;
+    const next = promptFrom(loc.state);
+    if (next) setInitial(next);
+  }
+  useEffect(() => { // 새로고침해도 같은 요청을 또 보내지 않게 읽자마자 지운다
+    if ((!wid && !isNew) || !promptFrom(loc.state)) return;
+    const { prompt: _p, attachmentIds: _a, fromWorkId: _f, fillOnly: _o, askFile: _k, ...rest } = loc.state as Record<string, unknown>;
+    nav(loc.pathname + loc.search, { replace: true, state: Object.keys(rest).length ? rest : null });
+  }, [loc.state, loc.pathname, loc.search, nav, wid, isNew]);
   // '표로 바로 Simulator'나 넓은 Simulator 화면에서 넘어오면 그 Simulator 탭부터 연다.
   // 주소 이력의 state는 새로고침에도 남으므로 읽자마자 지운다. 평범한 주소로 다시 와도 탭을 강제하지 않게
   const [arrival, setArrival] = useState(() => arrivalFrom(loc.state));
@@ -146,6 +155,12 @@ function LegacyNotice() {
     <div className="notice info ws-legacy" role="status"><span className="grow">{COPY.legacyFirst}</span>
       <button className="icon-btn" aria-label="닫기" title="닫기" onClick={close}><X size={14} /></button></div>
   );
+}
+
+function promptFrom(state: unknown): InitialPrompt | null {
+  const st = state as { prompt?: string; attachmentIds?: number[]; fromWorkId?: number; fillOnly?: boolean; askFile?: string } | null;
+  return st?.prompt || st?.attachmentIds?.length || st?.fromWorkId
+    ? { text: st.prompt ?? "", attachmentIds: st.attachmentIds ?? [], fromWorkId: st.fromWorkId, fillOnly: st.fillOnly, askFile: st.askFile } : null;
 }
 
 function arrivalFrom(state: unknown): CanvasArrival | null {
