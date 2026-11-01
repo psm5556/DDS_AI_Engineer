@@ -1,4 +1,5 @@
-"""dds-flow MCP: 작업 흐름(Flow) 시각화와 결과 아티팩트 게시."""
+"""dds-flow MCP: Task Flow(Flow) 시각화와 결과 아티팩트 게시."""
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -9,7 +10,7 @@ mcp = DdsMCP(
     instructions=(
         "해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 일은 propose_flow로 제안하고 사용자가 웹앱에서 승인한 뒤에 실행하세요. "
         "조회·후처리·기존 데이터로 학습·Simulator 배포·보고서는 Flow와 승인 없이 바로 합니다. 실행 중에는 update_node로 각 단계의 상태를 갱신하고, "
-        "결과는 publish_artifact / publish_image로 게시하세요(Flow가 있으면 flow_id·node_id를 꼭 넣어야 웹앱 작업 흐름 탭에서 그 단계 아래에 보입니다). "
+        "결과는 publish_artifact / publish_image로 게시하세요(Flow가 있으면 flow_id·node_id를 꼭 넣어야 웹앱 Task Flow 탭에서 그 단계 아래에 보입니다). "
         "지난번 흐름을 다시 하려면 list_flows로 찾습니다. "
         "보고서는 get_report_context로 자료를 읽고 write_report로 새로 씁니다."
     ),
@@ -21,7 +22,7 @@ NodeType = Literal["cad", "pre", "solve", "post", "doe", "train", "optimize", "d
 @mcp.tool()
 def propose_flow(title: str, nodes: list[dict[str, Any]], edges: list[dict[str, str]], goal: str = "",
                  project_id: int | None = None) -> dict:
-    """작업 흐름 그래프를 제안한다(상태: 검토). 웹앱 캔버스에 표시되고 사용자가 승인한 뒤에 실행한다.
+    """Task Flow 그래프를 제안한다(상태: 검토). 웹앱 캔버스에 표시되고 사용자가 승인한 뒤에 실행한다.
     해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 일, 다른 멤버가 만든 스크립트를 돌리는 일에만 쓴다.
     조회·후처리·기존 데이터로 학습·Simulator 배포·보고서에는 쓰지 않고 승인 없이 바로 한다.
 
@@ -38,11 +39,11 @@ def propose_flow(title: str, nodes: list[dict[str, Any]], edges: list[dict[str, 
 
 
 @mcp.tool()
-def list_flows(project_id: int | None = None, limit: int = 20) -> dict:
-    """프로젝트의 지난 작업 흐름 목록(최신이 앞): 제목·목표·상태·단계, 연결된 스터디(study_id, 케이스 수, 최신·배포 모델, 스크립트 묶음 유무).
+def list_flows(project_id: int | None = None, limit: int = 20, all_works: bool = False) -> dict:
+    """지금 Task의 지난 Task Flow 목록(최신이 앞). all_works=True면 Project의 모든 Task에서 찾는다(지난번처럼 다시): 제목·목표·상태·단계, 연결된 스터디(study_id, 케이스 수, 최신·배포 모델, 스크립트 묶음 유무).
     "지난번처럼 다시"에서 flow_id를 몰라도 찾을 수 있다. 읽기만 하므로 승인이 필요 없다."""
     pid = resolve_pid(project_id)
-    flows = api.get(f"/api/projects/{pid}/flows/summary")
+    flows = api.get(f"/api/projects/{pid}/flows/summary", **({"all_works": "true"} if all_works else {}))
     return {"project_id": pid, "total": len(flows), "flows": [
         {"flow_id": f["id"], "title": f["title"], "goal": f["goal"], "status": f["status"], "created_at": f["created_at"],
          "steps": [n.get("label") for n in f["nodes"]], "studies": f["studies"]} for f in flows[:max(1, limit)]]}
@@ -87,11 +88,11 @@ def publish_artifact(kind: Literal["table", "scatter", "line", "bar", "parallel"
 @mcp.tool()
 def publish_image(path: str, title: str, caption: str = "", flow_id: int | None = None, node_id: str | None = None,
                   project_id: int | None = None) -> dict:
-    """이 PC의 이미지 파일(컨투어·형상 캡처 등)을 서버에 올려 아티팩트로 게시한다. path는 절대경로 또는 프로젝트 작업폴더 기준."""
+    """이 PC의 이미지 파일(컨투어·형상 캡처 등)을 서버에 올려 아티팩트로 게시한다. path는 절대경로 또는 Task 폴더 기준."""
     pid = resolve_pid(project_id)
     p = Path(path)
     if not p.is_absolute():
-        p = settings.project_dir(pid) / p
+        p = settings.work_base(pid) / p
     if not p.is_file():
         return {"error": f"파일이 없습니다: {p}"}
     rel = api.upload_image(pid, p)
@@ -102,15 +103,34 @@ def publish_image(path: str, title: str, caption: str = "", flow_id: int | None 
 
 
 @mcp.tool()
+def list_works(project_id: int | None = None) -> dict:
+    """이 Project의 Task 목록(최신이 앞): 번호, 이름, 주인, 상태, 모델 파일, 케이스 수, 지금 세션의 Task인지(current). 읽기만 하므로 승인이 필요 없다."""
+    pid = resolve_pid(project_id)
+    now = os.environ.get("DDS_WORK_ID")
+    return {"project_id": pid, "works": [
+        {"work_id": w["id"], "seq": w["seq"], "name": w["name"], "owner_name": w["owner_name"], "mine": w["mine"], "legacy": w["legacy"],
+         "status": w["status"], "model_file": w["model_file"], "n_cases": w["n_cases"], "current": str(w["id"]) == now}
+        for w in api.get(f"/api/projects/{pid}/works")]}
+
+
+@mcp.tool()
+def set_work_info(name: str, force: bool = False, project_id: int | None = None) -> dict:
+    """지금 Task의 이름(20자 안팎)을 일에 맞게 정한다. 새 Task는 '첫 Task'·'새 Task'나 요청문 앞부분이 임시 이름이므로 첫 응답 때 부른다.
+    폴더 이름도 따라가지만 지금 세션의 경로는 그대로 쓸 수 있다. 이미 정한 이름은 바꾸지 않는다. 사용자가 바꿔 달라고 했을 때만 force=True."""
+    pid = resolve_pid(project_id)
+    return api.put(f"/api/projects/{pid}/works/current", {"name": name, "force": force})
+
+
+@mcp.tool()
 def set_project_info(name: str | None = None, description: str | None = None, project_id: int | None = None, force: bool = False) -> dict:
-    """프로젝트 이름(20자 안팎)·설명(한 줄)을 작업 내용에 맞게 정한다. 첫 화면에서 막 시작한 프로젝트는 요청문 앞부분이 임시 이름이므로,
+    """Project 이름(20자 안팎)·설명(한 줄)을 작업 내용에 맞게 정한다. 첫 화면에서 막 시작한 Project는 요청문 앞부분이 임시 이름이므로,
     첫 응답 때 알아보기 쉬운 이름(예: "브래킷 경량화 DOE")으로 바꿔 준다.
-    스터디·작업 흐름이 이미 있는 프로젝트는 바꾸지 않는다. 멤버 모두가 쓰는 이름이다. 사용자가 이름을 바꿔 달라고 했을 때만 force=True."""
+    스터디·Task Flow가 이미 있는 Project는 바꾸지 않는다. 멤버 모두가 쓰는 이름이다. 사용자가 이름을 바꿔 달라고 했을 때만 force=True."""
     pid = resolve_pid(project_id)
     p = api.get(f"/api/projects/{pid}")
     if not force and (api.get(f"/api/projects/{pid}/studies") or api.get(f"/api/projects/{pid}/flows/summary")):
         return {"project_id": pid, "name": p["name"], "description": p["description"], "skipped": True,
-                "note": "이미 쓰고 있는 프로젝트라 이름을 바꾸지 않았습니다. 사용자가 바꿔 달라고 하면 force=True로 부른다."}
+                "note": "이미 쓰고 있는 Project라 이름을 바꾸지 않았습니다. 사용자가 바꿔 달라고 하면 force=True로 부른다."}
     body = {"version": p["version"]}
     if name:
         body["name"] = name[:60]
@@ -121,11 +141,11 @@ def set_project_info(name: str | None = None, description: str | None = None, pr
 
 
 @mcp.tool()
-def get_report_context(project_id: int | None = None) -> dict:
-    """보고서를 쓰기 전에 읽는 자료: 작업 흐름(단계 번호·상태·detail) · 결과 목록(artifact_id, 넣는 법 embed, 단계, 데이터 요약)
+def get_report_context(project_id: int | None = None, all_works: bool = False) -> dict:
+    """보고서를 쓰기 전에 읽는 자료(지금 Task 것. 비교 보고서면 all_works=True): Task Flow(단계 번호·상태·detail) · 결과 목록(artifact_id, 넣는 법 embed, 단계, 데이터 요약)
     · 스터디(입력 범위, 출력과 역할, 케이스 수, 최적 케이스, 예측 모델 R²) · 이전 보고서."""
     pid = resolve_pid(project_id)
-    return api.get(f"/api/projects/{pid}/report-context")
+    return api.get(f"/api/projects/{pid}/report-context", **({"all_works": "true"} if all_works else {}))
 
 
 @mcp.tool()
@@ -139,7 +159,7 @@ def write_report(title: str, body: str, flow_id: int | None = None, project_id: 
     body: 한국어 markdown. 권장 구성
       ## 요약 — 결론 3줄 안팎(핵심 숫자: 개선 전→후, 최적 설계값, 제약 만족 여부)
       ## 목적과 조건 — 무엇을, 어떤 조건(하중·회전수 등)·설계 변수 범위로
-      ## 수행 내용 — 작업 흐름 단계를 'N단계' 번호 그대로 짧게
+      ## 수행 내용 — Task Flow 단계를 'N단계' 번호 그대로 짧게
       ## 결과 — 그림·표를 넣고 바로 아래에 해석(경향, 민감한 변수, 예측 모델 정확도 R²의 의미)
       ## 결론과 권고 — 설계 제안, 검증 해석, 다음 할 일
       ## 한계 — 가정·확인 안 된 것
@@ -148,18 +168,18 @@ def write_report(title: str, body: str, flow_id: int | None = None, project_id: 
     """
     pid = resolve_pid(project_id)
     r = api.post(f"/api/projects/{pid}/reports", {"title": title, "body": body, "flow_id": flow_id})
-    return {"report_id": r["id"], "message": "웹앱 '보고서' 탭에 올렸습니다. 대화에는 한두 줄로 핵심만 알리세요."}
+    return {"report_id": r["id"], "message": "웹앱 '보고서' 탭에 올렸습니다. 답에는 한두 줄로 핵심만 알리세요."}
 
 
 @mcp.tool()
 def make_report(formats: list[Literal["html", "docx"]] | None = None, flow_id: int | None = None,
                 project_id: int | None = None) -> dict:
-    """보고서 파일(Word·HTML)을 이 PC 프로젝트 폴더 reports/에 저장한다. write_report로 쓴 최근 보고서가 있으면 그 내용으로,
+    """보고서 파일(Word·HTML)을 이 PC의 Task 폴더 reports/에 저장한다. write_report로 쓴 최근 보고서가 있으면 그 내용으로,
     없으면 게시된 결과를 모아 만든다(flow_id를 주면 그 흐름의 결과만)."""
     import time
 
     pid = resolve_pid(project_id)
-    out = settings.project_dir(pid) / "reports"
+    out = settings.work_base(pid) / "reports"
     out.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d_%H%M%S")
     saved = []

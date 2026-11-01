@@ -1,9 +1,9 @@
 ---
 name: workflow-planning
-description: 해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 요청을 작업 흐름(Flow) 그래프로 설계하는 방법. dds-flow.propose_flow를 호출하기 전에 사용. 조회·후처리·기존 데이터로 학습·Simulator 배포·보고서에는 Flow를 쓰지 않는다.
+description: 해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 요청을 Task Flow(Flow) 그래프로 설계하는 방법. dds-flow.propose_flow를 호출하기 전에 사용. 조회·후처리·기존 데이터로 학습·Simulator 배포·보고서에는 Flow를 쓰지 않는다.
 ---
 
-# 작업 흐름(Flow) 설계
+# Task Flow(Flow) 설계
 
 Flow 승인은 **해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 일**, 다른 멤버가 만든 스크립트를 돌리는 일에만 받습니다. 조회·후처리·기존 데이터로 학습·Simulator 배포·보고서는 승인 없이 바로 합니다(이미 가진 데이터는 `existing-data-to-simulator` 스킬).
 

@@ -42,7 +42,7 @@ dds-study.scan_results(folder=r"D:\runs\bracket")       # 읽기만 한다. 네�
 | 폴더 전체를 요약한 표가 `tables`에 있음 | 그 표로 1절을 따릅니다. 가장 빠릅니다 |
 | `fields`가 있음(`fields/*.npz`) | `import_cases`가 함께 올립니다. 그다음 `train_field_model` |
 
-- 원본 폴더에 쓰지 않습니다. 작업 폴더로 바꾸지도 않습니다(AI 도구 지침 파일과 폴더가 생겨 사용자 폴더가 오염됩니다).
+- 원본 폴더에 쓰지 않습니다. Task 폴더로 바꾸지도 않습니다(AI 도구 지침 파일과 폴더가 생겨 사용자 폴더가 오염됩니다).
 - `truncated`가 있으면 폴더가 많거나 공유 폴더가 느려 다 보지 못한 것입니다. 더 아래 폴더를 직접 지정해 다시 부릅니다.
 - `run_dir`은 원본 경로로 기록만 됩니다. 그 경로는 이 PC에만 있으니 다른 멤버 PC에서는 원본에서 추가 추출을 못 합니다.
 
@@ -73,7 +73,7 @@ dds-study.import_cases(cases=[
   ...
 ])
 ```
-값을 나중에 더 뽑으려면(Output 추가) `add_outputs`의 `post`에 추출 단계를 줍니다. 추출 스크립트는 작업 폴더에서 돌고 원본은 args의 `{source_dir}` 또는 환경변수 `DDS_SOURCE_DIR`로 찾습니다. 예: `{"tool": "abaqus_python", "script": "scripts/abq_odb_extract.py", "args": ["--odb", "{source_dir}/job.odb"]}`.
+값을 나중에 더 뽑으려면(Output 추가) `add_outputs`의 `post`에 추출 단계를 줍니다. 추출 스크립트는 Task 폴더에서 돌고 원본은 args의 `{source_dir}` 또는 환경변수 `DDS_SOURCE_DIR`로 찾습니다. 예: `{"tool": "abaqus_python", "script": "scripts/abq_odb_extract.py", "args": ["--odb", "{source_dir}/job.odb"]}`.
 
 ## 4. 학습과 배포
 - `train_surrogate`가 `status: "running"`이면 실패가 아닙니다. 같은 인자로 다시 부르면 이어서 기다립니다. 행이 500개를 넘으면 고르게 줄여 학습하고 `sampled`로 알립니다.

@@ -1,7 +1,8 @@
 # 사용자 PC 로컬 데이터 규칙
 
 해석 원본·산출물(odb, d3plot, op2, sim 등 무거운 파일)은 **사용자 PC**에 남는다.
-폴더 이름 앞의 번호(P/S/C + 서버 ID)가 서버와 로컬을 잇는 열쇠다. 이름 부분은 사람이 알아보기 위한 것이라 바뀌어도 번호로 찾는다.
+폴더 이름 앞의 번호(P/S/C + 서버 ID, T + Project 안의 Task 번호)가 서버와 로컬을 잇는 열쇠다. 이름 부분은 사람이 알아보기 위한 것이라 바뀌어도 번호로 찾는다.
+용어: Project(부품·제품 하나) > Task(일 한 건, 코드 이름 Work). **Task마다 폴더 하나**이고 AI의 작업 폴더(cwd)가 그 폴더다.
 
 ## 무엇이 서버에 올라가는가
 프로젝트 멤버는 서버에 있는 것을 볼 수 있다. 무엇을 할 수 있는지는 [product-spec.md 4-1절](product-spec.md) 표에 있다.
@@ -19,39 +20,57 @@
 | 예측 모델 | 학습은 서버에서 하므로 모델 파일도 서버에 있다 | - |
 | 스크립트 묶음(레시피) | 사용자가 올린 경우에만. 다른 멤버 PC에서 내려받아 쓴다. 서버는 검사와 보관만 하고 실행하지 않는다 | 묶음 20 MB, 파일당 5 MB, 200개 |
 
-서버에 올라가지 않는 것: 500 MB가 넘는 `case.h5`, 툴 산출물 원본(odb, d3plot, op2, sim 등), 스크립트(묶음을 올리지 않았을 때), PC별 작업 폴더 위치(`index.json`).
+서버에 올라가지 않는 것: 500 MB가 넘는 `case.h5`, 툴 산출물 원본(odb, d3plot, op2, sim 등), 스크립트(묶음을 올리지 않았을 때), PC별 폴더 위치(`index.json`).
 
 ```
 %USERPROFILE%\DDS_Workspace\                (agent.toml의 workspace_dir)
-  index.json                                내 PC 전체 프로젝트 색인 { "projects": { "12": {name, folder, uid, visible, pending, server} }, "links": { uid: 직접 정한 폴더 } }
+  index.json                                내 PC 전체 프로젝트 색인 { "projects": { "12": {name, folder, uid, visible, pending, server} }, "links": { uid: 직접 정한 폴더 }, "works_pending": { Task uid: 이름 바꾸기를 기다림 } }
   .dds-lock                                 작업 공간을 고치는 동안 잡는 잠금 파일(숨김)
-  P0012_브래킷-경량화\                       항상 번호_이름. 프로젝트 이름을 따라 바뀐다(아래 '폴더 이름')
-    project.json                            프로젝트 ID·이름·서버 주소, 폴더 이름 기록
+  P0012_브래킷-경량화\                       항상 번호_이름. Project 이름을 따라 바뀐다(아래 '폴더 이름')
+    project.json                            Project ID·이름·서버 주소, 폴더 이름 기록
     GEMINI.md / CLAUDE.md / AGENTS.md       에이전트 작업 규칙(자동 동기화, 탐색기에서 숨김. 아래 '규칙·스킬 파일 정리')
-    .gemini/.claude/.agents\skills\         스킬(자동 동기화, 탐색기에서 숨김)
+    .gemini/.claude/.agents\skills\         스킬 1벌(자동 동기화, 탐색기에서 숨김)
     .dds-skills.json / .dds-context-stamp   동기화 기록(탐색기에서 숨김)
-    inputs\                                 대화 첨부·원본 모델 (수정 금지, 복사해서 사용)
-    scripts\                                에이전트가 만든 자동화 스크립트
-    runs\20261027_101500_<이름>\            단발 실행(dds-cae.run_script)
-    studies\
-      S003_두께-리브-DOE\
-        study.json                          설계변수·목적·어댑터·툴 설정
-        cases.csv                           전 케이스 한 표(ID·출처·상태·in:변수·out:결과·폴더) — 엑셀에서 바로 열림. 보기용 사본이다: 읽어 오지 않고 case.json에서 매번 다시 만든다. 잠겼거나 암호화돼도 해석을 막지 않고 다음 케이스 때 맞춘다
-        cases\
-          C0001_doe\                        DOE 케이스
-          C0021_bo\                         베이지안 최적화가 제안한 케이스
-          C0031_al\                         능동학습이 제안한 케이스
-            case.json                       케이스 메타(파라미터·결과·상태·시작/끝 시각·PC 이름)
-            params.json  results.json  run.log  commands.json
-            images\                         캡처 이미지 → 서버 결과로 업로드
-            fields\<이름>.npz               3D 형상·필드(points, values, triangles) → 서버 업로드, 형상·필드 학습
-            (툴 산출물: *.odb, d3plot, *.op2, *.sim …)
-    live\                                   Live Link 화면 캡처
-    reports\                                보고서
+    inputs\ scripts\ runs\ studies\ live\ reports\   이전 기록(Task 구조 전의 일)만 쓴다. 옮기거나 이름을 바꾸지 않는다
+    T01_1차-경량화\                          Task 폴더. 항상 T번호_이름. Task 이름을 따라 바뀐다. AI의 작업 폴더(cwd)다
+      work.json                             Task id·uid·번호·이름, 폴더 이름 기록
+      AGENTS.md / GEMINI.md                 Codex·Gemini 규칙(숨김). 스킬 경로는 ../.agents/skills/… (CLAUDE.md는 두지 않는다)
+      .gemini\settings.json                 Gemini가 위 폴더를 읽게 하는 설정(숨김)
+      .dds-work-stamp                       동기화 기록(숨김)
+      inputs\                               첨부·원본 모델 (수정 금지, 복사해서 사용)
+      scripts\                              에이전트가 만든 자동화 스크립트
+      runs\20261027_101500_<이름>\          단발 실행(dds-cae.run_script)
+      studies\
+        S003_두께-리브-DOE\
+          study.json                        설계변수·목적·어댑터·툴 설정
+          cases.csv                         전 케이스 한 표(ID·출처·상태·in:변수·out:결과·폴더) — 엑셀에서 바로 열림. 보기용 사본이다: 읽어 오지 않고 case.json에서 매번 다시 만든다. 잠겼거나 암호화돼도 해석을 막지 않고 다음 케이스 때 맞춘다
+          cases\
+            C0001_doe\                      DOE 케이스
+            C0021_bo\                       베이지안 최적화가 제안한 케이스
+            C0031_al\                       능동학습이 제안한 케이스
+              case.json                     케이스 메타(파라미터·결과·상태·시작/끝 시각·PC 이름)
+              params.json  results.json  run.log  commands.json
+              images\                       캡처 이미지 → 서버 결과로 업로드
+              fields\<이름>.npz             3D 형상·필드(points, values, triangles) → 서버 업로드, 형상·필드 학습
+              (툴 산출물: *.odb, d3plot, *.op2, *.sim …)
+      live\                                 Live Link 화면 캡처
+      reports\                              보고서
 ```
 
+## Task 폴더
+- **만드는 때:** AI를 시작하거나 케이스를 돌릴 때만이다. 파일 탭·이름 변경·연결 같은 **조회로는 만들지 않는다**(`find_work`). 파일 탭에는 `이 Task의 폴더는 아직 이 PC에 없습니다`가 보인다.
+- **찾는 법:** `T{번호:02d}_*`에서 `work.json`의 uid가 같은 폴더. 번호가 같고 uid가 다르면(서버 DB를 다시 만든 경우) 남의 폴더로 보고 새 폴더 이름에 uid 앞 6자를 붙인다. `work.json`이 없는 `T01_…`은 사용자 폴더라 건드리지 않는다.
+- **이전 기록·옛 Agent:** 이전 기록(`legacy`)은 지금처럼 Project 폴더에서 돌고 옛 폴더를 건드리지 않는다. 이 표시가 없는 옛 Agent로 처음 시작하는 Task도 `legacy`가 되어 Project 폴더를 쓰고, 그 기록에 업데이트 안내를 한 번 남긴다. 옛 서버 + 새 Agent이면 `work`가 오지 않으므로 Project 폴더다.
+- **다른 PC의 내 Task:** 폴더가 없으면 AI를 시작할 때 새로 만든다. 세션은 그 PC에 없으므로 지난 기록 요약으로 잇는다. 번호와 이름은 PC마다 같다.
+- **세션:** CLI 프로세스는 하나이고 Task마다 세션이 있다. Task를 옮겨 다녀도 CLI를 다시 띄우지 않는다. 세션의 cwd는 Task 폴더이고, `additionalDirectories`로 Project 폴더(스킬 1벌)를 함께 넘긴다.
+- **MCP:** 환경값 `DDS_WORK_ID`·`DDS_WORK_UID`·`DDS_WORK_DIR`(절대 경로). MCP는 폴더를 다시 계산하지 않고(`settings.work_base`), `ServerApi`가 요청마다 `X-DDS-Work`를 붙인다. `DDS_PROJECT_DIR`은 Project 폴더다.
+- **경로 길이:** 기본 위치에서 Project·Task 이름을 모두 24자까지 쓴다. 놓일 곳의 경로가 길면 Project는 139자, Task는 110자를 아래 파일 몫으로 남기고 줄인다(최소 8자).
+- **쓸 수 없는 일:** Task 폴더나 그 안쪽을 Project 폴더로 직접 정하기. 파일 탭의 경로는 그 Task 폴더 밖으로 나가지 않는다(옆 Task·다른 Project 거절).
+
 ## 폴더 이름
-기본 위치의 프로젝트 폴더는 항상 `P0012_<이름>`이다. 번호만 있는 폴더는 만들지 않고, 이름을 모르면 `P0012_untitled`로 시작해 이름을 알게 되면 바꾼다. 코드는 `agent/dds_agent/workspace.py` `sync_name`.
+기본 위치의 Project 폴더는 항상 `P0012_<이름>`, Task 폴더는 항상 `T01_<이름>`이다. 번호만 있는 폴더는 만들지 않고, 이름을 모르면 `P0012_untitled`로 시작해 이름을 알게 되면 바꾼다. 코드는 `agent/dds_agent/workspace.py` `sync_name`·`sync_work_name`이고 절차는 같다(놓이는 곳과 기록 파일만 다르다). 아래 표는 Project 기준이고 Task도 같다. Task의 "살아 있는 세션"은 **그 Task의 세션**만 본다: 옆 Task의 세션은 이 폴더를 잡지 않는다. 해석은 어느 Task든 돌면 기다린다.
+
+**이름을 바꾸는 순서:** Task → Project → 안쪽 접합 재생성. Project의 실제 이름을 바꾸면 Task 접합의 대상 경로가 낡는다(옛 이름 접합이 지워지면 끊긴다). 바꾼 직후 새 경로로 다시 만든다. Task 세션이 살아 있으면 Project 폴더도 잠겨 있으므로 둘 다 접합으로 보인다. 서버 메시지는 `work.renamed`(이름이 바뀔 때)·`work.names`(연결할 때)이고, 기다리는 Task는 `index.json`의 `works_pending`에 남아 Agent를 다시 시작해도 이어 간다.
 
 **이름을 바꾸면 무슨 일이 일어나나**
 
@@ -130,6 +149,9 @@
 ## 규칙·스킬 파일 정리
 사용자 폴더가 지저분해지지 않게 DDS가 만든 파일을 눈에 띄지 않게 둔다. 깔끔하게 하려는 것이지 **보호 수단이 아니다**(탐색기에서 "숨긴 항목"을 켜면 보인다). 코드는 `agent/dds_agent/context.py`.
 
+- **Task 폴더:** 규칙·스킬은 Project 폴더에 1벌이고 Task마다 파일 4개(`AGENTS.md`·`GEMINI.md`·`.gemini\settings.json`·`.dds-work-stamp`)만 더한다. 코드는 `sync_work_context`. Claude는 부모의 `CLAUDE.md`와 `.claude/skills`를 읽으므로 `CLAUDE.md`를 두지 않는다(두면 두 번 읽는다). Project 폴더가 git 저장소 안이면 Codex·Gemini도 부모의 규칙 파일을 읽으므로 Task 쪽에는 스킬 경로만 적는다. git 제외는 Project 구간에 `T*/AGENTS.md` 같은 패턴만 더한다.
+  - **Gemini 스킬:** Gemini는 스킬을 cwd의 `.gemini/skills`에서만 찾고, ACP `session/load`가 Task 폴더의 설정을 읽지 않아 `../` 경로를 거부할 수 있다(번들 0.65 코드, 실행 확인은 못 함). 그래서 기본값 `work_skill_copy = ["gemini"]`이면 Gemini로 시작할 때 그 Task에 스킬을 복사한다(Task마다 파일 약 50개). 사내 관문을 통과하면 `agent.toml`에 `work_skill_copy = []`로 끈다. 신뢰 목록은 사용자의 전역 파일을 고치지 않고 `~/.dds-agent/gemini-trusted-folders.json`을 `GEMINI_CLI_TRUSTED_FOLDERS_PATH`로 넘긴다.
+  - **알고 맡기는 위험:** `additionalDirectories`는 옆 Task 폴더에도 쓰기를 허용한다. 지난 결과 보호는 규칙("다른 Task 폴더는 읽기만")에 맡긴다.
 - **숨기는 것(Windows Hidden 속성):** DDS만 만든 규칙 파일, 동기화 기록, `.claude`·`.gemini`·`.agents` 폴더. 동기화를 건너뛰는 때에도 맞춘다(파일 내용을 읽지 않고 이름·크기만 본다).
 - **숨기지 않는 것:** 사용자 글이 들어 있는 규칙 파일, 다른 내용이 든 `.claude` 등의 폴더(그 안에서는 DDS 스킬 폴더만 숨긴다). 나중에 사용자가 그런 내용을 넣으면 DDS가 숨겼던 것을 다시 보이게 한다. 사용자가 직접 숨긴 것은 건드리지 않는다.
 - **사용자 규칙 파일:** 표시한 구간(`DDS Conversa 규칙 시작`~`끝`)만 넣고 고친다. 구간 밖의 글은 바이트 그대로 남는다(인코딩·줄바꿈 포함). 기존 파일은 제자리에서 고쳐 권한(ACL)·하드 링크·이름의 대소문자도 그대로다. 구간을 지우면 다음 동기화 때 다시 들어간다.
@@ -172,7 +194,7 @@ ripgrep은 Hidden 속성을 숨김으로 다뤄 `--hidden` 없이는 건너뛴�
 ## 연결과 조회
 | 하고 싶은 일 | 방법 |
 |---|---|
-| 웹에서 내 PC 폴더 보기 | 캔버스 **파일** 탭 (PC Agent가 목록을 보내 줌, DDS 규칙·스킬 파일은 뺀다). 위쪽에 실제 경로와 "기본 위치/직접 지정"이 보인다 |
+| 웹에서 내 PC 폴더 보기 | 캔버스 **파일** 탭 (`/local/tree?work_id=`, PC Agent가 그 Task 폴더 목록을 보내 줌, DDS 규칙·스킬 파일은 뺀다). 이전 기록이면 Project 폴더에서 Task 폴더를 뺀 목록이다. 위쪽에 실제 경로와 "기본 위치/직접 지정"이 보인다 |
 | 탐색기로 열기 | 파일 탭·케이스 표의 📂 버튼, 프로젝트 메뉴의 "내 PC 작업 폴더 열기" |
 | CAE 뷰어로 열기 | 파일 탭의 👁 버튼 → `agent.toml [viewers]`의 확장자별 명령 (없으면 Windows 기본 프로그램) |
 | 다른 멤버의 케이스 | 원본은 그 멤버의 PC에 있다. 숫자 결과·이미지·필드와 서버에 올라간 `case.h5`는 멤버 누구나 볼 수 있다 |

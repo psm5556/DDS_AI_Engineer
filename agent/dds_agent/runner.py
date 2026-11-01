@@ -6,6 +6,7 @@
   {"sessionUpdate": "plan", "entries": [...]}
 권한 요청은 on_permission(session_id, request_id, payload)로 넘기고, respond_permission()으로 답한다.
 report(stage)는 시작 단계(cli_start·initialize·session_new·session_load)를 알리는 콜백이다. 기다리는 사용자에게 보여 준다.
+extra_dirs는 cwd 밖에서 읽고 쓸 수 있게 할 폴더다(Task 폴더의 부모인 Project 폴더). 모르는 러너는 받지 않는다.
 """
 from __future__ import annotations
 

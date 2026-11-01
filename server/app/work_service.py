@@ -6,7 +6,7 @@
 읽기를 넓게 두는 까닭: 조회는 아무것도 망가뜨리지 않고, 좁히면 스크립트나 다른 Project를 찾는 AI가 지난 결과를 못 찾는다.
 옛 PC Agent는 헤더를 보내지 않는다. 그래도 끊기지 않고 위 순서로 맞는 Task를 찾는다.
 
-2단계(폴더·세션·MCP)가 이어받는 곳: ServerApi가 X-DDS-Work를 붙이면 work_scope가 그대로 읽는다. 폴더를 정하는 hub._ensure_session에는 TurnState.work_id가 있다.
+ServerApi가 MCP의 요청마다 X-DDS-Work를 붙이고 work_scope가 그대로 읽는다. 폴더는 hub._session_work가 PC Agent에 알린다.
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .agent.hub import hub
+from .agent.link import AgentError, registry
 from .config import settings
 from .database import SessionLocal, engine, get_db
 from .deps import effective_admin, get_current_user, get_project_for_member
@@ -67,6 +68,21 @@ def new_work(db: Session, project_id: int, owner_id: int, name: str | None = Non
     db.add(w)
     db.flush()
     return w
+
+
+def tell_agents_renamed(db: Session, work: models.Work):
+    """멤버들의 PC Agent가 폴더 이름을 따라가게 한다. 그 PC에 폴더가 없으면 아무 일도 없다. 끊긴 PC는 다음 연결의 work.names로 따라온다."""
+    if work.legacy:  # 이전 기록은 Project 폴더를 쓴다. 따라갈 폴더가 없다
+        return
+    p = db.get(models.Project, work.project_id)
+    msg = {"type": "work.renamed", "project_id": p.id, "project_uid": p.uid, "work": work.folder_view()}
+    for uid in {m.user_id for m in p.members} | {work.owner_id}:
+        conn = registry.get(uid)
+        if conn and conn.info.get("work_folders"):
+            try:
+                conn.send(msg)
+            except AgentError as e:  # 다음 연결에 맞춘다. 이름 바꾸기 자체는 이미 끝났다
+                log.info("Task 이름 변경을 PC Agent에 알리지 못했습니다: %s", e)
 
 
 def add_chat(db: Session, work: models.Work, user_id: int, agent: str) -> models.ChatSession:
@@ -364,7 +380,7 @@ def migrate_works() -> int:
         for pid in sorted(need):
             project = db.get(models.Project, pid)
             had_works = db.query(models.Work.id).filter_by(project_id=pid).first() is not None
-            work = db.query(models.Work).filter_by(project_id=pid, legacy=True).first()
+            work = db.query(models.Work).filter_by(project_id=pid, legacy=True, seq=0).first()  # 옛 Agent로 시작한 Task도 legacy다. 이전 기록은 번호 0 하나다
             if work is None:
                 owner, users = _legacy_owner_and_users(db, project)
                 work = models.Work(project_id=pid, seq=0, name=LEGACY_NAME, name_auto=False, owner_id=owner, legacy=True, legacy_users=users,

@@ -221,6 +221,18 @@ class AcpRunner(AgentRunner):
     def supports_load(self) -> bool:
         return bool((self.agent_info.get("agentCapabilities") or {}).get("loadSession"))
 
+    def _dirs_params(self, extra_dirs: list[str] | None) -> dict:
+        """cwd 밖 폴더를 session/new·load에 얹는다. 표시한 CLI에만 공식 항목으로 보낸다. _meta.additionalRoots는 옛 claude-agent-acp가 읽는 이름이고 다른 CLI는 무시한다.
+        받지 않는 CLI는 권한 요청으로 넘어간다. 스킬은 규칙 파일의 목록으로 찾으므로 일은 된다(관문 G6)."""
+        dirs = [os.path.abspath(d) for d in extra_dirs or []]
+        if not dirs:
+            return {}
+        caps = (self.agent_info.get("agentCapabilities") or {}).get("sessionCapabilities") or {}
+        out: dict[str, Any] = {"_meta": {"additionalRoots": dirs}}
+        if caps.get("additionalDirectories") is not None:
+            out["additionalDirectories"] = dirs
+        return out
+
     def working_in_background(self) -> bool:
         """CLI 아래 프로세스들이 CPU를 쓰는 중인지. 프로세스 이름으로는 CLI 도우미와 솔버를 가릴 수 없어 쓰는 양으로 본다.
         한가한 CLI·MCP는 거의 쓰지 않는다. 라이선스를 기다리는 솔버처럼 CPU를 안 쓰는 것은 잡지 못한다."""
@@ -335,13 +347,13 @@ class AcpRunner(AgentRunner):
         return AgentError(f"{self.label}이(가) 요청을 처리하지 못했습니다 → 다시 보내 주세요. 계속되면 아래 원문을 확인하세요.\n\n원문: {str(e)[:500]}")
 
     # ---------- AgentRunner ----------
-    def new_session(self, cwd: str, mcp_servers: list[dict] | None = None, report: StageReport | None = None) -> str:
+    def new_session(self, cwd: str, mcp_servers: list[dict] | None = None, report: StageReport | None = None, extra_dirs: list[str] | None = None) -> str:
         cli = self._ensure_started(report)
         if report:
             report("session_new")
         t0 = time.monotonic()
         try:
-            res = self._request(cli, "session/new", {"cwd": os.path.abspath(cwd), "mcpServers": mcp_servers or []},
+            res = self._request(cli, "session/new", {"cwd": os.path.abspath(cwd), "mcpServers": mcp_servers or [], **self._dirs_params(extra_dirs)},
                                 timeout=self.start_timeout)
         except AgentError as e:
             raise self._friendly(e)
@@ -349,7 +361,8 @@ class AcpRunner(AgentRunner):
         cli.sessions.add(res["sessionId"])
         return res["sessionId"]
 
-    def load_session(self, session_id: str, cwd: str, mcp_servers: list[dict] | None = None, report: StageReport | None = None) -> bool:
+    def load_session(self, session_id: str, cwd: str, mcp_servers: list[dict] | None = None, report: StageReport | None = None,
+                     extra_dirs: list[str] | None = None) -> bool:
         """False는 지원하지 않거나 세션이 없을 때뿐이다. 멈췄거나 죽은 경우는 예외로 올려 멀쩡한 세션을 새 세션으로 덮지 않는다."""
         cli = self._ensure_started(report)
         if not self.supports_load():
@@ -361,7 +374,7 @@ class AcpRunner(AgentRunner):
         t0 = time.monotonic()
         cli.loading.add(session_id)
         try:
-            self._request(cli, "session/load", {"sessionId": session_id, "cwd": os.path.abspath(cwd), "mcpServers": mcp_servers or []},
+            self._request(cli, "session/load", {"sessionId": session_id, "cwd": os.path.abspath(cwd), "mcpServers": mcp_servers or [], **self._dirs_params(extra_dirs)},
                           timeout=self.start_timeout)
         except AgentError as e:
             if isinstance(self._friendly(e), LoginRequired):

@@ -908,7 +908,7 @@ def test_narrowed_approval_rule_says_the_same_everywhere(source):
 
 def test_instructions_cover_every_entry_and_rule():
     text = _rule_sources()["INSTRUCTIONS"]
-    assert "## 0-2. 어디서 시작하든" in text and "## 1-2. 신규 모델로 지난번처럼" in text and "## 1-3. 프로젝트 멤버가 이어받기" in text
+    assert "## 0-2. 어디서 시작하든" in text and "## 1-2. 신규 모델로 지난번처럼" in text and "## 1-3. Project 멤버가 이어받기" in text
     table = text.split("## 0-2. 어디서 시작하든")[1].split("## 1.")[0]
     for first in ("inspect_table", "import_table", "scan_results", "import_cases", "list_studies", "list_models", "export_doe", "set_study_adapter", "list_flows", "upload_field"):
         assert f"`{first}" in table or f".{first}`" in table, first
@@ -925,7 +925,7 @@ def test_instructions_cover_every_entry_and_rule():
 def test_report_section_is_left_for_the_report_branch():
     """report-template 브랜치가 1-0절을 고친다. 합칠 때 겹치지 않게 여기서는 건드리지 않는다."""
     text = INSTRUCTIONS.read_text(encoding="utf-8")
-    assert "## 1-0. 보고서는 AI가 새로 쓴다" in text and "`dds-flow.get_report_context`로 작업 흐름·결과·스터디를 읽는다 → `dds-flow.write_report`로 쓴다" in text
+    assert "## 1-0. 보고서는 AI가 새로 쓴다" in text and "`dds-flow.get_report_context`로 Task Flow·결과·스터디를 읽는다 → `dds-flow.write_report`로 쓴다" in text
 
 
 def test_every_tool_named_in_instructions_and_skills_exists():
@@ -1151,7 +1151,7 @@ def test_demo_plan_and_connect_later(env, tmp_path):
 def test_demo_same_flow_again_keeps_old_results(env):
     first = _DemoAll()
     _chat_all(first, "mock 솔버로 Branin 최적화하고 Simulator 배포해줘")
-    assert "다시 돌릴 지난 작업 흐름이" in _chat_all(_DemoAll(), "신규 모델 나왔어. 지난번처럼 다시 해 줘")  # 승인 전이라 연결된 스터디가 없다. 없는 것을 있다고 하지 않는다
+    assert "다시 돌릴 지난 Task Flow가" in _chat_all(_DemoAll(), "신규 모델 나왔어. 지난번처럼 다시 해 줘")  # 승인 전이라 연결된 스터디가 없다. 없는 것을 있다고 하지 않는다
     _approve(env, first)
     old = first.study_id
     before = (env.cases(old), dds_study.list_models(study_id=old))

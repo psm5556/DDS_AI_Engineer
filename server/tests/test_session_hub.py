@@ -51,7 +51,7 @@ def _ws(client, me):
 
 
 def _hello(ws, boot="boot1", live=(), turns=(), running=("fake",)):
-    ws.send_json({"type": "hello", "hostname": "PC", "version": "9", "boot": boot, "live_sessions": list(live), "active_turns": list(turns),
+    ws.send_json({"type": "hello", "hostname": "PC", "version": "9", "boot": boot, "work_folders": 1, "live_sessions": list(live), "active_turns": list(turns),
                   "running_agents": list(running), "start_times": {"fake": 192.0}, "default_agent": "fake",
                   "agents": [{"name": "fake", "label": "가짜", "installed": True}]})
     # 서버가 상태를 맞춘 뒤에 agent.settings를 보낸다. 그사이 온 메시지(다시 묻는 session.new 등)는 시험이 읽게 남겨 둔다
@@ -563,7 +563,8 @@ def test_force_restart_on_old_agent_says_so_instead_of_pretending(client, me):
         r = client.post(f"/api/sessions/{chat}/force-restart", headers=me["h"])
         assert r.status_code == 409 and "옛 버전" in r.json()["detail"] and "→" in r.json()["detail"]
         assert _status(client, me, chat)["busy"]  # 끝낸 척하지 않는다
-        assert not [x for x in _msgs(client, me, chat) if x["role"] == "system"]
+        # 옛 Agent로 처음 시작한 Task라 폴더 안내만 한 번 남는다
+        assert [x["content"] for x in _msgs(client, me, chat) if x["role"] == "system"] == ["PC Agent를 업데이트하면 다음 Task부터 폴더가 나뉩니다 → 트레이에서 다시 시작하세요"]
         ws.send_json({"type": "response", "rid": p["rid"], "result": {"stop_reason": "end_turn"}})
         _wait(lambda: not _status(client, me, chat)["busy"])
 

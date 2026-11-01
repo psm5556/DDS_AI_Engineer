@@ -68,6 +68,10 @@ class AgentSettings:
     base_tools: dict[str, str] = field(default_factory=dict)  # 기본값 + agent.toml [tools]
     base_tool_env: dict[str, dict[str, str]] = field(default_factory=dict)
     config_tools: set[str] = field(default_factory=set)  # agent.toml [tools]에 적힌 키
+    # 부모 폴더의 스킬을 읽지 못하는 CLI. 그 CLI로 시작할 때만 Task 폴더에 스킬을 복사한다(context.sync_work_context, 관문 G3).
+    # Gemini는 .gemini/skills를 cwd에서만 찾고, ACP session/load가 Task 폴더의 설정(includeDirectories)을 읽지 않아(번들 0.65 코드) ../ 경로를 거부할 수 있다.
+    # 사내 G3를 통과하면 agent.toml에 work_skill_copy = []로 끈다
+    work_skill_copy: list[str] = field(default_factory=lambda: ["gemini"])
     project_lookup: Callable[[int], dict] | None = None  # MCP: 이 PC에 폴더가 없는 프로젝트의 이름·uid를 서버에 묻는다
 
     @property
@@ -97,6 +101,15 @@ class AgentSettings:
                 except Exception as e:  # 서버가 안 되어도 일은 계속한다. 이름은 다음 동기화에 맞춘다
                     log.info("프로젝트 이름을 서버에서 가져오지 못했습니다(%s): %s", project_id, e)
         return ws.project_dir(project_id, name, uid)
+
+    def work_base(self, project_id: int, name: str | None = None, uid: str | None = None) -> Path:
+        """이 세션이 일하는 폴더. MCP의 상대 경로 기준이다. Task 세션이면 PC Agent가 알려 준 Task 폴더를 그대로 쓴다(다시 계산하지 않는다).
+        다른 Project를 말했거나 이전 기록이면 Project 폴더다."""
+        if str(project_id) == os.environ.get("DDS_PROJECT_ID"):
+            own = os.environ.get("DDS_WORK_DIR")
+            if own and Path(own).is_dir():
+                return Path(own)
+        return self.project_dir(project_id, name, uid)
 
     def agent_command(self, name: str) -> list[str]:
         if name not in self.agents:

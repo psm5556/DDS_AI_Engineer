@@ -120,11 +120,11 @@ def add_outputs(study_id: int, outputs: list[dict[str, str]], post: dict[str, An
     post: script 어댑터일 때 추출 단계 {"tool": "abaqus_python", "script": "scripts/extract_disp.py", "args": []}
           추출 스크립트는 케이스 폴더(cwd)에서 돌고 새 키만 results.json에 써도 된다(기존 값은 플랫폼이 지킨다).
           붙이기 전에 dds-cae.run_script로 한 케이스에서 먼저 시험한다. 결과 파일 경로는 args로 넘긴다. 큰 결과 파일을 inputs로 복사하지 않는다.
-          불러온 해석 폴더의 케이스는 원본에 쓰지 않으려고 작업 폴더에서 돈다. 스크립트는 args의 {source_dir} 또는 환경변수 DDS_SOURCE_DIR로 원본을 찾는다.
+          불러온 해석 폴더의 케이스는 원본에 쓰지 않으려고 Task 폴더에서 돈다. 스크립트는 args의 {source_dir} 또는 환경변수 DDS_SOURCE_DIR로 원본을 찾는다.
     mock 어댑터는 post 없이 해석함수에서 다시 계산한다.
     작업 주인만 추가할 수 있다. 남의 스터디는 403이며 그 문구를 사용자에게 그대로 전한다(다른 사람 PC에서 스크립트를 돌리지 않는다).
     내 PC가 꺼져 있으면 skipped_no_agent, 다른 멤버가 돌린 케이스는 other_pc로 빠진다. note를 사용자에게 알린다.
-    post의 script는 프로젝트 폴더 안의 상대 경로만 받는다.
+    post의 script는 Task 폴더 안의 상대 경로만 받는다.
     """
     r = api.post(f"/api/studies/{study_id}/outputs", {"outputs": outputs, "post": post, "extract_existing": extract_existing})
     st = _wait(study_id, wait_sec)
@@ -169,7 +169,7 @@ def _wait(study_id: int, wait_sec: int) -> dict:
 def run_cases(study_id: int, case_ids: list[int] | None = None, dry_run: bool = False, wait_sec: int = 480, flow_id: int | None = None) -> dict:
     """대기 케이스(또는 지정한 케이스)를 이 PC Agent에서 실행하고 최대 wait_sec 동안 기다린다.
     아직 running이면 get_study로 다시 확인한다. dry_run=True면 스크립트·명령만 만들고 실행하지 않는다.
-    flow_id: 이 실행을 승인받은 작업 흐름. 다른 멤버가 만든 스크립트는 내가 승인한 흐름이 있어야 돈다. 서버가 확인한다.
+    flow_id: 이 실행을 승인받은 Task Flow. 다른 멤버가 만든 스크립트는 내가 승인한 흐름이 있어야 돈다. 서버가 확인한다.
     끝난 케이스를 다시 돌리다 실패하면 이전 결과가 그대로 남고 그 이유가 케이스 오류에 적힌다."""
     r = api.post(f"/api/studies/{study_id}/run", {"case_ids": case_ids, "dry_run": dry_run, "flow_id": flow_id})
     out = _summary(_wait(study_id, wait_sec))
@@ -415,10 +415,10 @@ def _model_brief(m: dict) -> dict:
             "simulator_path": f"/simulator/{m['id']}", "field_models": m.get("field_models")}
 
 
-def _project_studies(pid: int, limit: int) -> list[dict]:
+def _project_studies(pid: int, limit: int, all_works: bool = False) -> list[dict]:
     models = api.get(f"/api/projects/{pid}/models")
     out = []
-    for s in api.get(f"/api/projects/{pid}/studies")[:limit]:
+    for s in api.get(f"/api/projects/{pid}/studies", **({"all_works": "true"} if all_works else {}))[:limit]:
         st = api.get(f"/api/studies/{s['id']}")
         mine = [m for m in models if m["study_id"] == s["id"]]  # 최신이 앞이다
         cfg = s.get("adapter_config") or {}
@@ -433,27 +433,27 @@ def _project_studies(pid: int, limit: int) -> list[dict]:
 
 
 @mcp.tool()
-def list_studies(project_id: int | None = None, all_projects: bool = False, limit: int = 30) -> dict:
-    """프로젝트의 스터디 목록(최신이 앞): 입력·출력, 해석 방법, 상태별 케이스 수, 데이터 출처, 최신·배포 모델, 스크립트 묶음 유무.
+def list_studies(project_id: int | None = None, all_projects: bool = False, limit: int = 30, all_works: bool = False) -> dict:
+    """지금 Task의 스터디 목록(최신이 앞). all_works=True면 Project의 모든 Task에서 찾는다: 입력·출력, 해석 방법, 상태별 케이스 수, 데이터 출처, 최신·배포 모델, 스크립트 묶음 유무.
     "지난 스터디에 10점 더", "지난번 모델로"처럼 id 없이 말할 때 먼저 부른다. 읽기만 하므로 승인이 필요 없다.
-    all_projects=True면 내가 멤버인 모든 프로젝트에서 찾는다(다른 프로젝트 스터디 재사용: clone_study)."""
+    all_projects=True면 내가 멤버인 모든 Project에서 찾는다(다른 Project 스터디 재사용: clone_study)."""
     limit = max(1, limit)
     if all_projects:
         out: list[dict] = []
         for p in api.get("/api/projects"):
             if len(out) >= limit:
                 break
-            out += [{**s, "project_name": p["name"]} for s in _project_studies(p["id"], limit - len(out))]
+            out += [{**s, "project_name": p["name"]} for s in _project_studies(p["id"], limit - len(out), True)]
         return {"studies": out}
     pid = resolve_pid(project_id)
-    return {"project_id": pid, "studies": _project_studies(pid, limit)}
+    return {"project_id": pid, "studies": _project_studies(pid, limit, all_works)}
 
 
 @mcp.tool()
-def list_models(project_id: int | None = None, study_id: int | None = None, limit: int = 30) -> dict:
-    """프로젝트의 예측 모델 목록(최신이 앞): 버전, 출력, 학습 행 수, R²(예측이 실제를 얼마나 잘 따르는지), 품질과 경고, 배포 여부.
+def list_models(project_id: int | None = None, study_id: int | None = None, limit: int = 30, all_works: bool = False) -> dict:
+    """지금 Task의 예측 모델 목록(최신이 앞). all_works=True면 Project의 모든 Task에서 찾는다: 버전, 출력, 학습 행 수, R²(예측이 실제를 얼마나 잘 따르는지), 품질과 경고, 배포 여부.
     deploy_model에 옛 버전을 주면 되돌리기다. 읽기만 하므로 승인이 필요 없다."""
-    models = api.get(f"/api/projects/{resolve_pid(project_id)}/models")
+    models = api.get(f"/api/projects/{resolve_pid(project_id)}/models", **({"all_works": "true"} if all_works else {}))
     if study_id:
         models = [m for m in models if m["study_id"] == study_id]
     return {"models": [_model_brief(m) for m in models[:max(1, limit)]], "total": len(models)}
@@ -463,11 +463,11 @@ def list_models(project_id: int | None = None, study_id: int | None = None, limi
 def _table_file(path: str, project_id: int | None) -> Path:
     p = Path(path).expanduser()
     if not p.is_absolute():
-        p = settings.project_dir(resolve_pid(project_id)) / p
+        p = settings.work_base(resolve_pid(project_id)) / p
     if p.is_dir():
         raise TableError(f"'{p}'은(는) 폴더입니다 → 해석 폴더라면 scan_results를 쓰고, 표라면 파일 경로를 주세요")
     if not p.is_file():
-        raise TableError(f"표 파일을 찾지 못했습니다: {p} → 경로를 확인하세요. 대화 첨부 파일은 inputs/ 아래에 있습니다")
+        raise TableError(f"표 파일을 찾지 못했습니다: {p} → 경로를 확인하세요. 첨부 파일은 inputs/ 아래에 있습니다")
     if p.stat().st_size > MAX_TABLE_BYTES:
         raise TableError(f"표 파일은 {MAX_TABLE_BYTES // (1024 * 1024)}MB까지 받습니다: {p.name} → 필요한 행과 열만 남겨 주세요")
     return p
@@ -485,10 +485,10 @@ def _read_local(path: Path, outputs_path: Path | None, sheet: str | None, header
 def inspect_table(path: str, sheet: str | None = None, header_row: int | None = None, outputs_path: str | None = None, key: str | None = None,
                   project_id: int | None = None) -> dict:
     """표 파일(CSV·XLSX)을 이 PC에서 읽어 열을 분석한다. 아무것도 저장하지 않으므로 승인이 필요 없다.
-    path: 절대 경로(네트워크 경로 포함) 또는 프로젝트 폴더 기준(첨부 파일은 inputs/이름). 행을 도구 인자로 옮기지 않는다.
+    path: 절대 경로(네트워크 경로 포함) 또는 Task 폴더 기준(첨부 파일은 inputs/이름). 행을 도구 인자로 옮기지 않는다.
     열마다 kind(numeric·constant·categorical·id·empty)와 role(input·output·fixed·exclude) 추측, 단위, 범위, 경고를 준다.
     출력이 다른 파일에 있으면 outputs_path와 잇는 열 key를 준다. 엑셀 시트는 sheet, 머리글 행은 header_row(1부터)로 정한다.
-    대화에 붙여 넣은 표는 inputs/붙여넣은_표_*.tsv로 온다. 요청에 출력이 없으면 outputs 추측이 맞는지만 사용자에게 한 번 묻는다. 나머지는 묻지 않는다.
+    입력창에 붙여 넣은 표는 inputs/붙여넣은_표_*.tsv로 온다. 요청에 출력이 없으면 outputs 추측이 맞는지만 사용자에게 한 번 묻는다. 나머지는 묻지 않는다.
     '보안 프로그램으로 암호화되어 읽을 수 없습니다' 오류가 오면 추측하지 말고 엑셀에서 표를 복사해 입력창에 붙여 넣어 달라고 한다.
     추측이 맞으면 import_table을 그대로 부르고, 틀리면 outputs를 지정한다(나머지 숫자 열은 입력이 된다. 결과처럼 보이는 열이 입력에 들면 warnings로 돌아오니 사용자에게 알리고, 그 값도 결과라면 outputs에 넣어 다시 부른다)."""
     file = _table_file(path, project_id)
@@ -557,7 +557,7 @@ def import_table(path: str, inputs: list[str | dict[str, Any]] | None = None, ou
                  study_id: int | None = None, fixed: dict[str, Any] | None = None, expects_fields: bool = False,
                  flow_id: int | None = None, node_id: str | None = None, project_id: int | None = None) -> dict:
     """표 파일의 행을 해석 없이 케이스로 등록해 스터디를 만든다. 파일을 이 PC에서 직접 올리므로 행을 도구 인자로 옮기지 않는다.
-    path: 절대 경로 또는 프로젝트 폴더 기준(첨부 파일은 inputs/이름). 승인 없이 바로 한다.
+    path: 절대 경로 또는 Task 폴더 기준(첨부 파일은 inputs/이름). 승인 없이 바로 한다.
     inputs·outputs: 열 이름 또는 {"name","unit","note","lower","upper"} 목록. 둘 다 비우면 inspect_table의 추측대로, 하나만 주면 나머지를 채운다.
     objectives: [{"name": "mass", "goal": "min"}]  constraints: [{"name": "stress", "upper": 250}]  (출력 열에서 고른다)
     study_id를 주면 그 스터디에 행을 더한다(같은 행은 중복되지 않고, 범위 밖 값은 범위를 넓히고 알리며, 대기 중인 DOE 점과 입력이 같으면 그 점을 채운다).
@@ -600,7 +600,7 @@ def import_table(path: str, inputs: list[str | dict[str, Any]] | None = None, ou
 
 @mcp.tool()
 def export_doe(study_id: int, status: str | None = None, path: str | None = None) -> dict:
-    """DOE 계획표를 CSV로 이 PC에 저장한다(기본: 프로젝트 폴더 reports/). 다른 팀이나 HPC에 넘길 때 쓴다.
+    """DOE 계획표를 CSV로 이 PC에 저장한다(기본: Task 폴더 reports/). 다른 팀이나 HPC에 넘길 때 쓴다.
     밖에서 해석한 뒤 출력 칸을 채워 import_table(study_id=…)로 되돌리면 그 DOE 점이 채워진다.
     status: pending·complete 등으로 거른다. 비우면 대기 케이스(없으면 전체). path: 저장할 곳(있는 파일을 덮어쓰지 않는다)."""
     st = api.get(f"/api/studies/{study_id}")
@@ -608,12 +608,12 @@ def export_doe(study_id: int, status: str | None = None, path: str | None = None
     if path:
         dest = Path(path).expanduser()
         if not dest.is_absolute():
-            dest = settings.project_dir(s["project_id"]) / dest
+            dest = settings.work_base(s["project_id"]) / dest
         if dest.exists():
             raise ValueError(f"이미 있는 파일입니다: {dest} → 다른 이름을 주세요. 사용자 파일을 덮어쓰지 않습니다")
     else:
         slug = re.sub(r'[\\/:*?"<>|\s]+', "_", s["name"])[:60]
-        dest = settings.project_dir(s["project_id"]) / "reports" / f"S{study_id:03d}_{slug}_DOE_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+        dest = settings.work_base(s["project_id"]) / "reports" / f"S{study_id:03d}_{slug}_DOE_{time.strftime('%Y%m%d_%H%M%S')}.csv"
     dest.parent.mkdir(parents=True, exist_ok=True)
     api.download(f"/api/studies/{study_id}/doe.csv" + (f"?status={status}" if status else ""), dest)
     rows = max(0, len(dest.read_text(encoding="utf-8-sig").splitlines()) - 1)
@@ -633,7 +633,7 @@ def set_study_adapter(study_id: int, adapter: str, adapter_config: dict[str, Any
 # ---------- 기존 해석 폴더로 시작 ----------
 @mcp.tool()
 def scan_results(folder: str, max_depth: int = 3, project_id: int | None = None) -> dict:
-    """이미 해석을 끝낸 폴더에서 케이스를 찾는다. 읽기만 하고 원본에 아무것도 쓰지 않으므로 승인이 필요 없다. 네트워크 경로도 된다. 프로젝트 작업 폴더로 바꾸지 않는다.
+    """이미 해석을 끝낸 폴더에서 케이스를 찾는다. 읽기만 하고 원본에 아무것도 쓰지 않으므로 승인이 필요 없다. 네트워크 경로도 된다. Project Task 폴더로 바꾸지 않는다.
     케이스마다 params·results를 params.json·results.json·case.json·요약 CSV·폴더 이름(t=3.0_w=30)에서 읽어 ready(바로 등록 가능)를 표시한다.
     반환: cases_total·ready·not_ready, inputs·outputs(찾은 이름), file_kinds(종류별 파일 수), fields(3D 필드), cases(앞 50개),
     tables(폴더의 표 파일), extract(값이 없는 케이스에 쓸 추출 스킬·스크립트), truncated(다 못 봤으면 이유), failed(해석 실패 표시 폴더 수), encrypted(요약 CSV가 암호화되어 값을 못 읽은 폴더 수).
@@ -641,7 +641,7 @@ def scan_results(folder: str, max_depth: int = 3, project_id: int | None = None)
     ready면 import_cases(folder=…). 결과 파일만 있으면 existing-data-to-simulator 스킬대로 값을 뽑아 import_cases(cases=[…])로 넣는다."""
     p = Path(folder).expanduser()
     if not p.is_absolute():
-        p = settings.project_dir(resolve_pid(project_id)) / p
+        p = settings.work_base(resolve_pid(project_id)) / p
     limit = tool_wait_limit()
     time_limit = min(30.0, limit * 0.6) if limit else 30.0  # 느린 공유 폴더라도 도구 제한 안에 그때까지 본 것을 돌려준다
     return scan_brief(scan_folder(p, max_depth=max_depth, time_limit=time_limit))
@@ -651,7 +651,7 @@ def _abs_case_dir(run_dir: str | None, project_id: int | None) -> Path | None:
     if not run_dir:
         return None
     p = Path(run_dir).expanduser()
-    return p if p.is_absolute() else settings.project_dir(resolve_pid(project_id)) / p
+    return p if p.is_absolute() else settings.work_base(resolve_pid(project_id)) / p
 
 
 def _upload_fields(cases: list[dict], rep: dict) -> dict:
@@ -689,7 +689,7 @@ def import_cases(cases: list[dict[str, Any]] | None = None, folder: str | None =
     folder: scan_results로 찾은 ready 케이스를 그대로 등록한다. 또는 cases: [{"params": {...}, "results": {...}, "run_dir": "원본 폴더(선택)", "label": "이름(선택)"}].
     inputs·outputs: 쓸 이름. 비우면 찾은 값 전부. study_id를 주면 그 스터디에 더한다. 같은 케이스를 두 번 넣어도 늘지 않는다.
     케이스 폴더의 fields/*.npz(points·values)는 함께 올린다. 스칼라 출력이 없으면 필드 최대값이 출력이 되어 Simulator가 성립한다. 그다음 train_surrogate·train_field_model.
-    나중에 Output을 추가하면 추출 스크립트는 작업 폴더에서 돌고 원본은 {source_dir}로 찾는다. 원본이 있는 PC에서만 된다.
+    나중에 Output을 추가하면 추출 스크립트는 Task 폴더에서 돌고 원본은 {source_dir}로 찾는다. 원본이 있는 PC에서만 된다.
     status='running'이면 실패가 아니다. 같은 인자로 다시 호출하면 이어서 기다린다."""
     if bool(cases) == bool(folder):
         raise ValueError("cases와 folder 중 하나만 주세요 → 폴더를 먼저 보려면 scan_results를 쓰세요")
@@ -705,7 +705,7 @@ def import_cases(cases: list[dict[str, Any]] | None = None, folder: str | None =
         if folder:
             p = Path(folder).expanduser()
             if not p.is_absolute():
-                p = settings.project_dir(resolve_pid(project_id)) / p
+                p = settings.work_base(resolve_pid(project_id)) / p
             scan = scan_folder(p, max_depth=max_depth)
             source = p.name or str(p)
             rows_from = [{"params": c["params"], "results": c["results"], "run_dir": c["folder"], "label": c["label"]} for c in scan["cases"] if c["ready"]]
@@ -773,7 +773,7 @@ def upload_field(case_id: int, path: str, field: str | None = None, project_id: 
     다른 곳에 있는 필드에만 쓴다. field: 필드 이름(영문·숫자·_-, 비우면 파일 이름). 스칼라 출력이 없는 스터디는 필드 최대값이 출력으로 생긴다(auto_output)."""
     p = Path(path).expanduser()
     if not p.is_absolute():
-        p = settings.project_dir(resolve_pid(project_id)) / p
+        p = settings.work_base(resolve_pid(project_id)) / p
     if not p.is_file():
         raise ValueError(f"필드 파일을 찾지 못했습니다: {p} → 경로를 확인하세요")
     return api.upload_form(f"/api/cases/{case_id}/fields", {"file": (f"{field or p.stem}.npz", p.read_bytes())})
@@ -785,9 +785,9 @@ def clone_study(study_id: int, name: str = "", variables: list[dict[str, Any]] |
                 constraints: list[dict[str, Any]] | None = None, outputs: list[dict[str, str]] | None = None, adapter: str | None = None,
                 adapter_config: dict[str, Any] | None = None, project_id: int | None = None, model_files: list[str] | None = None) -> dict:
     """지난번과 같은 설정으로 새 스터디를 만든다(신규 모델 출시 때 같은 흐름 다시). 변수·범위·출력·목적·제약·해석 방법·스크립트 묶음을 복사하고 바꿀 값만 준다.
-    케이스와 모델은 복사하지 않아 옛 스터디·모델·Simulator는 그대로다. project_id를 주면 그 프로젝트로 만든다(양쪽 멤버여야 한다).
+    케이스와 모델은 복사하지 않아 옛 스터디·모델·Simulator는 그대로다. project_id를 주면 그 Project로 만든다(양쪽 멤버여야 한다).
     새 모델을 inspect해 옛 모델과 달라진 점을 먼저 알린 뒤 부르고, 해석을 돌리기 전에 Flow 승인을 받는다.
-    model_files: 새 모델 파일(프로젝트 폴더 기준, 예: inputs/new.cae). adapter_config.inputs의 옛 모델을 바꾼다. 주지 않으면 옛 모델로 돈다.
+    model_files: 새 모델 파일(Task 폴더 기준, 예: inputs/new.cae). adapter_config.inputs의 옛 모델을 바꾼다. 주지 않으면 옛 모델로 돈다.
     스크립트가 모델 파일 이름을 고정해 두었으면 스크립트도 고쳐 scripts/에 새로 두고 adapter_config.script를 바꾼다."""
     if model_files:
         old = api.get(f"/api/studies/{study_id}")["study"]
@@ -823,11 +823,11 @@ def _with_new_models(config: dict, model_files: list[str]) -> dict:
 @mcp.tool()
 def save_recipe(study_id: int, files: list[str] | None = None, note: str = "") -> dict:
     """스터디의 스크립트를 서버에 묶어 둔다. 스크립트는 이 PC에만 있어서 올려 두지 않으면 다른 멤버 PC에서 "스크립트가 없습니다"로 막힌다.
-    adapter_config의 script·post 스크립트를 자동으로 넣고, 그 스크립트가 쓰는 파일이 더 있으면 files(프로젝트 폴더 기준 파일·폴더)로 더한다.
+    adapter_config의 script·post 스크립트를 자동으로 넣고, 그 스크립트가 쓰는 파일이 더 있으면 files(Task 폴더 기준 파일·폴더)로 더한다.
     해석 결과와 모델 파일은 넣지 않는다. 비밀값이 든 파일과 실행 파일은 서버가 거절한다.
     케이스가 처음 끝나면 PC Agent가 script·post 스크립트를 자동으로 올린다. 이 도구는 그 스크립트가 쓰는 파일을 더하거나, 해석을 돌리기 전에 미리 올릴 때 쓴다."""
     s = api.get(f"/api/studies/{study_id}")["study"]
-    root = settings.project_dir(s["project_id"])
+    root = settings.work_base(s["project_id"])
     wanted = config_scripts(s.get("adapter_config") or {}) + list(files or [])
     if not wanted:
         raise ValueError("묶을 스크립트가 없습니다 → 이 스터디에 script 해석 방법이 없으면 files로 스크립트를 지정하세요")
@@ -838,7 +838,7 @@ def save_recipe(study_id: int, files: list[str] | None = None, note: str = "") -
 
 @mcp.tool()
 def restore_recipe(study_id: int, overwrite: bool = False) -> dict:
-    """서버에 둔 스크립트 묶음을 이 PC 프로젝트 폴더로 받는다. 받기만 하고 실행하지 않으므로 승인 없이 부를 수 있다.
+    """서버에 둔 스크립트 묶음을 이 PC의 Task 폴더로 받는다. 받기만 하고 실행하지 않으므로 승인 없이 부를 수 있다.
     다른 멤버 PC에서 스크립트가 없을 때 쓴다. 이미 있고 내용이 다른 파일은 덮어쓰지 않고 conflicts로 알린다(overwrite=True면 덮어쓴다).
     만든 사람(created_by_name)이 내가 아니면 그 스크립트를 돌리기 전에 Flow 승인 카드에 "○○님이 만든 스크립트"라고 적어 승인을 받는다.
     입력 모델은 묶음에 없다. input_files_missing에 있는 파일은 사용자에게 첨부를 부탁한다."""
@@ -847,7 +847,7 @@ def restore_recipe(study_id: int, overwrite: bool = False) -> dict:
     if not info.get("has"):
         raise ValueError("이 스터디의 스크립트 묶음이 서버에 없습니다. 스크립트는 그 PC에서 해석이 끝날 때 자동으로 올라가는데 그 전에 돌린 스터디입니다 "
                          "→ 스크립트를 만든 멤버의 PC가 켜져 있을 때 묶음을 올려 달라고 하세요. 결과 조회·재학습·Simulator는 그 PC 없이 됩니다")
-    root = settings.project_dir(s["project_id"])
+    root = settings.work_base(s["project_id"])
     tmp = Path(tempfile.mkdtemp(prefix="dds_recipe_"))
     try:
         blob = tmp / "recipe.zip"

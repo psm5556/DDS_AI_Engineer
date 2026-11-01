@@ -28,7 +28,7 @@ from cae_adapters.hidden import console_python, hidden_kwargs, spawn_gui_detache
 from . import __version__, devtest, installer, market, toolscan, updater
 from .acp_runner import AcpRunner
 from .config import CONFIG_PATH, REPO_ROOT, load_settings
-from .context import sync_project_context
+from .context import sync_project_context, sync_work_context
 from .executor import CaseExecutor
 from .headless_runner import HeadlessRunner
 from .session_history import move_claude_session
@@ -37,6 +37,7 @@ from .runner import AgentError, AgentRunner, SessionGone
 from .server_api import ServerApi
 from .state import AgentState
 from .tray import Tray
+from .workspace import real_work
 
 log = logging.getLogger("dds-agent")
 REPLACED_CODE = 4000  # 서버: 같은 사용자의 새 연결이 들어왔다(server/app/agent/link.py)
@@ -61,6 +62,7 @@ MCP_SERVERS = ("dds_flow", "dds_cae", "dds_study", "dds_live")
 # MCP 시작·도구 시간 제한. 긴 해석이 실패로 보이거나 MCP가 늦게 떠 dds 도구 없이 대화가 시작되지 않게 한다
 MCP_START_MS, MCP_TOOL_MS = 30 * 60 * 1000, 25 * 3600 * 1000  # Claude Code: MCP_TIMEOUT · MCP_TOOL_TIMEOUT
 CODEX_DOC_BYTES = 256 * 1024
+GEMINI_TRUST_FILE = "gemini-trusted-folders.json"  # DDS 전용 신뢰 목록. 사용자의 전역 파일은 고치지 않고 신뢰 검사 전체를 끄지도 않는다
 # 시간 제한을 바꿀 수 없는 CLI는 긴 도구가 이 안에 돌아오게 한다(dds_cae.script_status·dds_study._wait로 이어서 확인).
 # Gemini 기본 10분. Codex는 기본 60초이고 codex-acp가 서버별 값을 넘길 길이 CODEX_CONFIG뿐이라 믿지 않고 짧게 잡는다
 MCP_WAIT_LIMIT_SEC = {"gemini": 540, "codex": 50}
@@ -87,6 +89,10 @@ class Agent:
         self.session_runner: dict[str, str] = {}  # 세션 id → 에이전트 이름
         self.session_project: dict[str, tuple[int, str | None, str | None]] = {}  # 세션 id → (프로젝트 id, 이름, uid)
         self.session_owner: dict[str, int] = {}  # 세션 id → 프로젝트 id. 폴더를 바꿔 잊은 세션도 CLI가 끝날 때까지 옛 폴더를 쓴다
+        self.session_work: dict[str, dict | None] = {}  # 세션 id → Task. session_owner와 같이 CLI가 끝날 때까지 둔다(그 폴더를 쓰고 있다)
+        self._busy_works: dict[str, int] = {}  # Task uid → 세션을 여는 중인 수
+        self._wanted_works: dict[str, tuple[int, str | None, dict]] = {}  # Task uid → 서버가 알려 준 이름
+        self._known_works: dict[str, str] = {}
         self._busy_projects: dict[int, int] = {}  # 프로젝트 id → 세션을 여는 중인 수
         self._wanted_names: dict[int, tuple[str | None, str]] = {}  # 프로젝트 id → 서버가 알려 준 이름(마지막 것이 이긴다)
         self._known_names: dict[int, tuple[str | None, str]] = {}  # 이미 맞춘 이름. 자주 오는 조회가 파일을 읽지 않게
@@ -163,7 +169,27 @@ class Agent:
             # Codex는 AGENTS.md를 기본 32KiB에서 자른다. 사용자 글 뒤에 붙는 DDS 규칙이 잘리지 않게 넉넉히 둔다
             config["project_doc_max_bytes"] = CODEX_DOC_BYTES
             env["CODEX_CONFIG"] = json.dumps(config)
+        if name == "gemini" and "GEMINI_CLI_TRUSTED_FOLDERS_PATH" not in env:
+            path = self._gemini_trust_file()
+            if path:
+                env["GEMINI_CLI_TRUSTED_FOLDERS_PATH"] = path
         return env
+
+    def _gemini_trust_file(self) -> str | None:
+        """Gemini는 신뢰한 폴더에서만 .gemini/settings.json과 스킬을 읽는다. 작업 공간과 직접 정한 폴더를 DDS 전용 목록에 적는다."""
+        path = CONFIG_PATH.parent / GEMINI_TRUST_FILE
+        try:
+            links = self.s.workspace._links()
+        except OSError:
+            links = {}
+        rows = {str(self.s.workspace_dir): "TRUST_FOLDER", **{str(d): "TRUST_FOLDER" for d in links.values()}}
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+            return str(path)
+        except OSError as e:  # 못 쓰면 지금까지처럼 사용자의 신뢰 설정을 따른다
+            log.info("Gemini 신뢰 목록을 쓰지 못했습니다: %s", e)
+            return None
 
     def runner_of(self, session_id: str) -> AgentRunner:
         name = self.session_runner.get(session_id)
@@ -234,6 +260,7 @@ class Agent:
             self.session_runner.pop(sid, None)
             self.session_project.pop(sid, None)
             self.session_owner.pop(sid, None)
+            self.session_work.pop(sid, None)
             self._forget_market_session(sid)
         prefix = f"{name}:"
         for rid in [r for r in self.open_perms if r.startswith(prefix)]:
@@ -312,11 +339,14 @@ class Agent:
                 "boot": self.boot, "live_sessions": self.live_sessions(), "active_turns": turns,
                 "active_cases": sorted({*self.executor.active_cases(), *self.outbox.pending_cases()}),  # 전하지 못한 결과도 '끝나지 못한 케이스'가 아니다
                 "settles_cases": True,  # 돌지 않는 케이스를 물으면 case.json으로 답한다(case.settle)
+                "work_folders": 1,  # Task마다 폴더를 쓴다. 표시가 없으면 서버는 work를 보내지 않고, 처음 시작하는 Task는 Project 폴더를 쓴다
                 "running_agents": self.running_agents(), "start_times": self.state.start_times()}
 
-    def mcp_servers(self, project_id: int, agent: str | None = None, cwd: str | None = None, uid: str | None = None) -> list[dict]:
+    def mcp_servers(self, project_id: int, agent: str | None = None, cwd: str | None = None, uid: str | None = None,
+                    work: dict | None = None, project_dir: str | None = None) -> list[dict]:
         """ACP session/new에 넘길 MCP 서버 정의. 세션별로 DDS_PROJECT_ID를 고정한다.
-        MCP의 cwd는 프로젝트 폴더다. 설정·작업 공간을 절대 경로로 주어 Agent와 다른 곳에 폴더를 만들지 않게 한다.
+        MCP의 cwd는 세션의 작업 폴더(Task 폴더, 이전 기록은 Project 폴더)다. 설정·작업 공간을 절대 경로로 주어 Agent와 다른 곳에 폴더를 만들지 않게 한다.
+        Task 세션은 DDS_WORK_*로 어느 Task인지 알린다. MCP는 폴더를 다시 계산하지 않고, ServerApi가 요청마다 X-DDS-Work를 붙인다.
         Codex는 환경변수를 골라 넘기므로 물려받기를 믿지 않고 여기에 적는다.
         토큰은 적지 않는다. 이 정의는 CLI 안으로 들어가고, CLI에 따라 명령줄에 실려 프로세스 목록에 보일 수 있다."""
         env = {"DDS_PROJECT_ID": str(project_id), "DDS_SERVER_URL": self.s.server_url,
@@ -326,10 +356,16 @@ class Agent:
         # 파일에 있는지 모르면 넘긴다: 대화 도구가 전부 인증 실패하는 쪽이 더 나쁘다
         if not getattr(self.s, "token_in_file", False):
             env["DDS_TOKEN"] = self.s.token
-        if cwd:
-            env["DDS_PROJECT_DIR"] = str(cwd)
+        if project_dir or cwd:
+            env["DDS_PROJECT_DIR"] = str(project_dir or cwd)
         if uid:
             env["DDS_PROJECT_UID"] = uid
+        if work and work.get("id") is not None:
+            env["DDS_WORK_ID"] = str(work["id"])
+        if real_work(work):
+            env["DDS_WORK_UID"] = work["uid"]
+            if cwd:
+                env["DDS_WORK_DIR"] = str(cwd)
         if agent in MCP_WAIT_LIMIT_SEC:
             env["DDS_MCP_WAIT_LIMIT_SEC"] = str(MCP_WAIT_LIMIT_SEC[agent])
         # launcher는 자동 업데이트로 교체되지 않아 Agent가 pythonw일 수 있다. MCP가 pythonw면 그 아래 솔버 창이 다시 보인다
@@ -369,19 +405,74 @@ class Agent:
                     return False
         return True
 
+    def _work_free(self, work_uid: str, mine: int = 0) -> bool:
+        """이 Task 폴더의 실제 이름을 바꿔도 되는가. 옆 Task의 세션은 상관없다: cwd가 다른 폴더이고 Project 폴더를 잠가도 이 폴더의 이름은 바꿀 수 있다."""
+        if self.executor.running or self.executor.queued or self.devtests:
+            return False
+        if self._busy_works.get(work_uid, 0) > mine:
+            return False
+        for r in list(self.runners.values()):
+            for sid in getattr(r, "live_sessions", set)():
+                if sid not in self.session_owner:  # 모르는 세션은 쓰고 있다고 본다
+                    return False
+                w = self.session_work.get(sid)
+                if w and w.get("uid") == work_uid:
+                    return False
+        return True
+
+    def _note_work(self, pid: int | None, puid: str | None, work: dict | None):
+        if pid is None or not real_work(work) or not work.get("name") or self._known_works.get(work["uid"]) == work["name"]:
+            return
+        self._wanted_works[work["uid"]] = (pid, puid, work)
+
     def _note_name(self, msg: dict):
         """수신 루프에서 순서대로 부른다. 처리는 스레드에서 해도 마지막 이름이 이기게 한다."""
         pid, uid, name = msg.get("project_id"), msg.get("project_uid"), msg.get("project_name")
+        self._note_work(pid, uid, msg.get("work"))
         if pid is None or not name or self._known_names.get(pid) == (uid, name):
             return
         self._wanted_names[pid] = (uid, name)
 
-    def _settle_names(self, project_id: int | None = None, mine: int = 0, gentle: bool = False):
+    def _settle_work_names(self, ws, project_id: int | None, gentle: bool, mine_work: str | None):
+        """Task 폴더 이름. Project보다 먼저 한다: Project 이름을 먼저 바꾸면 안쪽 접합이 끊어진다."""
+        todo = {u: v for u, v in self._wanted_works.items() if project_id is None or v[0] == project_id}
+        for u in todo:
+            self._wanted_works.pop(u, None)
+        try:
+            pending = ws.pending_works()
+        except OSError as e:
+            log.info("기다리는 Task 이름을 읽지 못했습니다: %s", e)
+            pending = []
+        for pid, puid, stub in pending:
+            if (project_id is None or pid == project_id) and stub["uid"] not in todo:
+                todo[stub["uid"]] = (pid, puid, stub)
+        now = time.monotonic()
+        for u, (pid, puid, work) in todo.items():
+            has_name = bool(work.get("name"))
+            skip = gentle and not has_name and now - self._name_tried.get(u, -1e9) < NAME_TRY_GAP_SEC
+            may = False if skip else (lambda u=u: self._work_free(u, 1 if u == mine_work else 0))
+            try:
+                res = ws.sync_work_name(pid, puid, work, may_move=may)
+            except OSError as e:  # 폴더 이름 때문에 대화·해석을 막지 않는다
+                log.warning("Task 폴더 이름을 맞추지 못했습니다(%s): %s", u[:6], e)
+                continue
+            if has_name:
+                self._known_works[u] = work["name"]
+            if res.get("pending"):
+                self._name_tried[u] = now
+            else:
+                self._name_tried.pop(u, None)
+            if res.get("moved"):
+                log.info("Task 폴더 이름을 바꿨습니다: %s", res.get("path"))
+
+    def _settle_names(self, project_id: int | None = None, mine: int = 0, gentle: bool = False, mine_work: str | None = None):
         """서버가 알려 준 이름과 기다리던 이름을 맞춘다. 세션·솔버를 끝내지 않는다. 안 되면 디스크에 남겨 다음 기회에 한다.
-        gentle: 화면을 열어 두면 계속 오는 조회. 잠긴 폴더를 간격을 두고만 다시 시도한다(시도마다 잠깐 기다린다)."""
+        gentle: 화면을 열어 두면 계속 오는 조회. 잠긴 폴더를 간격을 두고만 다시 시도한다(시도마다 잠깐 기다린다).
+        순서는 Task → Project다. Project의 실제 이름을 바꾸면 workspace가 안쪽 접합을 다시 만든다."""
         moved = []
         with self._name_lock:
             ws = self.s.workspace
+            self._settle_work_names(ws, project_id, gentle, mine_work)
             todo = {p: v for p, v in self._wanted_names.items() if project_id is None or p == project_id}
             for p in todo:
                 self._wanted_names.pop(p, None)
@@ -462,27 +553,43 @@ class Agent:
                 log.info("옛 이름을 읽지 못했습니다: %s", e)
         return [first]
 
-    def _busy_project(self, project_id: int, n: int):
+    def _busy_project(self, project_id: int, n: int, work: dict | None = None):
         with self._lock:
             self._busy_projects[project_id] = self._busy_projects.get(project_id, 0) + n
             if self._busy_projects[project_id] <= 0:
                 self._busy_projects.pop(project_id, None)
+            if real_work(work):
+                self._busy_works[work["uid"]] = self._busy_works.get(work["uid"], 0) + n
+                if self._busy_works[work["uid"]] <= 0:
+                    self._busy_works.pop(work["uid"], None)
 
-    def _prepare(self, project_id: int, project_name: str | None = None, project_uid: str | None = None, report=None) -> str:
+    def _prepare(self, project_id: int, project_name: str | None = None, project_uid: str | None = None, report=None, work: dict | None = None,
+                 agent: str | None = None) -> str:
+        """CLI의 작업 폴더를 돌려준다. Task 폴더이고, 이전 기록과 Task를 모르는 서버면 Project 폴더다."""
         # CLI가 뜨기 전이 가장 좋은 때다. 뜨면 며칠씩 폴더를 잡고 있을 수 있다. 부른 쪽이 _busy_project로 자기 몫을 세어 두었다
         mine = self._busy_projects.get(project_id, 0)
         try:
-            self._settle_names(project_id, mine=min(mine, 1))
+            self._settle_names(project_id, mine=min(mine, 1), mine_work=work.get("uid") if real_work(work) else None)
         except Exception as e:
             log.warning("폴더 이름 맞추기 실패: %s", str(e) or repr(e))
-        d = self.s.workspace.project_dir(project_id, project_name, project_uid)
+        ws = self.s.workspace
+        d = ws.project_dir(project_id, project_name, project_uid)
         if report:
             report("context_sync")
-        sync_project_context(d)
-        return str(d)
+        sync_project_context(d)  # 규칙·스킬은 Project 폴더에 1벌이다
+        if not real_work(work):
+            return str(d)
+        w = ws.work_dir(project_id, work, project_name, project_uid)
+        sync_work_context(w, d, [agent] if agent in self.s.work_skill_copy else [])
+        return str(w)
+
+    @staticmethod
+    def _extra_dirs(cwd: str, work: dict | None) -> dict:
+        """Task 세션은 부모인 Project 폴더(스킬 1벌, 직접 고른 폴더의 원본)도 쓴다. 비면 러너 인자를 넘기지 않는다: 옛 러너와 시험 대역이 받지 않는다."""
+        return {"extra_dirs": [str(Path(cwd).parent)]} if real_work(work) else {}
 
     def _new_session(self, project_id: int, agent: str | None, project_name: str | None = None,
-                     project_uid: str | None = None, turn_id: str | None = None) -> dict:
+                     project_uid: str | None = None, turn_id: str | None = None, work: dict | None = None) -> dict:
         name = agent or self.s.default_agent
         self._wait_force(name)
         owner, fut = True, None
@@ -497,14 +604,17 @@ class Agent:
         if not owner:
             return fut.result()  # 끊겨서 서버가 다시 물었다. 준비 중이거나 이미 만든 세션을 쓴다
         self.preparing += 1
-        self._busy_project(project_id, 1)
+        self._busy_project(project_id, 1, work)
         report = lambda stage: self._stage(turn_id, name, stage)  # noqa: E731
         try:
-            cwd = self._prepare(project_id, project_name, project_uid, report)
-            sid = self.runner(name).new_session(cwd, self.mcp_servers(project_id, name, cwd, project_uid), report)
+            cwd = self._prepare(project_id, project_name, project_uid, report, work, name)
+            extra = self._extra_dirs(cwd, work)
+            servers = self.mcp_servers(project_id, name, cwd, project_uid, work, *extra.get("extra_dirs", []))
+            sid = self.runner(name).new_session(cwd, servers, report, **extra)
             self.session_runner[sid] = name
             self.session_project[sid] = (project_id, project_name, project_uid)
             self.session_owner[sid] = project_id
+            self.session_work[sid] = work
             self.state.remember_cwd(sid, cwd)
             res = {"session_id": sid, "agent": name}
             if fut:
@@ -517,45 +627,49 @@ class Agent:
             raise
         finally:
             self.preparing -= 1
-            self._busy_project(project_id, -1)
+            self._busy_project(project_id, -1, work)
 
     def _sid_lock(self, session_id: str) -> threading.Lock:
         with self._lock:
             return self._sid_locks.setdefault(session_id, threading.Lock())
 
     def _load_session(self, project_id: int, session_id: str, agent: str | None, project_name: str | None = None,
-                      project_uid: str | None = None, turn_id: str | None = None) -> dict:
+                      project_uid: str | None = None, turn_id: str | None = None, work: dict | None = None) -> dict:
         name = agent or self.s.default_agent
         self._wait_force(name)
         self.preparing += 1
-        self._busy_project(project_id, 1)
+        self._busy_project(project_id, 1, work)
         report = lambda stage: self._stage(turn_id, name, stage)  # noqa: E731
         try:
             with self._sid_lock(session_id):  # 미리 띄우기가 같은 세션을 불러오는 중이면 끝날 때까지 기다린다
                 r = self.runner(name)
                 if self.session_runner.get(session_id) == name and session_id in r.live_sessions():
                     return {"ok": True, "live": True}  # 살아 있는 세션에 load하면 Gemini가 세션을 dispose한다
-                real = Path(self._prepare(project_id, project_name, project_uid, report))
+                real = Path(self._prepare(project_id, project_name, project_uid, report, work, name))
+                extra = self._extra_dirs(str(real), work)
                 for cwd in self._load_cwds(name, session_id, real):
-                    if r.load_session(session_id, cwd, self.mcp_servers(project_id, name, cwd, project_uid), report):
+                    servers = self.mcp_servers(project_id, name, cwd, project_uid, work, *extra.get("extra_dirs", []))
+                    if r.load_session(session_id, cwd, servers, report, **extra):
                         self.session_runner[session_id] = name
                         self.session_project[session_id] = (project_id, project_name, project_uid)
                         self.session_owner[session_id] = project_id
+                        self.session_work[session_id] = work
                         self.state.remember_cwd(session_id, cwd)
                         return {"ok": True}
                 return {"ok": False}
         finally:
             self.preparing -= 1
-            self._busy_project(project_id, -1)
+            self._busy_project(project_id, -1, work)
 
     def _fetch_attachments(self, session_id: str, attachments: list[dict]) -> str:
-        """대화 첨부 파일을 프로젝트 inputs/로 내려받고, 에이전트에게 알려 줄 안내문을 만든다."""
+        """첨부 파일을 이 세션의 inputs/(Task 폴더)로 내려받고, 에이전트에게 알려 줄 안내문을 만든다."""
         if not attachments:
             return ""
         pid, pname, puid = self.session_project.get(session_id, (None, None, None))
         if pid is None:
             return ""
-        inputs = self.s.project_dir(pid, pname, puid) / "inputs"
+        inputs = self.s.workspace.work_dir(pid, self.session_work.get(session_id), pname, puid) / "inputs"
+        inputs.mkdir(parents=True, exist_ok=True)  # 사람이 폴더를 지웠어도 받는다
         lines = []
         for a in attachments:
             dest = inputs / a["filename"]
@@ -564,7 +678,7 @@ class Agent:
             if not dest.exists():
                 self.api.download(f"/api/attachments/{a['id']}/download", dest)
             lines.append(f"- inputs/{dest.name} ({a['size'] / 1e6:.1f} MB)")
-        return "\n\n[첨부 파일 — 프로젝트 작업 폴더 기준, 원본이므로 수정하지 말고 복사해서 사용]\n" + "\n".join(lines)
+        return "\n\n[첨부 파일 — 지금 폴더 기준, 원본이므로 수정하지 말고 복사해서 사용]\n" + "\n".join(lines)
 
     def _start_turn(self, msg: dict):
         """프롬프트를 턴으로 받는다. 응답을 기다리지 않으므로 연결이 끊겨도 턴은 계속되고 끝은 agent.turn_end로 알린다.
@@ -601,7 +715,7 @@ class Agent:
                 stop = "cancelled"
             else:
                 runner = self.runner_of(sid)
-                self.state.remember_session(self.session_runner[sid], sid, self.session_project.get(sid))
+                self.state.remember_session(self.session_runner[sid], sid, self.session_project.get(sid), self.session_work.get(sid))
                 stop = runner.prompt(sid, text)
         except SessionGone as e:
             error, gone = str(e), True
@@ -697,7 +811,8 @@ class Agent:
             last = data.get("last_session") or {}
             sid, pid = last.get("session_id"), last.get("project_id")
             if sid and pid and last.get("agent") == name:
-                res = self._load_session(pid, sid, name, last.get("project_name"), last.get("project_uid"))
+                # Task를 함께 기억해야 한다. 빠뜨리면 이 세션이 Project 폴더로 불려 와 cwd가 달라진다
+                res = self._load_session(pid, sid, name, last.get("project_name"), last.get("project_uid"), work=last.get("work"))
                 if not res.get("ok"):
                     self.state.forget_session(sid)  # 다음에 또 시도해 시간을 쓰지 않게
                 self._send_live()
@@ -717,13 +832,13 @@ class Agent:
 
     # ---------- 내 PC 작업 폴더 ----------
     def _local_open(self, project_id: int, project_name: str | None, path: str, with_viewer: bool,
-                    project_uid: str | None = None) -> dict:
+                    project_uid: str | None = None, work: dict | None = None) -> dict:
         self._settle_names(project_id, gentle=True)
         ws = self.s.workspace
-        target = ws.resolve(project_id, path, project_name, project_uid)
+        target = ws.resolve(project_id, path, project_name, project_uid, work)
         if not target.exists():
             raise FileNotFoundError(f"없는 경로입니다: {path}")
-        target = ws.shown_path(project_id, target, project_name, project_uid)  # 숨겨 둔 실제 폴더 이름을 사람에게 보이지 않는다
+        target = ws.shown_path(project_id, target, project_name, project_uid, work)  # 숨겨 둔 실제 폴더 이름을 사람에게 보이지 않는다
         if with_viewer and target.is_file():
             cmd = self.s.viewers.get(target.suffix.lower()) or self.s.viewers.get("*")
             if cmd:
@@ -737,13 +852,13 @@ class Agent:
                 os.startfile(str(target))  # noqa: S606 — 폴더 열기 또는 기본 연결 프로그램
         return {"ok": True, "opened": str(target)}
 
-    def _local_tree(self, project_id: int, project_name: str | None, path: str, project_uid: str | None = None) -> dict:
+    def _local_tree(self, project_id: int, project_name: str | None, path: str, project_uid: str | None = None, work: dict | None = None) -> dict:
         self._settle_names(project_id, gentle=True)
-        return self.s.workspace.tree(project_id, path, project_name, project_uid=project_uid)
+        return self.s.workspace.tree(project_id, path, project_name, project_uid=project_uid, work=work)
 
-    def _local_folder(self, project_id: int, project_name: str | None, project_uid: str | None = None) -> dict:
+    def _local_folder(self, project_id: int, project_name: str | None, project_uid: str | None = None, work: dict | None = None) -> dict:
         self._settle_names(project_id, gentle=True)
-        return self.s.workspace.folder_info(project_id, project_name, project_uid)
+        return self.s.workspace.folder_info(project_id, project_name, project_uid, work)
 
     def _set_folder(self, project_id: int, project_name: str | None, project_uid: str, path: str | None) -> dict:
         """작업 폴더를 바꾼다. 에이전트 CLI 세션은 시작 폴더(cwd)가 고정이라 이 프로젝트의 세션은 잊는다
@@ -1002,17 +1117,24 @@ class Agent:
             for p in msg.get("projects") or []:
                 self._note_name(p)
             self._background_task(self._settle_names)
+        elif t == "work.renamed":  # 웹에서 또는 AI가 set_work_info로 바꿨다. 이 PC에 폴더가 없으면 아무 일도 없다
+            self._note_work(msg.get("project_id"), msg.get("project_uid"), msg.get("work"))
+            self._background_task(self._settle_names, msg.get("project_id"))
+        elif t == "work.names":  # 연결할 때 온다. Project 이름보다 먼저 맞춘다
+            for row in msg.get("works") or []:
+                self._note_work(row.get("project_id"), row.get("project_uid"), row.get("work"))
+            self._background_task(self._settle_names)
         elif t == "session.new":
             asyncio.create_task(self._respond(rid, self._new_session, msg["project_id"], msg.get("agent"), msg.get("project_name"),
-                                              msg.get("project_uid"), msg.get("turn_id")))
+                                              msg.get("project_uid"), msg.get("turn_id"), msg.get("work")))
         elif t == "session.load":
             asyncio.create_task(self._respond(rid, self._load_session, msg["project_id"], msg["session_id"],
-                                              msg.get("agent"), msg.get("project_name"), msg.get("project_uid"), msg.get("turn_id")))
+                                              msg.get("agent"), msg.get("project_name"), msg.get("project_uid"), msg.get("turn_id"), msg.get("work")))
         elif t == "session.prompt":
             self._start_turn(msg)
         elif t == "local.open":
             asyncio.create_task(self._respond(rid, self._local_open, msg["project_id"], msg.get("project_name"),
-                                              msg.get("path", ""), bool(msg.get("with_viewer")), msg.get("project_uid")))
+                                              msg.get("path", ""), bool(msg.get("with_viewer")), msg.get("project_uid"), msg.get("work")))
         elif t == "local.diagnose":
             asyncio.create_task(self._respond(rid, self._diagnose, bool(msg.get("rescan"))))
         elif t == "tools.pick":
@@ -1021,10 +1143,10 @@ class Agent:
             asyncio.create_task(self._respond(rid, self._set_tool, msg["key"], msg.get("path")))
         elif t == "local.tree":
             asyncio.create_task(self._respond(rid, self._local_tree, msg["project_id"], msg.get("project_name"), msg.get("path", ""),
-                                              msg.get("project_uid")))
+                                              msg.get("project_uid"), msg.get("work")))
         elif t == "local.folder":
             asyncio.create_task(self._respond(rid, self._local_folder, msg["project_id"], msg.get("project_name"),
-                                              msg.get("project_uid")))
+                                              msg.get("project_uid"), msg.get("work")))
         elif t == "local.folder.set":
             asyncio.create_task(self._respond(rid, self._set_folder, msg["project_id"], msg.get("project_name"),
                                               msg.get("project_uid"), msg.get("path")))

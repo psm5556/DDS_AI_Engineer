@@ -89,6 +89,10 @@ class Work(TimestampMixin, Base):
     carry = Column(JSON)  # 첫 AI 시작 때 PC Agent가 받을 목록(5단계)
     version = Column(Integer, default=1, nullable=False)
 
+    def folder_view(self) -> dict:
+        """PC Agent에 알릴 것. 폴더 경로는 서버에 없다: 번호와 uid로 그 PC가 찾는다."""
+        return {"id": self.id, "uid": self.uid, "seq": self.seq, "name": self.name, "legacy": bool(self.legacy), "carry": self.carry}
+
 
 class ChatSession(TimestampMixin, Base):
     __tablename__ = "chat_sessions"

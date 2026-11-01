@@ -216,7 +216,7 @@ def main(argv):
         else:
             path = find_model(cdir, args.get("model"))
             mdl = model_name(path)
-            c.creo_cd(cdir)                          # 케이스 폴더를 작업 폴더로
+            c.creo_cd(cdir)                          # 케이스 폴더를 Task 폴더로
             c.file_open(mdl, dirname=cdir, display=True)
             state["opened"] = True
             log("opened " + mdl)
@@ -256,7 +256,7 @@ def main(argv):
             try:
                 img_dir = ensure_dir(os.path.join(cdir, "images"))
                 c.interface_export_image("JPEG", filename="iso.jpg", height=6.0, width=8.0, dpi=100)
-                # TODO(사내검증): 이미지가 Creo 작업 폴더(creo_cd)로 저장되는지. 그래픽 없는 세션에서는 실패한다.
+                # TODO(사내검증): 이미지가 Creo Task 폴더(creo_cd)로 저장되는지. 그래픽 없는 세션에서는 실패한다.
                 src = os.path.join(cdir, "iso.jpg")
                 from PIL import Image
                 Image.open(src).save(os.path.join(img_dir, "iso.png"))

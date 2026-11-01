@@ -168,6 +168,8 @@ def test_pc_sample_reply_completes_dataset(client, tmp_path):  # noqa: F811
 
     sent = []
     class _Conn:
+        info = {}
+
         def send(self, m):
             sent.append(m)
     registry.conns[me["id"]] = _Conn()

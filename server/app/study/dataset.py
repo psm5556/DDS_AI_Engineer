@@ -89,7 +89,7 @@ def create_dataset(db: Session, study: models.Study, name: str, targets, frames,
     for conn, c in pc_jobs:
         conn.send({"type": "case.train_sample", "dataset_id": ds.id, "case_id": c.id, "study_id": study.id, "project_id": study.project_id,
                    "project_name": project.name, "project_uid": project.uid, "study_name": study.name, "run_dir": c.run_dir,
-                   "spec": spec, "spec_hash": h})
+                   "spec": spec, "spec_hash": h, **service._work_fields(db, conn, study)})
     if not ds.pending:
         _start_finalize(ds.id)
     manager.publish({"type": "study_updated", "project_id": study.project_id, "data": {"id": study.id}})

@@ -1,11 +1,13 @@
 """서버 ⇄ 사용자 PC Agent 연결(WebSocket /ws/agent).
 
 서버 → Agent 요청 (응답 필요: {"type":"response","rid",...,"result"|"error"})
-  session.new     {project_id, agent, turn_id?}        → {"session_id", "agent"}  (같은 turn_id면 세션을 또 만들지 않는다)
-  session.load    {project_id, session_id, agent, turn_id?} → {"ok": bool}  (False는 "지원 안 함/세션 없음"일 때만)
+  session.new     {project_id, agent, turn_id?, work?} → {"session_id", "agent"}  (같은 turn_id면 세션을 또 만들지 않는다)
+  session.load    {project_id, session_id, agent, turn_id?, work?} → {"ok": bool}  (False는 "지원 안 함/세션 없음"일 때만)
+                  work {id, uid, seq, name, legacy, carry?}: hello에 work_folders가 있는 Agent에만 보낸다. CLI의 작업 폴더가 그 Task 폴더가 된다.
+                  legacy면 Project 폴더다. 없으면(옛 서버) Agent도 Project 폴더를 쓴다.
   agent.install   {agent}                              → {"installed", "login"}  (npm 전역 설치)
-  local.open      {project_id, path?, with_viewer?}    → {"ok"}  (내 PC 탐색기/CAE 뷰어로 열기)
-  local.tree      {project_id, path?}                  → {"entries": [...]} (로컬 작업 폴더 탐색)
+  local.open      {project_id, path?, with_viewer?, work?} → {"ok"}  (내 PC 탐색기/CAE 뷰어로 열기)
+  local.tree      {project_id, path?, work?}           → {"entries": [...], "missing"?} (로컬 폴더 탐색. work를 주면 그 Task 폴더 기준이고 폴더를 만들지 않는다)
 서버 → Agent 알림
   session.prompt  {turn_id, chat_id, session_id, agent, text, attachments, started_at}
                   (응답을 기다리지 않는다. 끝은 agent.turn_end로 온다. 끊겨도 턴이 사라지지 않게 하기 위해서다)
@@ -14,8 +16,8 @@
                   답이 없으면 반쯤 끊긴 연결로 보고 다음 hello에 다시 보낸다)
   agent.ack       {seq}                                (seq까지 저장했다. Agent가 outbox에서 지운다. 저장에 실패하면 보내지 않고 연결을 닫는다(1013))
   permission.reply {request_id, option_id|null}
-  case.run        {case_id, study_id, project_id, params, adapter, adapter_config, dry_run}
-  case.extract    {case_id, study_id, project_id, params, results, run_dir, adapter, adapter_config, steps, names}
+  case.run        {case_id, study_id, project_id, params, adapter, adapter_config, dry_run, work?}
+  case.extract    {case_id, study_id, project_id, params, results, run_dir, adapter, adapter_config, steps, names, work?}
                   (Output 추가 — 해석 없이 추출 단계만 실행, case.status {extract: true, results: 새 값만}로 답한다)
   case.cancel     {case_ids, extract_ids}              (사용자가 중지. 대기는 시작하지 않고 실행 중이면 솔버 트리를 끝낸다.
                   case.status {status: "cancelled"}로 답한다. 추출은 case.status {extract: true, error}로 답한다)
@@ -30,13 +32,15 @@
   devtest.run     {op, script?, tool?, ...}            → 실행 결과 (개발 AI의 원격 검증, 응답 필요. routers/devtest.py)
   project.renamed {project_id, project_uid, project_name} (이름이 바뀌었다. Agent가 작업 폴더 이름을 맞춘다. 옛 Agent는 로그만 남긴다)
   project.names   {projects:[{project_id, project_uid, project_name}]} (hello에 대한 답. 꺼져 있는 동안 바뀐 이름을 따라간다)
+  work.renamed    {project_id, project_uid, work}      (Task 이름이 바뀌었다. 폴더가 있으면 맞춘다. work_folders가 있는 Agent에만)
+  work.names      {works:[{project_id, project_uid, work}]} (hello에 대한 답. 이 사람의 Task. 폴더가 없는 것은 만들지 않는다)
   market.sync     {rev, recall_rev, enabled, gateway_on, items:[{key, name, package_id, version, sha256, skills, summaries, code, ...}],
                    recalled:[{key, name, display_name, versions, active, replacement}]}
                   (이 사용자의 PC가 가져야 할 전체 목록. 연결할 때와 바뀔 때 보낸다. hello에 market_api가 있는 Agent에만)
 Agent → 서버 알림
   hello           {hostname, version, agents:[{name,label,installed,login}], default_agent, tools,
                    boot, live_sessions:[sid], active_turns:[{turn_id, chat_id, session_id, agent, started_at}],
-                   running_agents:[이름], start_times:{이름: 초}, market_api, market_rev, market_recall_rev, tools_ready:[툴 이름]}
+                   running_agents:[이름], start_times:{이름: 초}, market_api, market_rev, market_recall_rev, tools_ready:[툴 이름], work_folders}
   market.state    {rev, recall_rev, items:[{key, name, version, state, error, target?, conflicts?:[{project_id, project, message}], pins?:[{project_id, project, version}]}], incomplete:[key]}
                   (state: installed·failed·conflict·agent_too_old. conflicts: 그 프로젝트에서만 못 쓴다. pins: 그 프로젝트의 대화가 옛 버전을 쓴다. incomplete: 회수했는데 파일이 남은 항목)
   market.note     {session_id, text}                   (그 대화의 사용자에게 보일 안내. 이름 겹침 등)
@@ -83,6 +87,11 @@ def is_save_failure(e: Exception) -> bool:
 
 class AgentError(Exception):
     pass
+
+
+def work_fields(conn: "AgentConnection | None", work) -> dict:
+    """PC Agent 메시지에 넣을 Task. 옛 Agent에는 보내지 않는다(받아도 무시하지만, 어느 폴더를 쓰는지 서버가 알고 있어야 한다)."""
+    return {"work": work.folder_view()} if conn is not None and work is not None and conn.info.get("work_folders") else {}
 
 
 class LinkLost(AgentError):
@@ -166,17 +175,17 @@ class RemoteRunner:
 
     # CLI 시작은 사내 보안 검사로 몇 분이 걸릴 수 있어 서버는 시간 제한을 두지 않는다. 한계는 Agent의 cli_start_timeout_sec 하나다
     def new_session(self, project_id: int, agent: str, project_name: str | None = None, project_uid: str | None = None,
-                    turn_id: str | None = None) -> str:
+                    turn_id: str | None = None, work: dict | None = None) -> str:
         return self.conn.request("session.new", {"project_id": project_id, "agent": agent, "project_name": project_name,
-                                                 "project_uid": project_uid, "turn_id": turn_id},
+                                                 "project_uid": project_uid, "turn_id": turn_id, **({"work": work} if work else {})},
                                  timeout=None)["session_id"]
 
     def load_session(self, session_id: str, project_id: int, agent: str, project_name: str | None = None,
-                     project_uid: str | None = None, turn_id: str | None = None) -> bool:
+                     project_uid: str | None = None, turn_id: str | None = None, work: dict | None = None) -> bool:
         """False는 "지원 안 함/세션 없음"일 때만 온다. 연결·CLI 문제는 예외로 올려 멀쩡한 세션을 새 세션으로 덮어쓰지 않는다."""
         return bool(self.conn.request("session.load", {"project_id": project_id, "session_id": session_id,
                                                        "agent": agent, "project_name": project_name,
-                                                       "project_uid": project_uid, "turn_id": turn_id},
+                                                       "project_uid": project_uid, "turn_id": turn_id, **({"work": work} if work else {})},
                                       timeout=None).get("ok"))
 
     def call(self, type_: str, payload: dict, timeout: float = 30) -> dict:

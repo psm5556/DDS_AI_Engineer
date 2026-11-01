@@ -1582,6 +1582,7 @@ def test_first_turn_rename_with_live_session_does_not_restart_cli(stack):
     """AI가 첫 응답에서 실제 set_project_info로 이름을 바꾼다. 세션은 이미 그 폴더에서 돌고 있다: 흔한 경우다."""
     s = stack
     chat = s.new_chat()
+    s.make_legacy(chat)  # Project 폴더에서 도는 세션. Task 폴더는 test_sessions_works.py
     s.turn(chat, "[rename 브래킷 E2E 설계] 시작합니다")
     assert "브래킷 E2E 설계" in s.agent_text(chat)
     real, shown = _dir(s, "세션-시험"), _dir(s, "브래킷-E2E-설계")
@@ -1693,6 +1694,7 @@ def test_claude_session_survives_real_rename(tmp_path):
     try:
         s.up()
         chat = s.new_chat()
+        s.make_legacy(chat)  # Project 폴더에서 도는 세션. Task 폴더는 test_sessions_works.py
         s.turn(chat, "[rename 브래킷 E2E 설계] 시작합니다")
         real, shown = _dir(s, "세션-시험"), _dir(s, "브래킷-E2E-설계")
         wait_for(lambda: _is_alias(shown), what="새 이름 접합")
@@ -1723,6 +1725,7 @@ def test_gemini_session_from_before_this_version_survives_real_rename(tmp_path):
     try:
         s.up()
         chat = s.new_chat()
+        s.make_legacy(chat)  # Project 폴더에서 도는 세션. Task 폴더는 test_sessions_works.py
         s.turn(chat, "첫 요청")
         s.stop_agent()
         wait_for(lambda: not s.agent_connected(), what="Agent 끊김", timeout=30)

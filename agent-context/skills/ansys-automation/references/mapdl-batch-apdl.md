@@ -10,7 +10,7 @@ ANSYS242.exe -b -i input.inp -o solve.out -j file -np 4 -dir C:/work/case_0001
 | `-i` / `-o` | 입력 / 출력(로그) 파일 |
 | `-j` | jobname(결과는 `file.rst`, 에러는 `file.err`) |
 | `-np` | 코어 수(SMP). DMP는 `-dis` |
-| `-dir` | 작업 폴더 |
+| `-dir` | Task 폴더 |
 | `-p` | 라이선스 제품 코드(예: `ansys`, `meba`) `TODO(사내검증)` |
 
 실행파일 이름(`ANSYS242.exe` 또는 `MAPDL.exe`)과 경로(`.../v242/ansys/bin/winx64/`)는 버전에 따라 다르다. `TODO(사내검증)`

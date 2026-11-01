@@ -16,6 +16,7 @@
   [longtool] 명령줄처럼 아주 긴 제목의 도구를 6초 돌린다
   [rename 이름]  실제 dds_flow.set_project_info를 세션의 작업 폴더·MCP 환경으로 돌려 프로젝트 이름을 바꾼다
   [where]    실제 dds_cae.project_folder를 같은 환경으로 돌려 작업 폴더를 글자로 쓴다
+  [name 이름]  실제 dds_flow.set_work_info를 같은 환경으로 돌려 지금 Task의 이름을 정한다(헤더 X-DDS-Work가 서버까지 가는지 본다)
 control.json의 hold_cwd=true면 세션마다 cwd가 그 작업 폴더인 자식 프로세스를 띄운다.
 실제 Claude(세션마다 claude.exe·MCP가 cwd를 그 폴더에 둔다)처럼 Windows가 폴더 이름 바꾸기를 막는다.
 control.json의 history_by는 session/load가 기록을 찾는 규칙이다: "realpath"는 Claude($CLAUDE_CONFIG_DIR/projects/<실제 경로 인코딩>/<세션>.jsonl 한 곳),
@@ -129,6 +130,7 @@ class FakeCli:
     def _open_session(self, sid: str, params: dict):
         cwd = params.get("cwd") or os.getcwd()
         servers = params.get("mcpServers") or []
+        self.log("session_dirs", sid=sid, extra=params.get("additionalDirectories"), meta=(params.get("_meta") or {}).get("additionalRoots"))
         env = {e["name"]: e["value"] for e in servers[0].get("env") or []} if servers else {}
         self.session_env[sid] = (cwd, env)
         if self.hold_cwd:  # stdin이 닫히면(이 프로세스가 끝나면) 함께 끝난다
@@ -214,6 +216,11 @@ class FakeCli:
         if m:
             out = self._run_mcp(sid, "import dds_flow; print(json.dumps(dds_flow.set_project_info(name=sys.argv[1]), ensure_ascii=False))", m.group(1))
             self.log("mcp_rename", sid=sid, out=out)
+            self.say(sid, out + " ")
+        m = re.search(r"\[name ([^\]]+)\]", text)
+        if m:
+            out = self._run_mcp(sid, "import dds_flow; print(json.dumps(dds_flow.set_work_info(name=sys.argv[1]), ensure_ascii=False))", m.group(1))
+            self.log("mcp_name", sid=sid, out=out)
             self.say(sid, out + " ")
         if "[where]" in text:
             out = self._run_mcp(sid, "import dds_cae; print(json.dumps(dds_cae.project_folder()['folder'], ensure_ascii=False))")

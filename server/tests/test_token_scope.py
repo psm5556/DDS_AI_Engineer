@@ -607,7 +607,7 @@ def test_project_folder_is_not_filled_by_dot_folders(monkeypatch, tmp_path):
     (proj / "CLAUDE.md").write_text("x", encoding="utf-8")
     (proj / ".keep").write_text("x", encoding="utf-8")
 
-    monkeypatch.setattr(mod, "settings", SimpleNamespace(project_dir=lambda pid: proj))
+    monkeypatch.setattr(mod, "settings", SimpleNamespace(work_base=lambda pid: proj))
     monkeypatch.setattr(mod, "resolve_pid", lambda pid: 1)
     res = mod.project_folder()
     names = [f.replace("\\", "/") for f in res["files"]]
@@ -623,6 +623,6 @@ def test_project_folder_still_stops_at_200(monkeypatch, tmp_path):
 
     for i in range(205):
         (tmp_path / f"{i:03}.txt").write_text("x", encoding="utf-8")
-    monkeypatch.setattr(mod, "settings", SimpleNamespace(project_dir=lambda pid: tmp_path))
+    monkeypatch.setattr(mod, "settings", SimpleNamespace(work_base=lambda pid: tmp_path))
     monkeypatch.setattr(mod, "resolve_pid", lambda pid: 1)
     assert len(mod.project_folder()["files"]) == 200

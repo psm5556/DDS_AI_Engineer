@@ -317,6 +317,7 @@ class AgentHub:
     def _ensure_session(self, st: TurnState, conn: AgentConnection, turn_id: str, agent: str) -> str | None:
         """이 대화의 CLI 세션을 돌려준다. 살아 있으면 그대로(session/load는 Gemini에서 세션을 dispose한다),
         없으면 load, load가 "지원 안 함/없음"이면 new. 턴이 그새 끝났어도 끝까지 해 둔다(다음 요청이 빨라진다)."""
+        notice = None
         with SessionLocal() as db:
             chat = db.get(models.ChatSession, st.chat_id)
             if not self._ours(st, chat, agent):
@@ -324,6 +325,9 @@ class AgentHub:
             old, pid = chat.agent_session_id, chat.project_id
             pname = chat.project.name if chat.project else None
             puid = chat.project.uid if chat.project else None
+            work, notice = self._session_work(db, conn, chat, old)
+        if notice:
+            self._note(st, notice)
         if old and old in self.live.setdefault(st.user_id, set()):
             self._bind(st, old)
             return old
@@ -332,7 +336,7 @@ class AgentHub:
         if old:
             if warm and self._current(st, turn_id):
                 self._set_stage(st, "session_load")
-            if runner.load_session(old, pid, agent, pname, puid, turn_id):
+            if runner.load_session(old, pid, agent, pname, puid, turn_id, work):
                 self.running.setdefault(st.user_id, set()).add(agent)
                 with SessionLocal() as db:
                     if not self._ours(st, db.get(models.ChatSession, st.chat_id), agent):
@@ -342,7 +346,7 @@ class AgentHub:
                 return old
         if warm and self._current(st, turn_id):
             self._set_stage(st, "session_new")
-        sid = runner.new_session(pid, agent, pname, puid, turn_id)
+        sid = runner.new_session(pid, agent, pname, puid, turn_id, work)
         self.running.setdefault(st.user_id, set()).add(agent)
         with st.lock, SessionLocal() as db:  # 확인과 저장을 한 번에: 사이에 작업 폴더가 바뀌면 옛 폴더의 세션이 남는다
             chat = db.get(models.ChatSession, st.chat_id)
@@ -359,6 +363,21 @@ class AgentHub:
             self._note(st, "이전 AI를 이어 붙일 수 없어 AI를 새로 시작해 이어 갑니다. 지금까지의 기록 요약을 함께 넘겼습니다.")
         self._bind(st, sid)
         return sid
+
+    def _session_work(self, db, conn: AgentConnection, chat: models.ChatSession, old: str | None) -> tuple[dict | None, str | None]:
+        """세션을 어느 폴더에서 열지 정한다. (PC Agent에 보낼 Task, 대화에 한 번 남길 안내).
+        폴더를 모르는 옛 Agent로 처음 시작하는 Task는 이전 기록처럼 Project 폴더를 쓴다. 이 Task는 앞으로도 그렇다: 세션과 결과가 그 폴더에 쌓이기 때문이다.
+        이미 시작한 Task면 표시를 바꾸지 않는다(새 Agent가 만든 폴더가 다른 PC에 있을 수 있다)."""
+        work = db.get(models.Work, chat.work_id) if chat.work_id else None
+        if work is None:
+            return None, None
+        if conn.info.get("work_folders"):
+            return work.folder_view(), None
+        if work.legacy or old or db.query(models.ChatSession.id).filter(models.ChatSession.work_id == work.id, models.ChatSession.agent_session_id.isnot(None)).first():
+            return None, None
+        work.legacy = True
+        db.commit()
+        return None, "PC Agent를 업데이트하면 다음 Task부터 폴더가 나뉩니다 → 트레이에서 다시 시작하세요"
 
     def _bind(self, st: TurnState, sid: str):
         with self._lock:
@@ -398,7 +417,7 @@ class AgentHub:
     # ---------- 턴 ----------
     def send_prompt(self, chat_id: int, text: str, attachments: list[dict] | None = None, flow_id: int | None = None, shown: str | None = None, auto: str | None = None) -> str:
         """요청을 저장하고 바로 돌아온다. CLI 준비와 전달은 뒤의 스레드에서 한다. 이미 진행 중이면 AgentError.
-        attachments: [{id, filename, size, sha256}] — PC Agent가 프로젝트 폴더 inputs/로 내려받은 뒤 에이전트에 전달한다.
+        attachments: [{id, filename, size, sha256}] — PC Agent가 그 세션의 inputs/(Task 폴더)로 내려받은 뒤 에이전트에 전달한다.
         flow_id·shown·auto: 서버가 사용자를 대신해 보내는 말(_flush_flows). shown은 대화에 보이는 글, auto는 그 종류다."""
         attachments = attachments or []
         with SessionLocal() as db:

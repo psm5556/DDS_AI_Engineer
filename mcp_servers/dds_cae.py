@@ -1,6 +1,7 @@
 """dds-cae MCP: 이 PC의 CAD/CAE 툴을 배치 모드로 실행한다(스크립트 1회 실행, 툴 목록·경로 확인, 규약 조회).
 반복 실행(DOE/최적화)은 dds-study의 스터디 + script 어댑터를 쓴다."""
 import os
+import re
 import shutil
 import threading
 import time
@@ -59,23 +60,24 @@ def list_tools() -> dict:
 
 @mcp.tool()
 def project_folder(project_id: int | None = None) -> dict:
-    """이 PC에서 현재 프로젝트의 작업 폴더(모델·스크립트를 두는 곳)."""
+    """이 PC에서 지금 Task 폴더(모델·스크립트를 두는 곳). Task 세션이면 Task 폴더다."""
     pid = resolve_pid(project_id)
-    d = settings.project_dir(pid)
+    d = settings.work_base(pid)
     return {"project_id": pid, "folder": str(d), "files": _project_files(d)[:200]}
 
 
 def _project_files(d: Path) -> list[str]:
-    """.claude·.agents·.gemini의 스킬 복사본만 수백 개라 그대로 세면 앞 200칸을 다 채워 AI가 실제 파일을 못 본다. 점 폴더와 studies는 내려가지 않는다."""
+    """.claude·.agents·.gemini의 스킬 복사본만 수백 개라 그대로 세면 앞 200칸을 다 채워 AI가 실제 파일을 못 본다. 점 폴더와 studies는 내려가지 않는다.
+    이전 기록에서 볼 때 Project 폴더의 Task 폴더(T01_…)는 그 Task의 것이라 내려가지 않는다."""
     found = []
     for folder, subdirs, names in os.walk(d):
-        subdirs[:] = [s for s in subdirs if not s.startswith(".") and s != "studies"]
+        subdirs[:] = [s for s in subdirs if not s.startswith(".") and s != "studies" and not (re.match(r"T\d+_", s) and (Path(folder) / s / "work.json").is_file())]
         found += [os.path.relpath(os.path.join(folder, n), d) for n in names]
     return sorted(found)
 
 
 def _bad_script_name(filename: str) -> str | None:
-    """실행 폴더 안의 파일 이름만 받는다. 경로를 받으면 AI가 작업 폴더 밖의 파일을 덮어쓸 수 있다. 스크립트 안에서 쓰는 것은 여기서 막지 못한다."""
+    """실행 폴더 안의 파일 이름만 받는다. 경로를 받으면 AI가 Task 폴더 밖의 파일을 덮어쓸 수 있다. 스크립트 안에서 쓰는 것은 여기서 막지 못한다."""
     name = str(filename or "")
     if not name.strip() or any(c in name for c in '/\\:\x00') or name != name.rstrip(" .") or name.split(".")[0].rstrip(" ").lower() in WINDOWS_DEVICES:
         return f"파일 이름에 경로를 쓸 수 없습니다: {name[:80]} → 이름만 주세요(예: script.py)."
@@ -93,7 +95,7 @@ def run_script(tool: str, script: str, filename: str = "script.py", args: list[s
 
     - tool: list_tools의 키 (nx, simcenter, abaqus_cae, abaqus_python, lsdyna, ansys_wb, starccm, amesim, python ...)
     - script: 스크립트 본문. 실행 폴더(runs/<시각>_<파일명>/)에 filename으로 저장된다. filename은 이름만 받는다(경로 불가).
-    - params: 주면 실행 폴더에 params.json으로 써 준다. inputs: 프로젝트 폴더 기준 복사할 파일(모델 등).
+    - params: 주면 실행 폴더에 params.json으로 써 준다. inputs: Task 폴더 기준 복사할 파일(모델 등).
     - 실행 후 results.json(있으면)과 stdout/stderr 끝부분을 돌려주고, images/의 그림을 아티팩트로 게시한다.
     - status='running'과 job_id가 오면 실패가 아니라 오래 걸리는 것이다. 다시 실행하지 말고 script_status(job_id)로 결과를 받는다.
     """
@@ -103,7 +105,7 @@ def run_script(tool: str, script: str, filename: str = "script.py", args: list[s
     if bad:
         return {"error": bad}
     pid = resolve_pid(project_id)
-    pdir = settings.project_dir(pid)
+    pdir = settings.work_base(pid)
     run_dir = pdir / "runs" / f"{time.strftime('%Y%m%d_%H%M%S')}_{Path(filename).stem}"
     missing = next((rel for rel in inputs or [] if not (pdir / rel).exists()), None)
     if missing is not None:
@@ -113,7 +115,7 @@ def run_script(tool: str, script: str, filename: str = "script.py", args: list[s
         cmd = build_command(tool, filename, [str(a) for a in args or []], settings.tools, settings.tool_commands)
     except ValueError as e:
         return {"error": str(e)}
-    if dry_run:  # 명령만 보여 준다. 시험 삼아 부른 호출이 작업 폴더에 흔적을 남기지 않게 아무것도 쓰지 않는다
+    if dry_run:  # 명령만 보여 준다. 시험 삼아 부른 호출이 Task 폴더에 흔적을 남기지 않게 아무것도 쓰지 않는다
         return {"dry_run": True, "command": cmd, "run_dir": str(run_dir)}
     (run_dir / "images").mkdir(parents=True, exist_ok=True)
     (run_dir / filename).write_text(script, encoding="utf-8")

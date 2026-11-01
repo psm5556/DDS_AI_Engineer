@@ -43,12 +43,12 @@ class AgentState:
         except OSError as e:
             log.debug("state.json을 저장하지 못했습니다: %s", e)
 
-    def remember_session(self, agent: str, session_id: str, project: tuple | None = None):
+    def remember_session(self, agent: str, session_id: str, project: tuple | None = None, work: dict | None = None):
         with self._lock:
             self.data["last_agent"] = agent
             pid, pname, puid = project or (None, None, None)
             self.data["last_session"] = {"agent": agent, "session_id": session_id, "project_id": pid,
-                                         "project_name": pname, "project_uid": puid}
+                                         "project_name": pname, "project_uid": puid, "work": work}
             self._save()
 
     def forget_session(self, session_id: str):

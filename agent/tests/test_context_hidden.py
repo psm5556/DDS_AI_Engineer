@@ -478,8 +478,8 @@ def test_tracked_dds_only_file_is_skipped_silently(src, proj):
     _git(proj, "commit", "-qm", "잘못 올림")
     _new_version(src)
     context.sync_project_context(proj)
-    text = _exclude(proj)
-    assert "/AGENTS.md" not in text and "/.agents/" not in text and "/CLAUDE.md" in text
+    lines = _exclude(proj).splitlines()
+    assert "/AGENTS.md" not in lines and "/.agents/" not in lines and "/CLAUDE.md" in lines
 
 
 @git_only
@@ -679,7 +679,7 @@ def test_tracked_geminiignore_keeps_skill_folders_out_of_exclude(src, proj):
     text = _exclude(proj)
     assert "/CLAUDE.md" in text and context.STAMP in text
     for top in TOPS:
-        assert f"/{top}/" not in text
+        assert f"/{top}/" not in text.splitlines()
     assert (proj / ".geminiignore").read_text(encoding="utf-8") == "*.odb\n"
     assert ".claude/skills/" in _status(proj)  # 대신 git에는 새 파일로 보인다
 

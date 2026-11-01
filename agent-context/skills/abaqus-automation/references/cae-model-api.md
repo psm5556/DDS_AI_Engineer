@@ -7,7 +7,7 @@ from abaqusConstants import *
 from caeModules import *
 import mesh          # mesh.ElemType
 ```
-**가장 확실한 API 확인 방법**: GUI에서 같은 작업을 한 번 하고 작업 폴더의 `abaqus.rpy`(리플레이 파일)를 연다. Abaqus가 실행한 정확한 명령이 기록된다. 스크립트는 이 기록을 그대로 일반화해서 만든다. 이름 기반 참조(`findAt` 좌표 대신)를 쓰려면 기록 전에 `session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COORDINATE)`를 실행해 두면 좌표 기반으로 기록된다.
+**가장 확실한 API 확인 방법**: GUI에서 같은 작업을 한 번 하고 Task 폴더의 `abaqus.rpy`(리플레이 파일)를 연다. Abaqus가 실행한 정확한 명령이 기록된다. 스크립트는 이 기록을 그대로 일반화해서 만든다. 이름 기반 참조(`findAt` 좌표 대신)를 쓰려면 기록 전에 `session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COORDINATE)`를 실행해 두면 좌표 기반으로 기록된다.
 
 ## 모델 열기/저장
 ```python

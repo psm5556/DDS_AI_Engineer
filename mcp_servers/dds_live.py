@@ -364,7 +364,7 @@ def _grab(tool: str, path: Path) -> str | None:
 
 
 def _shot_path(pid: int, tool: str) -> Path:
-    shots = settings.project_dir(pid) / "live"
+    shots = settings.work_base(pid) / "live"
     shots.mkdir(parents=True, exist_ok=True)
     return shots / f"{tool}_{time.strftime('%Y%m%d_%H%M%S')}.png"
 

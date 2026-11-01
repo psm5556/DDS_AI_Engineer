@@ -183,8 +183,7 @@ class CaseExecutor:
         if info.get("status") not in _FINISHED:
             self.report({"type": "case.status", "case_id": job["case_id"], "status": "cancelled", "error": NOT_FINISHED})
             return
-        project_dir = self.s.workspace.project_dir(job["project_id"], job.get("project_name"), job.get("project_uid"))
-        self._deliver(job, run_dir, CaseOutcome(info["status"], results=info.get("results") or {}, error=info.get("error")), project_dir)
+        self._deliver(job, run_dir, CaseOutcome(info["status"], results=info.get("results") or {}, error=info.get("error")), self._base(job))
 
     def _deliver(self, job: dict, run_dir: Path, out: CaseOutcome, project_dir: Path, notice: str | None = None):
         """끝난 결과를 보고한다. 이미지·3D·묶음은 덧붙이는 자료라 실패해도 결과를 막지 않는다."""
@@ -214,14 +213,21 @@ class CaseExecutor:
             runner.stop = stop
         return runner
 
+    def _base(self, job: dict) -> Path:
+        """스크립트·원본의 기준이 되는 폴더. Task 폴더이고, 이전 기록과 work 없는 옛 서버의 케이스는 Project 폴더다."""
+        return self.s.workspace.work_dir(job["project_id"], job.get("work"), job.get("project_name"), job.get("project_uid"))
+
+    def _study_dir(self, job: dict) -> Path:
+        return self.s.workspace.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
+                                          job.get("project_uid"), job.get("work"))
+
     def _case_dir(self, job: dict) -> Path:
         run_dir = Path(job["run_dir"]) if job.get("run_dir") else None
         if run_dir and run_dir.is_dir():
             # 서버에 남은 경로가 프로젝트의 옛 이름(접합)일 수 있다. 접합으로 cwd를 두면 실제 폴더가 잠기므로 실제 경로로 돈다
             return Path(os.path.realpath(run_dir))
         # 작업 폴더를 옮겼으면 스터디 폴더에서 다시 찾는다
-        sdir = self.s.workspace.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
-                                          job.get("project_uid"))
+        sdir = self._study_dir(job)
         found = sorted((sdir / "cases").glob(f"C{job['case_id']:04d}_*"))
         return found[0] if found else sdir / "cases" / f"C{job['case_id']:04d}"
 
@@ -234,8 +240,7 @@ class CaseExecutor:
         try:
             h5 = self._case_dir(job) / H5_NAME
             if not h5.is_file():  # 불러온 케이스는 원본 폴더가 아니라 스터디 폴더 쪽 작업 폴더에 case.h5가 있다
-                sdir = self.s.workspace.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
-                                                  job.get("project_uid"))
+                sdir = self._study_dir(job)
                 h5 = next((d / H5_NAME for d in sorted((sdir / "cases").glob(f"C{job['case_id']:04d}_*")) if (d / H5_NAME).is_file()), h5)
             if not h5.is_file():
                 raise FileNotFoundError(f"이 PC에 case.h5가 없습니다: {h5}")
@@ -252,8 +257,7 @@ class CaseExecutor:
         """Output 추가: 이미 해석한 케이스 폴더에서 새 Output만 뽑아 보고한다(해석은 다시 하지 않는다).
         불러온 케이스의 run_dir은 사용자의 원본 폴더다. 원본에는 아무것도 쓰지 않고 스터디 폴더 쪽 작업 폴더에서 돌린다."""
         ws = self.s.workspace
-        sdir = ws.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
-                            job.get("project_uid"))
+        sdir = self._study_dir(job)
         source = self._case_dir(job)
         given = Path(job["run_dir"]) if job.get("run_dir") else None
         if given is not None and not source.is_dir():
@@ -267,7 +271,7 @@ class CaseExecutor:
             out = get_adapter(job["adapter"]).extract(
                 job["params"], run_dir, job.get("adapter_config") or {}, job.get("steps") or [], job.get("names") or [],
                 self._runner_for(job), self.s.tools,
-                project_dir=ws.project_dir(job["project_id"], job.get("project_name"), job.get("project_uid")),
+                project_dir=self._base(job),
                 tool_commands=self.s.tool_commands, tool_envs=self.s.tool_env, **kw)
         except Exception as e:
             log.exception("Output 추출 오류")
@@ -288,9 +292,8 @@ class CaseExecutor:
 
     def _run_case(self, job: dict):
         ws = self.s.workspace
-        project_dir = ws.project_dir(job["project_id"], job.get("project_name"), job.get("project_uid"))
-        sdir = ws.study_dir(job["project_id"], job["study_id"], job.get("study_name"), job.get("project_name"),
-                            job.get("project_uid"))
+        project_dir = self._base(job)
+        sdir = self._study_dir(job)
         ws.write_study(sdir, {k: job.get(k) for k in ("study_id", "study_name", "project_id", "variables", "objectives",
                                                        "adapter", "adapter_config")})
         run_dir = ws.case_dir(sdir, job["case_id"], job.get("source", "doe"))

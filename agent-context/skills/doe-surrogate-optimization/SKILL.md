@@ -25,7 +25,7 @@ dds-study.create_study(
 - `timeout_sec`는 케이스 한 단계의 한계입니다. 넘으면 그 아래 솔버까지 모두 끝나고 결과가 남지 않습니다. 예상 해석 시간보다 넉넉히 줍니다.
 - 변수 이름은 스크립트가 `params.json`에서 읽는 키와 같아야 합니다.
 - 목적함수 이름은 스크립트가 `results.json`에 쓰는 키와 같아야 합니다.
-- `inputs`와 `script` 경로는 **프로젝트 폴더 기준**입니다. 프로젝트 폴더 위치는 `dds-cae.project_folder`로 확인합니다.
+- `inputs`와 `script` 경로는 **Task 폴더 기준**입니다. Task 폴더 위치는 `dds-cae.project_folder`로 확인합니다.
 - 제약조건(예: 응력 ≤ 250)은 `constraints=[{"name": "max_stress", "upper": 250}]`로 줍니다. 최적 케이스는 제약을 만족한 것 중에서 고르고, `train_surrogate`의 `outputs`에 제약 항목도 넣으면 제안할 때 제약 만족 확률을 곱합니다.
 - 변수와 출력의 `note`에 쉬운 이름과 단위를 적습니다(`"note": "두께 [mm]"`). 판단 문장이 이 이름과 단위로 나옵니다.
 - **목표가 둘 이상이면** `objectives`에 모두 적고 `train_surrogate(outputs=[...])`에 목표를 모두 넣은 뒤 `optimize(mode="bo")`를 씁니다. 첫 목표만 보지 않고 함께 좋아지는 쪽을 찾습니다. 항상 더 낫다고 말하지 않습니다(부딪힘이 작은 문제에서는 차이가 작습니다).

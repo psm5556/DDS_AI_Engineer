@@ -10,7 +10,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from .. import models, schemas, work_service
 from ..agent.hub import hub
-from ..agent.link import AgentError, registry
+from ..agent.link import AgentError, registry, work_fields
 from ..config import settings
 from ..database import get_db
 from ..deps import effective_admin, get_current_user, get_or_404, get_project_for_member, member_role, require_ai_can_work, require_jwt, require_member
@@ -262,25 +262,38 @@ def download_attachment(attachment_id: int, user: models.User = Depends(get_curr
     return FileResponse(settings.files_dir / a.stored, filename=a.filename)
 
 
-# ---------- 내 PC 작업 폴더 (PC Agent 경유) ----------
+# ---------- 내 PC 폴더 (PC Agent 경유) ----------
+def _local_work(scope: work_service.WorkScope, user: models.User) -> dict:
+    """work_id를 주면 그 Task 폴더를 본다. 폴더를 만들지 않는다. 주지 않으면(Project 메뉴, 옛 화면) Project 폴더다."""
+    wid = scope.hint
+    if not wid:
+        return {}
+    w = scope.db.get(models.Work, wid)
+    if not w or w.project_id != scope.project.id:
+        raise HTTPException(404, "이 Project에 없는 Task입니다 → 왼쪽 목록에서 다시 골라 주세요")
+    return work_fields(registry.get(user.id), w)
+
+
 @router.post("/projects/{project_id}/local/open")
-def open_local(body: schemas.LocalOpen, project: models.Project = Depends(get_project_for_member),
+def open_local(body: schemas.LocalOpen, scope: work_service.WorkScope = Depends(work_service.work_scope),
                user: models.User = Depends(require_jwt)):
-    """내 PC에서 프로젝트 작업 폴더(또는 케이스 폴더·결과 파일)를 탐색기나 CAE 뷰어로 연다."""
+    """내 PC에서 Task 폴더나 Project 폴더(또는 케이스 폴더·결과 파일)를 탐색기나 CAE 뷰어로 연다."""
+    project = scope.project
     try:
         return registry.runner(user.id).call("local.open", {"project_id": project.id, "project_name": project.name, "project_uid": project.uid,
-                                                            "path": body.path, "with_viewer": body.with_viewer})
+                                                            "path": body.path, "with_viewer": body.with_viewer, **_local_work(scope, user)})
     except AgentError as e:
         raise HTTPException(409, str(e))
 
 
 @router.get("/projects/{project_id}/local/tree")
-def local_tree(path: str = "", project: models.Project = Depends(get_project_for_member),
+def local_tree(path: str = "", scope: work_service.WorkScope = Depends(work_service.work_scope),
                user: models.User = Depends(get_current_user)):
-    """내 PC 작업 폴더 탐색 (폴더·파일 목록, 크기, 수정 시각)."""
+    """내 PC 폴더 탐색 (폴더·파일 목록, 크기, 수정 시각). 이 PC에 Task 폴더가 없으면 missing이 온다."""
+    project = scope.project
     try:
         return registry.runner(user.id).call("local.tree", {"project_id": project.id, "project_name": project.name, "project_uid": project.uid,
-                                                            "path": path})
+                                                            "path": path, **_local_work(scope, user)})
     except AgentError as e:
         raise HTTPException(409, str(e))
 
@@ -293,9 +306,10 @@ def _agent_call(user: models.User, type_: str, payload: dict, timeout: float = 3
 
 
 @router.get("/projects/{project_id}/local/folder")
-def get_local_folder(project: models.Project = Depends(get_project_for_member), user: models.User = Depends(get_current_user)):
-    """이 프로젝트의 내 PC 작업 폴더 (직접 정했는지 여부 포함). 폴더는 사람마다·PC마다 다르다."""
-    return _agent_call(user, "local.folder", {"project_id": project.id, "project_name": project.name, "project_uid": project.uid})
+def get_local_folder(scope: work_service.WorkScope = Depends(work_service.work_scope), user: models.User = Depends(get_current_user)):
+    """이 Project(work_id를 주면 그 Task)의 내 PC 폴더 (직접 정했는지 여부 포함). 폴더는 사람마다·PC마다 다르다."""
+    project = scope.project
+    return _agent_call(user, "local.folder", {"project_id": project.id, "project_name": project.name, "project_uid": project.uid, **_local_work(scope, user)})
 
 
 @router.put("/projects/{project_id}/local/folder")
