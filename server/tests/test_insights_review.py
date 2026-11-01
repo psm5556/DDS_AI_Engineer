@@ -181,6 +181,27 @@ def test_trust_line_of_a_constant_output_says_it_cannot_be_measured(client):
     assert line["state"] == "unknown" and "오차가 큽니다" not in line["sentence"], line
 
 
+def test_trust_line_answers_with_the_worst_output_not_only_the_goal(client):
+    """Simulator에는 모든 출력이 나온다. 목표만 보고 '믿을 만함'이라고 하면 위의 '정확도 보통'과 어긋난다."""
+    admin, _ = _auth(client, "admin")
+    _, sid = _make_study(client, admin, [{"name": "a", "lower": 0, "upper": 1}, {"name": "b", "lower": 0, "upper": 1}], [{"name": "y", "goal": "min"}], name="여러 출력")
+    rng = np.random.default_rng(3)
+    rows = []
+    for u in qmc.LatinHypercube(d=2, seed=4).random(40):
+        rows.append((_P(u), {"y": float(u[0] + u[1]), "noisy": float(rng.normal()), "flat": 7.0}, "complete", "doe"))
+    with SessionLocal() as db:
+        _add_cases(db, sid, rows)
+        study = db.get(models.Study, sid)
+        study.outputs = [{"name": "y"}, {"name": "noisy"}, {"name": "flat"}]
+        db.commit()
+        m = service.train(db, study, None)
+        line = insights.trust_line(db, m)
+    assert set(m.outputs) >= {"y", "noisy", "flat"}, m.outputs
+    assert line["outputs"]["y"]["state"] == "good", line
+    assert line["outputs"]["flat"]["state"] == "unknown", line
+    assert line["state"] in ("fair", "caution") and "noisy" in line["sentence"], line  # 일정한 출력이 '모름'으로 덮지 않고, 어느 출력인지 말한다
+
+
 def test_failed_measurement_stops_asking_and_falls_back(client, monkeypatch):
     admin, _ = _auth(client, "admin")
     U = qmc.LatinHypercube(d=2, seed=2).random(30)

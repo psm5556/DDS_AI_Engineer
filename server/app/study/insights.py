@@ -3147,7 +3147,9 @@ def trust_line(db: Session, m: models.SurrogateModel) -> dict:
             if o in pool and h["gap"] > gaps.get(h["variable"], {"gap": 0})["gap"]:
                 gaps[h["variable"]] = {"variable": h["variable"], "lo": _r(h["lo"], SHOWN), "hi": _r(h["hi"], SHOWN), "gap": _r(h["gap"])}
         per[o] = {"label": label, "unit": unit, "state": line[0], "state_label": state_label("trust", line[0]), "p80": _r(sc["p80"]) if sc else None}
-        if o in pool and (best is None or _RANK[line[0]] > _RANK[best[0]]):
+        # 목표가 아닌 출력도 Simulator에 함께 나온다. 가장 나쁜 출력으로 답해야 위의 정확도 표시와 어긋나지 않는다
+        # 값이 일정해 못 재는 출력은 나쁜 것이 아니다. 목표·제약이 아니면 답을 '모름'으로 바꾸지 않는다
+        if (o in pool or line[0] != "unknown") and (best is None or _RANK[line[0]] > _RANK[best[0]]):
             best = line
     sentence = _data_words(best[1]) if snap.imported else best[1]
     if snap.adapter == "mock":
