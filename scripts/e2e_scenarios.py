@@ -193,6 +193,12 @@ class Pc:
         from mcp.client.stdio import StdioServerParameters, stdio_client
 
         env = {**self.env(), "DDS_PROJECT_ID": str(pid), "DDS_SERVER_URL": self.world.base, "DDS_TOKEN": self.who.token, "PYTHONPATH": str(ROOT)}
+        # 실제 AI의 도구 호출은 세션 안에서 일어난다. PC Agent가 세션에 주는 Task 환경값을 그대로 준다. 없으면 스크립트와 케이스의 폴더가 어긋난다
+        for work in self.who.get(f"/api/projects/{pid}/works"):
+            found = list(Path(self.ws).glob(f"P{pid:04d}_*/T{work['seq']:02d}_*")) if work["mine"] and not work["legacy"] else []
+            if found:
+                env.update({"DDS_WORK_ID": str(work["id"]), "DDS_WORK_UID": work["uid"] or "", "DDS_WORK_DIR": str(found[0])})
+                break
         params = StdioServerParameters(command=sys.executable, args=[str(ROOT / "mcp_servers" / f"{server.replace('-', '_')}.py")], env=env)
 
         async def call():
