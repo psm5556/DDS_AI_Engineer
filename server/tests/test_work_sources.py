@@ -46,6 +46,13 @@ def team(client):
     return {"a": a, "b": b, "out": out, "admin": admin, "ua": ua, "ub": ub, "pid": pid}
 
 
+def _stop_cases(src):
+    """도는 케이스가 있으면 Task를 지울 수 없다. 멈춘 뒤 지우는 사람의 순서를 따른다."""
+    with SessionLocal() as db:
+        db.query(models.Case).filter_by(study_id=src["sid"], status="running").update({"status": "cancelled"})
+        db.commit()
+
+
 def _source(client, h, pid, recipe=True, name="1차 경량화", tool="python"):
     """끝난 해석이 있는 Task. 케이스는 주인 PC에서 돈 것으로 적는다."""
     w = client.post(f"/api/projects/{pid}/works", json={"name": name, "name_auto": False, "agent": "demo"}, headers=h).json()
@@ -135,6 +142,7 @@ def test_copy_is_not_a_link_source_edit_or_delete_changes_nothing(client, team):
     # 원본 스크립트를 고치고 지워도 내 몫은 그대로다
     client.post(f"/api/studies/{src['sid']}/recipe", files={"file": ("r.zip", _bundle(b"print('changed')\n"))}, headers=a)
     assert client.get(f"/api/works/{w['id']}/carry/{src['sid']}", headers=a).content == blob
+    _stop_cases(src)
     assert client.delete(f"/api/works/{src['wid']}", headers=a).status_code == 200
     after = client.get(f"/api/works/{w['id']}", headers=a).json()
     assert after["source_label"] == "1차 경량화" and after["source_work_id"] is None, "원본이 지워져도 어디서 왔는지 남는다"
@@ -232,6 +240,7 @@ def test_takeover_then_source_deleted_keeps_my_copy_and_my_attachment(client, te
     w = client.post(f"/api/works/{src['wid']}/takeover", json={}, headers=b).json()
     sid = client.get(f"/api/projects/{pid}/studies?work_id={w['id']}", headers=b).json()[0]["id"]
     att = client.get(f"/api/projects/{pid}/attachments?work_id={w['id']}", headers=b).json()[0]["id"]
+    _stop_cases(src)
     assert client.delete(f"/api/works/{src['wid']}", headers=a).status_code == 200
     assert client.get(f"/api/attachments/{att}/download", headers=b).content == b"model"
     assert len(client.get(f"/api/studies/{sid}/cases", headers=b).json()) == 5
@@ -242,6 +251,7 @@ def test_takeover_then_source_deleted_keeps_my_copy_and_my_attachment(client, te
 def test_takeover_of_a_deleted_task_says_what_to_do(client, team):
     a, b, pid = team["a"], team["b"], team["pid"]
     src = _source(client, a, pid)
+    _stop_cases(src)
     assert client.delete(f"/api/works/{src['wid']}", headers=a).status_code == 200
     r = client.post(f"/api/works/{src['wid']}/takeover", json={}, headers=b)
     assert r.status_code == 404

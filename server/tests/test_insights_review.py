@@ -266,6 +266,17 @@ def test_deleted_result_still_leaves_a_saved_edition(client):
     assert "지울 값" not in _html(client, pid, rep["id"], admin)
 
 
+def test_report_keeps_values_quoted_from_a_task_that_was_deleted(client):
+    admin, _ = _auth(client, "admin")
+    pid = client.post("/api/projects", json={"name": "Task 지움"}, headers=admin).json()["id"]
+    a = client.post(f"/api/projects/{pid}/works", json={"name": "A"}, headers=admin).json()["id"]
+    b = client.post(f"/api/projects/{pid}/works", json={"name": "B"}, headers=admin).json()["id"]
+    aid = client.post(f"/api/projects/{pid}/artifacts?work_id={a}", headers=admin, json={"kind": "table", "title": "A의 결과", "payload": _table([["a", "남길 값"]])}).json()["id"]
+    rep = client.post(f"/api/projects/{pid}/reports?work_id={b}", headers=admin, json={"title": "비교", "body": f"![결과](artifact:{aid})\n"}).json()
+    assert client.delete(f"/api/works/{a}", headers=admin).status_code == 200
+    assert "남길 값" in _html(client, pid, rep["id"], admin)
+
+
 def test_old_edition_without_saved_values_says_it_shows_current_values(client):
     admin, _ = _auth(client, "admin")
     pid = client.post("/api/projects", json={"name": "옛 판"}, headers=admin).json()["id"]

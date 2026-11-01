@@ -363,9 +363,9 @@ STALE_NOTE = "이 판을 쓴 뒤 바뀐 결과가 있습니다. 이 판은 쓸 �
 
 
 def _from_saved(project: models.Project, aid: int, saved: dict | None) -> models.Artifact | None:
-    """판에 저장해 둔 값만 남은 결과(그 Task를 지웠다). 세션에 넣지 않는다."""
+    """판에 저장해 둔 값만 남은 결과(그 Task를 지웠다). 세션에 넣지 않는다. 사람이 결과를 지웠으면 kept가 없어 파일에서 빠진다."""
     item = (saved or {}).get(str(aid))
-    return models.Artifact(id=aid, project_id=project.id, kind=item.get("kind"), title=item.get("title"), payload=item.get("payload"), created_at=datetime.min) if item else None
+    return models.Artifact(id=aid, project_id=project.id, kind=item.get("kind"), title=item.get("title"), payload=item.get("payload"), created_at=datetime.min) if item and item.get("kept") else None
 
 
 def _as_written(a: models.Artifact, saved: dict | None) -> models.Artifact:

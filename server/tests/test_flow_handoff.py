@@ -377,6 +377,6 @@ def test_member_cannot_send_approval_into_someone_elses_chat(client, me):
     client.put(f"/api/projects/{me['pid']}/members/{other['id']}", json={"role": "member"}, headers=me["h"])
     chat = _chat(client, me)
     flow = _propose(client, me)
-    r = client.put(f"/api/flows/{flow['id']}/status", json={"status": "approved", "version": flow["version"], "session_id": chat}, headers=other_h).json()
-    assert r["status"] == "approved" and not r["start_queued"]
+    r = client.put(f"/api/flows/{flow['id']}/status", json={"status": "approved", "version": flow["version"], "session_id": chat}, headers=other_h)
+    assert r.status_code == 403  # 승인은 Task 주인만 한다
     assert not _msgs(client, me, chat)

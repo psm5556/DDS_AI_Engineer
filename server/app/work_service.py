@@ -586,6 +586,12 @@ def delete_work(db: Session, work: models.Work) -> list[int]:
     """Task와 그 안의 모든 것을 코드로 지운다. 기존 DB의 work_id 열에는 외래 키가 없어(ensure_columns는 열만 더한다) DB에 맡길 수 없다.
     서버 파일(해석 데이터·필드·모델·스크립트 묶음·학습 샘플·첨부)도 함께 지운다. PC 폴더는 건드리지 않는다. 지운 스터디 id를 돌려준다(판단 도우미 기억을 비우려고)."""
     wid = work.id
+    # 다른 Task의 보고서가 인용한 결과는 그 판에 저장된 값으로 남긴다. 사람이 결과 하나를 지운 것과 달리 그 값을 없애려는 뜻이 아니다
+    gone = {str(aid) for aid, in db.query(models.Artifact.id).filter_by(work_id=wid)}
+    for rep in db.query(models.Report).filter(models.Report.project_id == work.project_id, models.Report.work_id != wid):
+        if rep.frozen and gone & rep.frozen.keys():
+            rep.frozen = {k: ({**v, "kept": True} if k in gone else v) for k, v in rep.frozen.items()}
+    db.flush()
     for model in (models.Report, models.Artifact):
         db.query(model).filter_by(work_id=wid).delete(synchronize_session=False)
     study_ids, files = [], []
