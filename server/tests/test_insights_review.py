@@ -530,6 +530,12 @@ def test_next_step_changes_after_deploying(client):
     assert _ready(client, sid, admin)["overview"]["next"]["key"] == "finish"
     assert client.post(f"/api/models/{m['id']}/deploy", headers=admin).status_code == 200
     assert _ready(client, sid, admin)["overview"]["next"]["key"] == "report"
+    # 보고서를 쓰면 같은 일을 또 권하지 않고, 결과가 새로 생기면 다시 권한다
+    assert client.post(f"/api/projects/{pid}/reports", headers=admin, json={"title": "보고서", "body": "## 요약\n끝"}).status_code == 200
+    assert _ready(client, sid, admin)["overview"]["next"] is None
+    time.sleep(0.05)
+    client.post(f"/api/projects/{pid}/artifacts", headers=admin, json={"kind": "table", "title": "새 결과", "payload": {"columns": ["ID"], "rows": [[1]]}})
+    assert _ready(client, sid, admin)["overview"]["next"]["key"] == "report"
 
 
 # ---------- 영향도 문장 ----------

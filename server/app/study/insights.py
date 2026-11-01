@@ -2957,6 +2957,10 @@ def get_insights(db: Session, study: models.Study) -> dict:
     if line and any(x["key"] == "active" and x["facts"].get("al") for x in value.get("sections") or []):
         # 연습 함수 값은 스터디 상태와 따로 늦게 끝난다. 저장된 결과에 넣지 않고 응답할 때 붙인다
         value = {**value, "sections": [{**x, "bench": line} if x["key"] == "active" else x for x in value["sections"]]}
+    nx = (value.get("overview") or {}).get("next")
+    if nx and nx.get("key") == "report" and service.report_is_current(db, study.project_id):
+        # 이미 쓴 보고서를 또 쓰라고 하지 않는다. 보고서는 스터디 상태와 따로 바뀌므로 저장된 결과에 넣지 않고 응답할 때 고른다
+        value = {**value, "overview": {**value["overview"], "next": None}}
     return {k: v for k, v in value.items() if k != "owner"}
 
 

@@ -7,7 +7,6 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, Response
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import market_service, models, report, schemas
@@ -26,8 +25,7 @@ def _caption(title: str) -> str:
 
 def _new_results(db: Session, rep: models.Report) -> int:
     """이 판을 쓴 뒤 새로 생기거나 바뀐 결과 수 — 화면에서 '다시 쓰기'를 권할 때 쓴다."""
-    changed = func.coalesce(models.Artifact.updated_at, models.Artifact.created_at)
-    return db.query(models.Artifact).filter(models.Artifact.project_id == rep.project_id, changed > rep.created_at).count()
+    return service.report_new_results(db, rep)
 
 
 def _issue(db: Session, project: models.Project, rep: models.Report | None, user: models.User | None = None) -> report.Issue:

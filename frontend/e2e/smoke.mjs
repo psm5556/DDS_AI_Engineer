@@ -88,6 +88,28 @@ if (DEMO) {
       if (/\bmock\b/i.test(await page.locator(".chat, .canvas").allInnerTexts().then((x) => x.join(" ")))) throw new Error(`${tab} 탭에 mock이 그대로 보입니다`);
     }
   });
+  await step("단계 머리글이 목록 맨 위에 붙음", async () => {
+    await page.getByRole("tab", { name: "작업 흐름" }).click();
+    await page.locator(".step-list .step-head").first().waitFor({ timeout: 15000 });
+    // 틈이 있으면 그 사이로 스크롤되는 결과가 비친다
+    const gaps = await page.evaluate(() => {
+      const list = document.querySelector(".step-list");
+      const edge = list.getBoundingClientRect().top + list.clientTop;
+      const seen = [];
+      for (let y = 40; y < list.scrollHeight - list.clientHeight; y += 80) {
+        list.scrollTop = y;
+        // 자기 단계가 위로 지나가는 중인 머리글만 본다. 올라오는 중이거나 밀려나는 머리글은 제자리가 다르다
+        for (const sec of list.querySelectorAll(".step-sec")) {
+          const head = sec.querySelector(".step-head")?.getBoundingClientRect();
+          const box = sec.getBoundingClientRect();
+          if (head && box.top + parseFloat(getComputedStyle(sec).paddingTop) < edge - 1 && box.bottom > edge + head.height + 1) seen.push(head.top - edge);
+        }
+      }
+      list.scrollTop = 0;
+      return seen;
+    });
+    if (gaps.some((g) => g > 0.5)) throw new Error(`머리글 위에 틈이 있습니다: ${Math.max(...gaps)}px`);
+  });
   await step("이 흐름을 새 모델로 다시", async () => {
     await page.getByRole("tab", { name: "작업 흐름" }).click();
     const again = page.getByRole("button", { name: "이 흐름을 새 모델로 다시" });

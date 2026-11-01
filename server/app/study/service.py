@@ -231,6 +231,18 @@ def tool_label(study: models.Study) -> str:
     return "" if study.adapter == "data" else "해석 방법 미정"
 
 
+def report_new_results(db: Session, rep: models.Report) -> int:
+    """이 보고서를 쓴 뒤 새로 생기거나 바뀐 결과 수."""
+    changed = func.coalesce(models.Artifact.updated_at, models.Artifact.created_at)
+    return db.query(models.Artifact).filter(models.Artifact.project_id == rep.project_id, changed > rep.created_at).count()
+
+
+def report_is_current(db: Session, project_id: int) -> bool:
+    """가장 최근 보고서가 지금 결과를 모두 담았는지."""
+    rep = db.query(models.Report).filter_by(project_id=project_id).order_by(models.Report.id.desc()).first()
+    return bool(rep) and report_new_results(db, rep) == 0
+
+
 def practice_note(db: Session, project_id: int) -> str | None:
     """프로젝트에 연습용 스터디가 있으면 그 안내. 보고서·AI 자료가 함께 쓴다."""
     has = db.query(models.Study.id).filter(models.Study.project_id == project_id, models.Study.adapter == "mock").first()
