@@ -5,11 +5,11 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
-from .. import schemas
+from .. import models, schemas
 from ..database import get_db
 from ..deps import get_current_user
 from ..study import insights
-from .studies import _model, _share, _share_model, _study
+from .studies import _model, _share, _share_model, _study, _writable_study
 
 router = APIRouter(prefix="/api", tags=["insights"])
 
@@ -38,8 +38,7 @@ def study_pareto(study_id: int, a: str, b: str, a_goal: Literal["min", "max"] = 
 
 
 @router.post("/studies/{study_id}/insights/publish")
-def publish_insights(study_id: int, body: schemas.InsightPublish, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    s = _study(study_id, user, db)
+def publish_insights(body: schemas.InsightPublish, s: models.Study = Depends(_writable_study), db: Session = Depends(get_db)):
     try:
         return {"published": insights.publish(db, s, body.flow_id, body.node_id, body.keys)}
     except insights.NotReady as e:

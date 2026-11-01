@@ -172,13 +172,16 @@ class RemoteRunner:
 
     def __init__(self, conn: AgentConnection):
         self.conn = conn
+        self.carried: dict | None = None
 
     # CLI 시작은 사내 보안 검사로 몇 분이 걸릴 수 있어 서버는 시간 제한을 두지 않는다. 한계는 Agent의 cli_start_timeout_sec 하나다
     def new_session(self, project_id: int, agent: str, project_name: str | None = None, project_uid: str | None = None,
                     turn_id: str | None = None, work: dict | None = None) -> str:
-        return self.conn.request("session.new", {"project_id": project_id, "agent": agent, "project_name": project_name,
-                                                 "project_uid": project_uid, "turn_id": turn_id, **({"work": work} if work else {})},
-                                 timeout=None)["session_id"]
+        res = self.conn.request("session.new", {"project_id": project_id, "agent": agent, "project_name": project_name,
+                                                "project_uid": project_uid, "turn_id": turn_id, **({"work": work} if work else {})},
+                                timeout=None)
+        self.carried = res.get("carried")  # 첫 턴 전에 PC로 복사한 것. 옛 Agent는 보내지 않는다
+        return res["session_id"]
 
     def load_session(self, session_id: str, project_id: int, agent: str, project_name: str | None = None,
                      project_uid: str | None = None, turn_id: str | None = None, work: dict | None = None) -> bool:

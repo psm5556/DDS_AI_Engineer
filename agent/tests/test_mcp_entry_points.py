@@ -607,11 +607,9 @@ def test_e16_member_uses_server_data_while_owner_pc_is_off(env, client, tmp_path
     assert dds_study.get_study(sid)["counts"] == {"complete": 10}
     assert dds_study.list_models()["models"][0]["model_id"] == m1["model_id"]
     assert "stress" in dds_study.predict(m1["model_id"], {"thickness": 2.0, "width": 20.0})["mean"]
-    m2 = dds_study.train_surrogate(sid, force=True, wait_sec=120)
-    assert m2["status"] == "done" and m2["version"] == 2
-    assert dds_study.deploy_model(m2["model_id"])["deployed"]
-    # 표로 만든 스터디에는 원본 결과 파일이 없다. 멤버 PC에서 돌릴 것도 없으니 이유를 안내한다
-    assert "해석 방법" in _raises(dds_study.run_cases, sid)
+    # 남의 Task는 재학습·배포하지 못한다. 할 일을 듣는다
+    for fn, arg in ((dds_study.train_surrogate, sid), (dds_study.deploy_model, m1["model_id"]), (dds_study.run_cases, sid)):
+        assert "내 PC로 복사해서 하기" in _raises(fn, arg)
     # 스크립트 없는 스터디를 멤버 PC에서 돌리면: 스크립트가 없다고 하고 다음 할 일을 말한다
     from cae_adapters.script import ScriptAdapter
 
@@ -908,7 +906,7 @@ def test_narrowed_approval_rule_says_the_same_everywhere(source):
 
 def test_instructions_cover_every_entry_and_rule():
     text = _rule_sources()["INSTRUCTIONS"]
-    assert "## 0-2. 어디서 시작하든" in text and "## 1-2. 신규 모델로 지난번처럼" in text and "## 1-3. Project 멤버가 이어받기" in text
+    assert "## 0-2. 어디서 시작하든" in text and "## 1-2. 신규 모델로 지난번처럼" in text and "## 1-3. 다른 사람의 Task와 옆 Task" in text
     table = text.split("## 0-2. 어디서 시작하든")[1].split("## 1.")[0]
     for first in ("inspect_table", "import_table", "scan_results", "import_cases", "list_studies", "list_models", "export_doe", "set_study_adapter", "list_flows", "upload_field"):
         assert f"`{first}" in table or f".{first}`" in table, first
@@ -917,6 +915,7 @@ def test_instructions_cover_every_entry_and_rule():
     assert "달라진 점" in again and "건드리지 않습니다" in again and "승인" in again and "clone_study" in again and "list_flows" in again
     member = text.split("## 1-3.")[1].split("## 2.")[0]
     assert "restore_recipe" in member and "save_recipe" in member and "만든 스크립트" in member and "case.h5" in member
+    assert "clone_study" in member and "내 PC로 복사해서 하기" in member and "[시작점]" in member and "흐름 번호를 비워" in member
     # R² 처방은 솔버 유무로 갈린다. 표 모델에 능동학습을 권하면 막다른 길이다
     assert "해석 방법이 없는 스터디" in text and "행을 더 달라" in text
     assert "툴이 없어도" in text and "데이터도 모델도 없음" in text and "승인 전에 해도 됩니다" in text
@@ -1167,39 +1166,37 @@ def test_demo_same_flow_again_keeps_old_results(env):
     assert (env.cases(old), dds_study.list_models(study_id=old)) == before
 
 
-def test_demo_takeover_shows_author_and_explains_what_needs_the_owner_pc(env, client, tmp_path, monkeypatch):  # noqa: F811
-    owner = _DemoAll()
+def test_demo_on_someone_elses_task_says_what_to_do_without_raw_errors(env, client, tmp_path, monkeypatch):  # noqa: F811
+    """남의 스터디에 쓰지 않고 할 일을 말한다. 서버 거절 문구나 도구 이름을 사용자에게 보이지 않는다."""
     sid = _script_study(env, "입력있음")
-    assert "3개" in _chat_all(owner, "입력있음 스크립트 묶음 올려 줘 scripts/helper.py")
-    table = dds_study.import_table(str(_write_csv(tmp_path / "t.csv", _rows(8))), name="표 스터디")["study_id"]
-    author = dds_study.save_recipe(sid)["created_by_name"]
-    d = env.project_dir() / "scripts"
+    dds_study.save_recipe(sid)
+    _member(env, client, tmp_path, monkeypatch, name="member3")
+    for ask in ("입력있음 이어받아 2점 더 해석해 줘", "입력있음 이어받아 Output mass 추가해 줘 scripts/run.py", "입력있음 이어받아 다시 학습해 줘"):
+        m = _DemoAll()
+        reply = _chat_all(m, ask)
+        assert "내 PC로 복사해서 하기" in reply and "→" in reply and m.flow_id is None, reply
+        assert "403" not in reply and "서버 오류" not in reply and "clone_study" not in reply, reply
+    assert env.study(sid)["counts"] == {}
+
+
+def test_demo_in_my_copy_shows_author_and_asks_for_missing_input(env, client, tmp_path, monkeypatch):  # noqa: F811
+    """내 Task로 복제한 뒤: 받기만 하고 승인을 기다린다. 승인 카드에 만든 사람, 없는 입력은 부탁."""
+    need = _script_study(env, "입력있음")
+    author = dds_study.save_recipe(need)["created_by_name"]
     plain = dds_study.create_study("입력없음", [{"name": "x", "lower": 0, "upper": 1}], adapter="script", adapter_config={"tool": "python", "script": "scripts/run.py"})["study_id"]
     dds_study.save_recipe(plain)
-    assert d.exists()
-
-    _member(env, client, tmp_path, monkeypatch, name="member3")
-    m = _DemoAll()
-    # 서버 데이터로 학습: PC 해석 없음
-    assert "해석은 돌리지 않았습니다" in _chat_all(m, "표 스터디 이어받아 다시 학습해 줘") and env.c.get(f"/api/studies/{table}/cases", headers=env.h).status_code == 200
-    # 입력 모델이 없으면 돌리지 않는다
+    _member(env, client, tmp_path, monkeypatch, name="member4")
+    copy_need = dds_study.clone_study(need, name="입력있음 복제")["study_id"]
     m2 = _DemoAll()
-    reply = _chat_all(m2, "입력있음 이어받아 2점 더 해석해 줘")
+    reply = _chat_all(m2, "입력있음 복제 이어받아 2점 더 해석해 줘")
     assert "inputs/model.dat" in reply and "첨부" in reply and m2.flow_id is None
-    # 입력이 필요 없으면 받기만 하고 승인을 기다린다. 승인 카드에 만든 사람
+    copy_plain = dds_study.clone_study(plain, name="입력없음 복제")["study_id"]
     m3 = _DemoAll()
-    reply = _chat_all(m3, "입력없음 이어받아 3점 더 해석해 줘")
-    assert f"{author}님이 만든 스크립트" in reply and "돌리지 않았습니다" in reply and env.study(plain)["counts"] == {}
+    reply = _chat_all(m3, "입력없음 복제 이어받아 3점 더 해석해 줘")
+    assert f"{author}님이 만든 스크립트" in reply and "돌리지 않았습니다" in reply and env.study(copy_plain)["counts"] == {}
     flow = env.c.get(f"/api/flows/{m3.flow_id}", headers=env.h).json()
     assert flow["status"] == "review" and f"{author}님이 만든 스크립트" in json.dumps(flow["nodes"], ensure_ascii=False)
-    # 내 PC에서 돈 케이스의 Output은 주인만 추가한다. 멤버 AI는 이유와 할 일을 말한다
-    env.c.post(f"/api/studies/{plain}/doe", json={"n": 2, "seed": 1}, headers=env.h)
-    for c in env.cases(plain):
-        service.on_case_status({"case_id": c["id"], "status": "complete", "results": {"y": 1.0}, "run_dir": "C:/my/run"})
-    m4 = _DemoAll()
-    reply = _chat_all(m4, "입력없음 이어받아 Output mass 추가해 줘 scripts/run.py")
-    assert "님만 추가할 수 있습니다" in reply and "내 PC로 복사해서 하기" in reply and "→" in reply
-    assert not [c for c in env.cases(plain) if "mass" in (c["results"] or {})]
+    assert copy_need != copy_plain
 
 
 @pytest.mark.parametrize("text,entry", [

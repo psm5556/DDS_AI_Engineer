@@ -23,7 +23,7 @@ from .. import models, schemas, work_service
 from ..agent.link import AgentError
 from ..config import settings
 from ..database import get_db
-from ..deps import get_current_user, get_or_404, get_project_for_member, require_ai_can_work, require_jwt, require_member
+from ..deps import effective_admin, get_current_user, get_or_404, get_project_for_member, member_role, require_ai_can_work, require_jwt, require_member
 from ..study import importer, recipe, service, table_job, thumbnail
 from ..ws import manager
 
@@ -34,6 +34,11 @@ def _study(study_id: int, user, db) -> models.Study:
     s = get_or_404(db, models.Study, study_id, "스터디")
     require_member(s.project_id, user, db)
     return s
+
+
+def _writable_study(study_id: int, user=Depends(get_current_user), db: Session = Depends(get_db), header: int | None = Depends(work_service.header_hint)) -> models.Study:
+    """이 스터디의 결과를 바꾸는 입구. 주인만 지난다. 표는 docs/product-spec.md 4-1절이고 server/tests/test_work_permissions.py가 빠진 입구를 잡는다."""
+    return work_service.require_study_write(db, _study(study_id, user, db), user, header)
 
 
 def _status(study: models.Study) -> dict:
@@ -266,16 +271,14 @@ def import_file(file: UploadFile = File(...), outputs_file: UploadFile | None = 
 
 
 @router.post("/studies/{study_id}/cases/import", response_model=schemas.ImportReport)
-def import_cases(study_id: int, body: schemas.CaseImportRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def import_cases(body: schemas.CaseImportRequest, s: models.Study = Depends(_writable_study), user=Depends(get_current_user), db: Session = Depends(get_db)):
     """있는 스터디에 행을 더한다. 같은 행은 중복되지 않고, 대기 중인 DOE 점과 입력이 같으면 그 점을 채운다."""
-    s = _study(study_id, user, db)
     return _import_rejected(importer.import_rows, db, s, body.model_dump(), user.id)
 
 
 @router.post("/studies/{study_id}/cases/import/file", response_model=schemas.ImportReport)
-def import_cases_file(study_id: int, file: UploadFile = File(...), outputs_file: UploadFile | None = File(None), mapping: str = Form("{}"),
-                      user=Depends(get_current_user), db: Session = Depends(get_db)):
-    s = _study(study_id, user, db)
+def import_cases_file(file: UploadFile = File(...), outputs_file: UploadFile | None = File(None), mapping: str = Form("{}"),
+                      s: models.Study = Depends(_writable_study), user=Depends(get_current_user), db: Session = Depends(get_db)):
     m = _mapping(mapping)
     table, join = _load_table(file, outputs_file, m.sheet, m.header_row, m.key, _output_names(s, m))
     return _import_rows_table(s, table, join, m, user, db)
@@ -287,9 +290,8 @@ def _output_names(s: models.Study, m: schemas.TableMapping) -> list[str]:
 
 
 @router.post("/studies/{study_id}/cases/import/text", response_model=schemas.ImportReport)
-def import_cases_text(study_id: int, body: schemas.TablePasteImport, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def import_cases_text(body: schemas.TablePasteImport, s: models.Study = Depends(_writable_study), user=Depends(get_current_user), db: Session = Depends(get_db)):
     """있는 스터디에 붙여 넣은 표의 행을 더한다. AI·PC Agent가 없어도 된다."""
-    s = _study(study_id, user, db)
     return _import_rows_table(s, _read_paste(body.text, body.header_row, _output_names(s, body)), None, body, user, db)
 
 
@@ -311,9 +313,8 @@ def get_study(study_id: int, user=Depends(get_current_user), db: Session = Depen
 
 
 @router.put("/studies/{study_id}/adapter", response_model=schemas.StudyStatus)
-def set_study_adapter(study_id: int, body: schemas.StudyAdapterRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def set_study_adapter(body: schemas.StudyAdapterRequest, s: models.Study = Depends(_writable_study), db: Session = Depends(get_db)):
     """해석 방법을 나중에 연결한다. 대기 중인 DOE 케이스는 이어서 돌릴 수 있다."""
-    s = _study(study_id, user, db)
     try:
         service.set_adapter(db, s, body.adapter, body.adapter_config)
     except ValueError as e:
@@ -328,13 +329,15 @@ def clone_study(study_id: int, body: schemas.StudyCloneRequest, user=Depends(get
                 header: int | None = Depends(work_service.header_hint)):
     """신규 모델로 지난번처럼: 설정을 복사한 새 스터디를 만든다. 케이스·모델을 옮기지 않아 옛 결과는 그대로다."""
     s = _study(study_id, user, db)
-    if body.project_id and body.project_id != s.project_id:
-        require_member(body.project_id, user, db)
+    # 복제본은 지금 Task에 생긴다. 옛 Task나 다른 Project의 스터디를 찾아 복제해도 새 결과가 그쪽에 쌓이지 않게 한다. 원본은 읽기만 하므로 남의 것이어도 된다
+    here = db.get(models.Work, header) if header else None
+    target = body.project_id or (here.project_id if here else s.project_id)
+    if target != s.project_id:
+        require_member(target, user, db)
     fields = body.model_dump(exclude_none=True, exclude={"project_id"})
     try:
-        # 복제본은 지금 Task에 생긴다. 옛 Task의 스터디를 찾아 복제해도 새 결과가 옛 Task에 쌓이지 않게
-        work = work_service.write_work(db, body.project_id or s.project_id, user, None, header)
-        return service.clone_study(db, s, fields, body.project_id, owner_id=user.id, work_id=work.id)
+        work = work_service.require_mine(db, work_service.write_work(db, target, user, None, header), user)
+        return service.clone_study(db, s, fields, target, owner_id=user.id, work_id=work.id)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -354,10 +357,9 @@ def export_doe(study_id: int, status: str | None = None, user=Depends(get_curren
 
 # ---------- 레시피: 스크립트 묶음 ----------
 @router.post("/studies/{study_id}/recipe", response_model=schemas.RecipeResponse)
-def upload_recipe(study_id: int, file: UploadFile = File(...), note: str = Form(""), adapter_config: str | None = Form(None),
-                  user=Depends(get_current_user), db: Session = Depends(get_db)):
+def upload_recipe(file: UploadFile = File(...), note: str = Form(""), adapter_config: str | None = Form(None),
+                  s: models.Study = Depends(_writable_study), user=Depends(get_current_user), db: Session = Depends(get_db)):
     """스크립트 zip을 서버에 둔다. 다른 멤버 PC에서 내려받아 쓴다. 서버는 검사와 보관만 하고 실행하지 않는다."""
-    s = _study(study_id, user, db)
     data = file.file.read(recipe.MAX_BUNDLE + 1)
     config = None
     if adapter_config:
@@ -395,8 +397,7 @@ def download_recipe(study_id: int, user=Depends(get_current_user), db: Session =
 
 
 @router.delete("/studies/{study_id}/recipe")
-def delete_recipe(study_id: int, user=Depends(require_jwt), db: Session = Depends(get_db)):
-    s = _study(study_id, user, db)
+def delete_recipe(s: models.Study = Depends(_writable_study), _user=Depends(require_jwt), db: Session = Depends(get_db)):
     recipe.recipe_path(s).unlink(missing_ok=True)
     s.recipe = None
     db.commit()
@@ -412,8 +413,7 @@ def list_cases(study_id: int, limit: int | None = None, offset: int = 0, user=De
 
 
 @router.post("/studies/{study_id}/doe", response_model=list[schemas.CaseResponse])
-def create_doe(study_id: int, body: schemas.DoeRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    s = _study(study_id, user, db)
+def create_doe(body: schemas.DoeRequest, s: models.Study = Depends(_writable_study), db: Session = Depends(get_db)):
     try:
         return service.create_doe(db, s, body.method, body.n, body.seed, body.flow_id, body.node_id)
     except ValueError as e:
@@ -421,8 +421,8 @@ def create_doe(study_id: int, body: schemas.DoeRequest, user=Depends(get_current
 
 
 @router.post("/studies/{study_id}/run")
-def run_cases(study_id: int, body: schemas.RunRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    require_ai_can_work(_study(study_id, user, db).project_id, user, db)
+def run_cases(study_id: int, body: schemas.RunRequest, s: models.Study = Depends(_writable_study), user=Depends(get_current_user), db: Session = Depends(get_db)):
+    require_ai_can_work(s.project_id, user, db)
     try:
         n, already = service.run_cases_async(study_id, body.case_ids, body.dry_run, user.id, body.flow_id)
     except service.NoRunMethod as e:
@@ -448,7 +448,10 @@ def run_cases(study_id: int, body: schemas.RunRequest, user=Depends(get_current_
 
 @router.post("/studies/{study_id}/stop", response_model=schemas.StopResponse)
 def stop_cases(study_id: int, body: schemas.StopRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    _study(study_id, user, db)
+    s = _study(study_id, user, db)
+    # 내가 돌린 케이스는 끝까지 내가 멈출 수 있다. 주인이 아니게 된 뒤에도 내 PC의 솔버를 세우는 길은 남겨 둔다
+    if not any(c.run_by == user.id and (c.status in service.ACTIVE or c.id in service.extracting(study_id)) for c in s.cases):
+        work_service.require_study_write(db, s, user)
     try:
         return service.stop_cases(study_id, body.case_ids, user.id)
     except PermissionError as e:
@@ -458,9 +461,8 @@ def stop_cases(study_id: int, body: schemas.StopRequest, user=Depends(get_curren
 
 
 @router.delete("/studies/{study_id}/cases/{case_id}")
-def delete_case(study_id: int, case_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_case(case_id: int, s: models.Study = Depends(_writable_study), db: Session = Depends(get_db)):
     """불러온 행을 지운다. 잘못 넣은 값을 빼고 다시 학습할 수 있게 한다."""
-    s = _study(study_id, user, db)
     case = db.get(models.Case, case_id)
     if case is None or case.study_id != s.id:
         raise HTTPException(404, "이 스터디에 없는 케이스입니다 → 케이스 번호를 확인하세요")
@@ -472,11 +474,14 @@ def delete_case(study_id: int, case_id: int, user=Depends(get_current_user), db:
 
 
 @router.post("/studies/{study_id}/outputs")
-def add_outputs(study_id: int, body: schemas.OutputAddRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def add_outputs(study_id: int, body: schemas.OutputAddRequest, user=Depends(get_current_user), db: Session = Depends(get_db), header: int | None = Depends(work_service.header_hint)):
     """Output 추가: 이미 해석한 케이스에서도 추출하고, 이후 케이스는 해석할 때 함께 추출한다."""
     s = _study(study_id, user, db)
     require_ai_can_work(s.project_id, user, db)
     try:
+        # 파일이 그 사람 PC에 있다는 이유가 가장 정확하므로 먼저 말한다. 지나면 Task 입구를 탄다
+        service._check_output_owner(db, s, user.id)
+        work_service.require_study_write(db, s, user, header)
         return service.add_outputs(db, s, [o.model_dump() for o in body.outputs], body.post, body.extract_existing, user.id)
     except PermissionError as e:
         raise HTTPException(403, str(e))
@@ -485,8 +490,7 @@ def add_outputs(study_id: int, body: schemas.OutputAddRequest, user=Depends(get_
 
 
 @router.post("/studies/{study_id}/train", response_model=schemas.ModelResponse)
-def train(study_id: int, body: schemas.TrainRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    s = _study(study_id, user, db)
+def train(body: schemas.TrainRequest, s: models.Study = Depends(_writable_study), user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         return service.train(db, s, body.outputs, body.flow_id, body.node_id, created_by=user.id)
     except ValueError as e:
@@ -499,9 +503,8 @@ def _train_job_view(job: dict, db: Session) -> dict:
 
 
 @router.post("/studies/{study_id}/train/start", response_model=schemas.TrainJobResponse)
-def train_start(study_id: int, body: schemas.TrainStartRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def train_start(body: schemas.TrainStartRequest, s: models.Study = Depends(_writable_study), user=Depends(get_current_user), db: Session = Depends(get_db)):
     """학습을 시작하고 바로 돌아온다. 같은 요청을 다시 보내도 학습 중인 작업이나 이미 만든 모델을 돌려줘 버전이 겹치지 않는다."""
-    s = _study(study_id, user, db)
     try:
         return _train_job_view(service.start_train(db, s, body.outputs, body.flow_id, body.node_id, user.id, body.force), db)
     except ValueError as e:
@@ -518,9 +521,8 @@ def train_status(job_id: str, user=Depends(get_current_user), db: Session = Depe
 
 
 @router.post("/studies/{study_id}/candidates", response_model=schemas.CandidatesResponse)
-def candidates(study_id: int, body: schemas.CandidatesRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def candidates(body: schemas.CandidatesRequest, s: models.Study = Depends(_writable_study), db: Session = Depends(get_db)):
     """모델로만 후보를 찾는다. 케이스를 만들지 않고 해석도 돌리지 않는다. 결과는 확인되지 않은 예측이다."""
-    s = _study(study_id, user, db)
     try:
         return service.model_candidates(db, s, body.mode, body.n, body.model_id, body.objective, body.goal,
                                         [c.model_dump(exclude_none=True) for c in body.constraints] if body.constraints is not None else None)
@@ -529,9 +531,8 @@ def candidates(study_id: int, body: schemas.CandidatesRequest, user=Depends(get_
 
 
 @router.post("/studies/{study_id}/suggest", response_model=list[schemas.CaseResponse] | schemas.CandidatesResponse)
-def suggest(study_id: int, body: schemas.SuggestRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def suggest(body: schemas.SuggestRequest, s: models.Study = Depends(_writable_study), db: Session = Depends(get_db)):
     """다음 케이스를 제안한다. 불러온 데이터 스터디는 돌릴 해석이 없어 케이스 대신 확인되지 않은 후보를 돌려준다."""
-    s = _study(study_id, user, db)
     try:
         if s.adapter == "data":
             return service.model_candidates(db, s, body.mode, body.n, body.model_id)
@@ -545,6 +546,12 @@ def _model(model_id: int, user, db) -> models.SurrogateModel:
     m = get_or_404(db, models.SurrogateModel, model_id, "모델")
     study = db.get(models.Study, m.study_id)
     require_member(study.project_id, user, db)
+    return m
+
+
+def _writable_model(model_id: int, user=Depends(get_current_user), db: Session = Depends(get_db), header: int | None = Depends(work_service.header_hint)) -> models.SurrogateModel:
+    m = _model(model_id, user, db)
+    work_service.require_study_write(db, db.get(models.Study, m.study_id), user, header)
     return m
 
 
@@ -570,9 +577,9 @@ def model_spec(model_id: int, user=Depends(get_current_user), db: Session = Depe
 
 
 @router.post("/models/{model_id}/deploy", response_model=schemas.ModelResponse)
-def deploy(model_id: int, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def deploy(target: models.SurrogateModel = Depends(_writable_model), db: Session = Depends(get_db)):
     """이 버전을 Simulator의 현재 버전으로 둔다. 옛 버전을 고르면 되돌리기다. 공유 링크는 그대로 현재 버전을 따라간다."""
-    m = service.deploy_version(db, _model(model_id, user, db))
+    m = service.deploy_version(db, target)
     study = db.get(models.Study, m.study_id)
     manager.publish({"type": "model_updated", "project_id": study.project_id, "data": {"id": m.id}})
     return m
@@ -620,8 +627,7 @@ def _share_model(sh: models.ShareLink, db: Session) -> models.SurrogateModel:
 
 
 @router.post("/models/{model_id}/shares", response_model=schemas.ShareResponse)
-def create_share(model_id: int, body: schemas.ShareCreate, user=Depends(require_jwt), db: Session = Depends(get_db)):
-    m = _model(model_id, user, db)
+def create_share(body: schemas.ShareCreate, m: models.SurrogateModel = Depends(_writable_model), user=Depends(require_jwt), db: Session = Depends(get_db)):
     if not m.deployed:
         raise HTTPException(400, "배포된 현재 버전의 Simulator만 공유할 수 있습니다")
     sh = models.ShareLink(token=secrets.token_urlsafe(16), model_id=m.id, created_by=user.id, note=body.note,
@@ -645,7 +651,13 @@ def stop_share(token: str, user=Depends(require_jwt), db: Session = Depends(get_
     sh = db.query(models.ShareLink).filter_by(token=token).first()
     if not sh:
         raise HTTPException(404, "없는 링크입니다")
-    _model(sh.model_id, user, db)  # 프로젝트 멤버만 중지
+    m = _model(sh.model_id, user, db)
+    # 공유 중지: 주인, master, 관리자. 잘못 나간 링크는 주인이 자리에 없어도 끊을 수 있어야 한다
+    study = db.get(models.Study, m.study_id)
+    work = db.get(models.Work, study.work_id) if study.work_id else None
+    if work is not None and not work_service.is_mine(work, user.id) and member_role(study.project_id, user, db) != "master" and not effective_admin(user):
+        who = work_service.owner_label(db, work)
+        raise HTTPException(403, f"{who}님의 Simulator입니다 → 공유를 끊으려면 {who}님이나 Project 관리자에게 요청하세요")
     sh.enabled = False
     db.commit()
     return {"ok": True}
@@ -808,6 +820,7 @@ async def upload_field(case_id: int, file: UploadFile = File(...), user=Depends(
     c = get_or_404(db, models.Case, case_id, "케이스")
     study = db.get(models.Study, c.study_id)
     require_member(study.project_id, user, db)
+    work_service.require_case_upload(db, c, study, user)
     name = Path(file.filename or "field.npz").stem
     if not name.replace("_", "").replace("-", "").isalnum():
         raise HTTPException(400, "필드 이름은 영문·숫자·_- 만 쓸 수 있습니다")
@@ -857,6 +870,7 @@ async def upload_archive(case_id: int, file: UploadFile = File(...), user=Depend
     from cae_adapters.h5store import FORMAT, archive_info, summary
 
     c, study = _case_member(case_id, user, db)
+    work_service.require_case_upload(db, c, study, user)
     dest = service.archive_path(study.project_id, study.id, c.id)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".part")
@@ -899,8 +913,7 @@ def archive_file(case_id: int, user=Depends(get_current_user), db: Session = Dep
 
 
 @router.post("/studies/{study_id}/train_field", response_model=schemas.FieldModelResponse)
-def train_field(study_id: int, body: schemas.TrainFieldRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
-    s = _study(study_id, user, db)
+def train_field(body: schemas.TrainFieldRequest, s: models.Study = Depends(_writable_study), db: Session = Depends(get_db)):
     try:
         return service.train_field(db, s, body.field, body.flow_id, body.node_id)
     except ValueError as e:

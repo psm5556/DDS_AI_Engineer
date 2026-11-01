@@ -11,6 +11,8 @@ export interface ReportAsk { at: number; after: number }
 interface Ctx {
   /** 지금 Task. 새 Task 화면에서는 null이고, 탭은 비어 있다 */
   workId: number | null;
+  /** 남의 Task를 보는 중. 실행·재학습·배포 버튼을 보이지 않는다. 서버도 막는다 */
+  readOnly: boolean;
   tab: CanvasTab;
   setTab: (t: CanvasTab) => void;
   flowId: number | null;
@@ -43,7 +45,7 @@ const CanvasCtx = createContext<Ctx | null>(null);
 
 export interface CanvasArrival { tab: CanvasTab; studyId?: number; modelId?: number }
 
-export function CanvasProvider({ children, initial, workId = null }: { children: ReactNode; initial?: CanvasArrival | null; workId?: number | null }) {
+export function CanvasProvider({ children, initial, workId = null, readOnly = false }: { children: ReactNode; initial?: CanvasArrival | null; workId?: number | null; readOnly?: boolean }) {
   const [tab, setTabState] = useState<CanvasTab>(initial?.tab ?? "flow");
   const [flowId, setFlowId] = useState<number | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
@@ -75,9 +77,9 @@ export function CanvasProvider({ children, initial, workId = null }: { children:
   }, [follow]);
 
   const value = useMemo(() => ({
-    workId, tab, setTab, flowId, setFlowId, focus, showArtifact, showFlow, follow, setFollow, autoShow, openRequest, reportAsk, setReportAsk, studyId, setStudyId,
+    workId, readOnly, tab, setTab, flowId, setFlowId, focus, showArtifact, showFlow, follow, setFollow, autoShow, openRequest, reportAsk, setReportAsk, studyId, setStudyId,
     openSimulator, simModel, clearSimModel, tableOpen, setTableOpen,
-  }), [workId, tab, setTab, flowId, focus, showArtifact, showFlow, follow, autoShow, openRequest, reportAsk, studyId, openSimulator, simModel, clearSimModel, tableOpen]);
+  }), [workId, readOnly, tab, setTab, flowId, focus, showArtifact, showFlow, follow, autoShow, openRequest, reportAsk, studyId, openSimulator, simModel, clearSimModel, tableOpen]);
   return <CanvasCtx.Provider value={value}>{children}</CanvasCtx.Provider>;
 }
 

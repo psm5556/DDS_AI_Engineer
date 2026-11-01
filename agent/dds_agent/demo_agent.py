@@ -77,6 +77,15 @@ _OBJECTIVE = re.compile(r"([A-Za-z_]\w*)\s*(?:을|를|이|가)?\s*(최소|최대
 PLANNED_MODES = ("connect", "rerun", "takeover")  # 승인을 받은 뒤 _run_planned로 도는 일
 
 
+_START = re.compile(r"^\[시작점\].*$", re.M)
+
+
+def start_point(text: str) -> str:
+    """서버가 첫 턴에 알린 시작점 한 줄. 실제 AI는 이 글을 읽고, 데모는 스터디 번호만 꺼내 쓴다."""
+    m = _START.search(text)
+    return m.group(0) if m else ""
+
+
 def request_text(text: str) -> str:
     """프롬프트에서 이번 요청만 남긴다. [DDS 컨텍스트]는 세션을 새로 연 첫 턴에만 붙으므로,
     그때만 앞 문단을 뗀다. 무조건 떼면 후속 턴의 첫 문단이 사라진다."""
@@ -187,6 +196,7 @@ class DemoSession:
         self.revising = False  # 반려된 흐름을 고쳐 다시 제안하는 중(같은 시나리오를 유지한다)
         self.points: int | None = None  # 사용자가 고친 DOE 점 수
         self.cancelled = False
+        self.start_point = ""  # 서버가 첫 턴에 알린 시작점(지난 Task처럼 시작 · 내 PC로 복사해서 하기)
 
     async def start_mcp(self):
         for d in self.mcp_defs:
@@ -311,6 +321,7 @@ class DemoAgent:
         '3D'/'형상' 요청(Beam3D 형상·필드 학습) · 'Branin'(시험용 수식)."""
         text, _, notice = text.partition("\n\n[마켓 안내]")  # Agent가 프롬프트 끝에 붙인 안내는 요청이 아니다
         await self._read_market_skills(s, notice)
+        s.start_point = start_point(text) or s.start_point
         body = request_text(text)
         if is_panel_request(body):  # 판단 도우미 버튼의 요청은 어떤 입구보다 먼저 본다. 문구에 '표'·'모델'이 들어 있어도 시나리오로 새지 않는다
             await s.say("데모에서는 해석을 더 돌리지 않습니다. 실제 에이전트라면 지금 요청을 그대로 진행합니다.\n\n"
@@ -626,8 +637,14 @@ class DemoAgent:
 
     # ---------- 신규 모델로 지난번처럼 ----------
     async def _same_flow_again(self, s, body: str):
-        flows = (await s.tool("dds-flow", "list_flows", {"all_works": True}))["flows"]
-        last = next((f for f in flows if f["studies"]), None)
+        # 지난 Task처럼 시작했으면 서버가 알린 시작점을 쓴다. 다른 Project에서 왔으면 이 Project의 흐름에는 없다
+        origin = re.search(r"study_id=(\d+)", getattr(s, "start_point", "") or "")
+        if origin:
+            picked = await s.tool("dds-study", "get_study", {"study_id": int(origin.group(1))})
+            last = {"title": re.search(r"'([^']+)'", s.start_point).group(1), "studies": [{"id": picked["study_id"]}]}
+        else:
+            flows = (await s.tool("dds-flow", "list_flows", {"all_works": True}))["flows"]
+            last = next((f for f in flows if f["studies"]), None)
         if not last:
             await s.say("다시 돌릴 지난 Task Flow가 이 Project에 없습니다 → 다른 Project라면 어느 Project인지 알려 주시거나, 무엇을 돌릴지 말씀해 주세요.")
             return
@@ -676,10 +693,19 @@ class DemoAgent:
         await s.say(f"'{st['name']}' 스크립트 {len(r['files'])}개를 서버에 올렸습니다({r['version']}판). 다른 멤버 PC에서도 받아 쓸 수 있습니다.")
 
     async def _takeover(self, s, body: str):
-        studies = (await s.tool("dds-study", "list_studies", {"all_works": True}))["studies"]
-        st = next((x for x in studies if x["name"] in body), None) or next((x for x in studies if x["has_recipe"]), None) or next(iter(studies), None)
+        # 내 Task의 스터디만 움직인다. 남의 Task에 쓰면 서버가 거절하므로, 거절 문구를 그대로 읽히지 않고 할 일을 말한다
+        works = (await s.tool("dds-flow", "list_works", {}))["works"]
+        current = next((w["work_id"] for w in works if w["current"]), None)
+        allowed = {current} if current else {w["work_id"] for w in works if w["mine"]}  # 옛 Agent는 어느 Task인지 몰라 내 Task 전체를 본다
+        everywhere = (await s.tool("dds-study", "list_studies", {"all_works": True}))["studies"]
+        here = [x for x in everywhere if x.get("work_id") in allowed]
+        st = next((x for x in here if x["name"] in body), None) or next((x for x in here if x["has_recipe"]), None) or next(iter(here), None)
         if not st:
-            await s.say("이어받을 스터디가 이 Project에 없습니다 → Project 멤버로 추가됐는지 확인해 주세요.")
+            other = next((x for x in everywhere if x["name"] in body), None) or next((x for x in everywhere if x["has_recipe"]), None) or next(iter(everywhere), None)
+            if not other:
+                await s.say("가져올 스터디가 이 Project에 없습니다 → Project 멤버로 추가됐는지 확인해 주세요.")
+                return
+            await s.say(f"'{other['name']}'은(는) 지금 Task의 것이 아니라 여기서 바꾸지 않았습니다. 다른 사람의 Task는 보기만 할 수 있습니다 → 그 Task를 열어 입력창에 요청을 적고 '내 PC로 복사해서 하기'를 누르세요. 원래 Task는 그대로입니다.")
             return
         s.study_id = st["study_id"]
         try:
@@ -692,7 +718,7 @@ class DemoAgent:
                 d = await s.tool("dds-study", "deploy_model", {"model_id": m["model_id"]})
                 await s.say(f"'{st['name']}'의 서버 데이터로 다시 학습해 Simulator(모델 #{d['model_id']}, {m['version']}판)를 배포했습니다. 해석은 돌리지 않았습니다.")
         except RuntimeError as e:
-            await s.say(f"이어받지 못했습니다. {tool_error_text(e)}")
+            await s.say(f"하지 못했습니다. {tool_error_text(e)}")
 
     async def _takeover_output(self, s, st: dict, body: str):
         name = re.search(r"(?:Output|output|출력)\s+([A-Za-z_]\w*)", body)

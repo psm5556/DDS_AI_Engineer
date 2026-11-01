@@ -47,7 +47,7 @@ export function useFlowDecision(pid: number, sessionId: number | null, connected
 /** 작업 흐름 탭: 위에는 흐름도, 아래에는 단계 순서대로 그 단계의 결과(표·그래프·이미지)를 모두 펼친다.
  *  흐름도의 단계를 누르면 그 단계 결과로 스크롤한다. 흐름도·결과·대화 카드·보고서가 같은 'N단계' 번호를 쓴다. */
 export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; arts: Artifact[] }) {
-  const { flowId: fid, setFlowId: setFid, focus } = useCanvas();
+  const { flowId: fid, setFlowId: setFid, focus, readOnly } = useCanvas();
   const [sel, setSel] = useState<string | null>(null);
   const [rm, setRm] = useState<Artifact | null>(null);
   const qc = useQueryClient();
@@ -150,7 +150,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
                 <span className="chip">{NODE_TYPE[n.type] ?? n.type}{n.tool ? ` · ${toolName(n.tool)}` : ""}</span>
                 <span className={`chip ${n.status === "complete" ? "ok" : n.status === "failed" ? "err" : n.status === "in_progress" ? "info" : ""}`}>{NODE_STATUS[n.status]}</span>
                 <span className="grow" />
-                {n.status === "failed" && flow.status !== "review" && (
+                {n.status === "failed" && flow.status !== "review" && !readOnly && (
                   <button className="small ghost" onClick={() => sendToAgent(`${i + 1}단계 '${n.label}'이(가) 실패했습니다. 원인을 찾아 고쳐 주세요`)}>원인 찾기</button>
                 )}
               </header>
@@ -193,7 +193,7 @@ export function StudiesView({ pid }: { pid: number }) {
       <div className="row study-bar">
         {studies.length > 1 && <span className="seg">{studies.map((s) => <button key={s.id} className={cur === s.id ? "on" : ""} onClick={() => c.setStudyId(s.id)}>{s.name}</button>)}</span>}
         <span className="grow" />
-        {cur && <button className="small" title="이 스터디에 표의 행이나 출력 열을 더합니다. AI와 PC Agent가 없어도 됩니다" onClick={() => setAdding(true)}><Plus size={13} />행 추가</button>}
+        {cur && !c.readOnly && <button className="small" title="이 스터디에 표의 행이나 출력 열을 더합니다. AI와 PC Agent가 없어도 됩니다" onClick={() => setAdding(true)}><Plus size={13} />행 추가</button>}
         <button className="small" title={TABLE_START_HINT} onClick={() => c.setTableOpen(true)}><Table2 size={13} />표로 바로 Simulator</button>
       </div>
       {cur && <StudyDetail pid={pid} id={cur} />}
@@ -275,13 +275,14 @@ function DatasetsBlock({ s, done }: { s: Study; done: number }) {
     queryKey: ["study", s.id, "datasets"], queryFn: () => get<TrainingDataset[]>(`/api/studies/${s.id}/datasets`),
     refetchInterval: (q) => (q.state.data?.some((d) => d.status === "building") ? 2000 : false),
   });
+  const { readOnly } = useCanvas();
   if (!data || (!data.length && done < 4)) return null;
   return (
     <section className="block">
       <div className="block-head"><h3>학습 데이터</h3><span className="cnt">{data.length}개</span></div>
       {!data.length ? (
         <div className="row"><span className="small muted grow">신경망 형상 학습에 쓸 데이터가 아직 없습니다. 해석은 다시 하지 않습니다.</span>
-          <button className="small" onClick={() => sendToAgent(`스터디 '${s.name}'(#${s.id})의 완료된 케이스로 학습 데이터셋을 만들어 줘`)}>만들기 요청</button></div>
+          {!readOnly && <button className="small" onClick={() => sendToAgent(`스터디 '${s.name}'(#${s.id})의 완료된 케이스로 학습 데이터셋을 만들어 줘`)}>만들기 요청</button>}</div>
       ) : (
         <div className="model-list">{data.slice(0, 3).map((d) => (
           <div key={d.id} className="model-row">
@@ -316,6 +317,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const { data: st } = useQuery({ queryKey: ["study", id], queryFn: () => get<StudyStatus>(`/api/studies/${id}`) });
   const { data: cases } = useQuery({ queryKey: ["study", id, "cases"], queryFn: () => get<Case[]>(`/api/studies/${id}/cases`) });
   const { user } = useAuth();
+  const { readOnly } = useCanvas();
   const qc = useQueryClient();
   const toast = useToast();
   const [askStop, setAskStop] = useState(false);
@@ -431,8 +433,8 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
         <div className="io-col">
           <div className="io-head">
             <span className="io-tag out">출력 · Output</span><span className="cnt">{outs.length}개</span><span className="grow" />
-            <button className="small ghost" title="입력창에 요청을 채웁니다. 이름(예: 바닥 전달력)을 적어 보내면 이미 해석한 케이스에서도 뽑습니다"
-              onClick={() => prefillAgent(`'${s.name}' 스터디에 Output 추가: `)}><Plus size={13} />Output 추가</button>
+            {!readOnly && <button className="small ghost" title="입력창에 요청을 채웁니다. 이름(예: 바닥 전달력)을 적어 보내면 이미 해석한 케이스에서도 뽑습니다"
+              onClick={() => prefillAgent(`'${s.name}' 스터디에 Output 추가: `)}><Plus size={13} />Output 추가</button>}
           </div>
           <ul className="io-list">{outs.map((o) => {
             const n = done.filter((c) => o in (c.results ?? {})).length;

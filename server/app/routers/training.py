@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from cae_adapters.train_h5 import read_info
 
-from .. import models, schemas
+from .. import models, schemas, work_service
 from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, require_ai_can_work, require_member
 from ..study import dataset as ds_service
-from .studies import _case_member, _receive, _study
+from .studies import _case_member, _receive, _study, _writable_study
 
 router = APIRouter(prefix="/api", tags=["training"])
 
@@ -25,6 +25,7 @@ async def upload_train_sample(case_id: int, spec_hash: str = Query(...), file: U
     if not re.fullmatch(r"[0-9a-f]{12}", spec_hash):
         raise HTTPException(400, "조건 해시 형식이 아닙니다")
     c, study = _case_member(case_id, user, db)
+    work_service.require_case_upload(db, c, study, user)
     dest = ds_service.training_dir() / ds_service.sample_rel(study.project_id, study.id, c.id, spec_hash)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".part")
@@ -39,9 +40,8 @@ async def upload_train_sample(case_id: int, spec_hash: str = Query(...), file: U
 
 
 @router.post("/studies/{study_id}/datasets", response_model=schemas.DatasetResponse)
-def create_dataset(study_id: int, body: schemas.DatasetCreate, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def create_dataset(body: schemas.DatasetCreate, s: models.Study = Depends(_writable_study), user=Depends(get_current_user), db: Session = Depends(get_db)):
     """완료된 케이스로 학습 데이터셋을 만든다. 오래 걸릴 수 있어 바로 돌려주고, status가 building → ready | failed로 바뀐다."""
-    s = _study(study_id, user, db)
     require_ai_can_work(s.project_id, user, db)
     try:
         return ds_service.create_dataset(db, s, body.name, body.targets, body.frames, body.step, body.flow_id, body.node_id, user.id)

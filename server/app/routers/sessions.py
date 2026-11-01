@@ -40,6 +40,10 @@ def _session_for_owner(session_id: int, user: models.User, db: Session) -> model
     if chat.user_id != user.id:
         owner = db.get(models.User, chat.user_id)
         raise HTTPException(403, work_service.not_mine_message(owner.display_name if owner else "다른 멤버"))
+    # 내 대화여도 Task가 내 것이 아니면 보내지 않는다. 이전 기록의 명단에서 빠진 멤버가 옛 대화를 쥐고 있는 경우다
+    work = db.get(models.Work, chat.work_id) if chat.work_id else None
+    if work is not None:
+        work_service.require_mine(db, work, user)
     return chat
 
 

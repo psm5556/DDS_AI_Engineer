@@ -11,9 +11,10 @@ import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/Agen
 import { folderName } from "../components/FolderModal";
 import { FLOW_STATUS, PRACTICE_EXAMPLES, when } from "../format";
 import { useToast } from "../toast";
-import type { AgentStatus, Attachment, Project, WorkBrief } from "../types";
+import type { AgentStatus, Attachment, Project, WorkBrief, WorkSource } from "../types";
 import { COPY, taskPath, W } from "../work/copy";
 import { pickWork } from "../work/scope";
+import { SourcePicker } from "../work/SourcePicker";
 
 // 앞의 셋은 CAD·CAE 툴과 모델 파일 없이 끝까지 된다(연습용 계산). 마지막만 내 모델과 툴이 필요하다고 말하고 파일을 먼저 받는다
 const STARTERS: { icon: typeof Rocket; t: string; p: string; askFile?: string }[] = [
@@ -44,6 +45,7 @@ export default function DashboardPage() {
   const [picking, setPicking] = useState(false);
   const [opts, setOpts] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
+  const [source, setSource] = useState<WorkSource | null>(null); // 지난 Task처럼 시작. 고르지 않으면 처음부터
   const openSimulator = (pid: number, studyId: number, modelId: number, workId?: number | null) => nav(taskPath(pid, workId), { state: { canvasTab: "simulator", studyId, modelId } });
   const showOpts = opts || !!folderErr; // 폴더 오류가 나면 펼쳐서 보여 준다
   const folderRef = useRef<HTMLInputElement>(null);
@@ -85,7 +87,7 @@ export default function DashboardPage() {
       return { p, ids, text: o.text };
     },
     // ③ 요청을 들고 첫 Task 화면으로. Task는 거기서 보낼 때 만들어진다
-    onSuccess: ({ p, ids, text }) => nav(`/projects/${p.id}/w/new`, { state: { prompt: text, attachmentIds: ids } }),
+    onSuccess: ({ p, ids, text }) => nav(`/projects/${p.id}/w/new`, { state: { prompt: text, attachmentIds: ids, fromWorkId: source?.work_id } }),
     onError: (e: Error) => {
       if (e instanceof FolderError) { setFolderErr(e.message); setTimeout(() => folderRef.current?.focus(), 0); }
       else toast(e.message ?? "시작하지 못했습니다", true);
@@ -110,6 +112,7 @@ export default function DashboardPage() {
             leftBar={<AgentPicker value={resolveAgent(agent, preferred) ?? ""} onChange={setPreferred} disabled={!connected} />}
             placeholder="예: 내 브래킷 모델의 두께를 바꿔 가며 응력을 보고, 가장 가벼운 설계를 찾아 줘" />
           <p className="small muted np-send">{COPY.homeSend}</p>
+          <SourcePicker pid={null} picked={source} onPick={setSource} />
           <div className={`np-opts ${showOpts ? "open" : ""}`}>
             <button type="button" className="np-opts-toggle" aria-expanded={showOpts} onClick={() => setOpts(!showOpts)}
               title={`${W.project} 이름과 폴더 — 비워 두면 자동으로 정합니다`}>

@@ -7,7 +7,7 @@ import zipfile
 import numpy as np
 import pytest
 
-from server.tests.test_api import _auth, _wait_idle, client  # noqa: F401 — 같은 서버 fixture 재사용, 서버 코드보다 먼저 불러온다
+from server.tests.test_api import _co_workers, _auth, _wait_idle, client  # noqa: F401 — 같은 서버 fixture 재사용, 서버 코드보다 먼저 불러온다
 
 from cae_adapters import result_scan  # noqa: E402
 from cae_adapters.tabular import MAX_CELLS, TableError, analyze, cell_state, fill_guessing, join_tables, read_pasted, read_table  # noqa: E402
@@ -435,6 +435,7 @@ def test_failed_rerun_keeps_previous_results(client):  # noqa: F811
     pid = _project(client, admin)
     client.put(f"/api/projects/{pid}/members/{mu['id']}", json={"role": "member"}, headers=admin)
     sid, ids = _solved(client, admin, pid, adapter="script")
+    _co_workers(sid, mu["id"])  # 이전 기록에서 함께 일한 멤버. 새 Task에서는 주인 말고 돌리는 사람이 없다
     owner, other = _Conn(me["id"]), _Conn(mu["id"])
     registry.conns[me["id"]] = owner
     registry.conns[mu["id"]] = other
@@ -471,7 +472,7 @@ def test_cases_on_a_dead_pc_are_settled_only_by_who_ran_them(client):  # noqa: F
     # 쉬운 말로 이유를 듣는다
     run = client.post(f"/api/studies/{sid}/run", json={}, headers=admin).json()
     assert run["queued"] == 0 and "꺼져" in run["note"] and "→" in run["note"]
-    blocked = client.put(f"/api/studies/{sid}/adapter", json={"adapter": "mock", "adapter_config": {"function": "branin"}}, headers=member)
+    blocked = client.put(f"/api/studies/{sid}/adapter", json={"adapter": "mock", "adapter_config": {"function": "branin"}}, headers=admin)
     assert blocked.status_code == 409 and "중지" in blocked.json()["detail"]
     # 멤버는 멈추지 못한다. 끊김은 PC가 꺼졌다는 뜻이 아니어서 솔버가 돌고 있을 수 있다
     denied = client.post(f"/api/studies/{sid}/stop", json={}, headers=member)
@@ -482,7 +483,7 @@ def test_cases_on_a_dead_pc_are_settled_only_by_who_ran_them(client):  # noqa: F
     assert r["released"] == 3 and r["stopping"] == 0 and "꺼져" in r["note"]
     st = client.get(f"/api/studies/{sid}", headers=member).json()
     assert st["counts"] == {"cancelled": 3} and not st["running"] and not st["stalled"]
-    assert client.put(f"/api/studies/{sid}/adapter", json={"adapter": "mock", "adapter_config": {"function": "branin"}}, headers=member).status_code == 200
+    assert client.put(f"/api/studies/{sid}/adapter", json={"adapter": "mock", "adapter_config": {"function": "branin"}}, headers=admin).status_code == 200
 
 
 def test_reconnecting_agent_settles_cases_it_no_longer_runs(client):  # noqa: F811
@@ -491,6 +492,7 @@ def test_reconnecting_agent_settles_cases_it_no_longer_runs(client):  # noqa: F8
     pid = _project(client, admin)
     client.put(f"/api/projects/{pid}/members/{mu['id']}", json={"role": "member"}, headers=admin)
     sid, ids = _solved(client, admin, pid, n=4, adapter="script")
+    _co_workers(sid, mu["id"])
     conn = _Conn(me["id"])
     registry.conns[me["id"]] = conn
     try:
@@ -533,6 +535,7 @@ def _approved_flow(client, h, pid, status="approved"):  # noqa: F811
 
 
 def test_other_members_script_needs_my_approved_flow(client):  # noqa: F811
+    """남의 Task에서는 돌리지 못하고, 내 Task로 복제한 뒤에도 남이 만든 스크립트는 내가 승인한 흐름으로만 돈다."""
     admin, me = _auth(client, "admin")
     member, mu = _auth(client, "gate_member", admin)
     pid = _project(client, admin)
@@ -543,23 +546,24 @@ def test_other_members_script_needs_my_approved_flow(client):  # noqa: F811
     registry.conns[me["id"]] = _Conn(me["id"])
     try:
         r = client.post(f"/api/studies/{sid}/run", json={}, headers=member)
-        assert r.status_code == 403 and "만든 스크립트" in r.json()["detail"] and "→" in r.json()["detail"]
+        assert r.status_code == 403 and "내 PC로 복사해서 하기" in r.json()["detail"]
         assert {c["status"] for c in client.get(f"/api/studies/{sid}/cases", headers=admin).json()} == {"pending"}
-        # 다른 사람이 승인한 흐름으로는 안 된다
+        # 복제본은 내 Task에 생기고, 스크립트를 만든 사람은 그대로다
+        copy = client.post(f"/api/studies/{sid}/clone", json={"name": "내 복제"}, headers=member).json()["id"]
+        assert client.post(f"/api/studies/{copy}/doe", json={"n": 2, "seed": 3}, headers=member).status_code == 200
+        r = client.post(f"/api/studies/{copy}/run", json={}, headers=member)
+        assert r.status_code == 403 and "만든 스크립트" in r.json()["detail"] and "→" in r.json()["detail"]
+        # 다른 사람 Task의 흐름은 붙이지 못한다. 흐름 번호를 비우라고 하지 않고 복제를 말한다
         other = _approved_flow(client, admin, pid)
-        assert client.post(f"/api/studies/{sid}/run", json={"flow_id": other["id"]}, headers=member).status_code == 403
-        # 만든 사람은 그대로 돌린다. 같은 내용을 다시 올려 만든 사람이 바뀌지 않는다
-        same = client.post(f"/api/studies/{sid}/recipe", headers=member, files={"file": ("r.zip", _bundle())}).json()
+        r = client.post(f"/api/studies/{copy}/run", json={"flow_id": other["id"]}, headers=member)
+        assert r.status_code == 400 and "clone_study" in r.json()["detail"] and "비우" not in r.json()["detail"] and "→" in r.json()["detail"]
+        # 같은 내용을 다시 올려 만든 사람이 바뀌지 않는다
+        same = client.post(f"/api/studies/{copy}/recipe", headers=member, files={"file": ("r.zip", _bundle())}).json()
         assert same["created_by"] == me["id"]
-        assert client.post(f"/api/studies/{sid}/run", json={"flow_id": other["id"]}, headers=member).status_code == 403
-        # 내 Task의 흐름을 남의 Task 스터디에 붙이지 못한다. 복제해 내 Task에서 돌린다(이유와 할 일을 알린다)
+        assert client.post(f"/api/studies/{copy}/run", json={}, headers=member).status_code == 403
+        # 내가 승인한 내 Task의 흐름이면 돈다
         mine = _approved_flow(client, member, pid)
-        r = client.post(f"/api/studies/{sid}/run", json={"flow_id": mine["id"]}, headers=member)
-        assert r.status_code == 400 and "다른 Task" in r.json()["detail"] and "→" in r.json()["detail"]
-        work_id = client.get(f"/api/studies/{sid}", headers=admin).json()["study"]["work_id"]
-        same_work = client.post(f"/api/projects/{pid}/flows?work_id={work_id}", json={"title": "멤버 흐름", "goal": "", "nodes": [{"id": "n", "label": "n", "type": "doe"}], "edges": []}, headers=member).json()
-        same_work = client.put(f"/api/flows/{same_work['id']}/status", json={"status": "approved", "version": same_work["version"]}, headers=member).json()
-        assert client.post(f"/api/studies/{sid}/run", json={"flow_id": same_work["id"]}, headers=member).json()["queued"] == 3
+        assert client.post(f"/api/studies/{copy}/run", json={"flow_id": mine["id"]}, headers=member).json()["queued"] == 2
     finally:
         registry.conns.pop(mu["id"], None)
         registry.conns.pop(me["id"], None)

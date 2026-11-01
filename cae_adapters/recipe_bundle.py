@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -64,3 +65,35 @@ def build_bundle(root: Path, wanted: list[str]) -> tuple[bytes, dict[str, str]]:
                     zf.writestr(arc, body)
                     names[arc] = hashlib.sha256(body).hexdigest()
     return buf.getvalue(), names
+
+
+def restore_zip(blob: Path, root: Path, expected: dict[str, dict], overwrite: bool = False) -> tuple[list[str], list[str], list[str]]:
+    """묶음을 폴더로 푼다. 다른 사람이 만든 파일을 이 PC에 쓰는 일이라 먼저 전부 검사한 뒤에 쓴다(중간에 멈춰 일부만 받은 상태를 남기지 않는다).
+    expected: 서버 기록 {경로: {sha256}}. 돌려주는 값: (받음, 같음, 내용이 달라 두었음)."""
+    members: list[tuple[str, Path, bytes]] = []
+    with zipfile.ZipFile(blob) as zf:
+        for item in zf.infolist():
+            if item.is_dir() or item.filename == "recipe.json":
+                continue
+            if item.filename not in expected:
+                raise ValueError(f"서버 기록에 없는 파일이 묶음에 있습니다: {item.filename[:80]} → 만든 멤버에게 다시 올려 달라고 하세요")
+            target = inside(root, member_path(item.filename))
+            body = zf.read(item)
+            if hashlib.sha256(body).hexdigest() != expected[item.filename]["sha256"]:
+                raise ValueError(f"파일 내용이 서버 기록과 다릅니다: {item.filename[:80]} → 만든 멤버에게 다시 올려 달라고 하세요")
+            members.append((item.filename, target, body))
+    restored, unchanged, conflicts = [], [], []
+    for name, target, body in members:
+        if target.exists():
+            if target.is_file() and target.read_bytes() == body:
+                unchanged.append(name)
+                continue
+            if not overwrite:
+                conflicts.append(name)
+                continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        part = target.with_name(f"{target.name}.{uuid.uuid4().hex[:8]}.part")
+        part.write_bytes(body)
+        part.replace(target)
+        restored.append(name)
+    return restored, unchanged, conflicts

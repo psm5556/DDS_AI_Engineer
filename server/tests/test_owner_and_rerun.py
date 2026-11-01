@@ -1,5 +1,5 @@
 """남의 PC에서 스크립트를 돌리지 않는다(상황 지도 16행) · 도는 케이스를 다시 시작하지 않는다(86행) · 3D 모델 캐시(19행 일부)."""
-from server.tests.test_api import _auth, client  # noqa: F401, I001 — test_api가 임시 데이터 폴더를 정한 뒤에 서버 코드를 불러와야 한다
+from server.tests.test_api import _auth, _co_workers, client  # noqa: F401, I001 — test_api가 임시 데이터 폴더를 정한 뒤에 서버 코드를 불러와야 한다
 
 import os
 import time
@@ -108,10 +108,11 @@ def test_table_study_owner_only_with_plain_wording(client):  # noqa: F811
 
 
 def test_owner_extracts_only_on_own_pc_never_on_a_members(client, pcs):  # noqa: F811
-    """멤버가 내 스터디에서 돌린 케이스의 파일은 멤버 PC에 있다. 내 스크립트를 그 PC에서 돌리지 않고 이유를 말한다."""
+    """이전 기록에서 함께 일한 멤버가 돌린 케이스의 파일은 그 멤버 PC에 있다. 내 스크립트를 그 PC에서 돌리지 않고 이유를 말한다."""
     admin, me, member, member_user, pid = _team(client, "owner_other_pc")
     alice, bob = pcs(me["id"]), pcs(member_user["id"])
     sid = _script_study(client, admin, pid, n=2)
+    _co_workers(sid, member_user["id"])
     mine = _finished(client, admin, sid, alice)
     assert client.post(f"/api/studies/{sid}/doe", headers=admin, json={"n": 1, "method": "lhs", "seed": 2}).status_code == 200
     theirs = _finished(client, member, sid, bob)
@@ -229,9 +230,12 @@ def test_mixed_rerun_starts_only_the_finished_ones(client, pcs):  # noqa: F811
 
 
 def test_someone_elses_running_case_is_still_refused(client, pcs):  # noqa: F811
-    admin, me, member, _, pid = _team(client, "rerun_other")
+    admin, me, member, mu, pid = _team(client, "rerun_other")
     conn = pcs(me["id"])
     sid, ids = _queued(client, admin, pid, conn, n=1)
+    denied = client.post(f"/api/studies/{sid}/run", headers=member, json={"case_ids": ids})
+    assert denied.status_code == 403 and "내 PC로 복사해서 하기" in denied.json()["detail"], "남의 Task는 입구에서 막는다"
+    _co_workers(sid, mu["id"])  # 이전 기록에서 함께 일한 멤버도 돌고 있는 남의 케이스는 넘겨받지 못한다
     r = client.post(f"/api/studies/{sid}/run", headers=member, json={"case_ids": ids})
     assert r.status_code == 403 and "실행한 사람만" in r.json()["detail"]
 

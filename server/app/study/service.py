@@ -54,9 +54,10 @@ def check_flow(db: Session, project_id: int, flow_id: int | None, work_id: int |
         return
     flow = db.get(models.Flow, flow_id)
     if flow is None or flow.project_id != project_id:
-        raise ValueError(f"Task Flow {flow_id}번이 이 Project에 없습니다 → 흐름 번호를 비우거나 지금 흐름의 번호를 주세요")
+        raise ValueError(f"Task Flow {flow_id}번이 이 Project에 없습니다 → list_flows로 지금 Task의 흐름 번호를 찾아 주세요")
     if work_id and flow.work_id and flow.work_id != work_id:
-        raise ValueError(f"Task Flow {flow_id}번은 다른 Task의 것입니다 → 흐름 번호를 비우거나 이 Task의 흐름 번호를 주세요")
+        # 흐름 번호를 비우라고 하면 승인 없이 돌리는 길을 알려 주는 셈이다. 다른 Task의 스터디면 지금 Task로 복제하는 것이 할 일이다
+        raise ValueError(f"Task Flow {flow_id}번과 스터디가 서로 다른 Task에 있습니다 → clone_study로 스터디를 지금 Task에 복제한 뒤, 복제본과 지금 Task의 흐름 번호로 부르세요. 옛 결과는 그대로 남습니다")
 
 
 def check_config_scripts(config: dict | None):
@@ -765,7 +766,8 @@ def _steps_for(study: models.Study, names: list[str]) -> list[dict]:
 
 
 def study_owner(study: models.Study) -> int | None:
-    """스터디의 주인. 작업 구조가 들어오면 작업 주인으로 바뀐다. 주인 칸이 생기기 전 스터디는 처음 돌린 사람이 주인이다."""
+    """Output을 뽑을 해석 파일이 있는 사람. Task 주인 검사와 따로 있는 까닭: 이전 기록은 여러 멤버가 함께 쓰지만 파일은 돌린 사람 PC에 있다.
+    주인 칸이 생기기 전 스터디는 처음 돌린 사람이다."""
     if study.created_by is not None:
         return study.created_by
     return next((c.run_by for c in study.cases if c.run_by is not None), None)
@@ -811,6 +813,7 @@ def add_outputs(db: Session, study: models.Study, outputs: list[dict], post, ext
     publish_cases_table(db, study)
     manager.publish({"type": "study_updated", "project_id": study.project_id, "data": {"id": study.id}})
     no_source = sum(c.status == "complete" and c.source == "import" and not c.run_dir for c in study.cases)
+    copied = sum(c.status == "complete" and bool(c.from_case_id) and not c.run_dir and c.source != "import" for c in study.cases)
     notes = []
     if not can and no_source:
         notes.append("이 데이터는 표에서 왔습니다. 그 출력 열을 더한 표를 데이터 탭의 '행 추가'로 붙여 넣으면 값이 합쳐집니다.")
@@ -818,6 +821,8 @@ def add_outputs(db: Session, study: models.Study, outputs: list[dict], post, ext
         notes.append("추출 단계(post)가 없어 이미 해석한 케이스에서는 뽑지 않았습니다. 케이스 스크립트가 이 키를 results.json에 쓰면 이후 케이스부터 보입니다.")
     elif no_source:
         notes.append(f"표에서 온 {no_source}건은 원본 해석 파일이 없어 뽑지 못합니다 → 그 출력 열을 더한 표를 데이터 탭의 '행 추가'로 붙여 넣으세요.")
+    if copied:
+        notes.append(f"복사해 온 {copied}건은 숫자만 있고 해석 파일이 없어 뽑지 못합니다 → 그 점을 다시 돌리면 함께 뽑습니다.")
     if skipped:
         notes.append(f"{skipped}건은 해석 파일이 내 PC에 있는데 PC Agent가 꺼져 있어 뽑지 못했습니다 → 그 PC를 켠 뒤 다시 요청하세요. 학습·Simulator는 PC 없이 쓸 수 있습니다.")
     if other_pc:
@@ -840,7 +845,7 @@ def extract_outputs_async(study_id: int, names: list[str], user_id: int, case_id
         for c in study.cases:
             if c.status != "complete" or (case_ids and c.id not in case_ids) or c.id in _extracting.get(study_id, set()):
                 continue
-            if c.source == "import" and not c.run_dir:  # 표에서 온 행: 뽑을 원본 해석 파일이 없다
+            if (c.source == "import" or c.from_case_id) and not c.run_dir:  # 표에서 온 행, 다른 Task에서 복사한 숫자: 뽑을 원본 해석 파일이 없다
                 continue
             if c.run_by not in (None, user_id):
                 other_pc.append(c.run_by)

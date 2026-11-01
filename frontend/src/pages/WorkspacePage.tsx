@@ -7,7 +7,7 @@ import { CanvasProvider, useCanvas, type CanvasArrival, type CanvasTab } from ".
 import { CanvasPanel } from "../canvas/CanvasPanel";
 import { TableImportHost } from "../canvas/TableImport";
 import { MembersPanel } from "../canvas/views";
-import { ChatView } from "../chat/ChatView";
+import { ChatView, type InitialPrompt } from "../chat/ChatView";
 import { Skeleton } from "../components/Skeleton";
 import { Modal } from "../components/Modal";
 import { ProjectMenu } from "../components/ProjectMenu";
@@ -41,9 +41,9 @@ export default function WorkspacePage() {
   const oldNew = !widS && !sidS && loc.pathname.endsWith("/new");
   const wid = widS && !isNew ? Number(widS) : null;
   // 첫 화면에서 넘어온 요청(과 첨부)
-  const [initial, setInitial] = useState<{ text: string; attachmentIds: number[] } | null>(() => {
-    const st = loc.state as { prompt?: string; attachmentIds?: number[] } | null;
-    return st?.prompt || st?.attachmentIds?.length ? { text: st.prompt ?? "", attachmentIds: st.attachmentIds ?? [] } : null;
+  const [initial, setInitial] = useState<InitialPrompt | null>(() => {
+    const st = loc.state as { prompt?: string; attachmentIds?: number[]; fromWorkId?: number } | null;
+    return st?.prompt || st?.attachmentIds?.length || st?.fromWorkId ? { text: st.prompt ?? "", attachmentIds: st.attachmentIds ?? [], fromWorkId: st.fromWorkId } : null;
   });
   // '표로 바로 Simulator'나 넓은 Simulator 화면에서 넘어오면 그 Simulator 탭부터 연다.
   // 주소 이력의 state는 새로고침에도 남으므로 읽자마자 지운다. 평범한 주소로 다시 와도 탭을 강제하지 않게
@@ -92,7 +92,7 @@ export default function WorkspacePage() {
   const others = !!work && !work.mine;
 
   return (
-    <CanvasProvider initial={arrival} workId={wid}>
+    <CanvasProvider initial={arrival} workId={wid} readOnly={others}>
       <ApplyArrival arrival={arrival} />
       <TableImportHost pid={pid} wid={wid} mine={!!work?.mine} />
       <div className={`workspace ${canvasOn ? "" : "canvas-collapsed"}`} style={{ "--canvas-w": `${canvasLayout.width}px` } as React.CSSProperties}>

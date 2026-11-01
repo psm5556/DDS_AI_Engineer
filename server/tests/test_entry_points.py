@@ -1201,11 +1201,14 @@ def test_e16_member_continues_without_my_pc(client):  # noqa: F811
     rep = _import(client, admin, pid, rows=rows, kind="folders", source="D:/내결과").json()
     sid = rep["study_id"]
     assert registry.get(me["id"]) is None and registry.get(member_user["id"]) is None
-    # 멤버: 결과 조회·학습·배포·예측 모두 PC 없이 된다
+    # 멤버: 남의 Task는 보기만 한다. 조회·내려받기·예측은 PC 없이 되고, 재학습·배포는 막는다
     assert len(client.get(f"/api/studies/{sid}/cases", headers=member).json()) == 10
-    m = client.post(f"/api/studies/{sid}/train", json={}, headers=member).json()
-    assert m["n_train"] == 10 and m["created_by"] == member_user["id"]
-    assert client.post(f"/api/models/{m['id']}/deploy", headers=member).json()["deployed"]
+    denied = client.post(f"/api/studies/{sid}/train", json={}, headers=member)
+    assert denied.status_code == 403 and "내 PC로 복사해서 하기" in denied.json()["detail"]
+    m = client.post(f"/api/studies/{sid}/train", json={}, headers=admin).json()
+    assert m["n_train"] == 10 and m["created_by"] == me["id"]
+    assert client.post(f"/api/models/{m['id']}/deploy", headers=member).status_code == 403
+    assert client.post(f"/api/models/{m['id']}/deploy", headers=admin).json()["deployed"]
     assert client.post(f"/api/models/{m['id']}/predict", json={"params": {"thickness": 2, "width": 20}}, headers=member).status_code == 200
     # Output 추가는 주인만: 내 PC가 꺼져 있든 켜져 있든 멤버의 요청으로 내 PC에서 스크립트를 돌리지 않는다
     r = client.post(f"/api/studies/{sid}/outputs", headers=member, json={"outputs": [{"name": "mass"}], "post": {"tool": "python", "script": "scripts/ex.py"}})
@@ -1252,10 +1255,11 @@ def test_e16_member_continues_without_my_pc(client):  # noqa: F811
     with zipfile.ZipFile(io.BytesIO(r.content)) as z:
         assert z.read("scripts/run.py") == b"print(1)\n"
         assert json.loads(z.read("recipe.json"))["created_by"] == "admin"
-    # 다시 올리면 판이 오르고 지울 수 있다
-    assert client.post(f"/api/studies/{sid3}/recipe", headers=member, files={"file": ("r.zip", _zip({"scripts/run.py": b"print(2)\n"}))}).json()["version"] == 2
-    assert client.get(f"/api/studies/{sid3}/recipe", headers=member).json()["created_by_name"] == "e16_member"
-    assert client.delete(f"/api/studies/{sid3}/recipe", headers=member).status_code == 200
+    # 멤버는 고치지 못한다. 주인이 다시 올리면 판이 오르고 지울 수 있다
+    assert client.post(f"/api/studies/{sid3}/recipe", headers=member, files={"file": ("r.zip", _zip({"scripts/run.py": b"print(2)\n"}))}).status_code == 403
+    assert client.delete(f"/api/studies/{sid3}/recipe", headers=member).status_code == 403
+    assert client.post(f"/api/studies/{sid3}/recipe", headers=admin, files={"file": ("r.zip", _zip({"scripts/run.py": b"print(2)\n"}))}).json()["version"] == 2
+    assert client.delete(f"/api/studies/{sid3}/recipe", headers=admin).status_code == 200
     assert client.get(f"/api/studies/{sid3}/recipe", headers=member).json()["has"] is False
     other, _ = _auth(client, "e16_outsider", admin)
     assert client.get(f"/api/studies/{sid3}/recipe", headers=other).status_code == 403

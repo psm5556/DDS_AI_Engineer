@@ -80,7 +80,7 @@ function StudySimulator({ pid, study, versions }: { pid: number; study: Study; v
       <div className="row"><span className="small muted grow">{train.isPending
         ? `${training?.rows ?? ""}${training ? "행으로 " : ""}학습 중입니다. 멈춘 것이 아닙니다. 행이 많으면 몇 분 걸립니다.`
         : "아직 예측 모델이 없습니다. 완료된 케이스가 3건 이상이면 학습할 수 있습니다."}</span>
-        <button className="small" disabled={train.isPending} onClick={() => train.mutate()}>{train.isPending && <Loader2 size={13} className="spin" />}예측 모델 학습</button></div>
+        {!c.readOnly && <button className="small" disabled={train.isPending} onClick={() => train.mutate()}>{train.isPending && <Loader2 size={13} className="spin" />}예측 모델 학습</button>}</div>
     );
   }
   const preview = !live || shown.id !== live.id;
@@ -93,7 +93,7 @@ function StudySimulator({ pid, study, versions }: { pid: number; study: Study; v
           <span className="small muted">버전 {versions.length}개</span>
         </button>
         <span className="grow" />
-        {live && <button className="small" onClick={() => setSharing(true)} title="이 Simulator를 링크로 공유합니다. 링크는 항상 현재 버전을 보여 줍니다"><Share2 size={13} />공유</button>}
+        {live && !c.readOnly && <button className="small" onClick={() => setSharing(true)} title="이 Simulator를 링크로 공유합니다. 링크는 항상 현재 버전을 보여 줍니다"><Share2 size={13} />공유</button>}
         <Link className="btn small" to={`/simulator/${shown.id}`} title="패널 없이 넓은 화면으로 엽니다"><Maximize2 size={13} />넓게 보기</Link>
       </div>
 
@@ -114,7 +114,7 @@ function StudySimulator({ pid, study, versions }: { pid: number; study: Study; v
       {preview && (
         <div className="notice sim-preview">
           <span className="grow">{live ? `미리 보는 중: v${shown.version}. 공유 링크는 현재 버전(v${live.version})을 보여 줍니다.` : `배포 전: v${shown.version}. ${W.project} 멤버만 볼 수 있습니다.`}</span>
-          <button className="small primary" disabled={deploy.isPending} onClick={() => deploy.mutate(shown)}>{!live ? "배포" : shown.id < live.id ? "이 버전으로 되돌리기" : "현재 버전으로"}</button>
+          {!c.readOnly && <button className="small primary" disabled={deploy.isPending} onClick={() => deploy.mutate(shown)}>{!live ? "배포" : shown.id < live.id ? "이 버전으로 되돌리기" : "현재 버전으로"}</button>}
         </div>
       )}
 

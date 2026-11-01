@@ -141,7 +141,7 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
     setReportAsk({ at: Date.now(), after: latestId });
     sendToAgent(latestId ? "최신 결과로 보고서를 다시 작성해 줘" : "지금까지의 작업과 결과로 보고서를 작성해 줘");
   };
-  const writeBtn = (big?: boolean) => (
+  const writeBtn = (big?: boolean) => c.readOnly ? null : (
     <button className={`${big ? "" : "small "}primary`} onClick={write} disabled={writing || !arts.length}
       title={!arts.length ? "결과가 생기면 쓸 수 있습니다" : "AI가 ${W.flow}·결과·스터디를 읽고 보고서를 새로 씁니다"}>
       {writing ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Sparkles size={13} />}

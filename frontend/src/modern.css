@@ -1442,3 +1442,19 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 /* 다른 Task의 소식: 탭을 빼앗지 않는 알림 */
 .work-notices { position: fixed; right: var(--sp-4); bottom: var(--sp-4); z-index: 70; display: flex; flex-direction: column; gap: var(--sp-2); }
 .work-notice { display: flex; align-items: center; gap: var(--sp-2); min-width: 280px; max-width: 420px; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-m); background: var(--paper); box-shadow: var(--shadow-pop); font-size: var(--fs-13); }
+/* 지난 Task처럼 시작 · 경로 카드: 입력창 바로 위에 한 덩어리로 놓는다 */
+.src-pick, .src-card, .route-card { margin-bottom: var(--sp-2); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line-2); border-radius: var(--r-m); background: var(--panel); text-align: left; }
+.src-head { display: flex; align-items: baseline; gap: var(--sp-2); }
+.src-head b { font-size: var(--fs-13); font-weight: 600; }
+.src-rows { display: flex; flex-direction: column; margin-top: var(--sp-1); }
+.src-row { display: flex; align-items: baseline; gap: var(--sp-2); min-height: 28px; min-width: 0; padding: 2px var(--sp-1); border: none; border-radius: var(--r-s); background: none; text-align: left; }
+.src-row:hover:not(:disabled) { background: var(--hover); }
+.src-row .t { min-width: 0; overflow: hidden; font-size: var(--fs-13); text-overflow: ellipsis; white-space: nowrap; }
+.src-row .small { flex: none; }
+.src-find { width: 100%; margin-top: var(--sp-1); }
+.src-card p { margin: var(--sp-1) 0 0; }
+.src-line { margin: 0 0 var(--sp-2); }
+.route-text { margin: 0; font-size: var(--fs-13); line-height: 1.55; }
+.route-lines p { margin: var(--sp-1) 0 0; }
+.route-actions { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-2); }
+.np-card .src-pick, .np-card .src-card { margin: var(--sp-2) 0 0; }

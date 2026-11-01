@@ -66,7 +66,7 @@ def get_flow(flow_id: int, user=Depends(get_current_user), db: Session = Depends
 
 
 def apply_flow_status(flow_id: int, body: schemas.FlowStatusUpdate, user: models.User, db: Session) -> models.Flow:
-    f = _flow_for_member(flow_id, user, db)
+    f = work_service.require_flow_write(db, _flow_for_member(flow_id, user, db), user)
     if f.version != body.version:
         raise HTTPException(409, "다른 사용자가 수정했습니다. 새로고침 후 다시 시도하세요.")
     if body.status == "review" and f.status == "approved" and not f.start_queued:  # 이미 에이전트에게 전한 승인은 되돌릴 수 없다. 멈추려면 중지다
@@ -110,7 +110,7 @@ def _decision_chat(db: Session, f: models.Flow, user, session_id: int | None) ->
 def update_node(flow_id: int, node_id: str, body: schemas.FlowNodeUpdate, user=Depends(get_current_user),
                 db: Session = Depends(get_db)):
     """에이전트가 진행 상황을 갱신하는 경로. 버전 충돌 없이 노드 단위로 덮어쓴다."""
-    f = _flow_for_member(flow_id, user, db)
+    f = work_service.require_flow_write(db, _flow_for_member(flow_id, user, db), user)
     nodes = [dict(n) for n in f.nodes]
     node = next((n for n in nodes if n["id"] == node_id), None)
     if not node:
@@ -153,7 +153,8 @@ def create_artifact(body: schemas.ArtifactCreate, scope: work_service.WorkScope 
         raise HTTPException(400, str(e))
     # 흐름을 밝혔으면 그 흐름의 Task가 가장 정확하다. 헤더가 없는 옛 Agent도 여기서 맞는다
     flow = db.get(models.Flow, body.flow_id) if body.flow_id else None
-    work_id = (flow.work_id if flow else None) or scope.write().id
+    flow_work = db.get(models.Work, flow.work_id) if flow and flow.work_id else None
+    work_id = work_service.require_mine(db, flow_work, scope.user).id if flow_work else scope.write().id
     return publish_artifact(db, project.id, body.kind, body.title, body.payload, body.flow_id, body.node_id, work_id=work_id)
 
 
@@ -161,6 +162,9 @@ def create_artifact(body: schemas.ArtifactCreate, scope: work_service.WorkScope 
 def delete_artifact(artifact_id: int, user=Depends(require_jwt), db: Session = Depends(get_db)):
     a = get_or_404(db, models.Artifact, artifact_id, "아티팩트")
     require_member(a.project_id, user, db)
+    work = db.get(models.Work, a.work_id) if a.work_id else None
+    if work is not None:
+        work_service.require_mine(db, work, user)
     db.delete(a)
     db.commit()
     manager.publish({"type": "artifact_updated", "project_id": a.project_id, "work_id": a.work_id, "data": {"id": a.id, "deleted": True}})

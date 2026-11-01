@@ -84,7 +84,9 @@ def create_report(body: schemas.ReportCreate, scope: work_service.WorkScope = De
     arts = db.query(models.Artifact).filter(models.Artifact.id.in_(ids)).all() if ids else []
     frozen = {str(a.id): {"kind": a.kind, "title": a.title, "payload": a.payload} for a in arts}
     flow = db.get(models.Flow, body.flow_id) if body.flow_id else None
-    rep = models.Report(project_id=project.id, work_id=(flow.work_id if flow else None) or scope.write().id, flow_id=body.flow_id, title=body.title, body=body.body, frozen=frozen, created_by=user.id)
+    flow_work = db.get(models.Work, flow.work_id) if flow and flow.work_id else None
+    work_id = work_service.require_mine(db, flow_work, user).id if flow_work else scope.write().id
+    rep = models.Report(project_id=project.id, work_id=work_id, flow_id=body.flow_id, title=body.title, body=body.body, frozen=frozen, created_by=user.id)
     db.add(rep)
     db.commit()
     db.refresh(rep)

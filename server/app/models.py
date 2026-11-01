@@ -91,7 +91,14 @@ class Work(TimestampMixin, Base):
 
     def folder_view(self) -> dict:
         """PC Agent에 알릴 것. 폴더 경로는 서버에 없다: 번호와 uid로 그 PC가 찾는다."""
-        return {"id": self.id, "uid": self.uid, "seq": self.seq, "name": self.name, "legacy": bool(self.legacy), "carry": self.carry}
+        return {"id": self.id, "uid": self.uid, "seq": self.seq, "name": self.name, "legacy": bool(self.legacy), "carry": self._carry_view()}
+
+    def _carry_view(self) -> dict | None:
+        """PC Agent가 첫 세션 전에 받을 것. 받았으면 다시 보내지 않고, AI에게 넘길 글은 PC에 보낼 필요가 없다."""
+        c = self.carry or {}
+        if not c or c.get("done"):
+            return None
+        return {"kind": c.get("kind"), "recipes": c.get("recipes") or [], "attachments": c.get("attachments") or [], "local_source": c.get("local_source")}
 
 
 class ChatSession(TimestampMixin, Base):

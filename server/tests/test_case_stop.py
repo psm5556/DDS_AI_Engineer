@@ -1,5 +1,5 @@
 """케이스 중지: 해석 창이 숨어 있으니 웹앱에서 대기·실행 중인 케이스를 멈출 수 있어야 한다."""
-from server.tests.test_api import _auth, client  # noqa: F401, I001 — test_api가 임시 데이터 폴더를 정한 뒤에 서버 코드를 불러와야 한다
+from server.tests.test_api import _co_workers, _auth, client  # noqa: F401, I001 — test_api가 임시 데이터 폴더를 정한 뒤에 서버 코드를 불러와야 한다
 
 import pytest  # noqa: E402
 
@@ -79,6 +79,7 @@ def test_stop_leaves_other_members_run_alone(client, running):  # noqa: F811
     pid = client.get(f"/api/studies/{sid}", headers=admin).json()["study"]["project_id"]
     assert client.put(f"/api/projects/{pid}/members/{kim_user['id']}", headers=admin, json={"role": "member"}).status_code == 200
     registry.conns[kim_user["id"]] = _Conn(kim_user["id"])
+    _co_workers(sid, kim_user["id"])  # 이전 기록에서 함께 일한 멤버도 남이 돌린 케이스는 멈추지 못한다
     try:
         r = client.post(f"/api/studies/{sid}/stop", headers=kim, json={})
         assert r.status_code == 403 and "다른 멤버" in r.json()["detail"]
@@ -89,11 +90,12 @@ def test_stop_leaves_other_members_run_alone(client, running):  # noqa: F811
 
 @pytest.fixture
 def member(client, running):  # noqa: F811
-    """같은 프로젝트의 다른 멤버. PC Agent 없이 웹으로 본다"""
+    """이전 기록에서 함께 일한 다른 멤버. PC Agent 없이 웹으로 본다. 새 Task의 멤버는 test_work_permissions가 입구에서 막는 것을 잰다"""
     admin, _, sid, _, _ = running
     kim, kim_user = _auth(client, "kim_drop", admin)
     pid = client.get(f"/api/studies/{sid}", headers=admin).json()["study"]["project_id"]
     assert client.put(f"/api/projects/{pid}/members/{kim_user['id']}", headers=admin, json={"role": "member"}).status_code == 200
+    _co_workers(sid, kim_user["id"])
     return kim
 
 

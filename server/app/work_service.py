@@ -11,7 +11,10 @@ ServerApi가 MCP의 요청마다 X-DDS-Work를 붙이고 work_scope가 그대로
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 import sqlite3
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,12 +24,14 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from . import models
+from .agent.hub import _recap as _source_recap
 from .agent.hub import hub
 from .agent.link import AgentError, registry
 from .config import settings
 from .database import SessionLocal, engine, get_db
-from .deps import effective_admin, get_current_user, get_project_for_member
-from .study import service
+from .deps import effective_admin, get_current_user, get_project_for_member, require_ai_can_work
+from .study import recipe, service
+from .ws import manager
 
 log = logging.getLogger(__name__)
 
@@ -44,12 +49,53 @@ def is_mine(work: models.Work, user_id: int) -> bool:
 
 
 def not_mine_message(owner_name: str) -> str:
-    return f"{owner_name}님의 Task입니다 → 보기만 할 수 있습니다. 내 일은 왼쪽 '+ 새 Task'로 시작하세요."
+    return f"{owner_name}님의 Task입니다 → 보기만 할 수 있습니다. 하려면 입력창에 요청을 적고 '내 PC로 복사해서 하기'를 누르세요."
 
 
 def owner_label(db: Session, work: models.Work) -> str:
     owner = db.get(models.User, work.owner_id)
     return owner.display_name if owner else "다른 멤버"
+
+
+# ---------- 권한 (docs/product-spec.md 4-1절의 표. 쓰기 경로 전부를 server/tests/test_work_permissions.py가 잰다) ----------
+def require_mine(db: Session, work: models.Work, user: models.User) -> models.Work:
+    """요청·해석·재학습·배포·게시처럼 이 Task의 결과를 바꾸는 일은 주인만 한다. master도 관리자도 남의 Task에서는 실행하지 못한다:
+    AI와 케이스는 그 사람의 PC에서 돌기 때문이다. 화면에서 숨기는 것으로 끝내지 않고 입구마다 여기를 지난다."""
+    if not is_mine(work, user.id):
+        raise HTTPException(403, not_mine_message(owner_label(db, work)))
+    return work
+
+
+def _check_same_task(db: Session, project_id: int, work: models.Work, header: int | None):
+    """세션의 Task(헤더)와 다른 Task의 스터디에 쓰면 스크립트는 지금 폴더에서 찾는데 케이스는 그 스터디의 폴더에서 돈다. 내 옆 Task여도 막고 복제로 돌린다.
+    화면은 헤더를 보내지 않는다. 옛 Agent도 보내지 않으므로 주인 검사만 탄다."""
+    if header and header != work.id and _in_project(db, project_id, header):
+        raise HTTPException(403, f"이 스터디는 '{work.name}' Task의 것이라 지금 Task에서 바꾸지 않습니다 → clone_study로 지금 Task에 복제한 뒤 복제본으로 하세요. 옛 결과는 그대로 남습니다")
+
+
+def require_study_write(db: Session, study: models.Study, user: models.User, header: int | None = None) -> models.Study:
+    work = db.get(models.Work, study.work_id) if study.work_id else None
+    if work is None:  # 이전 전의 행이 남아 있는 잠깐 동안. 시작할 때 채우므로 평소에는 오지 않는다
+        owner = service.study_owner(study)
+        if owner not in (None, user.id):
+            raise HTTPException(403, not_mine_message(service._display_names(db, [owner])[0]))
+        return study
+    require_mine(db, work, user)
+    _check_same_task(db, study.project_id, work, header)
+    return study
+
+
+def require_flow_write(db: Session, flow: models.Flow, user: models.User) -> models.Flow:
+    work = db.get(models.Work, flow.work_id) if flow.work_id else None
+    if work is not None:
+        require_mine(db, work, user)
+    return flow
+
+
+def require_case_upload(db: Session, case: models.Case, study: models.Study, user: models.User) -> None:
+    """PC Agent가 케이스 결과를 올린다. 돌린 사람의 결과는 받는다: 며칠 뒤 다시 연결된 PC의 결과를 버리면 해석을 다시 해야 한다."""
+    if case.run_by != user.id:
+        require_study_write(db, study, user)
 
 
 # ---------- 만들기 ----------
@@ -134,6 +180,7 @@ def write_work(db: Session, project_id: int, user: models.User, explicit: int | 
     """쓸 Task. 모르면 내 Task를 새로 만든다. 스크립트나 옛 Agent의 요청을 NULL로 남기거나 실패시키지 않는다."""
     w = resolve(db, project_id, user, explicit, header)
     if w is None:
+        require_ai_can_work(project_id, user, db)  # 관리자는 멤버가 아니면 볼 수만 있다. 멤버 아닌 사람의 Task를 만들지 않는다
         w = new_work(db, project_id, user.id)
         db.commit()
     return w
@@ -164,7 +211,7 @@ class WorkScope:
         return self.hint or _in_project_id(self.db, self.project.id, hub.active_work(self.user.id, self.project.id))
 
     def write(self) -> models.Work:
-        return write_work(self.db, self.project.id, self.user, self.explicit, self.header)
+        return require_mine(self.db, write_work(self.db, self.project.id, self.user, self.explicit, self.header), self.user)
 
 
 def _in_project_id(db: Session, project_id: int, work_id: int | None) -> int | None:
@@ -237,7 +284,7 @@ def briefs(db: Session, project_ids: list[int], user: models.User) -> dict[int, 
         out[w.project_id].append({
             "id": w.id, "uid": w.uid, "project_id": w.project_id, "seq": w.seq, "name": w.name, "owner_id": w.owner_id, "owner_name": names.get(w.owner_id, ""),
             "legacy": bool(w.legacy), "mine": is_mine(w, user.id), "can_manage": w.owner_id == user.id or w.project_id in masters or admin,
-            "status": status, "flow_title": title, "model_file": files.get(w.id), "n_cases": cases.get(w.id, 0), "source_label": w.source_label,
+            "status": status, "flow_title": title, "model_file": files.get(w.id), "n_cases": cases.get(w.id, 0), "source_label": w.source_label, "source_work_id": w.source_work_id, "source_kind": w.source_kind,
             "version": w.version, "created_at": w.created_at, "updated_at": w.updated_at})
     return out
 
@@ -289,6 +336,195 @@ def search(db: Session, q: str, user: models.User) -> dict:
         for w, pname, owner in rows]}
 
 
+# ---------- 지난 Task처럼 시작 · 내 PC로 복사해서 하기 ----------
+SOURCE_LIMIT = 6
+SEARCH_SOURCE_LIMIT = 30
+MAX_FLOWS_CARRIED = 3
+
+
+def _carry_dir(project_id: int, work_id: int) -> Path:
+    return settings.files_dir / f"project_{project_id}" / "carry" / f"work_{work_id}"
+
+
+def _link_or_copy(src: Path, dest: Path):
+    """원본을 지워도 사본이 남게 한다. 1 GB 첨부를 복사하는 동안 요청을 붙잡지 않도록 같은 디스크면 하드 링크를 쓴다."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(src, dest)
+    except OSError:
+        shutil.copyfile(src, dest)
+
+
+def _author_of(studies: list[models.Study]) -> dict:
+    return next((s.recipe for s in reversed(studies) if s.recipe), {}) or {}
+
+
+def _result_line(study: models.Study | None) -> str:
+    """목록에 보일 결과 한 줄: 첫 목적의 최적값(없으면 완료 케이스 수)."""
+    if study is None:
+        return ""
+    best = service.best_case(study)
+    goal = next(iter(study.objectives or []), {}).get("name")
+    if best and goal and goal in (best.results or {}):
+        unit = next((o.get("unit") for o in study.outputs or [] if o.get("name") == goal), "") or ""
+        return f"{goal} {best.results[goal]:.4g}{(' ' + unit) if unit else ''}"
+    done = sum(c.status == "complete" for c in study.cases)
+    return f"케이스 {done}건" if done else ""
+
+
+def sources(db: Session, user: models.User, project_id: int | None, q: str = "") -> list[dict]:
+    """지난 Task처럼 시작 목록. 내가 멤버인 Project의 Task만 보인다(관리자여도 멤버가 아니면 빼 준다: 기밀 값이 옮겨 가는 길이다).
+    흐름도 스터디도 없는 Task는 가져올 것이 없어 뺀다. project_id를 주면 그 Project만 보이고, 찾기(q)는 내 Project 전체에서 찾는다."""
+    P, W = models.Project, models.Work
+    mine = [pid for pid, in db.query(models.ProjectMember.project_id).filter(models.ProjectMember.user_id == user.id)]
+    if not mine:
+        return []
+    term = q.strip()
+    rows = db.query(W, P.name).join(P, W.project_id == P.id).filter(W.project_id.in_(mine))
+    if term:
+        rows = rows.filter(or_(W.name.contains(term, autoescape=True), P.name.contains(term, autoescape=True)))
+    elif project_id:
+        rows = rows.filter(W.project_id == project_id)
+    limit = SEARCH_SOURCE_LIMIT if term else SOURCE_LIMIT
+    out: list[dict] = []
+    for w, pname in rows.order_by(W.id.desc()).limit(limit * 4):
+        flows = db.query(models.Flow).filter(models.Flow.work_id == w.id, models.Flow.status != "rejected").order_by(models.Flow.id).all()
+        studies = db.query(models.Study).filter_by(work_id=w.id).order_by(models.Study.id).all()
+        if not flows and not studies:
+            continue
+        author = _author_of(studies)
+        out.append({"work_id": w.id, "project_id": w.project_id, "project_name": pname, "name": w.name, "owner_name": owner_label(db, w), "mine": w.owner_id == user.id,
+                    "n_steps": len((flows[-1].nodes or []) if flows else []), "result": _result_line(studies[-1] if studies else None),
+                    "has_recipe": bool(author), "script_author": author.get("created_by_name") if author.get("created_by") not in (None, user.id) else None,
+                    "other_project": w.project_id != project_id, "created_at": w.created_at})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _flows_summary(db: Session, source: models.Work) -> list[dict]:
+    rows = db.query(models.Flow).filter(models.Flow.work_id == source.id, models.Flow.status != "rejected").order_by(models.Flow.id.desc()).limit(MAX_FLOWS_CARRIED).all()
+    return [{"title": f.title, "goal": f.goal or "", "steps": [{"label": n.get("label"), "type": n.get("type"), "tool": n.get("tool")} for n in f.nodes or []]} for f in reversed(rows)]
+
+
+def _study_settings(s: models.Study) -> dict:
+    return {"source_study_id": s.id, "name": s.name, "adapter": s.adapter, "adapter_config": s.adapter_config or {}, "variables": s.variables or [],
+            "objectives": s.objectives or [], "constraints": s.constraints or [], "outputs": [o for o in s.outputs or [] if not o.get("auto")]}
+
+
+def _snapshot_recipes(studies: list[models.Study], work: models.Work) -> list[dict]:
+    """스크립트 묶음을 이 Task 몫으로 복사해 둔다. 복사이며 연결이 아니다: 원본 Task를 지우거나 고쳐도 이 Task가 받을 스크립트는 그대로다. 새 스터디의 묶음이 먼저 풀린다."""
+    out = []
+    for s in reversed(studies):
+        path = recipe.recipe_path(s)
+        if not s.recipe or not path.is_file():
+            continue
+        dest = _carry_dir(work.project_id, work.id) / f"study_{s.id}.zip"
+        _link_or_copy(path, dest)
+        out.append({"study_id": s.id, "name": s.name, "sha256": s.recipe.get("sha256"), "size": s.recipe.get("size"), "version": s.recipe.get("version"),
+                    "created_by_name": s.recipe.get("created_by_name"), "files": s.recipe.get("files") or []})
+    return out
+
+
+def _source_view(db: Session, source: models.Work, user: models.User) -> dict | None:
+    """내 PC에 원본 Task 폴더가 있으면 그 scripts가 서버 묶음보다 낫다(아직 올라가지 않은 스크립트도 있다). 남의 폴더는 내 PC에 없다."""
+    if source.owner_id != user.id:
+        return None
+    p = db.get(models.Project, source.project_id)
+    return {"project_id": p.id, "project_uid": p.uid, "work": source.folder_view()}
+
+
+def start_from(db: Session, work: models.Work, source: models.Work, user: models.User) -> None:
+    """지난 Task처럼 시작: 작업 순서·스크립트·설정을 복사한다. 결과와 모델 파일은 가져오지 않는다. 케이스도 만들지 않는다.
+    설정은 AI가 새 모델을 살핀 뒤 clone_study로 복제한다. 그래서 첫 턴에 넘길 값을 여기 적어 두고, 그사이 원본이 지워져도 그 값으로 새로 만들 수 있다."""
+    studies = db.query(models.Study).filter_by(work_id=source.id).order_by(models.Study.id).all()
+    work.source_work_id, work.source_kind, work.source_label = source.id, "same_again", source.name
+    work.carry = {"kind": "same_again", "source_name": source.name, "other_project": source.project_id != work.project_id,
+                  "recipes": _snapshot_recipes(studies, work), "attachments": [], "local_source": _source_view(db, source, user),
+                  "flows": _flows_summary(db, source), "studies": [_study_settings(s) for s in studies]}
+
+
+def _copy_case(c: models.Case, study_id: int) -> models.Case:
+    # 숫자 결과만 옮긴다. 파일은 원본 PC에 있어 run_dir을 적지 않는다. 그래야 이 PC에서 없는 파일을 찾지 않는다
+    return models.Case(study_id=study_id, params=dict(c.params or {}), results=dict(c.results or {}), status="complete", source=c.source, from_case_id=c.id, timing=c.timing,
+                       origin={"copied_from_case": c.id, **({"label": c.origin["label"]} if (c.origin or {}).get("label") else {})} if c.source == "import" else None)
+
+
+def _copy_attachments(db: Session, source: models.Work, work: models.Work, user: models.User) -> list[dict]:
+    """입력 모델을 이 Task의 첨부로 복사한다. 원본 Task를 지우면 그쪽 파일이 지워지므로 같은 파일을 가리키지 않는다."""
+    out = []
+    for a in db.query(models.Attachment).filter_by(work_id=source.id).order_by(models.Attachment.id):
+        src = settings.files_dir / a.stored
+        if not src.is_file():
+            continue
+        rel = f"project_{work.project_id}/attachments/{uuid.uuid4().hex[:12]}_{a.filename}"
+        _link_or_copy(src, settings.files_dir / rel)
+        row = models.Attachment(project_id=work.project_id, work_id=work.id, user_id=user.id, filename=a.filename, size=a.size, sha256=a.sha256, stored=rel)
+        db.add(row)
+        db.flush()
+        out.append({"id": row.id, "filename": a.filename, "size": a.size, "sha256": a.sha256})
+    return out
+
+
+def take_over(db: Session, source: models.Work, user: models.User, name: str | None, agent: str | None) -> models.Work:
+    """내 PC로 복사해서 하기: 같은 Project에 내 이름의 새 Task를 만든다. 스터디 설정·스크립트·입력 첨부와 완료한 케이스의 숫자 결과를 복사하고, 원본에는 손대지 않는다.
+    승인 대기·진행 중인 원본도 그대로 두고 끝난 것만 가져온다. 끝까지 한 번에 저장한다: 중간에 원본이 지워져도 반쪽짜리 Task를 남기지 않는다."""
+    work = new_work(db, source.project_id, user.id, name or f"{source.name} 복사", name_auto=False)
+    work.source_work_id, work.source_kind, work.source_label = source.id, "takeover", source.name
+    studies = db.query(models.Study).filter_by(work_id=source.id).order_by(models.Study.id).all()
+    clones = []
+    for s in studies:
+        new = models.Study(project_id=work.project_id, work_id=work.id, name=service._unique_study_name(db, work.project_id, f"{s.name} 복사"[:200]), variables=[dict(v) for v in s.variables or []],
+                           objectives=s.objectives, constraints=s.constraints, outputs=[o for o in s.outputs or [] if not o.get("auto")] or s.outputs, adapter=s.adapter,
+                           adapter_config=s.adapter_config, import_info={**(s.import_info or {}), "cloned_from": {"study_id": s.id, "name": s.name, "work_id": source.id}}, created_by=user.id)
+        db.add(new)
+        db.flush()
+        recipe.copy_to(s, new)
+        done = [c for c in s.cases if c.status == "complete" and c.results]
+        for c in done:
+            db.add(_copy_case(c, new.id))
+        clones.append({"study_id": new.id, "name": new.name, "source_study_id": s.id, "n_copied": len(done)})
+    chat = db.query(models.ChatSession).filter_by(work_id=source.id, user_id=source.owner_id).order_by(models.ChatSession.id.desc()).first()
+    work.carry = {"kind": "takeover", "source_name": source.name, "source_owner": owner_label(db, source), "other_project": False,
+                  "recipes": _snapshot_recipes(studies, work), "attachments": _copy_attachments(db, source, work, user), "local_source": _source_view(db, source, user),
+                  "flows": _flows_summary(db, source), "studies": clones, "recap": _source_recap(db, chat.id) if chat else ""}
+    if agent:
+        add_chat(db, work, user.id, agent)
+    db.commit()
+    for c in clones:
+        manager.publish({"type": "study_updated", "project_id": work.project_id, "work_id": work.id, "data": {"id": c["study_id"]}})
+    return work
+
+
+def takeover_preview(db: Session, source: models.Work, user: models.User) -> dict:
+    """복사하기 전에 알릴 것: 이 PC에 없는 툴, 받지 못하는 원본, 복사되는 숫자 결과 수. 알리기만 하고 막지는 않는다."""
+    from cae_adapters.catalog import TOOLS
+
+    studies = db.query(models.Study).filter_by(work_id=source.id).order_by(models.Study.id).all()
+    conn = registry.get(user.id)
+    have = {str(t).lower() for t in (conn.info.get("tools") or [])} if conn else None
+    # 스터디는 실행 명령 키(abaqus_cae)나 툴 id를 적는다. PC Agent는 실행 파일 키를 알린다. 파이썬은 PC Agent가 늘 가지고 있고, 연습용 계산에는 툴이 없다
+    missing: list[dict] = []
+    if have is not None:
+        for used in sorted({str((s.adapter_config or {}).get("tool") or "").lower() for s in studies} - {"", "python", "mock"}):
+            entry = next((t for t in TOOLS if used == t["id"] or used in (t.get("run") or [])), None)
+            if not ({used, *(entry.get("paths") or [] if entry else [])} & have):
+                missing.append({"key": entry["id"] if entry else used, "label": entry["name"] if entry else used})
+    raw = copied = 0
+    for s in studies:
+        for c in s.cases:
+            if c.status != "complete":
+                continue
+            copied += bool(c.results)
+            arc = c.archive or {}
+            if c.run_dir and s.adapter not in ("mock", "data") and (arc.get("raw") or arc.get("stored") != "server"):
+                raw += 1
+    author = _author_of(studies)
+    return {"work_id": source.id, "name": source.name, "owner_name": owner_label(db, source), "agent_connected": conn is not None, "missing_tools": missing, "n_raw": raw, "n_copied": copied,
+            "has_recipe": bool(author), "script_author": author.get("created_by_name") if author.get("created_by") not in (None, user.id) else None,
+            "n_inputs": db.query(models.Attachment.id).filter_by(work_id=source.id).count()}
+
+
 # ---------- 삭제 ----------
 def counts_for_delete(db: Session, work_id: int) -> dict[str, int]:
     ids = [sid for sid, in db.query(models.Study.id).filter_by(work_id=work_id)]
@@ -318,8 +554,10 @@ def delete_work(db: Session, work: models.Work) -> list[int]:
     for a in atts:
         db.delete(a)
     db.flush()
+    carried = _carry_dir(work.project_id, wid)
     db.delete(work)
     db.commit()
+    shutil.rmtree(carried, ignore_errors=True)
     for rel in stored:
         try:
             (settings.files_dir / rel).unlink(missing_ok=True)

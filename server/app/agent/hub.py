@@ -7,6 +7,9 @@
 """
 from __future__ import annotations
 
+import json
+
+import json
 import logging
 import threading
 import time
@@ -353,6 +356,7 @@ class AgentHub:
             if not self._ours(st, chat, agent):
                 return None
             chat.agent_session_id = sid
+            _note_carried(db, chat, runner.carried)
             db.commit()
         self.live.setdefault(st.user_id, set()).add(sid)
         self.needs_context.add(sid)
@@ -484,11 +488,13 @@ class AgentHub:
             if sid in self.needs_context:  # first_turn 판단은 세션을 얻은 뒤: 어떤 이유로 새로 열렸든 지난 대화를 넘긴다
                 with SessionLocal() as db:
                     recap = _recap(db, st.chat_id, before_id=msg_id)
+                    start, source_recap = _carry_context(db, st.chat_id)
+                # 시작점은 첫 문단에 함께 둔다. 데모 AI와 시험은 첫 문단을 요청이 아닌 맥락으로 읽는다
                 context = (f"[DDS 컨텍스트] project_id={st.project_id}. "
                            "dds-* MCP 툴과 스킬을 사용하고 작업 규칙을 따르세요. 사용자가 가진 것에서 시작합니다(표·해석 폴더·모델이 있으면 해석부터 하지 않습니다). "
                            "해석·긴 계산을 새로 돌리거나 사용자 모델을 바꾸는 일만 Flow 승인 후 실행하고, "
-                           "조회·후처리·기존 데이터로 학습·Simulator 배포·보고서는 승인 없이 바로 합니다. 데이터는 로컬 폴더 규칙대로 둡니다.\n\n"
-                           + recap)
+                           "조회·후처리·기존 데이터로 학습·Simulator 배포·보고서는 승인 없이 바로 합니다. 데이터는 로컬 폴더 규칙대로 둡니다."
+                           + (f"\n{start}" if start else "") + "\n\n" + (recap or source_recap))
             payload = {"type": "session.prompt", "turn_id": turn_id, "chat_id": st.chat_id, "session_id": sid, "agent": st.agent,
                        "text": context + text, "attachments": attachments, "started_at": st.started_at}
             self._deliver(st, turn_id, sid, payload)
@@ -1074,6 +1080,56 @@ def _flow_words(f: models.Flow, kind: str | None) -> tuple[str, str]:
     shown = f"Task Flow '{f.title}'(#{f.id})을 승인했습니다. 계획대로 진행해 주세요."
     return (f"{shown} 승인받은 계획이니 끝까지 진행하고 중간에 사용자에게 묻지 마세요. 정하지 않은 값은 기본값으로 정해 단계 설명에 적으세요. "
             "정말 진행할 수 없는 단계는 update_node로 failed와 원인·할 일을 적고 사용자에게 알리세요.", shown)
+
+
+def _note_carried(db, chat: models.ChatSession, carried: dict | None):
+    """PC가 받아 둔 것을 적는다. 받지 못한 것이 있으면 다음 세션에서 다시 받게 '끝남'으로 두지 않는다."""
+    work = db.get(models.Work, chat.work_id) if chat.work_id else None
+    if work is None or not work.carry or carried is None:
+        return
+    work.carry = {**work.carry, "carried": carried, "done": not carried.get("errors")}
+
+
+def _carry_context(db, chat_id: int) -> tuple[str, str]:
+    """이 Task가 어디서 왔는지 AI에게 한 번 알린다. (첫 문단에 넣을 글, 지난 기록 요약)."""
+    chat = db.get(models.ChatSession, chat_id)
+    work = db.get(models.Work, chat.work_id) if chat and chat.work_id else None
+    c = (work.carry or {}) if work else {}
+    if not c or c.get("told"):
+        return "", ""
+    work.carry = {**c, "told": True}
+    db.commit()
+    return _carry_text(c), c.get("recap") or ""
+
+
+def _carry_text(c: dict) -> str:
+    got = c.get("carried")
+    flows = c.get("flows") or []
+    steps = " → ".join(str(s.get("label")) for s in flows[-1]["steps"]) if flows else ""
+    order = f" 지난 작업 순서: {steps}." if steps else ""
+    # 스크립트가 어디 있는지 사실만 적는다. 옛 Agent는 복사하지 않았으므로 AI가 받아야 한다
+    if got is None:
+        files = " 스크립트는 아직 이 폴더에 없습니다 → restore_recipe로 받으세요."
+    elif got.get("scripts") or got.get("unchanged"):
+        files = f" 스크립트를 이 Task 폴더로 복사해 두었습니다: {', '.join((got.get('scripts') or []) + (got.get('unchanged') or []))[:600]}."
+    else:
+        files = " 스크립트가 서버에 없어 작업 순서와 설정만 가져왔습니다 → 스크립트를 새로 만드세요."
+    if got and got.get("inputs"):
+        files += f" 입력 파일: {', '.join(got['inputs'])[:400]}."
+    if got and got.get("conflicts"):
+        files += f" 이미 있는 다른 내용이라 덮지 않은 파일: {', '.join(got['conflicts'])[:300]}."
+    if got and got.get("errors"):
+        files += f" 받지 못한 것: {'; '.join(got['errors'])[:300]}."
+    name = c.get("source_name") or ""
+    if c.get("kind") == "takeover":
+        rows = ", ".join(f"study_id={s['study_id']}('{s['name']}', 완료 {s['n_copied']}건)" for s in c.get("studies") or [])
+        return (f"[시작점] 이 Task는 {c.get('source_owner') or '다른 멤버'}님의 '{name}'을 복사해 시작했습니다(복사이며 연결이 아니다). 원본 Task의 것은 읽기만 하고 바꾸지 않습니다."
+                f" 지금 Task의 스터디: {rows or '없음'}. 완료 케이스의 숫자 결과가 복사되어 있으니 다시 돌리지 말고 재학습에 씁니다. 파일은 없으므로 Output 추가는 그 점을 다시 돌려야 합니다.{order}{files}")
+    rows = ", ".join(f"study_id={s['source_study_id']}('{s['name']}')" for s in c.get("studies") or [])
+    secret = " 다른 Project에서 왔습니다: 치수·경로·품번이 함께 옮겨질 수 있으니 범위와 경로를 승인 카드에 적어 확인받습니다." if c.get("other_project") else ""
+    keep = (f" 지난 스터디: {rows}. 새 모델을 살펴 달라진 점을 먼저 알리고 clone_study(study_id=…, model_files=[…])로 지금 Task에 복제합니다. 원본 Task가 지워져 복제가 안 되면 create_study로 같은 값을 만듭니다: "
+            + json.dumps(c.get("studies"), ensure_ascii=False)[:1500]) if rows else ""
+    return f"[시작점] 이 Task는 '{name}'처럼 시작합니다(복사이며 연결이 아니다). 결과와 모델 파일은 가져오지 않았습니다.{order}{files}{secret}{keep}"
 
 
 def _content_text(content) -> str:

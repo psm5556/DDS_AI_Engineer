@@ -27,6 +27,7 @@ from cae_adapters.hidden import console_python, hidden_kwargs, spawn_gui_detache
 
 from . import __version__, devtest, installer, market, toolscan, updater
 from .acp_runner import AcpRunner
+from .carry import apply_carry
 from .config import CONFIG_PATH, REPO_ROOT, load_settings
 from .context import sync_project_context, sync_work_context
 from .executor import CaseExecutor
@@ -608,6 +609,8 @@ class Agent:
         report = lambda stage: self._stage(turn_id, name, stage)  # noqa: E731
         try:
             cwd = self._prepare(project_id, project_name, project_uid, report, work, name)
+            # CLI가 뜨기 전에 복사한다. 뜬 뒤에 넣으면 첫 턴의 AI가 스크립트가 없다고 읽는다
+            carried = apply_carry(self.api, self.s.workspace, Path(cwd), work) if real_work(work) else None
             extra = self._extra_dirs(cwd, work)
             servers = self.mcp_servers(project_id, name, cwd, project_uid, work, *extra.get("extra_dirs", []))
             sid = self.runner(name).new_session(cwd, servers, report, **extra)
@@ -616,7 +619,7 @@ class Agent:
             self.session_owner[sid] = project_id
             self.session_work[sid] = work
             self.state.remember_cwd(sid, cwd)
-            res = {"session_id": sid, "agent": name}
+            res = {"session_id": sid, "agent": name, **({"carried": carried} if carried is not None else {})}
             if fut:
                 fut.set_result(res)
             return res

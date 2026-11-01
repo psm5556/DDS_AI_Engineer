@@ -1041,50 +1041,111 @@ def e14(w: World, tmp: Path, c: Check):
     c["outsider_status"] = denied.status_code
 
 
-@scenario("E15", "신규 모델, 같은 흐름: 새 스터디로 진행, 옛 결과 불변")
+def new_task(who: Who, pid: int, name: str, from_work: int | None = None) -> dict:
+    return who.post(f"/api/projects/{pid}/works", {"name": name, "name_auto": False, "agent": "demo", **({"from_work_id": from_work} if from_work else {})})
+
+
+def task_dir(pc: "Pc", pid: int, seq: int) -> Path:
+    return next(Path(pc.ws).glob(f"P{pid:04d}_*/T{seq:02d}_*"))
+
+
+def in_task(who: Who, kind: str, pid: int, wid: int) -> list[dict]:
+    return who.get(f"/api/projects/{pid}/{kind}?work_id={wid}")
+
+
+def digest(*parts) -> str:
+    return hashlib.sha256(json.dumps(parts, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
+
+
+def task_snapshot(who: Who, pid: int, wid: int, point: dict | None = None, token: str | None = None) -> tuple:
+    """Task 하나의 모든 결과. 한 글자라도 바뀌면 옛 결과가 다친 것이다."""
+    studies = in_task(who, "studies", pid, wid)
+    return (studies, [cases_of(who, s["id"]) for s in studies], in_task(who, "models", pid, wid), in_task(who, "flows", pid, wid), in_task(who, "artifacts", pid, wid),
+            who.post(f"/api/shares/{token}/predict", point) if token else None)
+
+
+@scenario("E15", "신규 모델, 같은 흐름: 새 Task에서 새 스터디로 진행, 옛 결과 해시 변화 0")
 def e15(w: World, tmp: Path, c: Check):
     o = w.owner
     pid = o.project("E15")
     sid = o.new_chat(pid)
     chat(o, sid, "mock 솔버로 Branin 최적화하고 Simulator 배포해줘")
-    old_flow = flows(o, pid)[0]["id"]
+    old_work = o.get(f"/api/projects/{pid}/works")[0]
+    old_flow = in_task(o, "flows", pid, old_work["id"])[0]["id"]
     approve(o, sid, old_flow)
-    old = study_of(o, pid)["id"]
-    old_model = next(m for m in models_of(o, pid) if m["deployed"])
+    old = in_task(o, "studies", pid, old_work["id"])[0]["id"]
+    old_model = next(m for m in in_task(o, "models", pid, old_work["id"]) if m["deployed"])
     token = o.post(f"/api/models/{old_model['id']}/shares", {})["token"]
     point = {"params": {"x1": 2.0, "x2": 3.0}}
-    snapshot = lambda: (cases_of(o, old), [m for m in models_of(o, pid) if m["study_id"] == old], o.get(f"/api/studies/{old}")["study"]["adapter_config"], o.get(f"/api/studies/{old}")["study"]["variables"],
-                        o.post(f"/api/shares/{token}/predict", point))
-    before = snapshot()
+    before = task_snapshot(o, pid, old_work["id"], point, token)
+    before_hash = digest(before)
 
-    sid2 = o.new_chat(pid)
+    # 새 모델은 새 Task에서 한다. 지난 흐름과 설정을 복사해 시작하고 지난 것은 그대로다
+    task = new_task(o, pid, "신규 모델", old_work["id"])
+    c(task["seq"] == old_work["seq"] + 1 and task["source_label"] == old_work["name"], "새 Task + 어디서 가져왔는지 기록")
+    sid2 = task["active_chat_id"]
     ask = chat(o, sid2, "신규 모델 나왔어. 지난번처럼 다시 돌려 줘")
-    c("첨부" in ask.reply and len(flows(o, pid)) == 1, "새 모델 파일이 없으면 먼저 부탁")
+    c("첨부" in ask.reply and not in_task(o, "flows", pid, task["id"]), "새 모델 파일이 없으면 먼저 부탁")
     att = o.post(f"/api/projects/{pid}/attachments", files={"file": ("신형브래킷.dat", b"new model\n")})
     t = chat(o, sid2, "신규 모델 나왔어. 지난번처럼 다시 돌려 줘. x1 -5~12", [att["id"]])
-    review = [f for f in flows(o, pid) if f["status"] == "review"]
+    review = [f for f in in_task(o, "flows", pid, task["id"]) if f["status"] == "review"]
     c(len(review) == 1 and not t.errors, "새 Flow 제안(해석을 새로 돌리므로)")
     detail = " ".join(n.get("detail") or "" for n in review[0]["nodes"])
     c("달라진 점" in detail and "x1" in detail and "신형브래킷" in detail, "달라진 점을 승인 카드에 적음")
-    new = next(s["id"] for s in o.get(f"/api/projects/{pid}/studies") if s["id"] != old)
-    c(counts(o, new) == {}, "승인 전 해석 0")
+    new = in_task(o, "studies", pid, task["id"])[0]["id"]
+    c(new != old and counts(o, new) == {}, "승인 전 해석 0")
     done = approve(o, sid2, review[0]["id"])
     c(not done.errors and counts(o, new).get("complete", 0) > 0, "새 스터디 해석 완료")
     c("지난 모델" in done.reply and "신규 모델" in done.reply, "옛 결과와 나란히 보고")
-    after = snapshot()
-    names = ("케이스", "모델", "해석 설정", "변수 범위", "공유 링크 예측")
-    for label, x, y in zip(names, before, after):
+    after = task_snapshot(o, pid, old_work["id"], point, token)
+    for label, x, y in zip(("스터디", "케이스", "모델", "흐름", "결과 카드", "공유 링크 예측"), before, after):
         c(x == y, f"옛 {label} 그대로")
+    c(digest(after) == before_hash, "옛 결과 해시 변화 0")
     new_st = o.get(f"/api/studies/{new}")
     c(new_st["study"]["variables"][0]["upper"] == 12, "새 스터디 범위 반영")
-    new_models = [m for m in models_of(o, pid) if m["study_id"] == new]
+    new_models = in_task(o, "models", pid, task["id"])
     c(new_models and new_models[0]["version"] == 1 and new_models[0]["deployed"], "새 모델 v1 배포")
-    c(next(m for m in models_of(o, pid) if m["id"] == old_model["id"])["deployed"], "옛 Simulator도 배포 상태")
-    c["old_cases"] = len(before[0])
+    c(next(m for m in in_task(o, "models", pid, old_work["id"]) if m["id"] == old_model["id"])["deployed"], "옛 Simulator도 배포 상태")
+    titles = {a["title"] for a in in_task(o, "artifacts", pid, task["id"])}
+    c(titles and not (titles & {a["title"] for a in before[4]}) or all(a in before[4] for a in after[4]), "같은 제목이어도 옛 Task의 카드를 덮지 않음")
+    c["old_cases"] = len(before[1][0])
     c["new_cases"] = counts(o, new)["complete"]
-    c["old_changed"] = 0
+    c["old_hash_changed"] = 0
     c["new_model_version"] = 1
-    c["old_share_pred"] = round(after[4]["mean"]["f"], 3)
+    c["old_share_pred"] = round(after[5]["mean"]["f"], 3)
+
+
+@scenario("E17", "새 Task 격리: 탭은 비어 있고, 폴더가 따로 생기고, 옛 Task는 그대로")
+def e17(w: World, tmp: Path, c: Check):
+    o = w.owner
+    pid = o.project("E17")
+    first = o.new_chat(pid)
+    chat(o, first, "mock 솔버로 Branin 최적화하고 Simulator 배포해줘")
+    t1 = o.get(f"/api/projects/{pid}/works")[0]
+    approve(o, first, in_task(o, "flows", pid, t1["id"])[0]["id"])
+    before = digest(task_snapshot(o, pid, t1["id"]))
+    t2 = new_task(o, pid, "조건 바꾸기")
+    for kind in ("flows", "artifacts", "studies", "models"):
+        c(in_task(o, kind, pid, t2["id"]) == [], f"새 Task의 {kind}가 비어 있음")
+    c(t2["seq"] == t1["seq"] + 1, "번호가 이어짐")
+    c(not list(Path(w.owner_pc.ws).glob(f"P{pid:04d}_*/T{t2['seq']:02d}_*")), "보낼 때까지 폴더가 생기지 않음")
+    t = chat(o, t2["active_chat_id"], "mock 솔버로 Branin 최적화하고 Simulator 배포해줘")
+    review = in_task(o, "flows", pid, t2["id"])
+    c(len(review) == 1 and not t.errors, "Flow가 새 Task에 생김")
+    d1, d2 = task_dir(w.owner_pc, pid, t1["seq"]), task_dir(w.owner_pc, pid, t2["seq"])
+    c(d1 != d2 and (d2 / "work.json").exists(), "폴더가 따로 있음")
+    approve(o, t2["active_chat_id"], review[0]["id"])
+    new_study = in_task(o, "studies", pid, t2["id"])[0]
+    c(counts(o, new_study["id"]).get("complete", 0) > 0, "새 Task에서 해석")
+    c(digest(task_snapshot(o, pid, t1["id"])) == before, "옛 Task 해시 변화 0")
+    c(not any(a["work_id"] == t1["id"] and a["title"].startswith(f"[{new_study['name']}]") for a in in_task(o, "artifacts", pid, t1["id"]) if a.get("work_id")), "새 결과가 옛 Task에 없음")
+    # 옆 Task의 스터디에 쓰면 복제하라고 한다. 세션의 Task는 AI 세션의 값이다
+    old_study = in_task(o, "studies", pid, t1["id"])[0]["id"]
+    next_door = o.c.post(f"/api/studies/{old_study}/train", json={}, headers={"X-DDS-Work": str(t2["id"])})
+    c(next_door.status_code == 403 and "clone_study" in next_door.json()["detail"], "옆 Task에 쓰면 복제를 안내")
+    c["t1_cases"] = counts(o, in_task(o, "studies", pid, t1["id"])[0]["id"])["complete"]
+    c["t2_cases"] = counts(o, new_study["id"])["complete"]
+    c["t1_hash_changed"] = 0
 
 
 MODEL_PY = """import glob, json
@@ -1141,7 +1202,7 @@ json.dump({"y": p["x"] ** 2 + p["z"]}, open("results.json", "w"))
 """
 
 
-@scenario("E16b", "실행 중에 내 PC가 꺼짐: 멤버는 멈추지 못하고 실행한 사람이 정리, 다시 돌리기 실패에도 값 유지", pc=False)
+@scenario("E16b", "실행 중에 내 PC가 꺼짐: 멤버는 멈추지도 돌리지도 못하고 실행한 사람이 정리, 다시 돌리기 실패에도 값 유지", pc=False)
 def e16b(w: World, tmp: Path, c: Check):
     o, m = w.owner, w.member
     w.owner_pc.start()
@@ -1153,7 +1214,6 @@ def e16b(w: World, tmp: Path, c: Check):
     (folder / "scripts" / "fast.py").write_text(RUN_PY, encoding="utf-8")
     (folder / "scripts" / "slow.py").write_text(SLOW_PY, encoding="utf-8")
     variables = [{"name": "x", "lower": 0, "upper": 2}, {"name": "z", "lower": 0, "upper": 2}]
-    # 다시 돌리기 실패: 끝난 값은 지워지지 않는다
     fast = w.owner_pc.mcp("dds-study", "create_study", {"name": "빠른 스터디", "variables": variables, "adapter": "script", "objectives": [{"name": "y", "goal": "min"}],
                                                         "adapter_config": {"tool": "python", "script": "scripts/fast.py"}}, pid)["study_id"]
     w.owner_pc.mcp("dds-study", "generate_doe", {"study_id": fast, "n": 5, "seed": 6}, pid)
@@ -1170,36 +1230,28 @@ def e16b(w: World, tmp: Path, c: Check):
     wait_for(lambda: m.get(f"/api/studies/{slow}")["stalled"] == 3, timeout=30, what="꺼진 PC 표시")
     st = m.get(f"/api/studies/{slow}")
     c(st["stalled_by"] == [OWNER_NAME] and not st["running"], "실행 중으로 남은 이유를 알 수 있음")
-    run = m.post(f"/api/studies/{slow}/run", {})
-    c(run["queued"] == 0 and "꺼져" in run["note"] and "→" in run["note"], "다시 돌려도 이유와 할 일을 들음")
-    denied = m.c.post(f"/api/studies/{slow}/stop", json={})
-    c(denied.status_code == 403 and "내 PC로 복사해서 하기" in denied.json()["detail"], "멤버는 다른 사람의 케이스를 멈추지 못함")
+    for path in ("run", "stop"):
+        denied = m.c.post(f"/api/studies/{slow}/{path}", json={})
+        c(denied.status_code == 403 and "내 PC로 복사해서 하기" in denied.json()["detail"] and "→" in denied.json()["detail"], f"멤버의 {path}: 막고 할 일을 말함")
+    run = o.post(f"/api/studies/{slow}/run", {})
+    c(run["queued"] == 0 and "꺼져" in run["note"] and "→" in run["note"], "주인이 다시 돌려도 이유와 할 일을 들음")
     stop = o.post(f"/api/studies/{slow}/stop", {})
     c(stop["released"] == 3, "실행한 사람은 PC 없이 정리")
-    c(counts(m, slow) == {"cancelled": 3} and not m.get(f"/api/studies/{slow}")["stalled"], "정리됨")
-    # 멤버 PC에서 넘겨받아 다시 돌린다. 내 승인 없이는 돌지 않는다
-    w.member_pc.start()
-    mid = m.new_chat(pid)
-    chat(m, mid, "이 프로젝트에 스터디 있어?")
-    member_dir = Path(w.member_pc.mcp("dds-cae", "project_folder", {}, pid)["folder"])
-    # 스크립트 없이 끝난 케이스를 다시 돌려도 값은 그대로다
-    denied = m.c.post(f"/api/studies/{fast}/run", json={"case_ids": [solved[0]["id"]]})
-    c(denied.status_code == 403 and OWNER_NAME in denied.json()["detail"], "다른 사람의 스크립트는 승인 없이 돌지 않음")
-    flow = m.post(f"/api/projects/{pid}/flows", {"title": "다시 돌리기", "goal": "", "nodes": [{"id": "solve", "label": "해석", "type": "solve"}], "edges": []})
-    flow = m.c.put(f"/api/flows/{flow['id']}/status", json={"status": "approved", "version": flow["version"]}).json()
-    again = m.post(f"/api/studies/{fast}/run", {"case_ids": [solved[0]["id"]], "flow_id": flow["id"]})
-    c(again["queued"] == 1, "내가 승인한 흐름이면 돎")
-    wait_for(lambda: next(x for x in cases_of(m, fast) if x["id"] == solved[0]["id"])["status"] != "queued" and not m.get(f"/api/studies/{fast}")["running"], timeout=60, what="다시 돌리기 끝")
-    kept = next(x for x in cases_of(m, fast) if x["id"] == solved[0]["id"])
-    c(kept["status"] == "complete" and kept["results"] == solved[0]["results"] and kept["run_by"] == o.id and "이전 결과" in (kept["error"] or ""), f"스크립트가 없어 실패해도 값을 지킴: {kept['status']}")
-    c(sum(x["status"] == "complete" for x in cases_of(m, fast)) == 5, "학습에 쓸 값 5건 그대로")
-    c(not (member_dir / "scripts" / "slow.py").exists(), "멤버 PC에 느린 스크립트 없음")
-    c["released"] = stop["released"]
+    c(counts(m, slow) == {"cancelled": 3} and not m.get(f"/api/studies/{slow}")["stalled"], "멤버 화면에도 정리됨")
     # 내 PC가 다시 켜지면 그 PC가 끝낸 것으로 친 케이스를 되살리지 않는다
     w.owner_pc.start()
     time.sleep(3)
     c(counts(o, slow) == {"cancelled": 3}, f"다시 켜도 정리된 상태 유지 {counts(o, slow)}")
+    # 끝난 케이스를 다시 돌리다 실패해도 값은 그대로다: 스크립트를 지운 채 다시 돌린다
+    (folder / "scripts" / "fast.py").unlink()
+    again = o.post(f"/api/studies/{fast}/run", {"case_ids": [solved[0]["id"]]})
+    c(again["queued"] == 1, "주인은 승인 없이 자기 스크립트를 다시 돌림")
+    wait_for(lambda: next(x for x in cases_of(o, fast) if x["id"] == solved[0]["id"])["status"] != "queued" and not o.get(f"/api/studies/{fast}")["running"], timeout=60, what="다시 돌리기 끝")
+    kept = next(x for x in cases_of(o, fast) if x["id"] == solved[0]["id"])
+    c(kept["status"] == "complete" and kept["results"] == solved[0]["results"] and "이전 결과" in (kept["error"] or ""), f"스크립트가 없어 실패해도 값을 지킴: {kept['status']}")
+    c(sum(x["status"] == "complete" for x in cases_of(o, fast)) == 5, "학습에 쓸 값 5건 그대로")
     w.owner_pc.stop()
+    c["released"] = stop["released"]
     c["kept_results"] = kept["results"]
 
 
@@ -1213,14 +1265,15 @@ json.dump({"extra_y": p["x"] + p["z"]}, open("results.json", "w"))
 """
 
 
-@scenario("E16", "다른 멤버가 내 PC 꺼진 채 이어받기: 조회·학습·Simulator, 레시피로 재해석, 원본 필요한 일은 안내", pc=False)
-def e16(w: World, tmp: Path, c: Check):
+def owner_scripts_study(w: World, c: Check, title: str) -> dict:
+    """내 PC에서 스크립트 스터디를 돌리고 배포해 둔 Project. 실제 AI가 도구를 부르는 그대로 MCP stdio로 한다."""
     o, m = w.owner, w.member
     w.owner_pc.start()
-    pid = o.project("E16")
+    pid = o.project(title)
     o.c.put(f"/api/projects/{pid}/members/{m.id}", json={"role": "member"}).raise_for_status()
-    # 내 PC: 스크립트 스터디를 돌리고 묶음을 서버에 올린다. 실제 AI가 도구를 부르는 그대로 MCP stdio로
-    chat(o, o.new_chat(pid), "이 프로젝트에 스터디 있어?")  # AI 세션이 프로젝트 폴더를 정한다. 실제 AI의 도구 호출도 세션 안에서 일어난다
+    first = o.new_chat(pid)
+    chat(o, first, "이 프로젝트에 스터디 있어?")  # AI 세션이 Task 폴더를 정한다. 실제 AI의 도구 호출도 세션 안에서 일어난다
+    work = o.get(f"/api/projects/{pid}/works")[0]
     folder = Path(w.owner_pc.mcp("dds-cae", "project_folder", {}, pid)["folder"])
     (folder / "scripts").mkdir(parents=True, exist_ok=True)
     (folder / "scripts" / "run.py").write_text(RUN_PY, encoding="utf-8")
@@ -1237,82 +1290,188 @@ def e16(w: World, tmp: Path, c: Check):
     w.owner_pc.mcp("dds-study", "deploy_model", {"model_id": v1["model_id"]}, pid)
     saved = w.owner_pc.mcp("dds-study", "save_recipe", {"study_id": sid, "files": ["scripts/extract.py"], "note": "기본 해석"}, pid)
     c(saved["created_by_name"] == OWNER_NAME and set(saved["files"]) == {"scripts/run.py", "scripts/extract.py"}, "묶음을 서버에 올림")
-    need = w.owner_pc.mcp("dds-study", "create_study", {"name": "입력 필요", "variables": variables, "adapter": "script",
-                                                        "adapter_config": {"tool": "python", "script": "scripts/run.py", "inputs": ["inputs/model.dat"]}, "objectives": [{"name": "y", "goal": "min"}]}, pid)["study_id"]
-    w.owner_pc.mcp("dds-study", "save_recipe", {"study_id": need}, pid)
-    attachment = o.post(f"/api/projects/{pid}/attachments", files={"file": ("model.dat", b"input model\n")})
+    return {"pid": pid, "sid": sid, "wid": work["id"], "seq": work["seq"], "model": v1["model_id"], "chat": first, "variables": variables, "folder": folder}
+
+
+@scenario("E16", "다른 멤버는 내 PC가 꺼져도 보고·내려받고·예측한다. 재학습·배포·실행은 막고, 복사로 안내", pc=False)
+def e16(w: World, tmp: Path, c: Check):
+    o, m = w.owner, w.member
+    s = owner_scripts_study(w, c, "E16")
+    pid, sid, model = s["pid"], s["sid"], s["model"]
     w.owner_pc.stop()
     c(not o.get("/api/agent/status")["connected"], "내 PC 꺼짐")
+    before = digest(task_snapshot(o, pid, s["wid"]))
 
-    # 멤버: PC Agent도 없이 서버에 있는 것만으로
+    # 멤버: PC Agent도 없이 서버에 있는 것을 본다
     c(not m.get("/api/agent/status").get("connected"), "멤버 PC도 아직 없음")
     cs = cases_of(m, sid)
     c(len(cs) == 6 and all(x["status"] == "complete" for x in cs), "결과 조회")
-    job = train_poll(m, sid, {"force": True})
-    v2 = job["model"]
-    c(v2["version"] == 2, "학습: 새 버전")
-    m.post(f"/api/models/{v2['id']}/deploy")
-    pred = m.post(f"/api/models/{v2['id']}/predict", {"params": {"x": 1.0, "z": 1.0}})["mean"]["y"]
-    token = m.post(f"/api/models/{v2['id']}/shares", {})["token"]
-    c(w.outsider.get(f"/api/shares/{token}")["model"]["id"] == v2["id"], "Simulator 공유")
-    c(w.outsider.c.get(f"/api/studies/{sid}/recipe").status_code == 403, "멤버가 아니면 묶음을 못 받음")
+    c(m.c.get(f"/api/studies/{sid}/recipe/file").status_code == 200, "스크립트 내려받기")
+    c(m.c.get(f"/api/projects/{pid}/report?format=html&work_id={s['wid']}").status_code == 200, "보고서 내려받기")
+    pred = m.post(f"/api/models/{model}/predict", {"params": {"x": 1.0, "z": 1.0}})["mean"]["y"]
+    c(abs(pred - 2.0) < 1.0, f"Simulator 예측 {pred}")
+    # 실행·재학습·배포·공유·게시·보고서는 서버가 막고 할 일을 말한다
+    for method, path, body in (("POST", f"/api/studies/{sid}/train/start", {"force": True}), ("POST", f"/api/models/{model}/deploy", {}), ("POST", f"/api/models/{model}/shares", {}),
+                               ("POST", f"/api/studies/{sid}/run", {}), ("POST", f"/api/studies/{sid}/doe", {"n": 2}),
+                               ("POST", f"/api/projects/{pid}/artifacts?work_id={s['wid']}", {"kind": "markdown", "title": "x", "payload": {"text": "x"}}),
+                               ("POST", f"/api/projects/{pid}/reports?work_id={s['wid']}", {"title": "x", "body": "## x"})):
+        r = m.c.request(method, path, json=body)
+        c(r.status_code == 403 and "내 PC로 복사해서 하기" in r.json()["detail"] and "→" in r.json()["detail"], f"{path}: {r.status_code}")
+    r = m.c.post(f"/api/studies/{sid}/outputs", json={"outputs": [{"name": "extra_y"}], "post": {"tool": "python", "script": "scripts/extract.py"}})
+    c(r.status_code == 403 and f"{OWNER_NAME}님만 추가할 수 있습니다" in r.json()["detail"] and "→" in r.json()["detail"], "Output은 파일이 있는 사람만")
+    token = o.post(f"/api/models/{model}/shares", {})["token"]
+    c(w.outsider.post(f"/api/shares/{token}/predict", {"params": {"x": 1.0, "z": 1.0}})["mean"]["y"] == o.post(f"/api/models/{model}/predict", {"params": {"x": 1.0, "z": 1.0}})["mean"]["y"], "링크로 받은 사람도 같은 값으로 예측")
+    c(w.outsider.c.get(f"/api/studies/{sid}/recipe").status_code == 403 and w.outsider.c.get(f"/api/studies/{sid}").status_code == 403, "링크로 받은 사람은 예측만")
 
-    # 멤버 PC가 켜졌다. 스크립트는 없다
+    # 멤버 PC가 켜졌다. 멤버의 AI는 내 Task에서 일하고, 남의 스터디에 쓰지 않는다
     w.member_pc.start()
     mid = m.new_chat(pid)
-    seen = chat(m, mid, "이 프로젝트에 스터디 있어?")
-    c("스크립트 스터디" in seen.reply, "멤버 대화에서 스터디가 보임")
-    member_dir = Path(w.member_pc.mcp("dds-cae", "project_folder", {}, pid)["folder"])
-    c(not (member_dir / "scripts" / "run.py").exists(), "멤버 PC에 스크립트 없음")
+    mine = next(x for x in m.get(f"/api/projects/{pid}/works") if x["mine"])
+    c(mine["id"] != s["wid"] and mine["owner_id"] == m.id, "멤버의 요청은 멤버의 새 Task로 간다")
     t = chat(m, mid, "스크립트 스터디 이어받아서 4점 더 해석해 줘")
-    review = [f for f in flows(m, pid) if f["status"] == "review"]
-    c(len(review) == 1 and not t.errors, "해석 전에 Flow 제안")
-    card = " ".join(n.get("detail") or "" for n in review[0]["nodes"])
-    c(f"{OWNER_NAME}님이 만든 스크립트" in card, "승인 카드에 만든 사람 표시")
-    c(OWNER_NAME in t.reply and "돌리지 않았습니다" in t.reply, "대화에도 만든 사람 표시")
-    c((member_dir / "scripts" / "run.py").read_text(encoding="utf-8") == RUN_PY, "묶음을 멤버 PC로 복구")
-    c(len(cases_of(m, sid)) == 6, "승인 전에는 돌리지 않음")
-    run = approve(m, mid, review[0]["id"])
-    c(not run.errors, f"오류 없음 {run.errors}")
-    c(run.permissions and OWNER_NAME in run.permissions[0], "실행 권한에도 만든 사람 표시")
-    cs = cases_of(m, sid)
-    mine = [x for x in cs if x["run_by"] == m.id]
-    c(len(cs) == 10 and len(mine) == 4 and all(x["status"] == "complete" for x in cs), f"멤버 PC에서 4건 해석 {[x['status'] for x in cs]}")
-    c(all((member_dir / x["run_dir"]).is_dir() or Path(x["run_dir"]).is_dir() for x in mine), "케이스 폴더가 멤버 PC에 있음")
-    c(all(str(w.member_pc.ws) in str((member_dir / x["run_dir"]).resolve()) for x in mine), "멤버 작업 폴더 안")
-    v3 = models_of(m, pid)[0]
-    c(v3["deployed"] and v3["n_train"] == 10, "10건으로 재학습·배포")
-
-    # Output 추가는 주인만: 멤버가 부탁해도 남의 PC에서 스크립트를 돌리지 않는다
-    w.owner_pc.start()
+    c("내 PC로 복사해서 하기" in t.reply and "→" in t.reply, f"AI가 할 일을 안내 {t.reply[:60]}")
+    c("403" not in t.reply and "서버 오류" not in t.reply and "clone_study" not in t.reply and not t.errors, "원문 오류를 보이지 않음")
+    c(not in_task(m, "flows", pid, mine["id"]), "남의 스터디로 Flow를 올리지 않음")
     t2 = chat(m, mid, "스크립트 스터디 이어받아서 Output extra_y 추가해 줘 scripts/extract.py")
-    c(f"{OWNER_NAME}님만 추가할 수 있습니다" in t2.reply and "내 PC로 복사해서 하기" in t2.reply and "→" in t2.reply, "멤버는 추가하지 못하고 이유와 할 일을 들음")
-    c(not any("extra_y" in (x["results"] or {}) for x in cases_of(m, sid)), "내 PC가 켜져 있어도 멤버 요청으로는 돌지 않음")
-    # 주인이 직접 하면 내 PC의 6건만 뽑는다. 멤버 PC의 4건에서는 돌리지 않고 그렇다고 말한다
+    c("내 PC로 복사해서 하기" in t2.reply and "403" not in t2.reply and not any("extra_y" in (x["results"] or {}) for x in cases_of(m, sid)), "Output도 같은 안내, 남의 PC에서 돌지 않음")
+    c(digest(task_snapshot(o, pid, s["wid"])) == before, "원본 해시 변화 0")
+
+    # 주인이 직접 하면 된다: 파일이 있는 내 PC에서 6건을 뽑는다
+    w.owner_pc.start()
     t3 = chat(o, o.new_chat(pid), "스크립트 스터디 이어받아서 Output extra_y 추가해 줘 scripts/extract.py")
     wait_for(lambda: not o.get(f"/api/studies/{sid}")["extracting"], timeout=60, what="추출 끝")
-    all_cases = cases_of(o, sid)
-    got = [x for x in all_cases if "extra_y" in (x["results"] or {})]
-    c(not t3.errors and len(got) == 6 and all(x["run_by"] == o.id for x in got), f"주인 PC의 6건만 뽑힘 {len(got)}")
-    c(MEMBER_NAME in t3.reply and "→" in t3.reply, "멤버 PC에 있는 4건은 뽑지 않았다고 말함")
+    got = [x for x in cases_of(o, sid) if "extra_y" in (x["results"] or {})]
+    c(not t3.errors and len(got) == 6 and all(x["run_by"] == o.id for x in got), f"주인 PC의 6건 뽑힘 {len(got)}")
     w.owner_pc.stop()
-
-    # 입력 모델이 PC에 없을 때: 무엇이 필요한지 말하고, 첨부로 받으면 이어 간다
-    t4 = chat(m, m.new_chat(pid), "입력 필요 이어받아서 4점 더 해석해 줘")
-    c("inputs/model.dat" in t4.reply and "첨부" in t4.reply and not [f for f in flows(m, pid) if f["status"] == "review"], "필요한 입력 파일을 안내")
-    sid5 = m.new_chat(pid)
-    t5 = chat(m, sid5, "입력 필요 이어받아서 4점 더 해석해 줘", [attachment["id"]])  # 내가 올린 첨부를 멤버가 고른다
-    review = [f for f in flows(m, pid) if f["status"] == "review"]
-    c(len(review) == 1 and (member_dir / "inputs" / "model.dat").exists() and not t5.errors, "서버에 있는 첨부를 멤버 PC가 받아 진행")
-    run5 = approve(m, sid5, review[0]["id"])
-    c(not run5.errors and counts(m, need).get("complete") == 4, "입력 모델까지 받아 멤버 PC에서 4건 해석")
-    c["member_cases"] = len(mine)
-    c["owner_cases"] = 6
-    c["versions"] = [1, 2, v3["version"]]
+    w.member_pc.stop()
     c["member_pred_y_at_1_1"] = round(pred, 3)
-    c["output_note"] = t2.reply[:120]
+    c["reply"] = t.reply[:120]
+    c["source_hash_changed"] = 0
+
+
+@scenario("E22", "내 PC로 복사해서 하기(주인 PC 꺼짐): 스크립트·입력·숫자 결과 복사, 다시 돌리지 않고 재학습, 원본 그대로", pc=False)
+def e22(w: World, tmp: Path, c: Check):
+    o, m = w.owner, w.member
+    s = owner_scripts_study(w, c, "E22")
+    pid, sid = s["pid"], s["sid"]
+    # 입력 모델이 필요한 스터디와 그 첨부. 첨부는 보낼 때 Task에 묶인다
+    need = w.owner_pc.mcp("dds-study", "create_study", {"name": "입력 필요", "variables": s["variables"], "adapter": "script",
+                                                        "adapter_config": {"tool": "python", "script": "scripts/run.py", "inputs": ["inputs/model.dat"]}, "objectives": [{"name": "y", "goal": "min"}]}, pid)["study_id"]
+    w.owner_pc.mcp("dds-study", "save_recipe", {"study_id": need}, pid)
+    att = o.post(f"/api/projects/{pid}/attachments", files={"file": ("model.dat", b"input model\n")})
+    chat(o, s["chat"], "이 첨부 확인해 줘. 스터디 있어?", [att["id"]])
+    # 승인 대기 중인 원본도 복사할 수 있다. 원본의 카드는 그대로 남는다
+    waiting = o.post(f"/api/projects/{pid}/flows?work_id={s['wid']}", {"title": "주인의 다음 일", "goal": "", "nodes": [{"id": "n", "label": "n", "type": "doe"}], "edges": []})
+    w.owner_pc.stop()
+    before = digest(task_snapshot(o, pid, s["wid"]))
+
+    # 카드에 알릴 것: PC Agent 없어도 답한다
+    pv = m.get(f"/api/works/{s['wid']}/takeover-preview")
+    c(pv["n_copied"] == 6 and pv["has_recipe"] and pv["owner_name"] == OWNER_NAME and pv["script_author"] == OWNER_NAME and pv["n_raw"] == 0, f"복사 전에 알림(이 스크립트는 원본 파일을 남기지 않는다) {pv}")
+    # 멤버 PC가 꺼져 있어도 복사는 된다. 폴더는 AI를 시작할 때 생긴다
+    task = m.post(f"/api/works/{s['wid']}/takeover", {"agent": "demo"})
+    c(task["mine"] and task["owner_id"] == m.id and task["source_kind"] == "takeover" and task["source_label"] == next(x for x in o.get(f"/api/projects/{pid}/works") if x["id"] == s["wid"])["name"], "내 이름의 새 Task")
+    c(digest(task_snapshot(o, pid, s["wid"])) == before, "복사해도 원본 해시 변화 0")
+    c(o.get(f"/api/flows/{waiting['id']}")["status"] == "review", "원본의 승인 대기는 그대로")
+    studies = {x["name"]: x for x in in_task(m, "studies", pid, task["id"])}
+    copied = studies["스크립트 스터디 복사"]
+    rows = cases_of(m, copied["id"])
+    c(len(rows) == 6 and all(x["status"] == "complete" and x.get("from_case_id") for x in rows), "완료 숫자 결과와 from_case_id")
+    # 다시 돌리지 않고 재학습한다. 주인 PC도 내 PC도 없이 서버에서
+    job = train_poll(m, copied["id"], {})
+    v1 = job["model"]
+    c(v1["n_train"] == 6 and v1["version"] == 1, "재해석 없이 재학습")
+    m.post(f"/api/models/{v1['id']}/deploy")
+    c(m.post(f"/api/models/{v1['id']}/predict", {"params": {"x": 1.0, "z": 1.0}})["mean"]["y"] > 0, "내 Simulator로 예측")
+
+    # 멤버 PC가 켜졌다. 첫 요청 전에 스크립트와 입력이 내 Task 폴더로 온다
+    w.member_pc.start()
+    sid_m = task["active_chat_id"]
+    t = chat(m, sid_m, "스크립트 스터디 복사 이어받아서 4점 더 해석해 줘")
+    folder = task_dir(w.member_pc, pid, task["seq"])
+    c((folder / "scripts" / "run.py").read_text(encoding="utf-8") == RUN_PY and (folder / "scripts" / "extract.py").exists(), "스크립트가 내 Task 폴더로 복사됨")
+    c((folder / "inputs" / "model.dat").read_bytes().replace(b"\r\n", b"\n") == b"input model\n", "입력 첨부가 내 Task 폴더로 복사됨")
+    review = [x for x in in_task(m, "flows", pid, task["id"]) if x["status"] == "review"]
+    c(len(review) == 1 and not t.errors, f"해석 전에 Flow 제안 {t.errors}")
+    card = " ".join(n.get("detail") or "" for n in review[0]["nodes"])
+    c(f"{OWNER_NAME}님이 만든 스크립트" in card, "승인 카드에 만든 사람 표시")
+    c(f"{OWNER_NAME}님이 만든 스크립트" in t.reply and "돌리지 않았습니다" in t.reply, "대화에도 만든 사람 표시")
+    c(len(cases_of(m, copied["id"])) == 6, "승인 전에는 돌리지 않음")
+    run = approve(m, sid_m, review[0]["id"])
+    c(not run.errors, f"오류 없음 {run.errors}")
+    c(run.permissions and OWNER_NAME in run.permissions[0], "실행 권한에도 만든 사람 표시")
+    cs = cases_of(m, copied["id"])
+    fresh = [x for x in cs if x["run_by"] == m.id]
+    c(len(cs) == 10 and len(fresh) == 4 and all(x["status"] == "complete" for x in cs), f"내 PC에서 4건 더 {[x['status'] for x in cs]}")
+    c(all(str(w.member_pc.ws) in str((folder / x["run_dir"]).resolve()) for x in fresh), "케이스 폴더가 내 PC에 있음")
+    v3 = in_task(m, "models", pid, task["id"])[0]
+    c(v3["deployed"] and v3["n_train"] == 10, "10건으로 재학습·배포")
+    # 입력이 필요한 스터디도 그대로 돈다. 입력을 다시 부탁하지 않는다
+    t5 = chat(m, sid_m, "입력 필요 복사 이어받아서 4점 더 해석해 줘")
+    review = [x for x in in_task(m, "flows", pid, task["id"]) if x["status"] == "review"]
+    c(len(review) == 1 and "첨부" not in t5.reply and not t5.errors, f"입력을 다시 묻지 않음 {t5.reply[:60]}")
+    run5 = approve(m, sid_m, review[0]["id"])
+    c(not run5.errors and counts(m, studies["입력 필요 복사"]["id"]).get("complete") == 4, "입력 모델까지 받아 내 PC에서 4건 해석")
+    # 원본을 지워도 내 Task는 그대로다
+    c(digest(task_snapshot(o, pid, s["wid"])) == before, "끝까지 원본 해시 변화 0")
+    w.member_pc.stop()
+    c["copied"] = 6
+    c["member_cases"] = len(fresh)
     c["card"] = card[:80]
     c["permission"] = run.permissions[0]
+    c["source_hash_changed"] = 0
+
+
+@scenario("E23", "지난 Task처럼 시작: 스크립트·설정 복사, 결과 없음, 원본을 지워도 그대로, 다른 Project면 기밀 안내", pc=False)
+def e23(w: World, tmp: Path, c: Check):
+    o, m = w.owner, w.member
+    s = owner_scripts_study(w, c, "E23")
+    pid, sid = s["pid"], s["sid"]
+    before = digest(task_snapshot(o, pid, s["wid"]))
+    rows = o.get(f"/api/works/sources?project_id={pid}")
+    c([x["work_id"] for x in rows] == [s["wid"]] and rows[0]["has_recipe"] and rows[0]["result"], f"목록에 만든 사람·결과 한 줄 {rows}")
+    c(w.outsider.get(f"/api/works/sources?project_id={pid}") == [], "멤버가 아니면 목록에 없음")
+
+    # 같은 Project: 내 PC 폴더의 scripts를 복사한다. 묶음에 없는 파일도 온다
+    (s["folder"] / "scripts" / "only_on_pc.py").write_text("print('pc')\n", encoding="utf-8")
+    t2 = new_task(o, pid, "2차", s["wid"])
+    for kind in ("studies", "flows", "artifacts", "models"):
+        c(in_task(o, kind, pid, t2["id"]) == [], f"결과를 가져오지 않음: {kind}")
+    ask = chat(o, t2["active_chat_id"], "새 모델로 지난번처럼 다시 돌려 줘")
+    d2 = task_dir(w.owner_pc, pid, t2["seq"])
+    c((d2 / "scripts" / "run.py").read_text(encoding="utf-8") == RUN_PY and (d2 / "scripts" / "only_on_pc.py").exists(), "내 PC 폴더의 스크립트를 복사")
+    c("첨부" in ask.reply, f"새 모델 파일을 부탁 {ask.reply[:60]}")
+    att = o.post(f"/api/projects/{pid}/attachments", files={"file": ("m9.dat", b"new")})
+    t = chat(o, t2["active_chat_id"], "새 모델로 지난번처럼 다시 돌려 줘", [att["id"]])
+    review = [x for x in in_task(o, "flows", pid, t2["id"]) if x["status"] == "review"]
+    c(len(review) == 1 and not t.errors and "m9" in " ".join(n.get("detail") or "" for n in review[0]["nodes"]), f"새 Task에 Flow 제안 {t.errors}")
+    clone = in_task(o, "studies", pid, t2["id"])[0]
+    c(clone["adapter_config"]["inputs"] == ["inputs/m9.dat"] and counts(o, clone["id"]) == {}, "설정 복사, 새 모델을 가리킴, 승인 전 해석 0")
+    c(digest(task_snapshot(o, pid, s["wid"])) == before, "원본 해시 변화 0")
+    # 복사이며 연결이 아니다: 원본 스크립트를 고치고 지워도 내 것은 그대로다
+    (s["folder"] / "scripts" / "run.py").write_text("raise SystemExit(1)\n", encoding="utf-8")
+    c((d2 / "scripts" / "run.py").read_text(encoding="utf-8") == RUN_PY, "원본을 고쳐도 내 스크립트는 그대로")
+    (s["folder"] / "scripts" / "run.py").write_text(RUN_PY, encoding="utf-8")
+
+    # 다른 Project의 멤버가 가져온다. 주인 PC가 꺼져 있어도 서버 묶음으로 된다. 그사이 원본 Task가 지워져도 된다
+    w.owner_pc.stop()
+    other = m.project("E23 다른 부품")
+    c(any(x["work_id"] == s["wid"] and x["other_project"] for x in m.get("/api/works/sources")), "첫 화면 목록에 다른 Project 표시")
+    t3 = new_task(m, other, "내 첫 일", s["wid"])
+    c(t3["project_id"] == other and t3["source_label"], "다른 Project에 시작점 기록")
+    source_name = t3["source_label"]
+    r = o.c.delete(f"/api/works/{s['wid']}")
+    # 스터디가 있는 Task를 주인이 지워도 멤버의 사본은 남는다
+    c(r.status_code == 200, f"원본 삭제 {r.text[:80]}")
+    c(m.get(f"/api/works/{t3['id']}")["source_label"] == source_name and m.get(f"/api/works/{t3['id']}")["source_work_id"] is None, "원본이 지워져도 어디서 왔는지 남음")
+    w.member_pc.start()
+    chat(m, t3["active_chat_id"], "이 Task에 무엇이 있어?")
+    d3 = task_dir(w.member_pc, other, t3["seq"])
+    c((d3 / "scripts" / "run.py").read_text(encoding="utf-8") == RUN_PY, "원본이 지워져도 서버의 내 몫에서 스크립트를 받음")
+    c(not (d3 / "scripts" / "only_on_pc.py").exists(), "남의 PC에만 있던 파일은 없음")
+    w.member_pc.stop()
+    c["source_hash_changed"] = 0
+    c["script_after_source_deleted"] = True
 
 
 @scenario("PV", "pc_verify chat: --attach·--session·--expect·측정값 저장·현재 대화 Flow만 승인")

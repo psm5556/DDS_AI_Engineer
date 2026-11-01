@@ -198,8 +198,7 @@ def test_admin_ai_blocked_before_start_in_non_member_project(client):  # noqa: F
     admin, me = _auth(client, "admin")
     kim, _ = _auth(client, "sc_kim", admin)
     pid = client.post("/api/projects", json={"name": "멤버 아님"}, headers=kim).json()["id"]
-    sid = client.post(f"/api/projects/{pid}/sessions", json={"agent": "claude"}, headers=admin).json()["id"]
-    r = client.post(f"/api/sessions/{sid}/prompt", json={"text": "해 줘"}, headers=admin)
+    r = client.post(f"/api/projects/{pid}/sessions", json={"agent": "claude"}, headers=admin)
     assert r.status_code == 403 and "멤버" in r.json()["detail"] and "→" in r.json()["detail"]
 
     study = client.post(f"/api/projects/{pid}/studies", headers=kim, json={
@@ -208,9 +207,10 @@ def test_admin_ai_blocked_before_start_in_non_member_project(client):  # noqa: F
                        (f"/api/studies/{study['id']}/outputs", {"outputs": [{"name": "g", "direction": "minimize"}]}),
                        (f"/api/studies/{study['id']}/datasets", {"name": "d", "targets": []})):
         r = client.post(path, json=body, headers=admin)
-        assert r.status_code == 403 and "멤버" in r.json()["detail"], f"{path}: {r.text}"
+        assert r.status_code == 403 and "→" in r.json()["detail"], f"{path}: {r.text}"
 
     client.put(f"/api/projects/{pid}/members/{me['id']}", json={"role": "member"}, headers=admin)
+    sid = client.post(f"/api/projects/{pid}/sessions", json={"agent": "claude"}, headers=admin).json()["id"]
     assert client.post(f"/api/sessions/{sid}/prompt", json={"text": "해 줘"}, headers=admin).status_code != 403
 
 

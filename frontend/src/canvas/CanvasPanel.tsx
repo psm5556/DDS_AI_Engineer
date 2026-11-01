@@ -1,9 +1,10 @@
 import { AlertTriangle, Database, FileText, FolderTree, SlidersHorizontal, Workflow, X } from "lucide-react";
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { startPanelResize, type PanelLayout } from "../components/sideLayout";
 import { useLive } from "../live";
 import type { Artifact, Flow, Study, WorkDetail } from "../types";
-import { COPY, W } from "../work/copy";
+import { COPY, taskPath, W } from "../work/copy";
 import { useWorkList } from "../work/scope";
 import { useCanvas, type CanvasTab } from "./CanvasContext";
 import { LocalFiles } from "./LocalFiles";
@@ -18,6 +19,15 @@ const TABS: [CanvasTab, string, typeof Workflow][] = [
 /** 오른쪽 탭: 이 Task의 흐름(단계별 결과)·보고서·데이터·Simulator(모델 버전)·내 PC 파일이 실시간으로 쌓인다.
  *  에이전트가 새로 만든 것으로 탭이 자동으로 바뀐다(방금 직접 탭을 골랐으면 잠시 양보). 다른 Task의 소식은 탭을 빼앗지 않는다(WorkNotices가 알린다).
  *  닫으면 완전히 사라지고, 머리글의 버튼(Ctrl+J)으로 다시 연다. */
+/** 데이터 탭 맨 위: 어디서 가져온 Task인지. 원본이 지워졌으면 이름만 남는다 */
+function SourceLine({ pid, work }: { pid: number; work: WorkDetail | null }) {
+  if (!work?.source_label) return null;
+  return (
+    <p className="src-line small muted">{work.source_kind === "takeover" ? COPY.sourceLineTakeover(work.source_label) : COPY.sourceLine(work.source_label)}
+      {work.source_work_id && <>{" · "}<Link to={taskPath(pid, work.source_work_id)}>{COPY.sourceOpen}</Link></>}</p>
+  );
+}
+
 export function CanvasPanel({ pid, wid, work, layout }: { pid: number; wid: number | null; work: WorkDetail | null; layout: PanelLayout }) {
   const c = useCanvas();
   const flows = useWorkList<Flow>("flows", pid, wid);
@@ -74,7 +84,7 @@ export function CanvasPanel({ pid, wid, work, layout }: { pid: number; wid: numb
       <div key={tab} className={`canvas-body ${tab === "flow" ? "pinned" : ""}`}>
         {tab === "flow" ? <FlowView pid={pid} flows={flows} arts={arts ?? []} />
           : tab === "report" ? <ReportView pid={pid} arts={arts ?? []} />
-          : tab === "data" ? <StudiesView pid={pid} />
+          : tab === "data" ? <><SourceLine pid={pid} work={work} /><StudiesView pid={pid} /></>
           : tab === "simulator" ? <SimulatorTab pid={pid} /> : <LocalFiles pid={pid} work={work} />}
       </div>
     </aside>

@@ -1,6 +1,9 @@
 """Task(코드 이름 Work): Project 안의 일 한 건. 기록·흐름·결과는 Task에 묶이고, 지우면 함께 사라진다."""
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from .. import models, schemas, work_service
 from ..agent.hub import hub
@@ -34,6 +37,14 @@ def _chats(db: Session, work_id: int) -> list[dict]:
     return [{"id": c.id, "user_id": c.user_id, "display_name": name, "agent": c.agent, "created_at": c.created_at} for c, name in rows]
 
 
+def _source(db: Session, work_id: int, user: models.User) -> models.Work:
+    """가져올 Task. 내가 멤버인 Project의 것만 된다. 관리자여도 멤버가 아니면 안 된다: 값이 다른 Project로 옮겨 가는 길이다."""
+    w = get_or_404(db, models.Work, work_id, "가져올 Task")
+    if member_role(w.project_id, user, db) is None:
+        raise HTTPException(403, "내가 멤버인 Project의 Task에서만 가져올 수 있습니다 → 그 Project 관리자에게 멤버 추가를 요청하세요")
+    return w
+
+
 def _detail(db: Session, w: models.Work, user: models.User) -> dict:
     brief = next(b for b in work_service.briefs(db, [w.project_id], user)[w.project_id] if b["id"] == w.id)
     chats = _chats(db, w.id)
@@ -62,6 +73,12 @@ def search_works(q: str = "", user: models.User = Depends(get_current_user), db:
     return work_service.search(db, q, user)
 
 
+@router.get("/works/sources", response_model=list[schemas.WorkSource])
+def work_sources(project_id: int | None = None, q: str = "", user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """지난 Task처럼 시작 목록. 지난 Task가 없으면 빈 목록이고, 화면은 이 칸을 보이지 않는다."""
+    return work_service.sources(db, user, project_id, q)
+
+
 @router.get("/projects/{project_id}/works", response_model=list[schemas.WorkBrief])
 def list_works(project: models.Project = Depends(get_project_for_member), user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     return work_service.briefs(db, [project.id], user)[project.id]
@@ -74,7 +91,10 @@ def create_work(body: schemas.WorkCreate | None = None, project: models.Project 
     require_ai_can_work(project.id, user, db)
     body = body or schemas.WorkCreate()
     agent = _agent_for(user, body.agent)  # 쓸 수 없는 AI면 Task를 만들기 전에 알린다
+    source = _source(db, body.from_work_id, user) if body.from_work_id else None  # 가져올 수 없으면 번호를 쓰기 전에 알린다
     w = work_service.new_work(db, project.id, user.id, body.name, body.name_auto)
+    if source:
+        work_service.start_from(db, w, source, user)
     if agent:
         work_service.add_chat(db, w, user.id, agent)
     db.commit()
@@ -143,6 +163,37 @@ def name_current_work(body: schemas.WorkAiInfo, scope: work_service.WorkScope = 
     _changed(w.project_id, w.id)
     work_service.tell_agents_renamed(db, w)
     return {"work_id": w.id, "name": w.name, "changed": True}
+
+
+@router.get("/works/{work_id}/takeover-preview", response_model=schemas.TakeoverPreview)
+def takeover_preview(work_id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """내 PC로 복사해서 하기 전에 알릴 것: 없는 툴, 받지 못하는 원본. PC Agent가 꺼져 있어도 답한다."""
+    return work_service.takeover_preview(db, _source(db, work_id, user), user)
+
+
+@router.post("/works/{work_id}/takeover", response_model=schemas.WorkDetail)
+def take_over(work_id: int, body: schemas.TakeoverRequest | None = None, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
+    """내 PC로 복사해서 하기. 사람이 누를 때만 한다. 주인의 PC가 꺼져 있어도 서버에 있는 것으로 된다. 원본은 그대로다."""
+    source = _source(db, work_id, user)
+    body = body or schemas.TakeoverRequest()
+    agent = _agent_for(user, body.agent)
+    try:
+        w = work_service.take_over(db, source, user, body.name, agent)
+    except (ObjectDeletedError, StaleDataError, IntegrityError) as e:  # 복사하는 사이 원본이 지워졌다. 반쪽 Task를 남기지 않는다
+        db.rollback()
+        raise HTTPException(409, "복사하는 사이 원본 Task가 지워졌습니다 → 왼쪽 목록을 새로고침한 뒤 다시 고르세요") from e
+    _changed(w.project_id, w.id)
+    return _detail(db, w, user)
+
+
+@router.get("/works/{work_id}/carry/{study_id}")
+def carry_recipe(work_id: int, study_id: int, user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """PC Agent가 받는 이 Task 몫의 스크립트 묶음. 원본 스터디가 지워져도 그대로 있다."""
+    w = _visible(work_id, user, db)
+    path = work_service._carry_dir(w.project_id, w.id) / f"study_{study_id}.zip"
+    if not path.is_file():
+        raise HTTPException(404, "받을 스크립트 묶음이 서버에 없습니다 → AI가 스크립트를 새로 만들게 요청하세요")
+    return FileResponse(path, filename=path.name, media_type="application/zip")
 
 
 @router.get("/works/{work_id}/messages", response_model=list[schemas.ChatMessageResponse])

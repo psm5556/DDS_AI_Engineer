@@ -755,7 +755,7 @@ await step("Project > Task", async () => {
     await page.waitForURL(new RegExp(`/projects/${p.id}(/w/\\d+)?$`), { timeout: 15000 });
     await page.goto(`${BASE}/projects/${p.id}/new`);
     await page.waitForURL(new RegExp(`/projects/${p.id}/w/new$`), { timeout: 15000 });
-    // 남의 Task: 머리글에 주인과 '보기만 가능'을 보이고 입력창은 막힌다. 말없이 내 Task로 넘어가지 않는다
+    // 남의 Task: 머리글에 주인과 '보기만 가능'을 보인다. 적어 보내면 카드로 묻고, 말없이 내 Task로 넘어가지 않는다
     const uname = `tasker${Date.now()}`;
     const anon = await page.evaluate(async ([u]) => {
       await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: u, pin: "123456", display_name: "박프로" }) });
@@ -774,7 +774,17 @@ await step("Project > Task", async () => {
     await page.locator(".side-work.active .side-owner", { hasText: "박프로" }).waitFor({ timeout: 8000 });
     const box = page.getByLabel("에이전트에게 요청");
     if (!(await box.getAttribute("placeholder"))?.includes("보기만")) throw new Error("남의 Task의 입력창 안내가 없습니다");
-    if (!(await box.getAttribute("readonly") !== null)) throw new Error("남의 Task의 입력창이 열려 있습니다");
+    if (await page.getByRole("button", { name: "Output 추가" }).count()) throw new Error("남의 Task에 실행 버튼이 보입니다");
+    await box.fill("이 조건으로 다시 돌려 줘");
+    await box.press("Enter");
+    const cardC = page.locator(".route-card");
+    await cardC.getByRole("button", { name: "내 PC로 복사해서 하기" }).waitFor({ timeout: 8000 });
+    await cardC.getByText("원래 Task는 그대로입니다").waitFor({ timeout: 5000 });
+    if (page.url() !== `${BASE}/projects/${p.id}/w/${theirs.id}`) throw new Error("남의 Task에서 말없이 다른 곳으로 넘어갔습니다");
+    await shot("task-others-card");
+    await cardC.getByRole("button", { name: "취소" }).click();
+    if (await box.inputValue() !== "이 조건으로 다시 돌려 줘") throw new Error("취소했는데 적은 요청이 사라졌습니다");
+    await box.fill("");
     await page.getByRole("tab", { name: "파일" }).click();
     await page.getByText("박프로님 PC에 있습니다").waitFor({ timeout: 8000 });
     await shot("task-others");

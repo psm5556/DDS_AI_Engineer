@@ -12,10 +12,18 @@ export interface Project {
 export interface WorkBrief {
   id: number; uid: string | null; project_id: number; seq: number; name: string; owner_id: number; owner_name: string; legacy: boolean;
   mine: boolean; can_manage: boolean; status: FlowStatus | null; flow_title: string | null; model_file: string | null; n_cases: number;
-  source_label: string | null; version: number; created_at: string; updated_at: string;
+  source_label: string | null; source_work_id: number | null; source_kind: "same_again" | "takeover" | null; version: number; created_at: string; updated_at: string;
 }
 export interface WorkChat { id: number; user_id: number; display_name: string; agent: string; created_at: string }
 export interface WorkDetail extends WorkBrief { chats: WorkChat[]; active_chat_id: number | null; n_simulators: number; n_share_links: number }
+export interface WorkSource {
+  work_id: number; project_id: number; project_name: string; name: string; owner_name: string; mine: boolean; n_steps: number; result: string;
+  has_recipe: boolean; script_author: string | null; other_project: boolean; created_at: string;
+}
+export interface TakeoverPreview {
+  work_id: number; name: string; owner_name: string; agent_connected: boolean; missing_tools: { key: string; label: string }[]; n_raw: number; n_copied: number;
+  has_recipe: boolean; script_author: string | null; n_inputs: number;
+}
 export interface WorkSearchHit { project_id: number; project_name: string; work_id: number; work_name: string; owner_name: string; created_at: string; model_file: string | null; matched: "name" | "file" | "result"; matched_text: string }
 export interface WorkSearchResult { projects: number[]; works: WorkSearchHit[] }
 

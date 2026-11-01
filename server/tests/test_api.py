@@ -26,6 +26,17 @@ def _auth(client, username, admin_headers=None):
     return {"Authorization": f"Bearer {r.json()['access_token']}"}, r.json()["user"]
 
 
+def _co_workers(study_id: int, *user_ids: int):
+    """이전 기록처럼 여러 멤버가 한 Task에서 일하는 경우. 남의 PC·남의 케이스 규칙은 여기서만 생긴다(새 Task는 주인 한 사람이다)."""
+    from server.app import models
+    from server.app.database import SessionLocal
+
+    with SessionLocal() as db:
+        work = db.get(models.Work, db.get(models.Study, study_id).work_id)
+        work.legacy_users = [*(work.legacy_users or []), *user_ids]
+        db.commit()
+
+
 def test_auth_and_sharing(client):
     admin, admin_user = _auth(client, "admin")
     assert admin_user["is_admin"]

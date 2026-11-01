@@ -20,9 +20,11 @@ import { AGENT_PREFILL, AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, PRACTIC
 import { useLive, useServerDown } from "../live";
 import { useToast } from "../toast";
 import { orderNodes } from "../flow/order";
-import type { AgentInstance, AgentStatus, Artifact, Attachment, ChatMessage, ChatSession, Flow, PermissionRequest, SessionStatus, TurnStatus, WorkDetail } from "../types";
+import type { AgentInstance, AgentStatus, Artifact, Attachment, ChatMessage, ChatSession, Flow, PermissionRequest, SessionStatus, TurnStatus, WorkDetail, WorkSource } from "../types";
 import { autoTaskName, COPY, taskPath, W } from "../work/copy";
+import { TakeoverCard } from "../work/RouteCard";
 import { useWorkList } from "../work/scope";
+import { SourcePicker } from "../work/SourcePicker";
 
 /** 가운데 기록: 사용자는 말로 지시하고, 에이전트의 Task Flow 제안·실행 확인·결과가 기록 안의 카드로 이어진다.
  *  같은 내용은 오른쪽 탭에 크게 쌓인다. 기록은 Task에 하나다. 이전 기록만 옛 대화 여러 개를 시간순으로 합쳐 보여 준다.
@@ -63,9 +65,11 @@ function fillPieces(xs: ChatMessage[], pieces: Map<number, { off: number; text: 
   return changed ? out : xs;
 }
 
+export interface InitialPrompt { text: string; attachmentIds: number[]; fromWorkId?: number }
+
 export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onInitialSent }: {
   pid: number; wid: number | null; work: WorkDetail | null; firstTask?: boolean; onWork: (id: number) => void;
-  initialPrompt?: { text: string; attachmentIds: number[] } | null; onInitialSent?: () => void;
+  initialPrompt?: InitialPrompt | null; onInitialSent?: () => void;
 }) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -98,6 +102,13 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
   const bodyRef = useRef<HTMLDivElement>(null);
   const sentInitial = useRef(false);
   const [seed, setSeed] = useState<{ text: string; n: number; attachments?: Attachment[]; askFile?: string } | undefined>();
+  const [source, setSource] = useState<WorkSource | null>(null); // 새 Task 화면에서 고른 '지난 Task처럼 시작'
+  const homeSource = useRef(initialPrompt?.fromWorkId); // 첫 화면에서 골랐으면 처음 보내는 요청에 쓴다. initialPrompt는 보내면 비워진다
+  const fromWork = useRef<number | undefined>(undefined);
+  fromWork.current = source?.work_id ?? homeSource.current;
+  // 남의 Task에 적은 요청: 보내지 않고 카드로 묻는다. 복사하면 새 Task에서 이 요청을 그대로 보낸다
+  const [takeoverAsk, setTakeoverAsk] = useState<{ text: string; attachmentIds: number[] } | null>(null);
+  const [copying, setCopying] = useState(false);
 
   const { data: agent } = useQuery({
     queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status"),
@@ -328,7 +339,10 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
     sending.current = true;
     stopWanted.current = false;
     try {
-      if (readOnly) throw new Error(COPY.readOnly(work?.owner_name ?? ""));
+      if (readOnly) { // 어느 입구로 왔든(입력창, 탭의 요청 버튼) 남의 Task에 보내지 않고 카드로 묻는다
+        setTakeoverAsk({ text: t, attachmentIds });
+        return false;
+      }
       if (!target || !id) {
         if (!chosen) throw new Error("쓸 수 있는 AI 에이전트를 찾지 못했습니다 → PC Agent 연결을 확인하거나 설정에서 AI 도구를 설치하세요.");
         if (!target) setPendingFirst(t || "첨부한 파일을 확인해 주세요.");
@@ -336,7 +350,7 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
         if (!target) {
           // 첫 화면에서 온 첫 Task는 '첫 Task'로 두고, 그 뒤는 요청 앞부분으로 부른다. 보낼 때 비로소 만들어진다
           const name = firstTask ? null : autoTaskName(t, fileName);
-          const made = newWork.current ?? await post<WorkDetail>(`/api/projects/${pid}/works`, { name, name_auto: true, agent: chosen });
+          const made = newWork.current ?? await post<WorkDetail>(`/api/projects/${pid}/works`, { name, name_auto: true, agent: chosen, ...(fromWork.current ? { from_work_id: fromWork.current } : {}) });
           newWork.current = made;
           qc.setQueryData(["work", made.id], made); // 주소가 바뀔 때 뼈대 화면이 끼지 않게
           target = made.id;
@@ -398,6 +412,20 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
       });
     }
   }, [initialPrompt, agentKnown, send, onInitialSent, pid]);
+
+  /** 내 PC로 복사해서 하기: 내 이름의 새 Task를 만들고, 적어 둔 요청은 그 Task에서 보낸다. 원래 Task는 그대로다 */
+  const copyToPc = async () => {
+    if (!wid) return;
+    setCopying(true);
+    try {
+      const made = await post<WorkDetail>(`/api/works/${wid}/takeover`, chosen ? { agent: chosen } : {});
+      qc.setQueryData(["work", made.id], made);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["project", pid] });
+      toast(COPY.copied(made.name));
+      nav(taskPath(pid, made.id), { state: { prompt: takeoverAsk?.text ?? "", attachmentIds: takeoverAsk?.attachmentIds ?? [] } });
+    } catch (e) { toast((e as Error).message, true); setCopying(false); }
+  };
 
   // 상황에 맞는 추천 프롬프트 (→ 키로 입력)
   const suggestions = useMemo(() => {
@@ -481,7 +509,7 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
             <div className="chat-empty">
               <AgentGlyph size={32} /><b>{COPY.newTaskTitle}</b>
               <p>{COPY.newTaskBody}</p>
-              {!disabled && !busy && statusKnown && <div className="chat-suggest">{CHAT_SUGGEST.map((s) => <button key={s} onClick={() => void send(s)}>{s}</button>)}</div>}
+              {!source && !disabled && !busy && statusKnown && <div className="chat-suggest">{CHAT_SUGGEST.map((s) => <button key={s} onClick={() => void send(s)}>{s}</button>)}</div>}
             </div>
           ) : !timeline.length && readOnly ? (
             <div className="chat-empty"><AgentGlyph size={32} /><b>{COPY.emptyOthers}</b></div>
@@ -516,14 +544,16 @@ export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onI
 
       <div className="chat-composer">
         <div className="chat-col">
+          {!wid && !pendingFirst && <SourcePicker pid={pid} picked={source} onPick={setSource} />}
+          {readOnly && takeoverAsk && wid && <TakeoverCard wid={wid} owner={work?.owner_name ?? ""} busy={copying} onPrimary={() => void copyToPc()} onLink={() => setTakeoverAsk(null)} />}
           <Composer projectId={pid} workId={wid} workMine={!!work?.mine} suggestions={readOnly ? [] : suggestions} busy={busy && !readOnly} stopping={!!clock?.turn.cancelling} onStop={cancel}
             onSimulator={(p, s, m, w) => { if (w != null && w !== wid) nav(taskPath(p, w), { state: { canvasTab: "simulator", studyId: s, modelId: m } }); else canvas.openSimulator(s, m); }}
-            disabled={disabled || !statusKnown || readOnly} seed={seed}
+            disabled={readOnly ? false : disabled || !statusKnown} seed={seed}
             onSend={(o) => send(o.text, o.attachmentIds, o.fileName)}
             placeholder={readOnly ? COPY.readOnly(work?.owner_name ?? "") : busy ? "진행 중입니다. 끝나면 이어서 요청할 수 있습니다"
               : !statusKnown ? "기록을 불러오는 중입니다" : agent?.connected && !agentKnown ? "PC Agent가 준비되는 중입니다"
               : disabled ? "PC Agent 연결 후 요청할 수 있습니다. 표는 지금 붙여 넣어 Simulator를 만들 수 있습니다" : wid ? COPY.askHere : COPY.askNew}
-            leftBar={readOnly ? <span className="chip">{session ? `${agentLabel(session.agent)} · ` : ""}{COPY.viewOnly}</span>
+            leftBar={readOnly ? <button type="button" className="small" disabled={copying} onClick={() => setTakeoverAsk({ text: "", attachmentIds: [] })}>{COPY.copyToPc}</button>
               : <AgentPicker value={session?.agent ?? chosen ?? ""} onChange={(n) => void switchAgent(n)} disabled={disabled || busy} />} />
         </div>
       </div>

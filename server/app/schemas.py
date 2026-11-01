@@ -102,6 +102,8 @@ class WorkBrief(BaseModel):
     model_file: str | None = None
     n_cases: int = 0
     source_label: str | None = None
+    source_work_id: int | None = None
+    source_kind: str | None = None
     version: int = 1
     created_at: datetime
     updated_at: datetime
@@ -126,6 +128,47 @@ class WorkCreate(BaseModel):
     name: str | None = Field(None, max_length=200)
     name_auto: bool = True  # 화면이 요청 앞부분으로 붙인 이름이면 True
     agent: str | None = None  # 기록을 함께 만들 AI. 표처럼 AI가 필요 없으면 비워 둔다
+    from_work_id: int | None = None  # 지난 Task처럼 시작: 작업 순서·스크립트·설정을 복사해 온다. 내가 멤버인 Project의 Task만 된다
+
+
+class WorkSource(BaseModel):
+    """지난 Task처럼 시작 목록 한 줄."""
+    work_id: int
+    project_id: int
+    project_name: str
+    name: str
+    owner_name: str
+    mine: bool = False
+    n_steps: int = 0
+    result: str = ""
+    has_recipe: bool = False
+    script_author: str | None = None  # 내가 아닌 사람이 만든 스크립트면 그 이름
+    other_project: bool = False  # 지금 Project 밖에서 온다. 치수·경로·품번이 함께 옮겨질 수 있다
+    created_at: datetime
+
+
+class TakeoverTool(BaseModel):
+    key: str
+    label: str
+
+
+class TakeoverPreview(BaseModel):
+    """내 PC로 복사해서 하기 전에 알릴 것."""
+    work_id: int
+    name: str
+    owner_name: str
+    agent_connected: bool = False
+    missing_tools: list[TakeoverTool] = []  # 이 PC에 없는 툴. PC Agent가 꺼져 있으면 알 수 없어 비어 있다
+    n_raw: int = 0  # 원본이 주인 PC에만 있어 받지 못하는 케이스 수
+    n_copied: int = 0  # 숫자 결과를 복사하는 완료 케이스 수
+    has_recipe: bool = False
+    script_author: str | None = None
+    n_inputs: int = 0
+
+
+class TakeoverRequest(BaseModel):
+    name: str | None = Field(None, max_length=200)
+    agent: str | None = None
 
 
 class WorkUpdate(BaseModel):
@@ -560,6 +603,7 @@ class CaseResponse(ORM):
     fields: list[str] | None = None
     archive: dict[str, Any] | None = None
     origin: dict[str, Any] | None = None
+    from_case_id: int | None = None  # 다른 Task에서 숫자만 복사한 케이스. 해석 파일은 없다
     error: str | None
 
 

@@ -15,7 +15,7 @@ from typing import Any, Literal
 
 from _common import DdsMCP, ServerError, api, resolve_pid, settings, tool_wait_limit
 
-from cae_adapters.recipe_bundle import build_bundle, config_scripts, inside, member_path
+from cae_adapters.recipe_bundle import build_bundle, config_scripts, inside, member_path, restore_zip  # noqa: F401 — 받는 PC의 경로 규칙을 시험이 여기서 잰다
 from cae_adapters.result_scan import brief as scan_brief
 from cae_adapters.result_scan import scan_folder
 from cae_adapters.tabular import TableError, analyze, cell_state, fill_guessing, join_tables, read_table
@@ -422,7 +422,7 @@ def _project_studies(pid: int, limit: int, all_works: bool = False) -> list[dict
         st = api.get(f"/api/studies/{s['id']}")
         mine = [m for m in models if m["study_id"] == s["id"]]  # 최신이 앞이다
         cfg = s.get("adapter_config") or {}
-        out.append({"study_id": s["id"], "project_id": s["project_id"], "name": s["name"], "adapter": s["adapter"], "tool": cfg.get("tool"), "script": cfg.get("script"),
+        out.append({"study_id": s["id"], "project_id": s["project_id"], "work_id": s.get("work_id"), "name": s["name"], "adapter": s["adapter"], "tool": cfg.get("tool"), "script": cfg.get("script"),
                     "counts": st["counts"], "running": st.get("running", False), "data_source": st.get("data_source"),
                     "inputs": [{k: v.get(k) for k in ("name", "lower", "upper", "unit")} for v in s["variables"]],
                     "outputs": [o["name"] for o in s.get("outputs") or []], "objectives": s["objectives"], "constraints": s.get("constraints") or [],
@@ -784,7 +784,7 @@ def upload_field(case_id: int, path: str, field: str | None = None, project_id: 
 def clone_study(study_id: int, name: str = "", variables: list[dict[str, Any]] | None = None, objectives: list[dict[str, str]] | None = None,
                 constraints: list[dict[str, Any]] | None = None, outputs: list[dict[str, str]] | None = None, adapter: str | None = None,
                 adapter_config: dict[str, Any] | None = None, project_id: int | None = None, model_files: list[str] | None = None) -> dict:
-    """지난번과 같은 설정으로 새 스터디를 만든다(신규 모델 출시 때 같은 흐름 다시). 변수·범위·출력·목적·제약·해석 방법·스크립트 묶음을 복사하고 바꿀 값만 준다.
+    """지난번과 같은 설정으로 새 스터디를 지금 Task에 만든다(신규 모델 출시 때 같은 흐름 다시, 다른 사람이나 옆 Task의 스터디로 일할 때). 변수·범위·출력·목적·제약·해석 방법·스크립트 묶음을 복사하고 바꿀 값만 준다.
     케이스와 모델은 복사하지 않아 옛 스터디·모델·Simulator는 그대로다. project_id를 주면 그 Project로 만든다(양쪽 멤버여야 한다).
     새 모델을 inspect해 옛 모델과 달라진 점을 먼저 알린 뒤 부르고, 해석을 돌리기 전에 Flow 승인을 받는다.
     model_files: 새 모델 파일(Task 폴더 기준, 예: inputs/new.cae). adapter_config.inputs의 옛 모델을 바꾼다. 주지 않으면 옛 모델로 돈다.
@@ -822,7 +822,8 @@ def _with_new_models(config: dict, model_files: list[str]) -> dict:
 
 @mcp.tool()
 def save_recipe(study_id: int, files: list[str] | None = None, note: str = "") -> dict:
-    """스터디의 스크립트를 서버에 묶어 둔다. 스크립트는 이 PC에만 있어서 올려 두지 않으면 다른 멤버 PC에서 "스크립트가 없습니다"로 막힌다.
+    """지금 Task의 스터디 스크립트를 서버에 묶어 둔다. 스크립트는 이 PC에만 있어서 올려 두지 않으면 다른 멤버 PC에서 "스크립트가 없습니다"로 막힌다.
+    다른 Task의 스터디면 서버가 거절한다: clone_study로 지금 Task에 복제한 뒤 복제본으로 한다.
     adapter_config의 script·post 스크립트를 자동으로 넣고, 그 스크립트가 쓰는 파일이 더 있으면 files(Task 폴더 기준 파일·폴더)로 더한다.
     해석 결과와 모델 파일은 넣지 않는다. 비밀값이 든 파일과 실행 파일은 서버가 거절한다.
     케이스가 처음 끝나면 PC Agent가 script·post 스크립트를 자동으로 올린다. 이 도구는 그 스크립트가 쓰는 파일을 더하거나, 해석을 돌리기 전에 미리 올릴 때 쓴다."""
@@ -854,35 +855,9 @@ def restore_recipe(study_id: int, overwrite: bool = False) -> dict:
         digest = api.download(f"/api/studies/{study_id}/recipe/file", blob)
         if digest != info.get("sha256"):
             raise ValueError("받은 묶음이 서버 기록과 다릅니다 → 다시 받거나 만든 멤버에게 다시 올려 달라고 하세요")
-        expected = {f["path"]: f for f in info.get("files") or []}
-        members: list[tuple[str, Path, bytes]] = []
-        with zipfile.ZipFile(blob) as zf:  # 전부 검사한 뒤에 쓴다. 중간에 멈춰 일부만 받은 상태를 남기지 않는다
-            for item in zf.infolist():
-                if item.is_dir() or item.filename == "recipe.json":
-                    continue
-                if item.filename not in expected:
-                    raise ValueError(f"서버 기록에 없는 파일이 묶음에 있습니다: {item.filename[:80]} → 만든 멤버에게 다시 올려 달라고 하세요")
-                target = inside(root, member_path(item.filename))
-                body = zf.read(item)
-                if hashlib.sha256(body).hexdigest() != expected[item.filename]["sha256"]:
-                    raise ValueError(f"파일 내용이 서버 기록과 다릅니다: {item.filename[:80]} → 만든 멤버에게 다시 올려 달라고 하세요")
-                members.append((item.filename, target, body))
+        restored, unchanged, conflicts = restore_zip(blob, root, {f["path"]: f for f in info.get("files") or []}, overwrite)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    restored, unchanged, conflicts = [], [], []
-    for name, target, body in members:
-        if target.exists():
-            if target.is_file() and target.read_bytes() == body:
-                unchanged.append(name)
-                continue
-            if not overwrite:
-                conflicts.append(name)
-                continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        part = target.with_name(f"{target.name}.{uuid.uuid4().hex[:8]}.part")
-        part.write_bytes(body)
-        part.replace(target)
-        restored.append(name)
     config = s.get("adapter_config") or info.get("adapter_config") or {}  # 복제한 스터디는 새 모델을 가리킨다. 묶음의 옛 설정으로 안내하면 옛 모델을 첨부하라고 한다
     missing = [str(r) for r in config.get("inputs") or [] if not (root / str(r)).exists()]
     out = {"study_id": study_id, "version": info.get("version"), "created_by_name": info.get("created_by_name"), "note": info.get("note"), "folder": str(root),
