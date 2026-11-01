@@ -1032,6 +1032,28 @@ await step("관리", async () => {
   await page.goto(BASE + "/admin?tab=releases");
   await page.waitForTimeout(1500);
   await shot("admin-releases");
+  // 빼앗긴 로그인으로 PIN을 바꾸거나 관리자를 늘리지 못하게 내 PIN을 다시 받는다. 사람은 화면에서 그대로 할 수 있어야 한다
+  await page.goto(BASE + "/admin?tab=users");
+  const box = page.getByLabel("김 엔지니어 관리자").first(); // 앞 단계가 같은 이름의 계정을 여럿 만든다
+  await box.waitFor();
+  if (await box.isChecked()) throw new Error("시험 계정이 이미 관리자입니다");
+  await box.click();
+  await page.getByLabel("내 PIN 1번째 자리").waitFor();
+  if (await box.isChecked()) throw new Error("PIN을 넣기 전에 체크가 바뀌었습니다");
+  await shot("admin-user-grant-pin");
+  await page.getByLabel("내 PIN 1번째 자리").click();
+  await page.keyboard.type(PIN);
+  await page.getByRole("button", { name: "권한 주기" }).click();
+  await page.waitForFunction(() => document.querySelector('input[aria-label="김 엔지니어 관리자"]')?.checked);
+  await box.click();
+  await page.getByLabel("내 PIN 1번째 자리").click();
+  await page.keyboard.type(PIN);
+  await page.getByRole("button", { name: "권한 빼기" }).click();
+  await page.waitForFunction(() => document.querySelector('input[aria-label="김 엔지니어 관리자"]')?.checked === false);
+  await page.getByRole("button", { name: "PIN 초기화" }).first().click();
+  await page.getByLabel("내 PIN 1번째 자리").waitFor();
+  await shot("admin-user-reset-pin");
+  await page.getByRole("button", { name: "취소" }).click();
 });
 
 // 파일을 내려받은 뒤 브라우저를 닫으면 playwright 내부에서 이 거절이 처리되지 않은 채 올라와 프로세스가 죽는다. 점검 결과와 상관없으므로 닫는 동안만 무시한다

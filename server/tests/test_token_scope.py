@@ -180,7 +180,7 @@ def test_every_is_admin_read_is_accounted_for():
     expected = {
         "deps.py": 4,  # effective_admin, require_admin·require_devtest_admin의 관리자 아님 구분, require_member의 안내 문구 고르기
         "routers/agents.py": 2,  # settings_message: 대상 계정의 설정(토큰과 무관), project_names_message: 대상 계정 PC의 폴더 이름 맞추기
-        "routers/auth.py": 1,  # update_user의 body.is_admin
+        "routers/auth.py": 4,  # update_user의 body.is_admin(요청 값)과 u.is_admin(대상 계정). 호출자가 아니다
         "routers/devtest.py": 1,  # _allowed: 대상 PC의 계정
     }
     found = {}
@@ -351,6 +351,14 @@ def test_ai_token_cannot_approve_share_delete_or_change_members(client):  # noqa
         ("DELETE", "/api/tokens/1", {}),
         ("PUT", "/api/agent/settings", {"json": {"auto_update": False}}),
         ("POST", "/api/market/submissions", {"files": {"file": ("x.zip", _zip("a/SKILL.md"))}}),
+        # 툴 경로를 자기 파일로 돌리거나 작업 폴더를 옮기면 다음 실행과 규칙 복사가 그쪽으로 간다
+        ("PUT", "/api/agent/tools/abaqus", {"json": {"path": "C:/x.exe"}}),
+        ("POST", "/api/agent/tools/abaqus/pick", {}),
+        ("POST", "/api/agent/install", {"json": {"agent": "gemini"}}),
+        ("POST", "/api/agent/pick-folder", {"json": {}}),
+        ("POST", "/api/agent/check-folder", {"json": {"path": "C:/x"}}),
+        ("PUT", f"/api/projects/{w.pid}/local/folder", {"json": {"path": "C:/x"}}),
+        ("POST", f"/api/projects/{w.pid}/local/open", {"json": {"path": ""}}),
     ]
     for method, path, kw in calls:
         r = client.request(method, path, headers=w.tok, **kw)
@@ -486,8 +494,27 @@ def test_pin_change_locks_like_login(client):  # noqa: F811
     assert r.status_code == 423 and "잠겼" in r.json()["detail"]
     assert client.post("/api/auth/login", json={"username": "sc_pin_lock", "pin": "123456"}).status_code == 423
     # 관리자가 초기화하면 풀린다
-    assert client.put(f"/api/users/{user['id']}", json={"pin": "123456"}, headers=admin).status_code == 200
+    assert client.put(f"/api/users/{user['id']}", json={"pin": "123456", "admin_pin": "123456"}, headers=admin).status_code == 200
     assert client.post("/api/auth/login", json={"username": "sc_pin_lock", "pin": "123456"}).status_code == 200
+
+
+def test_changing_a_pin_or_admin_right_needs_my_own_pin(client):  # noqa: F811
+    """빼앗긴 관리자 로그인이 PIN을 바꾸면 PIN을 받는 다른 모든 곳이 뜻을 잃는다. 관리자를 늘리면 '다른 관리자의 승인'도 뜻을 잃는다."""
+    admin, me = _auth(client, "admin")
+    kim, kim_user = _auth(client, "sc_repin_kim", admin)
+    for uid, body in ((me["id"], {"pin": "222333"}), (kim_user["id"], {"pin": "222333"}), (kim_user["id"], {"is_admin": True})):
+        r = client.put(f"/api/users/{uid}", json=body, headers=admin)
+        assert r.status_code == 400 and "→" in r.json()["detail"], r.text
+        r = client.put(f"/api/users/{uid}", json={**body, "admin_pin": "000000"}, headers=admin)
+        assert r.status_code == 403 and "→" in r.json()["detail"], r.text
+    assert client.post("/api/auth/login", json={"username": "admin", "pin": "123456"}).status_code == 200
+    assert client.post("/api/auth/login", json={"username": "sc_repin_kim", "pin": "123456"}).status_code == 200
+    assert next(u for u in client.get("/api/users", headers=admin).json() if u["id"] == kim_user["id"])["is_admin"] is False
+
+    # 틀린 횟수는 재확인 잠금으로 세고, 맞으면 된다. 가입 승인처럼 자주 하는 일은 그대로다
+    assert client.put(f"/api/users/{kim_user['id']}", json={"is_admin": True, "admin_pin": "123456"}, headers=admin).status_code == 200
+    assert client.put(f"/api/users/{kim_user['id']}", json={"is_admin": False, "admin_pin": "123456"}, headers=admin).status_code == 200
+    assert client.put(f"/api/users/{kim_user['id']}", json={"display_name": "김", "is_active": True}, headers=admin).status_code == 200
 
 
 def test_pin_failures_are_counted_together_with_login(client):  # noqa: F811

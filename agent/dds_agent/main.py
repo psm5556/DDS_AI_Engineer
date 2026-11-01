@@ -74,6 +74,8 @@ NAME_TRY_GAP_SEC = 20  # 화면을 열어 둔 조회가 잠긴 폴더를 계속 
 class Agent:
     def __init__(self):
         self.s = load_settings()
+        if self.s.token_in_file:  # 설치 직후 첫 실행은 환경 변수로도 받는다. 케이스 실행이 Agent의 환경을 그대로 물려받으므로(tool_commands) 지운다
+            os.environ.pop("DDS_TOKEN", None)
         self.loop: asyncio.AbstractEventLoop | None = None
         self.ws = None
         # AI CLI와 그 안의 셸에는 토큰을 주지 않는다. MCP는 agent.toml에서 스스로 읽는다(mcp_servers/_common.py).

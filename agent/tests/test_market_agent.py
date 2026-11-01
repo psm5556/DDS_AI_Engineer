@@ -360,6 +360,39 @@ def test_recall_incomplete_is_reported(env, monkeypatch):
     assert "weld" in _last(sent)["incomplete"]
 
 
+def test_restarted_agent_still_sees_and_retries_leftover_copy(env, monkeypatch):
+    """재시작하면 기억이 사라진다. 그래도 현황이 '적용됨'으로 바뀌면 안 되고, 턴이 없어도 다시 지워야 한다."""
+    store, api, sent, tmp = env
+    project = _project(tmp)
+    _sync(store, [_item(api)])
+    context.sync_market(project)
+    real, held = market.remove_tree, {"on": True}
+    monkeypatch.setattr(market, "remove_tree", lambda p: False if held["on"] and Path(p).name == "weld" and project in Path(p).parents else real(p))
+    _sync(store, [], RECALL)
+    assert "weld" in _last(sent)["incomplete"]
+
+    fresh = market.MarketStore(api, sent.append, tmp / "ws", "1.0.0")
+    _sync(fresh, [], RECALL)
+    assert "weld" in _last(sent)["incomplete"]
+    assert fresh._has_failed()  # 작업자가 조금 뒤 다시 시도한다
+
+    held["on"] = False
+    _sync(fresh, [], RECALL)
+    assert _last(sent)["incomplete"] == [] and not fresh._has_failed()
+    assert not (project / ".claude" / "skills" / "weld").exists()
+
+
+def test_uninstall_leftover_is_reported(env, monkeypatch):
+    store, api, sent, tmp = env
+    project = _project(tmp)
+    _sync(store, [_item(api)])
+    context.sync_market(project)
+    real = market.remove_tree
+    monkeypatch.setattr(market, "remove_tree", lambda p: False if Path(p).name == "weld" and project in Path(p).parents else real(p))
+    _sync(store, [])
+    assert "weld" in _last(sent)["incomplete"]
+
+
 def test_remove_tree_really_checks(tmp_path, monkeypatch):
     d = tmp_path / "d"
     d.mkdir()

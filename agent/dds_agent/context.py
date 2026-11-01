@@ -509,8 +509,9 @@ def _tidy(project_dir: Path, stamp: str, state: dict | None, rules: dict, dirty:
 
 
 # ---------- 동기화 ----------
-def _skill_index(skills_root: Path, summaries: dict[str, str] | None = None) -> str:
-    """summaries: 마켓 스킬의 서버 요약. 등록자의 설명을 모든 AI의 지침에 그대로 넣지 않는다."""
+def _skill_index(skills_root: Path, summaries: dict[str, str] | None = None, skip: set[str] | frozenset[str] = frozenset()) -> str:
+    """summaries: 마켓 스킬의 서버 요약. 등록자의 설명을 모든 AI의 지침에 그대로 넣지 않는다.
+    skip: 회수·제거했는데 파일이 잡혀 있어 아직 지우지 못한 스킬. 폴더가 남아 있어도 AI에게 쓰라고 알리지 않는다."""
     # 경로는 프로젝트 폴더 기준이다. 절대 경로를 적으면 프로젝트 이름을 바꿀 때 낡고, 규칙 파일을 커밋하면 이 PC의 경로가 함께 올라간다
     summaries = summaries or {}
     lines = ["", "## 부록: 사용 가능한 스킬", "필요할 때 아래 SKILL.md를 읽고 따르세요. 경로는 이 프로젝트 폴더 기준입니다."]
@@ -518,7 +519,7 @@ def _skill_index(skills_root: Path, summaries: dict[str, str] | None = None) -> 
         lines.append("사용자 폴더를 깔끔하게 두려고 이 스킬 폴더에 Hidden 속성을 붙여 두었습니다. 아래 경로는 그대로 읽으면 됩니다. "
                      "목록을 볼 때 PowerShell은 `Get-ChildItem -Force`, ripgrep은 `--hidden`을 쓰세요.")
     lines.append("")
-    for d in sorted(p for p in skills_root.iterdir() if (p / "SKILL.md").exists()):
+    for d in sorted(p for p in skills_root.iterdir() if (p / "SKILL.md").exists() and p.name not in skip):
         if d.name in summaries:
             lines.append(f"- **{d.name}** — {market_store._one_line(summaries[d.name])}  \n  `.claude/skills/{d.name}/SKILL.md`")
             continue
@@ -541,13 +542,20 @@ def _market_doc(project_dir: Path) -> dict:
             # 폴더 이름만 받는다. 목록이 망가져도 스킬 폴더 밖을 지우지 않게
             skills = [s for s in row["skills"] if isinstance(s, str) and s == Path(s).name and not s.startswith(".")]
             items[str(key)] = {"version": str(row["version"]), "skills": skills, "summaries": dict(row.get("summaries") or {})}
-        return {"stamp": str(raw.get("stamp") or ""), "items": items, "conflicts": dict(raw.get("conflicts") or {})}
+        # 지우지 못한 스킬 → 그 항목. 기록을 잃으면 다음부터 사용자의 스킬로 보여 영영 남고, 고친 판까지 막는다
+        residue = {str(s): str(k) for s, k in dict(raw.get("residue") or {}).items() if str(s) == Path(str(s)).name and not str(s).startswith(".")}
+        return {"stamp": str(raw.get("stamp") or ""), "items": items, "conflicts": dict(raw.get("conflicts") or {}), "residue": residue}
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        return {"stamp": "", "items": {}, "conflicts": {}}
+        return {"stamp": "", "items": {}, "conflicts": {}, "residue": {}}
 
 
 def _market_skills(project_dir: Path) -> set[str]:
-    return {s for row in _market_doc(project_dir)["items"].values() for s in row["skills"]}
+    doc = _market_doc(project_dir)
+    return {s for row in doc["items"].values() for s in row["skills"]} | set(doc["residue"])
+
+
+def has_market_residue(project_dir: Path) -> bool:
+    return bool(_market_doc(project_dir)["residue"])
 
 
 def _market_summaries(project_dir: Path) -> dict[str, str]:
@@ -609,7 +617,7 @@ def _sync_market(project_dir: Path) -> dict:
 
     tmp_root = project_dir / MARKET_TMP
     market_store.remove_tree(tmp_root)  # 지난번 복사가 도중에 끊겼으면 남아 있다
-    incomplete, items, failed = [], {}, False
+    incomplete, items, failed, residue = [], {}, False, {}
     try:
         for w in active:
             key, skills = w["key"], list(w.get("skills") or [])
@@ -628,25 +636,35 @@ def _sync_market(project_dir: Path) -> dict:
                         items[key] = row
                     continue
             items[key] = {"version": w["version"], "skills": skills, "summaries": dict(w.get("summaries") or {})}
-        for key, row in doc["items"].items():
-            for s in row["skills"]:
-                if s not in taken and s not in {x for r in items.values() for x in r["skills"]}:
-                    for i, rel in enumerate(SKILL_DIRS):
-                        if s in base:  # Agent 업데이트가 같은 이름의 기본 스킬을 넣었다. 지우면 기본 스킬이 사라지므로 항목이 남긴 파일 없이 기본 스킬로 되돌린다
-                            try:
-                                _replace_tree(CONTEXT_DIR / "skills" / s, project_dir / rel / s, tmp_root, f"base-{i}-{s}")
-                            except OSError as e:
-                                log.warning("기본 스킬로 되돌리지 못했습니다(%s): %s", s, e)
-                                incomplete.append(key)
-                        elif not market_store.remove_tree(project_dir / rel / s):
-                            incomplete.append(key)  # 파일이 열려 있다. 성공처럼 넘어가면 회수가 조용히 실패한다
+        kept = {x for r in items.values() for x in r["skills"]}
+        leaving = {**{s: key for key, row in doc["items"].items() for s in row["skills"]}, **doc["residue"]}
+        for s, key in leaving.items():
+            if s in kept:
+                continue
+            if s in taken:  # 새 판 복사가 이번에 실패했다. 다음 턴에 다시 시도할 때까지 남은 것의 기록을 잃지 않는다
+                if s in doc["residue"]:
+                    residue[s] = key
+                continue
+            for i, rel in enumerate(SKILL_DIRS):
+                if s in base:  # Agent 업데이트가 같은 이름의 기본 스킬을 넣었다. 지우면 기본 스킬이 사라지므로 항목이 남긴 파일 없이 기본 스킬로 되돌린다
+                    try:
+                        _replace_tree(CONTEXT_DIR / "skills" / s, project_dir / rel / s, tmp_root, f"base-{i}-{s}")
+                    except OSError as e:
+                        log.warning("기본 스킬로 되돌리지 못했습니다(%s): %s", s, e)
+                        residue[s] = key
+                elif not market_store.remove_tree(project_dir / rel / s):
+                    residue[s] = key  # 파일이 열려 있다. 성공처럼 넘어가면 회수가 조용히 실패한다
+            if s in residue:
+                incomplete.append(key)
     finally:
         market_store.remove_tree(tmp_root)
     summaries = {k: v for row in items.values() for k, v in row["summaries"].items()}
-    body = (CONTEXT_DIR / "INSTRUCTIONS.md").read_text(encoding="utf-8") + _skill_index(project_dir / ".claude" / "skills", summaries)
+    body = (CONTEXT_DIR / "INSTRUCTIONS.md").read_text(encoding="utf-8") + _skill_index(project_dir / ".claude" / "skills", summaries, skip=set(residue) - base)
     rules = {name: _put_block(project_dir / name, body, RULES_START, RULES_END) for name in RULE_FILES}
-    if items or conflicts:
+    if items or conflicts or residue:
         new_doc = {"stamp": "" if failed or incomplete else stamp, "items": items, "conflicts": conflicts}
+        if residue:
+            new_doc["residue"] = residue
         _write_bytes(project_dir / MARKET_FILE, json.dumps(new_doc, ensure_ascii=False, indent=1).encode("utf-8"))
     else:
         (project_dir / MARKET_FILE).unlink(missing_ok=True)

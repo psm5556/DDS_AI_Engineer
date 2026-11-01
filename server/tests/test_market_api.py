@@ -405,6 +405,36 @@ def test_department_can_publish_its_own_new_version_of_an_official_item(client, 
             db.commit()
 
 
+def test_other_admins_code_version_of_official_item_is_not_a_dead_end(client, users):  # noqa: F811
+    """부서가 함께 유지하는 항목이다. 올린 관리자가 검토를 요청하고 버릴 수 있어야 하고, 다른 사람의 초안을 지우면 안 된다."""
+    name = _name()
+    with SessionLocal() as db:
+        db.query(models.User).filter_by(username="lee_market").one().is_admin = True
+        db.commit()
+    try:
+        first = _submit(client, users["lee"], name)
+        assert _do(client, first, "approve", {"pin": PIN, "official": True}, users["lee"]).status_code == 200
+        mine = _submit(client, users["admin"], name, {f"{name}/a.py": "x = 1\n"})
+        r = _do(client, mine, "approve", {"pin": PIN}, users["admin"])
+        assert r.status_code == 409 and "다른 관리자" in r.json()["detail"]  # 코드는 스스로 승인하지 못한다
+        assert _do(client, mine, "request-review", {}, users["admin"]).status_code == 200
+        assert _do(client, mine, "approve", {"pin": PIN}, users["lee"]).status_code == 200
+
+        again = _submit(client, users["admin"], name, {f"{name}/a.py": "x = 2\n"})
+        assert client.delete(_base(again), headers=users["admin"]).status_code == 200
+
+        owners = _submit(client, users["lee"], name, {f"{name}/a.py": "x = 3\n"})
+        other = _submit(client, users["admin"], name, {f"{name}/a.py": "x = 4\n"})
+        assert other["version"] != owners["version"]
+        statuses = {v["version"]: v["status"] for v in client.get(f"/api/market/packages/{first['package']['id']}", headers=users["lee"]).json()["versions"]}
+        assert statuses.get(owners["version"]) == "draft"  # 소유자가 고치던 초안이 사라지지 않는다
+        assert client.delete(_base(owners), headers=users["kim"]).status_code in (403, 404)  # 남은 여전히 못 버린다
+    finally:
+        with SessionLocal() as db:
+            db.query(models.User).filter_by(username="lee_market").one().is_admin = False
+            db.commit()
+
+
 def test_someones_draft_or_private_item_cannot_be_published_without_asking(client, users):  # noqa: F811
     sub = _submit(client, users["kim"], _name())
     r = _do(client, sub, "approve", {"pin": PIN}, users["admin"])

@@ -22,6 +22,7 @@ class UserAdminUpdate(BaseModel):
     is_active: bool | None = None
     is_admin: bool | None = None
     pin: str | None = None  # 관리자가 PIN 초기화 (6자리 숫자)
+    admin_pin: str | None = None  # PIN 초기화·관리자 권한 변경을 하는 사람의 PIN
 
 
 class PinChange(BaseModel):

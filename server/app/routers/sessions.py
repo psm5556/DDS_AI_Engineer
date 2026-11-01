@@ -142,7 +142,7 @@ def agent_status(user: models.User = Depends(get_current_user)):
 
 
 @router.post("/agent/install")
-def install_agent(body: schemas.AgentInstall, user: models.User = Depends(get_current_user)):
+def install_agent(body: schemas.AgentInstall, user: models.User = Depends(require_jwt)):
     """내 PC Agent에 에이전트 CLI(gemini/claude/codex) 설치를 요청한다. 수 분 걸릴 수 있다."""
     try:
         return registry.runner(user.id).install(body.agent)
@@ -249,7 +249,7 @@ def download_attachment(attachment_id: int, user: models.User = Depends(get_curr
 # ---------- 내 PC 작업 폴더 (PC Agent 경유) ----------
 @router.post("/projects/{project_id}/local/open")
 def open_local(body: schemas.LocalOpen, project: models.Project = Depends(get_project_for_member),
-               user: models.User = Depends(get_current_user)):
+               user: models.User = Depends(require_jwt)):
     """내 PC에서 프로젝트 작업 폴더(또는 케이스 폴더·결과 파일)를 탐색기나 CAE 뷰어로 연다."""
     try:
         return registry.runner(user.id).call("local.open", {"project_id": project.id, "project_name": project.name, "project_uid": project.uid,
@@ -284,7 +284,7 @@ def get_local_folder(project: models.Project = Depends(get_project_for_member), 
 
 @router.put("/projects/{project_id}/local/folder")
 def set_local_folder(body: schemas.LocalFolder, project: models.Project = Depends(get_project_for_member),
-                     user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+                     user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
     """내 PC에서 이 프로젝트의 작업 폴더를 바꾼다(path 없으면 기본 위치). 기존 파일은 옮기지 않는다.
     에이전트 CLI 세션은 시작 폴더가 고정이므로, 내 대화들은 다음 요청부터 새 폴더에서 새 세션으로 이어 간다(지난 대화 요약 전달)."""
     chats = db.query(models.ChatSession).filter_by(project_id=project.id, user_id=user.id).all()
@@ -301,7 +301,7 @@ def set_local_folder(body: schemas.LocalFolder, project: models.Project = Depend
 
 
 @router.post("/agent/check-folder")
-def check_folder(body: schemas.LocalFolder, user: models.User = Depends(get_current_user)):
+def check_folder(body: schemas.LocalFolder, user: models.User = Depends(require_jwt)):
     """새 프로젝트를 만들기 전에 고른 폴더를 작업 폴더로 쓸 수 있는지 확인한다."""
     if not body.path:
         raise HTTPException(422, "폴더 경로를 입력하세요")
@@ -309,7 +309,7 @@ def check_folder(body: schemas.LocalFolder, user: models.User = Depends(get_curr
 
 
 @router.post("/agent/pick-folder")
-def pick_folder(body: schemas.FolderPick, user: models.User = Depends(get_current_user)):
+def pick_folder(body: schemas.FolderPick, user: models.User = Depends(require_jwt)):
     """PC Agent가 있는 내 PC에 Windows 폴더 선택 창을 띄운다. 사용자가 고를 때까지 기다린다(취소하면 빈 경로)."""
     return _agent_call(user, "local.pick_folder", {"initial": body.initial, "title": body.title}, timeout=900)
 
@@ -333,12 +333,12 @@ def agent_diagnose(rescan: bool = False, user: models.User = Depends(get_current
 
 
 @router.post("/agent/tools/{key}/pick")
-def pick_tool(key: str, user: models.User = Depends(get_current_user)):
+def pick_tool(key: str, user: models.User = Depends(require_jwt)):
     """내 PC에 파일 선택 창을 띄워 툴 실행 파일을 고르게 하고 PC Agent에 저장한다(자동으로 못 찾았을 때). 취소하면 빈 경로."""
     return _agent_call(user, "tools.pick", {"key": key}, timeout=900)
 
 
 @router.put("/agent/tools/{key}")
-def set_tool(key: str, body: schemas.ToolPath, user: models.User = Depends(get_current_user)):
+def set_tool(key: str, body: schemas.ToolPath, user: models.User = Depends(require_jwt)):
     """툴 실행 파일 경로를 정한다. path가 비면 직접 고른 값을 지우고 자동으로 찾은 것을 쓴다."""
     return _agent_call(user, "tools.set", {"key": key, "path": body.path})

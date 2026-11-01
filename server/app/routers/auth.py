@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..database import get_db
-from ..deps import (PIN_RE, SCOPE_AGENT, check_pin_with_lock, create_access_token, effective_admin, get_current_user, hash_password,
+from ..deps import (PIN_RE, SCOPE_AGENT, check_pin_with_lock, check_reauth_pin, create_access_token, effective_admin, get_current_user, hash_password,
                     new_api_token, require_admin, require_jwt)
 
 router = APIRouter(prefix="/api", tags=["auth"])
@@ -110,6 +110,12 @@ def update_user(user_id: int, body: schemas.UserAdminUpdate, admin: models.User 
         raise HTTPException(404, "사용자를 찾을 수 없습니다")
     if u.id == admin.id and (body.is_admin is False or body.is_active is False):
         raise HTTPException(400, "자기 자신의 관리자 권한/활성 상태는 바꿀 수 없습니다")
+    # 빼앗긴 로그인이 PIN을 바꾸면 PIN을 받는 모든 곳이, 관리자를 늘리면 '다른 관리자의 승인'이 뜻을 잃는다. 그래서 이 둘만 내 PIN을 다시 받는다
+    if body.pin is not None or (body.is_admin is not None and body.is_admin != u.is_admin):
+        if not body.admin_pin:
+            raise HTTPException(400, "내 PIN이 필요합니다 → PIN 초기화와 관리자 권한 변경은 내 PIN을 입력해야 합니다")
+        if not check_reauth_pin(db.get(models.User, admin.id), body.admin_pin, db):
+            raise HTTPException(403, "PIN이 맞지 않습니다 → 다시 입력하세요. 5번 틀리면 잠깁니다")
     for k in ("is_active", "is_admin", "display_name"):
         if getattr(body, k) is not None:
             setattr(u, k, getattr(body, k))

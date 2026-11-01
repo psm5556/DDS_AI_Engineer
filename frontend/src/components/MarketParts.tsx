@@ -97,7 +97,7 @@ export function LabelFields({ value, onChange }: { value: LabelValues; onChange:
   );
 }
 
-/** 관리자 쓰기는 모두 PIN을 다시 받는다 */
+/** 되돌리기 어렵거나 다른 관문을 무너뜨리는 결정은 PIN을 다시 받는다 */
 export function PinModal({ title, confirm, danger, busy, disabled, children, onClose, onConfirm }: {
   title: string; confirm: string; danger?: boolean; busy?: boolean; disabled?: boolean; children?: ReactNode; onClose: () => void; onConfirm: (pin: string) => void;
 }) {

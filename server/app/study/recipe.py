@@ -41,6 +41,11 @@ _SECRET_TEXT = [
     (re.compile(rb"(?i)\b(?:authorization|bearer)\s*[:=]?\s*['\"]?bearer\s+[A-Za-z0-9._~+/=-]{20,}"), "인증 토큰"),
     # 값을 글자 그대로 적은 경우만 잡는다. password = os.environ[...]은 괜찮다
     (re.compile(rb"(?i)\b(?:password|passwd|pwd|secret|secret_key|api[_-]?key|access[_-]?token|auth[_-]?token)\s*[:=]\s*['\"][^'\"\s]{6,}['\"]"), "비밀번호·키 값"),
+    # 이 앱 자신의 토큰과 로그인. 내려받은 모두가 올린 사람의 권한을 갖게 된다. 길이로 dds_agent 같은 코드 이름과 나눈다
+    (re.compile(rb"(?<![\w-])dds_[A-Za-z0-9_-]{40,}"), "DDS 토큰"),
+    (re.compile(rb"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"), "로그인 토큰"),
+    # 토큰이라는 이름에 값을 글자 그대로 적은 경우. tokenizer·설명 문구가 걸리지 않게 값은 16자 이상의 토큰 글자만 본다
+    (re.compile(rb"(?i)\b[\w-]*token\s*[:=]\s*['\"][A-Za-z0-9._~+/=-]{16,}['\"]"), "토큰 값"),
 ]
 _SECRET_KEY = re.compile(r"(?i)(password|passwd|secret|api[_-]?key|token|credential|private[_-]?key)")
 # 받는 PC(mcp_servers/dds_study._recipe_member)가 거절하는 경로. 여기서 받아 두면 아무 멤버도 내려받지 못하는 묶음이 된다
@@ -87,8 +92,10 @@ def _check_restorable(path: str):
 def _scan_text(path: str, data: bytes):
     if data[:2] in (b"MZ", b"\x7fE") or data[:4] in (b"\x7fELF", b"\xca\xfe\xba\xbe"):
         raise RecipeRejected(f"실행 파일은 묶음에 넣을 수 없습니다: {path} → 스크립트만 넣어 주세요")
+    # UTF-16은 글자 사이에 0이 끼어 그대로는 패턴에 걸리지 않는다. 마켓은 이런 문서를 UTF-8로 바꿔 저장하므로 평문이 된다
+    texts = (data, data.replace(b"\x00", b"")) if b"\x00" in data else (data,)
     for pattern, label in _SECRET_TEXT:
-        if pattern.search(data):  # 찾은 값은 문구에 넣지 않는다. 오류가 대화·로그에 남기 때문이다
+        if any(pattern.search(t) for t in texts):  # 찾은 값은 문구에 넣지 않는다. 오류가 대화·로그에 남기 때문이다
             raise RecipeRejected(f"비밀값으로 보이는 내용이 있습니다({label}): {path} → 값을 지우고 환경변수에서 읽게 고친 뒤 다시 올려 주세요")
 
 

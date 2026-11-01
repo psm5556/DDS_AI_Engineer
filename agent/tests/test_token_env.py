@@ -1,5 +1,6 @@
 """AI CLI 환경에 토큰이 없고, MCP는 그래도 토큰을 얻는지(situ 5단계). 시험 값만 쓴다."""
 import json
+import os
 import subprocess
 import sys
 
@@ -63,6 +64,23 @@ def test_env_only_agent_passes_token_through_mcp_definition(monkeypatch, tmp_pat
     a = _agent(monkeypatch, tmp_path, False, True)
     try:
         assert _mcp_env(a)["DDS_TOKEN"] == TOKEN
+    finally:
+        a.shutdown()
+
+
+def test_case_process_does_not_inherit_token_from_first_run(monkeypatch, tmp_path):
+    """설치 직후 첫 실행은 환경 변수로 토큰을 받는다. 케이스 실행은 Agent의 환경을 그대로 물려받으므로(tool_commands) 파일에 있으면 지운다."""
+    a = _agent(monkeypatch, tmp_path, True, True)
+    try:
+        assert a.s.token == TOKEN and "DDS_TOKEN" not in os.environ
+    finally:
+        a.shutdown()
+
+
+def test_env_only_agent_keeps_token_it_cannot_read_again(monkeypatch, tmp_path):
+    a = _agent(monkeypatch, tmp_path, False, True)
+    try:
+        assert os.environ["DDS_TOKEN"] == TOKEN
     finally:
         a.shutdown()
 

@@ -276,7 +276,8 @@ class MarketStore:
                     self._applied = msg  # 다음 메시지나 다음 연결에서 다시 맞춘다
 
     def _has_failed(self) -> bool:
-        return any(s.get("state") == "failed" for s in self._states.values())
+        """조금 뒤 다시 할 일이 있는가. 지우지 못한 복사본도 넣는다: 대화가 없는 프로젝트는 턴을 기다려도 지워지지 않는다."""
+        return bool(self._incomplete) or any(s.get("state") == "failed" for s in self._states.values())
 
     # ---------- 처리 ----------
     def process(self, msg: dict) -> bool:
@@ -326,9 +327,8 @@ class MarketStore:
                 write_lock(new_lock)
         self._states = states
         removed = sorted(set(old_items) - {i["key"] for i in keep})
-        if removed:
-            self.sweep_projects()
-        incomplete = self._collect_garbage(keep, gone)
+        left = self.sweep_projects() if removed else []
+        incomplete = [*left, *self._collect_garbage(keep, gone)]
         self._incomplete = sorted({*self._incomplete, *incomplete})
         self.report(msg)
         return True
@@ -372,7 +372,8 @@ class MarketStore:
         gone = recalled_versions({"recalled": recalled})
         changed, dropped = self._write_recall(msg)
         on_disk = [k for k, vs in gone.items() if self._on_disk(k, vs)]
-        must_sweep = dropped or bool(on_disk)
+        # 재시작하면 지우지 못한 목록을 잊는다. 프로젝트의 기록을 함께 봐야 남은 것을 '적용됨'으로 보고하지 않는다
+        must_sweep = dropped or bool(on_disk) or bool(self._incomplete) or self._residue_left()
         if recalled or changed:
             self._acked_recall = msg.get("recall_rev")
             if must_sweep:
@@ -491,6 +492,11 @@ class MarketStore:
         except OSError:
             pass
         return [p for p in found.values() if p.is_dir()]
+
+    def _residue_left(self) -> bool:
+        from .context import has_market_residue
+
+        return any(has_market_residue(d) for d in self.known_projects())
 
     def sweep_projects(self) -> list[str]:
         """제거·회수한 항목의 복사본을 모든 프로젝트에서 지운다. 지우지 못한 항목 이름을 돌려준다."""

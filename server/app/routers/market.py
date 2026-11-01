@@ -1,7 +1,7 @@
 """마켓: 사내 스킬을 올리고, 승인하고, 설치하고, 회수한다. 규격은 docs/market-package-spec.md.
 
-사람이 내릴 결정(설치·공개 범위·승인·회수)은 JWT 전용이다. PC의 AI와 스크립트는 토큰으로 초안을 올리고 받을 수만 있다.
-관리자 쓰기는 모두 PIN을 다시 받는다. 올린 코드는 서버에서 실행하지 않고 디스크에 풀지 않는다.
+사람이 내릴 결정(설치·공개 범위·승인·회수)은 JWT 전용이다. PC의 AI와 스크립트는 토큰으로 보고 받을 수만 있다.
+승인·반려·내림·회수와 마켓 스위치는 PIN을 다시 받는다. 올린 코드는 서버에서 실행하지 않고 디스크에 풀지 않는다.
 """
 from __future__ import annotations
 
@@ -100,6 +100,12 @@ def _readable(pkg: models.MarketPackage, v: str, user: models.User, db: Session)
 def _own(pkg: models.MarketPackage, user: models.User):
     if pkg.owner_id != user.id:
         raise HTTPException(403, "만든 사람만 할 수 있습니다 → 고칠 내용을 만든 사람에게 알려 주세요")
+
+
+def _own_or_submitted(pkg: models.MarketPackage, v: models.MarketVersion, user: models.User):
+    """공식 항목의 새 버전은 다른 관리자도 올린다. 그 사람이 검토를 요청하거나 버릴 수 없으면 소유자가 없을 때 고친 판을 낼 길이 없다."""
+    if not (v.submitted_by == user.id and pkg.official and effective_admin(user)):
+        _own(pkg, user)
 
 
 def _check_pin(user: models.User, pin: str, db: Session):
@@ -401,8 +407,9 @@ def submit(file: UploadFile | None = File(None), files: list[UploadFile] = File(
     res = _run_check(file, files, paths, name_hint, user, db)
     pkg = _target_package(res, user, db)
     versions = versions_of(db, pkg.id) if pkg else []
-    drafts = [v for v in versions if v.status == "draft"]
-    versions = [v for v in versions if v.status != "draft"]
+    # 공식 항목은 여러 관리자가 올린다. 다른 사람이 고치던 초안은 지우지 않고 그 번호를 비켜 간다
+    drafts = [v for v in versions if v.status == "draft" and v.submitted_by == user.id]
+    versions = [v for v in versions if v not in drafts]
     blob = market_check.build_zip(res.files)
     sha = hashlib.sha256(blob).hexdigest()
     same = next((v for v in versions if v.sha256 == sha), None)
@@ -663,8 +670,8 @@ def _ensure_install(pkg, v, user, db):
 def request_review(ref: str, version: str, body: schemas.MarketAction | None = None, user=Depends(require_jwt), db: Session = Depends(get_db)):
     """부서에 검토 요청. 동료와 나누는 길도 이것 하나다. 반려된 버전은 이름표를 고쳐 다시 요청할 수 있다."""
     pkg = _package(ref, user, db)
-    _own(pkg, user)
     v = _version(pkg, version, db)
+    _own_or_submitted(pkg, v, user)
     if v.status not in ("draft", "private", "rejected"):
         raise HTTPException(409, f"이미 '{STATUS_LABEL.get(v.status)}' 상태입니다 → 파일을 고치려면 새 버전을 올려 주세요")
     _same_content(v, body.fingerprint if body else None)
@@ -707,8 +714,8 @@ def edit_labels(ref: str, version: str, body: schemas.MarketLabels, user=Depends
 def discard(ref: str, version: str, user=Depends(require_jwt), db: Session = Depends(get_db)):
     """공개한 적 없는 버전을 버린다. 공개한 버전은 지우지 않고 회수한다: 누가 언제 무엇을 썼는지 남아야 한다."""
     pkg = _package(ref, user, db)
-    _own(pkg, user)
     v = _version(pkg, version, db)
+    _own_or_submitted(pkg, v, user)
     if v.status not in ("draft", "private", "rejected"):
         raise HTTPException(409, "공개했거나 검토 중인 버전은 지울 수 없습니다 → 공개한 버전은 관리부서가 회수합니다")
     market_service.zip_path(pkg, version).unlink(missing_ok=True)

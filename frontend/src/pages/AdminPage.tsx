@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { get, post, put } from "../api";
 import { useAuth } from "../auth";
+import { PinModal } from "../components/MarketParts";
 import { Modal } from "../components/Modal";
 import { PinInput } from "../components/PinInput";
 import { SetupChecklist } from "../components/SetupReadiness";
@@ -72,22 +73,32 @@ function Users() {
   const toast = useToast();
   const { data } = useQuery({ queryKey: ["users"], queryFn: () => get<User[]>("/api/users") });
   const set = useMutation({
-    mutationFn: (v: { id: number; body: Partial<User> & { pin?: string } }) => put(`/api/users/${v.id}`, v.body),
+    mutationFn: (v: { id: number; body: Partial<User> & { pin?: string; admin_pin?: string } }) => put(`/api/users/${v.id}`, v.body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); toast("저장했습니다"); },
     onError: (e: Error) => toast(e.message, true),
   });
   const pending = (data ?? []).filter((u) => !u.is_active);
   const [reset, setReset] = useState<User | null>(null);
   const [pin, setPin] = useState("");
+  const [myPin, setMyPin] = useState("");
+  const [grant, setGrant] = useState<{ user: User; value: boolean } | null>(null);
+  const closeReset = () => { setReset(null); setPin(""); setMyPin(""); };
   return (
     <>
     {reset && (
-      <Modal title={`${reset.display_name} PIN 초기화`} onClose={() => { setReset(null); setPin(""); }} footer={<>
-        <button onClick={() => { setReset(null); setPin(""); }}>취소</button>
-        <button className="primary" disabled={pin.length !== 6} onClick={() => { set.mutate({ id: reset.id, body: { pin } as Partial<User> & { pin: string } }); setReset(null); setPin(""); }}>초기화</button>
+      <Modal title={`${reset.display_name} PIN 초기화`} onClose={closeReset} footer={<>
+        <button onClick={closeReset}>취소</button>
+        <button className="primary" disabled={pin.length !== 6 || myPin.length !== 6} onClick={() => { set.mutate({ id: reset.id, body: { pin, admin_pin: myPin } }); closeReset(); }}>초기화</button>
       </>}>
         <div className="field"><span className="lbl">새 PIN (사용자에게 전달 후 설정에서 바꾸도록 안내)</span><PinInput value={pin} onChange={setPin} autoFocus label="새 PIN" /></div>
+        <div className="field"><span className="lbl">내 PIN</span><PinInput value={myPin} onChange={setMyPin} label="내 PIN" /></div>
       </Modal>
+    )}
+    {grant && (
+      <PinModal title={`${grant.user.display_name} 관리자 권한 ${grant.value ? "주기" : "빼기"}`} confirm={grant.value ? "권한 주기" : "권한 빼기"} danger={!grant.value} onClose={() => setGrant(null)}
+        onConfirm={(p) => { set.mutate({ id: grant.user.id, body: { is_admin: grant.value, admin_pin: p } }); setGrant(null); }}>
+        {grant.value ? "관리자는 마켓 항목을 공개·회수하고 Agent를 배포할 수 있습니다." : "관리자 화면을 쓸 수 없게 됩니다."}
+      </PinModal>
     )}
     <div className="table-wrap panel" style={{ padding: 0 }}><table>
       <thead><tr><th>이름</th><th>아이디</th><th>상태</th><th>관리자</th><th /></tr></thead>
@@ -95,7 +106,7 @@ function Users() {
         <tr key={u.id}>
           <td>{u.display_name}</td><td>{u.username}</td>
           <td>{u.is_active ? <span className="chip ok">사용 중</span> : <span className="chip warn">승인 대기</span>}</td>
-          <td><input type="checkbox" checked={u.is_admin} onChange={(e) => set.mutate({ id: u.id, body: { is_admin: e.target.checked } })} aria-label={`${u.display_name} 관리자`} /></td>
+          <td><input type="checkbox" checked={u.is_admin} onChange={(e) => setGrant({ user: u, value: e.target.checked })} aria-label={`${u.display_name} 관리자`} /></td>
           <td className="r"><button className="small ghost" onClick={() => setReset(u)}>PIN 초기화</button>{" "}
             {u.is_active
             ? <button className="small danger" onClick={() => set.mutate({ id: u.id, body: { is_active: false } })}>사용 중지</button>

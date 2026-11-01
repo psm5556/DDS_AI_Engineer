@@ -246,6 +246,68 @@ def test_recalled_version_is_removed_even_when_lock_still_lists_it(project):
     assert res["active"] == [] and not (project / ".claude" / "skills" / "weld").exists()
 
 
+# ---------- 지우지 못한 복사본: 사용자의 스킬로 둔갑하면 회수가 조용히 실패한다 ----------
+RECALLED = [{"key": "weld", "versions": ["1.0.0"], "active": False}]
+
+
+def _hold(monkeypatch, project: Path, skill="weld") -> dict:
+    """다른 프로그램이 파일을 잡고 있어 스킬 폴더를 지우지 못하는 동안을 흉내 낸다."""
+    real, state = market.remove_tree, {"on": True}
+    monkeypatch.setattr(market, "remove_tree", lambda p: False if state["on"] and Path(p).name == skill and project in Path(p).parents else real(p))
+    return state
+
+
+def test_copy_that_could_not_be_removed_stays_ours_and_is_retried(project, monkeypatch):
+    _lock(_install("weld", "1.0.0"))
+    context.sync_market(project)
+    held = _hold(monkeypatch, project)
+    _lock(recalled=RECALLED)
+    assert context.sync_market(project)["incomplete"] == ["weld"]
+    assert (project / ".claude" / "skills" / "weld").exists()
+    assert "weld" not in (project / "CLAUDE.md").read_text(encoding="utf-8")  # 남아 있어도 AI에게 쓰라고 알리지 않는다
+    assert context.has_market_residue(project)
+    assert context.sync_market(project)["incomplete"] == ["weld"]  # 다음 턴에도 잊지 않는다
+    held["on"] = False
+    assert context.sync_market(project)["incomplete"] == []
+    for rel in context.SKILL_DIRS:
+        assert not (project / rel / "weld").exists()
+    assert not (project / context.MARKET_FILE).exists() and not context.has_market_residue(project)
+
+
+def test_fixed_version_replaces_leftover_instead_of_blaming_the_user(project, monkeypatch):
+    _lock(_install("weld", "1.0.0"))
+    context.sync_market(project)
+    _hold(monkeypatch, project)
+    _lock(recalled=RECALLED)
+    context.sync_market(project)
+    _lock(_install("weld", "1.0.1"), recalled=RECALLED)
+    res = context.sync_market(project)
+    assert res["conflicts"] == {} and [w["version"] for w in res["active"]] == ["1.0.1"]
+    assert "1.0.1" in (project / ".claude" / "skills" / "weld" / "SKILL.md").read_text(encoding="utf-8")
+    assert not context.has_market_residue(project)
+
+
+def test_uninstall_leftover_is_retried_too(project, monkeypatch):
+    _lock(_install("weld", "1.0.0"))
+    context.sync_market(project)
+    held = _hold(monkeypatch, project)
+    _lock()
+    assert context.sync_market(project)["incomplete"] == ["weld"]
+    held["on"] = False
+    assert context.sync_market(project)["incomplete"] == [] and not (project / ".claude" / "skills" / "weld").exists()
+
+
+@windows_only
+def test_really_open_file_blocks_removal_until_closed(project):
+    _lock(_install("weld", "1.0.0", files={"scripts/log.txt": "x"}))
+    context.sync_market(project)
+    _lock(recalled=RECALLED)
+    with open(project / ".claude" / "skills" / "weld" / "scripts" / "log.txt", encoding="utf-8"):  # 지우기 공유 없이 연다
+        assert context.sync_market(project)["incomplete"] == ["weld"]
+    assert context.sync_market(project)["incomplete"] == []
+    assert not (project / ".claude" / "skills" / "weld").exists()
+
+
 def test_sweep_removes_from_every_project_in_index(tmp_path, root):
     ws = tmp_path / "ws"
     default, linked = ws / "P0001_a", tmp_path / "elsewhere" / "linked"

@@ -419,7 +419,7 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 ### 3-10. 관리 (`/admin`, 관리자)
 | 탭 | 내용 |
 |---|---|
-| 사용자 | 승인, 사용 중지, PIN 초기화 |
+| 사용자 | 승인, 사용 중지, PIN 초기화(내 PIN 필요), 관리자 권한 변경(내 PIN 필요) |
 | Agent 배포 | 설치 파일 올리기, "서버 코드로 첫 버전 배포", 최신 지정, 변경 내용 |
 | PC Agent 현황 | 연결 PC, 버전, 실행 중 케이스, 원격 업데이트 |
 | 마켓 | 검토 대기(파일, 직전 버전과의 차이, 표시 항목별 확인, 이름표 고치기), 공개 항목(버전별 PC 수, 이름표·내리기·회수), 회수 현황(PC별 적용, 옛 Agent는 업데이트 필요), 마켓 켜고 끄기. 쓰기는 모두 PIN을 다시 받는다. 탭 이름과 사이드바 숫자에 검토 대기 수가 보인다 |
@@ -784,7 +784,7 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 ## 6. 서버 API (주요)
 | 분류 | 경로 |
 |---|---|
-| 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin`(웹 로그인만, 로그인과 같은 잠금) · `GET·POST·DELETE /api/tokens`(발급은 웹 로그인만) · `GET·PUT /api/users` · 관리자 API는 웹 로그인만 된다. 관리자의 AI도 멤버인 프로젝트에서만 일한다. **사람 전용(웹 로그인만):** 작업 흐름 승인·반려, 권한 허용, 프로젝트·대화·결과·스크립트 묶음 삭제, 멤버 변경, Simulator 공유, 토큰 발급·폐기, PIN, 자동 업데이트 설정, 마켓 등록·공개·설치. 토큰은 403이고 상태가 바뀌지 않는다. 개발 AI의 원격 검증만 `/api/devtest`의 좁은 길로 승인·허용한다(허용 중, 내역 남음) |
+| 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin`(웹 로그인만, 로그인과 같은 잠금) · `GET·POST·DELETE /api/tokens`(발급은 웹 로그인만) · `GET·PUT /api/users` · 관리자 API는 웹 로그인만 된다. 관리자의 AI도 멤버인 프로젝트에서만 일한다. **사람 전용(웹 로그인만):** 작업 흐름 승인·반려, 권한 허용, 프로젝트·대화·결과·스크립트 묶음 삭제, 멤버 변경, Simulator 공유, 토큰 발급·폐기, PIN, 자동 업데이트 설정, 툴 경로, 작업 폴더 변경·선택, 폴더 열기, AI 도구 설치, 마켓 등록·공개·설치. 토큰은 403이고 상태가 바뀌지 않는다. 개발 AI의 원격 검증만 `/api/devtest`의 좁은 길로 승인·허용한다(허용 중, 내역 남음) |
 | 프로젝트 | `GET·POST /api/projects` · `GET·PUT·DELETE /api/projects/{p}` · 즐겨찾기 · 멤버 |
 | 대화 | `GET·POST /api/projects/{p}/sessions` · `PUT·DELETE /api/sessions/{s}` · `POST …/prompt·cancel·permission·force-restart` · `GET …/messages·status`(busy·stage·stage_detail·started_at·elapsed_sec·typical_start_sec·link·pending_permissions) · 첨부 |
 | 작업 흐름 | `GET·POST /api/projects/{p}/flows` · `GET /api/flows/{f}` · `PUT …/status` · `PUT …/nodes/{n}` |

@@ -121,7 +121,7 @@ def test_pin_rules_and_lockout(client):
     # 5회 실패 → 맞는 PIN도 잠김
     assert client.post("/api/auth/login", json={"username": "lee", "pin": "654321"}).status_code == 423
     # 관리자 PIN 초기화 → 잠금 해제
-    client.put(f"/api/users/{uid}", json={"pin": "111222"}, headers=admin)
+    client.put(f"/api/users/{uid}", json={"pin": "111222", "admin_pin": "123456"}, headers=admin)
     assert client.post("/api/auth/login", json={"username": "lee", "pin": "111222"}).status_code == 200
 
 

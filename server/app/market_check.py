@@ -38,6 +38,7 @@ MAX_PLUGIN_JSON = 64 * 1024
 MAX_AST_FILE = 512 * 1024  # 기본 스킬의 가장 큰 스크립트가 18 KB다. 문법 분석은 도는 동안 GIL을 쥐므로(1 MB에 1.3초) 크기로 묶는다
 MAX_AST_TOTAL = 2 * 1024 * 1024
 MAX_HITS = 100
+MAX_ITEM_PATH = 150  # PC에서 앞에 붙는 작업 폴더·보관소 경로를 100자 안팎으로 잡았다. Windows 한도는 260자다
 
 # 걸러서 받지 않는 폴더. 브라우저와 scripts/market_publish.py도 보내기 전에 같은 목록으로 뺀다(Starlette는 파일 1000개에서 막힌다)
 JUNK_PARTS = {".git", ".venv", "venv", "__pycache__", "node_modules", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".idea", ".vscode"}
@@ -136,7 +137,9 @@ _PY2 = re.compile(r"^[ \t]*(print[ \t]+[\"'\w%(]|exec[ \t]+[\"'\w]|raise[ \t]+\w
 _CODING = re.compile(rb"^[ \t\f]*#.*?coding[:=][ \t]*([-\w.]+)")
 _FRONT = re.compile(r"\A---[ \t]*\r?\n(.*?\r?\n)?---[ \t]*(?:\r?\n|\Z)", re.S)
 _KEY_LINE = re.compile(r"^[\"']?([A-Za-z][\w-]*)[\"']?[ \t]*:(.*)$")  # "name": x와 name : x도 키다. 못 읽으면 같은 키가 둘 남는다
-_SHELL_INJECT = re.compile(r"!`[^`\n]+`|^[ \t]*(?:```|~~~)!", re.M)
+# CLI의 문법에 맞춘다. 공백이나 줄 처음 뒤의 !`는 명령이 여러 줄이어도 돌고, 울타리는 줄 처음이 아니어도 돈다(claude.exe의 정규식과 대조).
+# 코드의 x!=`y`처럼 줄을 건너 우연히 맞는 것은 잡지 않는다. 한 줄 안의 !`명령`은 CLI가 달라져도 위험하므로 전처럼 어디서나 잡는다
+_SHELL_INJECT = re.compile(r"!`[^`\n]+`|(?<!\S)!`[^`]+`|(?:```|~~~)!")
 _INTERPRETER = re.compile(r"(?<![\w.-])(python[0-9.]*|pythonw|py|bash|sh|zsh|pwsh|powershell|cmd|node|ruby|perl|wscript|cscript|mshta|rundll32|regsvr32|certutil|"
                           r"copy|cp|mv|move|ren|rename|copy-item|move-item|rename-item)(?:\.exe)?(?![\w-])", re.I)
 _SVG_SCRIPT = re.compile(r"<script|\son\w+\s*=|javascript:|<foreignObject", re.I)
@@ -953,6 +956,23 @@ def _scan_files(out: list[tuple[str, bytes]], ctx: CheckContext, scan: _Scan) ->
     return text_only and "runs_document" not in scan.hits
 
 
+def _check_unpacks_on_windows(files: list[tuple[str, bytes]]):
+    """받아 두면 그 PC에서 영원히 설치에 실패하는 묶음. 서버는 Linux일 수 있어 풀어 보지 않고 경로로 판단한다."""
+    spelled: dict[str, str] = {}
+    paths = {p.lower() for p, _ in files}
+    for path, _ in files:
+        if len(path) > MAX_ITEM_PATH:
+            raise PackageRejected(f"경로가 너무 깁니다({len(path)}자): {clean_label(path)[:80]}… → {MAX_ITEM_PATH}자 안으로 줄여 주세요. PC의 작업 폴더 경로가 앞에 붙어 Windows 한도 260자를 넘습니다")
+        parts = path.split("/")
+        for i in range(1, len(parts)):
+            folder = "/".join(parts[:i])
+            if folder.lower() in paths:
+                raise PackageRejected(f"같은 이름이 파일이면서 폴더입니다: {clean_label(folder)[:80]} → 둘 중 하나의 이름을 바꿔 주세요")
+            first = spelled.setdefault(folder.lower(), folder)
+            if first != folder:  # 파일 목록과 풀린 결과가 달라져 설치 검사에서 실패한다
+                raise PackageRejected(f"폴더 이름이 대소문자만 다릅니다: {clean_label(first)[:80]}, {clean_label(folder)[:80]} → 한 가지로 맞춰 주세요. Windows에서는 같은 폴더입니다")
+
+
 def check_package(raw: bytes, ctx: CheckContext | None = None, name_hint: str = "") -> CheckResult:
     """zip 바이트를 읽어 규격에 맞추고 검사한다. 파일을 디스크에 쓰지 않는다. 받을 수 없으면 PackageRejected."""
     ctx = ctx or CheckContext(base_skills=base_skill_names())
@@ -995,6 +1015,7 @@ def check_package(raw: bytes, ctx: CheckContext | None = None, name_hint: str = 
                 body = _to_utf8(path, body, fixes).encode("utf-8")
             out.append((path, body))
         skills.append({"name": skill, "description": desc, "summary": summary_of(desc)})
+    _check_unpacks_on_windows(out)
 
     # 검사
     scan = _Scan()
