@@ -29,7 +29,7 @@ dds-study.create_study(
 - 제약조건(예: 응력 ≤ 250)은 `constraints=[{"name": "max_stress", "upper": 250}]`로 줍니다. 최적 케이스는 제약을 만족한 것 중에서 고르고, `train_surrogate`의 `outputs`에 제약 항목도 넣으면 제안할 때 제약 만족 확률을 곱합니다.
 - 변수와 출력의 `note`에 쉬운 이름과 단위를 적습니다(`"note": "두께 [mm]"`). 판단 문장이 이 이름과 단위로 나옵니다.
 - **목표가 둘 이상이면** `objectives`에 모두 적고 `train_surrogate(outputs=[...])`에 목표를 모두 넣은 뒤 `optimize(mode="bo")`를 씁니다. 첫 목표만 보지 않고 함께 좋아지는 쪽을 찾습니다. 항상 더 낫다고 말하지 않습니다(부딪힘이 작은 문제에서는 차이가 작습니다).
-- 해석 없이 흐름을 검증할 때는 `adapter="mock"`, `adapter_config={"function": "beam"}`을 씁니다(외팔보: width, height → mass, deflection, max_stress).
+- 사용자가 "연습용 계산으로"라고 하거나 해석 없이 흐름을 검증할 때는 `adapter="mock"`을 씁니다(화면 이름 '연습용 계산'. 실제 해석 값이 아니라고 함께 말합니다). `adapter_config={"function": ...}`: `bracket3d`(브래킷: thickness, rib_height → mass, max_stress, deflection), `washer`(세탁기: spring_k, damper_c, balancer_m, spring_pos → vibration, floor_force), `beam`(외팔보: width, height → mass, deflection, max_stress).
 - 불러온 표·해석 결과로 만든 스터디는 `adapter="data"`입니다. 돌릴 수 없고, 나중에 `set_study_adapter`로 해석 방법을 연결하면 이어 갑니다.
 - DOE 계획만 필요하면 `generate_doe` 뒤 `export_doe`로 CSV를 넘깁니다. 스크립트는 케이스가 처음 끝날 때 PC Agent가 서버에 자동으로 올려 다른 멤버가 쓸 수 있습니다. 스크립트가 쓰는 파일이 더 있으면 `save_recipe(files=…)`로 더합니다.
 

@@ -41,7 +41,7 @@ def _status(study: models.Study) -> dict:
     for c in study.cases:
         counts[c.status] = counts.get(c.status, 0) + 1
     return {"study": study, "counts": counts, "best": service.best_case(study), **service.stalled_view(object_session(study), study),
-            "extracting": service.extracting(study.id), "pc_notice": study.pc_notice, "data_source": service.data_source(study)}
+            "extracting": service.extracting(study.id), "pc_notice": study.pc_notice, "data_source": service.data_source(study), "tool_label": service.tool_label(study)}
 
 
 @router.get("/adapters")
@@ -658,7 +658,7 @@ def share_spec(token: str, user=Depends(get_current_user), db: Session = Depends
     src = service.data_source(study)
     return {"model": schemas.ModelResponse.model_validate(m), "variables": service.model_variables(study, m), "objectives": study.objectives,
             "study_name": study.name, "shared_by": owner.display_name if owner else "", "note": sh.note,
-            "data_source": {k: src.get(k) for k in ("kind", "label", "rows", "total")}}  # 링크로 받은 사람에게 파일 이름은 보이지 않는다
+            "data_source": {k: src.get(k) for k in ("kind", "label", "rows", "total", "notice")}}  # 링크로 받은 사람에게 파일 이름은 보이지 않는다. 연습용 안내는 받는 사람에게 더 필요하다
 
 
 @router.post("/shares/{token}/predict", response_model=schemas.PredictResponse)
@@ -914,14 +914,18 @@ _rom_cache: dict[tuple[str, int], object] = {}  # (경로, 파일 시각) → �
 
 
 def _rom(fm: models.FieldModel):
+    path = str(service.model_file(fm.path))
     try:
-        key = (fm.path, os.stat(fm.path).st_mtime_ns)
+        key = (path, os.stat(path).st_mtime_ns)
     except OSError:
         raise HTTPException(404, "3D 모델 파일이 서버에 없습니다 → 이 스터디의 3D 모델을 다시 학습하세요") from None
     if key not in _rom_cache:
         from ..study.fieldmodel import FieldROM
-        rom = FieldROM.load(fm.path)
-        for old in [k for k in _rom_cache if k[0] == fm.path]:  # 다시 학습한 파일의 옛 모델은 다시 쓰이지 않는다
+        try:
+            rom = FieldROM.load(path)
+        except Exception as e:  # noqa: BLE001 — 파일이 망가졌으면 맨 500 대신 할 일을 말한다
+            raise HTTPException(500, f"3D 모델 파일을 읽지 못했습니다({type(e).__name__}) → 이 스터디의 3D 모델을 다시 학습하세요") from e
+        for old in [k for k in _rom_cache if k[0] == path]:  # 다시 학습한 파일의 옛 모델은 다시 쓰이지 않는다
             _rom_cache.pop(old, None)
         _rom_cache[key] = rom
     return _rom_cache[key]

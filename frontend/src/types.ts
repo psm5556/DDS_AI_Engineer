@@ -7,13 +7,13 @@ export interface Project {
   flow_status: FlowStatus | null; flow_title: string | null; is_favorite: boolean;
 }
 
-export type FlowStatus = "review" | "approved" | "in_progress" | "complete" | "failed" | "rejected";
+export type FlowStatus = "review" | "approved" | "in_progress" | "complete" | "failed" | "stopped" | "rejected";
 export type NodeStatus = "pending" | "in_progress" | "complete" | "failed" | "skipped";
 export interface FlowNode { id: string; label: string; type: string; tool?: string | null; status: NodeStatus; detail?: string }
 export interface FlowEdge { source: string; target: string; label?: string | null }
 export interface Flow {
   id: number; project_id: number; title: string; goal: string; nodes: FlowNode[]; edges: FlowEdge[];
-  status: FlowStatus; version: number; created_at: string; updated_at: string;
+  status: FlowStatus; version: number; start_queued?: boolean; created_at: string; updated_at: string;
 }
 
 export type ArtifactKind = "table" | "scatter" | "line" | "bar" | "parallel" | "markdown" | "image";
@@ -36,7 +36,7 @@ export interface ChatSession { id: number; project_id: number; user_id: number; 
 export interface ChatMessage {
   id: number; session_id: number; role: "user" | "agent" | "thought" | "tool" | "system"; content: string;
   meta: { tool_call_id?: string; title?: string; kind?: string; status?: string; raw_input?: unknown; output?: string;
-    attachments?: { id: number; filename: string; size: number }[] } | null;
+    attachments?: { id: number; filename: string; size: number }[]; auto?: string } | null;
   created_at: string;
 }
 export interface PermissionOption { optionId: string; name: string; kind: string }
@@ -61,7 +61,7 @@ export interface Variable { name: string; lower: number; upper: number; unit?: s
 export interface Objective { name: string; goal: "min" | "max" }
 export interface OutputDef { name: string; note?: string; unit?: string }
 export interface Study {
-  id: number; project_id: number; name: string; variables: Variable[]; objectives: Objective[];
+  id: number; project_id: number; name: string; practice?: boolean; variables: Variable[]; objectives: Objective[];
   constraints?: { name: string; upper?: number; lower?: number }[] | null;
   outputs?: OutputDef[] | null;
   adapter: string; adapter_config: Record<string, unknown>; version: number; created_at: string;
@@ -79,8 +79,8 @@ export interface Case {
   origin?: { row?: number; source?: string; label?: string } | null;
 }
 /** 학습 데이터가 어디서 왔는가. 링크로 받은 사람에게는 source(파일 이름)가 오지 않는다 */
-export interface DataSource { kind: "solver" | "table" | "folders"; label: string; rows: number; total: number; source?: string }
-export interface StudyStatus { study: Study; counts: Record<string, number>; best: Case | null; running: boolean; stalled?: number; stalled_by?: string[]; extracting?: number[]; pc_notice?: { by: number; text: string } | null; data_source?: DataSource | null }
+export interface DataSource { kind: "solver" | "practice" | "table" | "folders"; label: string; rows: number; total: number; source?: string; notice?: string }
+export interface StudyStatus { study: Study; counts: Record<string, number>; best: Case | null; running: boolean; stalled?: number; stalled_by?: string[]; extracting?: number[]; pc_notice?: { by: number; text: string } | null; data_source?: DataSource | null; tool_label?: string }
 export type QualityLevel = "good" | "fair" | "poor";
 export interface ModelQuality {
   level: QualityLevel; label: string; warnings: string[]; method?: string;

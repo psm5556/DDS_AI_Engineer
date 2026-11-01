@@ -181,8 +181,9 @@ class FlowNodeUpdate(BaseModel):
 
 
 class FlowStatusUpdate(BaseModel):
-    status: Literal["review", "approved", "in_progress", "complete", "failed", "rejected"]
+    status: Literal["review", "approved", "in_progress", "complete", "failed", "stopped", "rejected"]
     version: int
+    session_id: int | None = None  # 승인·반려를 전할 대화. 화면이 지금 보는 대화를 준다
 
 
 class FlowResponse(ORM):
@@ -194,6 +195,7 @@ class FlowResponse(ORM):
     edges: list[dict[str, Any]]
     status: str
     version: int
+    start_queued: bool = False  # 승인을 받았지만 아직 에이전트에게 전하지 못했다
     created_at: datetime
     updated_at: datetime
 
@@ -450,6 +452,7 @@ class StudyResponse(ORM):
     id: int
     project_id: int
     name: str
+    practice: bool = False  # 값이 실제 해석이 아니라 연습용 계산이다
     variables: list[dict[str, Any]]
     objectives: list[dict[str, Any]]
     constraints: list[dict[str, Any]] | None = None
@@ -489,7 +492,8 @@ class StudyStatus(BaseModel):
     stalled_by: list[str] = []  # 그 PC 주인 이름
     extracting: list[int] = []  # Output을 추출하는 중인 케이스 id
     pc_notice: dict[str, Any] | None = None  # 케이스를 돌린 PC가 알린 안내 {by, text}
-    data_source: dict[str, Any] | None = None  # {kind, label, rows, source}
+    data_source: dict[str, Any] | None = None  # {kind, label, rows, source, notice}
+    tool_label: str = ""  # 화면에 보이는 해석 방법. 날것의 어댑터 이름(mock)을 보이지 않는다
 
 
 class DoeRequest(BaseModel):

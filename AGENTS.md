@@ -119,7 +119,8 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 실제 툴에서 스킬 고치기 | `docs/onsite-validation.md`의 요청을 `docs/pc-verification.md`의 도구로 사용자 PC에서 직접 시험한다. 고친 곳의 `TODO(사내검증)` 표시를 지운다 |
 | Live Link | **사용자에게 리본 버튼·저널·스크립트·플러그인 실행을 부탁하지 않는다.** 연결은 `mcp_servers/dds_live.py`가 스스로 하고, 못 붙으면 에이전트가 배치로 진행한다(`test_live_autoconnect.py`가 문구를 막는다) |
 | MCP 툴 추가 | `mcp_servers/dds_*.py`(FastMCP 데코레이터) → 서버 API(필요 시) → `agent-context/INSTRUCTIONS.md`에 사용법 |
-| 대화 흐름(승인·권한·결과 카드) | `frontend/src/chat/ChatView.tsx` · 서버 `server/app/agent/hub.py` |
+| 대화 흐름(승인·권한·결과 카드) | `frontend/src/chat/ChatView.tsx` · 서버 `server/app/agent/hub.py`. 승인을 에이전트에게 전하는 일은 서버가 한다(화면에서 보내지 않는다). 상태×사건 표는 `docs/product-spec.md` 3-3절, 시험은 `server/tests/test_flow_handoff.py` |
+| 데모·예시 문구 | 시나리오 `agent/dds_agent/demo_agent.py`(기본은 드럼 세탁기, 값은 모두 연습용 계산) · 화면 예시 `frontend/src/format.ts` `PRACTICE_EXAMPLES` · 둘이 맞는지는 `agent/tests/test_demo_examples.py` |
 | 오른쪽 패널 탭 | `frontend/src/canvas/CanvasPanel.tsx` · `views.tsx`(작업 흐름: 흐름도 고정 + 'N단계' 결과 스크롤 · 데이터: 입력/출력·학습 데이터·케이스) · `ReportView.tsx`(보고서) · `SimulatorTab.tsx`(Simulator·모델 버전) · 단계 번호 `frontend/src/flow/order.ts` |
 | 표로 바로 Simulator | 표는 **붙여넣기로만** 받는다(회사 파일은 보안 프로그램으로 암호화됨) · 화면 `frontend/src/canvas/TableImport.tsx`(입력창·붙여넣기 창이 함께 쓴다, 묻는 것은 출력 열뿐) · 파서 `cae_adapters/tabular.py` `read_pasted` · 등록 `server/app/study/importer.py` · 라우트 `routers/studies.py` `/tables/preview/text`·`/projects/{p}/studies/import/text` · 시험 `server/tests/test_entry_points.py`·`npm run smoke` |
 | Simulator | 화면 `frontend/src/pages/SimulatorPage.tsx`(`SimulatorView`를 탭과 넓은 화면이 함께 쓴다) · 목록 `SimulatorsPage.tsx` · 버전·3D 묶기 `server/app/study/service.py` `deploy_version`·`field_models_for` · 목록·공유 `server/app/routers/studies.py` · 규칙 `docs/product-spec.md` 3-7절 |

@@ -1143,7 +1143,7 @@ def test_demo_plan_and_connect_later(env, tmp_path):
     assert "승인" in _chat_all(later, "이제 해석 방법 연결해서 돌려 줘")
     assert later.study_id == sid and env.study(sid)["counts"] == {"pending": 8} and env.study(sid)["study"]["adapter"] == "mock"
     done = _approve(env, later)
-    assert "8건" in done and env.study(sid)["counts"] == {"complete": 8} and later.permissions == ["대기 중인 8점 해석 실행"]
+    assert "8건" in done and env.study(sid)["counts"] == {"complete": 8} and later.permissions == []  # 승인 뒤에는 묻지 않는다
     assert dds_study.list_models()["models"][0]["deployed"]
     assert "기다리는 스터디가 없습니다" in _chat_all(_DemoAll(), "해석 방법 연결해 줘")
 

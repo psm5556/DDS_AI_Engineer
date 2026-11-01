@@ -394,9 +394,8 @@ def cmd_chat(args, api) -> int:
         approved = False
         if not st.get("busy") and not args.no_approve:
             for f in own_review_flows(api.call("GET", f"/api/projects/{pid}/flows"), msgs, known_flows):
-                # 웹앱의 [승인하고 실행]과 같게: 상태를 바꾸고 에이전트에게 알린다(useFlowDecision)
-                decide.call("PUT", f"/api/devtest/flows/{f['id']}/status", {"status": "approved", "version": f.get("version")})
-                _send_prompt(api, sid, f"작업 흐름 '{f.get('title')}'(#{f['id']})을 승인했습니다. 계획대로 진행해 주세요.", [], t0 + args.timeout)
+                # 웹앱의 [승인하고 실행]과 같게: 상태만 바꾼다. 에이전트에게 전하는 일은 서버가 한다
+                decide.call("PUT", f"/api/devtest/flows/{f['id']}/status", {"status": "approved", "version": f.get("version"), "session_id": sid})
                 approvals.append(f["id"])
                 print(f"작업 흐름 승인: {f.get('title') or f['id']}")
                 approved = True

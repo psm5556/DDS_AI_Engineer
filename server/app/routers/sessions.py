@@ -193,6 +193,12 @@ def delete_session(session_id: int, user: models.User = Depends(require_jwt), db
     if hub.status(session_id)["busy"]:
         raise HTTPException(409, "에이전트가 작업 중인 대화는 지울 수 없습니다. 먼저 중지하세요")
     hub.forget_chat(chat.id)
+    for f in db.query(models.Flow).filter_by(chat_id=chat.id):
+        if f.start_queued and f.status == "approved":  # 승인을 전할 대화가 없어졌다. 멈춘 채 두지 않고 승인 대기로 되돌린다
+            f.status, f.approved_by = "review", None
+            f.version += 1
+        f.chat_id, f.handoff = None, None
+    db.flush()
     db.delete(chat)
     db.commit()
     return {"ok": True}

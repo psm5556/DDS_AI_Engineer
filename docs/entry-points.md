@@ -19,7 +19,8 @@
 
 | ID | 상황 | 통과 기준 | API 시험 | MCP 시험 |
 |---|---|---|---|---|
-| E0 | 처음부터 전체(대조군) | Flow 제안 뒤 멈춤, 승인 전 스터디 0개. 승인 뒤 전 단계 완료, 권한 요청 1회, 배포 | `server/tests/test_api.py` `test_doe_train_bo_on_server_mock` | `test_demo_flow_review_does_not_block_other_requests` |
+| E0 | 처음부터 전체(대조군) | Flow 제안 뒤 멈춤, 승인 전 스터디 0개. 승인 뒤 묻지 않고 전 단계 완료, 권한 요청 0회, 배포. 다른 멤버의 스크립트만 내 PC에서 돌기 전에 한 번 더 확인한다 | `server/tests/test_api.py` `test_doe_train_bo_on_server_mock` | `test_demo_flow_review_does_not_block_other_requests` |
+| E0b | 승인과 사건이 겹칠 때 | 답하는 중에 승인해도, PC Agent가 꺼졌을 때 승인해도 끝까지 간다. 승인 말은 한 번만 전한다. 중지하면 멈춤으로 남고 다시 시키지 않는다 | `server/tests/test_flow_handoff.py` | `scripts/e2e_scenarios.py --only E0b` |
 | E1 | 엑셀에서 복사한 표 붙여넣기 → Simulator | PC Agent·AI 꺼진 채 미리보기·등록·학습·배포·예측. 해석 0건, 대화 0개, 처음 보는 점 오차 15% 이내. 수식 오류 행은 그 출력에서만 빠지고 고른 출력은 모델에 남는다 | `test_paste_to_simulator_without_agent_only_outputs_given`, `test_paste_*`, `test_e1_default_training_keeps_chosen_output_with_one_bad_cell` | `test_e1_table_to_simulator_without_agent_or_solver`, `test_pasted_table_attachment_*` |
 | E1a | 입력창의 표를 AI로 보내기 | **묻는 것은 출력 하나뿐.** 답을 받기 전에는 등록하지 않고, 출력을 적으면 묻지 않는다. 행은 첨부 파일로 가고 도구 인자에 없다. Flow 0개, 도구 순서 inspect → import → train → deploy | — | `test_demo_pasted_table_*`, `test_demo_other_request_after_the_question_*`, `test_demo_table_request_*`, `test_table_read_is_not_done_by_passing_rows_to_the_ai` |
 | E1b | 엑셀 복사 형식과 암호화 파일 | 천 단위 쉼표·퍼센트·빈 행·따옴표 안 줄바꿈·병합 셀 빈칸·수식 오류·머리글 없음·제목 줄을 알아서 읽는다. 암호화된 CSV·XLSX는 `inspect_table`·`import_table`·서버·대화 모두 깨진 표나 500 없이 "보안 프로그램으로 암호화되어 읽을 수 없습니다 → 엑셀에서 표를 복사해 붙여 넣으세요". 스터디가 생기지 않는다 | `test_paste_reads_what_excel_copies`, `test_encrypted_*`, `test_tabular_*` | `test_encrypted_table_*`, `test_demo_encrypted_table_gets_the_paste_answer_in_chat` |

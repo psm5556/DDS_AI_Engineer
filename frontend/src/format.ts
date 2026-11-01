@@ -25,7 +25,18 @@ export const FLOW_STATUS: Record<FlowStatus, { label: string; chip: string }> = 
   in_progress: { label: "진행 중", chip: "info" },
   complete: { label: "완료", chip: "ok" },
   failed: { label: "실패", chip: "err" },
+  stopped: { label: "멈춤", chip: "warn" },
   rejected: { label: "반려", chip: "" },
+};
+
+/** 단계의 툴 이름. mock은 코드의 말이고, 사용자에게는 실제 해석이 아니라는 것이 보여야 한다 */
+export const toolName = (tool?: string | null) => (tool === "mock" ? "연습용 계산" : tool ?? "");
+
+/** 툴·모델 파일 없이 끝까지 되는 예시. 첫 화면과 빈 대화가 함께 쓴다 */
+export const PRACTICE_EXAMPLES = {
+  whole: "연습용 계산으로 브래킷 형상부터 DOE, 예측 모델, 3D Simulator, 보고서까지 전체 과정을 해 줘",
+  washer: "연습용 계산으로 드럼 세탁기 탈수 진동을 줄이는 설계를 찾고 보고서까지 써 줘",
+  two: "연습용 계산으로 세탁기 진동과 바닥 전달력, 두 목표를 함께 줄이는 설계를 찾아 줘",
 };
 
 export const NODE_STATUS: Record<NodeStatus, string> = {

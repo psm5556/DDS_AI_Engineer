@@ -32,11 +32,12 @@ def _new_results(db: Session, rep: models.Report) -> int:
 
 def _issue(db: Session, project: models.Project, rep: models.Report | None, user: models.User | None = None) -> report.Issue:
     """틀(표지·머리글·맺음말)에 쓰는 발행 정보. 판은 프로젝트 안에서 몇 번째인지다."""
+    practice = service.practice_note(db, project.id)
     if rep is None:
-        return report.make_issue(project, requester=user.display_name if user else "")
+        return report.make_issue(project, requester=user.display_name if user else "", practice=practice)
     who = db.get(models.User, rep.created_by) if rep.created_by else None
     edition = db.query(models.Report).filter(models.Report.project_id == project.id, models.Report.id <= rep.id).count()
-    return report.make_issue(project, rep, edition, who.display_name if who else "")
+    return report.make_issue(project, rep, edition, who.display_name if who else "", practice=practice)
 
 
 def _response(db: Session, rep: models.Report) -> dict:
@@ -124,7 +125,7 @@ def report_context(project: models.Project = Depends(get_project_for_member), db
                        "r2": {k: round(v["r2"], 4) for k, v in (m.metrics or {}).items()}}
                       for m in db.query(models.SurrogateModel).filter_by(study_id=s.id).order_by(models.SurrogateModel.id.desc()).limit(3)]
         studies_out.append({
-            "study_id": s.id, "name": s.name, "cases": counts,
+            "study_id": s.id, "name": s.name, "cases": counts, "solver": service.tool_label(s), "practice": service.is_practice(s),
             "inputs": [{"name": v["name"], "lower": v["lower"], "upper": v["upper"]} for v in s.variables],
             "outputs": [{"name": n, "role": roles.get(n, ""), "note": notes.get(n, ""),
                          "extracted": sum(1 for c in done if n in (c.results or {}))} for n in service.output_names(s)],
@@ -132,7 +133,7 @@ def report_context(project: models.Project = Depends(get_project_for_member), db
             "models": models_out, "insights": insights.report_summary(db, s, until=wait_until)})
     prev = db.query(models.Report).filter_by(project_id=project.id).order_by(models.Report.id.desc()).first()
     out = {"project": {"name": project.name, "description": project.description}, "flows": flows_out,
-           "results": results, "studies": studies_out,
+           "results": results, "studies": studies_out, "practice_note": service.practice_note(db, project.id),
            "previous_report": {"title": prev.title, "created_at": prev.created_at.isoformat(timespec="minutes")} if prev else None}
     used = market_service.used_in_project(db, project.id)
     if used:  # 나중에 잘못된 스킬로 밝혀지면 어떤 보고서가 영향을 받았는지 좇는 근거다. 쓴 적이 없으면 자료도 그대로다

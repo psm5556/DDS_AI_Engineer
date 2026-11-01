@@ -296,16 +296,19 @@ class Issue:
         return f"{self.issued:%Y-%m-%d %H:%M}"
 
 
-def make_issue(project: models.Project, rep: models.Report | None = None, edition: int = 1, requester: str = "") -> Issue:
-    """표지·머리글·맺음말의 글. 사실만 적는다: AI가 썼고, 사람의 검토가 아직 필요하다."""
+def make_issue(project: models.Project, rep: models.Report | None = None, edition: int = 1, requester: str = "", practice: str | None = None) -> Issue:
+    """표지·머리글·맺음말의 글. 사실만 적는다: AI가 썼고, 사람의 검토가 아직 필요하다.
+    practice: 연습용 계산이 들어 있으면 그 안내. AI가 본문에 안 써도 표지와 맺음말에 남는다."""
     who = f" (요청: {requester})" if requester else ""
+    cover = " · 연습용 계산 포함(실제 해석 아님)" if practice else ""
+    end = f" {practice}" if practice else ""
     if rep:
         return Issue(f"DDS-P{project.id:04d}-R{rep.id:03d}", f"{edition}판", rep.created_at, f"AI{who}",
-                     f"{ISSUER} 발행 · AI 작성, 담당 엔지니어 검토 필요",
-                     f"이 문서는 {ISSUER}가 발행했습니다. AI가 작업 흐름과 결과를 읽고 썼으므로, 쓰기 전에 담당 엔지니어의 검토가 필요합니다.")
+                     f"{ISSUER} 발행 · AI 작성, 담당 엔지니어 검토 필요{cover}",
+                     f"이 문서는 {ISSUER}가 발행했습니다. AI가 작업 흐름과 결과를 읽고 썼으므로, 쓰기 전에 담당 엔지니어의 검토가 필요합니다.{end}")
     return Issue(f"DDS-P{project.id:04d}-AUTO", "자동 모음", datetime.now(), f"자동 모음{who}",
-                 f"{ISSUER} 발행 · 게시된 결과 자동 모음, 담당 엔지니어 검토 필요",
-                 f"이 문서는 {ISSUER}가 게시된 결과를 자동으로 모은 것입니다. 해석이 들어 있지 않으며, 쓰기 전에 담당 엔지니어의 검토가 필요합니다.")
+                 f"{ISSUER} 발행 · 게시된 결과 자동 모음, 담당 엔지니어 검토 필요{cover}",
+                 f"이 문서는 {ISSUER}가 게시된 결과를 자동으로 모은 것입니다. 해석이 들어 있지 않으며, 쓰기 전에 담당 엔지니어의 검토가 필요합니다.{end}")
 
 
 @cache

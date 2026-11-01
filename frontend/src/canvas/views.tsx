@@ -9,7 +9,7 @@ import { Confirm } from "../components/Modal";
 import { Skeleton } from "../components/Skeleton";
 import { dataSourceText } from "../components/ModelTrust";
 import { FlowCanvas } from "../flow/FlowCanvas";
-import { copyText, FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_LABEL, sendToAgent, when } from "../format";
+import { copyText, FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_LABEL, sendToAgent, toolName, when } from "../format";
 import { orderNodes } from "../flow/order";
 import { flash, scrollMode } from "../motion";
 import { useCanvas } from "./CanvasContext";
@@ -23,24 +23,22 @@ import type { AgentStatus, Artifact, Case, Flow, Project, StudyStatus, Study, Tr
  *  대화(가운데)에서 에이전트가 일하면 해당 화면이 실시간으로 갱신된다. */
 
 /* ---------- 작업 흐름 ---------- */
-/** 플로우 승인/반려. 승인하면 대화 중인 에이전트에게 "진행하세요"를 보낸다. */
-export function useFlowDecision(pid: number) {
+/** 플로우 승인/반려. 에이전트에게 전하는 일은 서버가 한다: 답하는 중이거나 PC Agent가 없으면 기다렸다가 보낸다.
+ *  화면이 보내면 답하는 중에 누른 승인이 사라지고 흐름이 멈춘다. */
+export function useFlowDecision(pid: number, sessionId: number | null, connected: boolean) {
   const qc = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: (v: { flow: Flow; status: "approved" | "rejected" }) =>
-      put<Flow>(`/api/flows/${v.flow.id}/status`, { status: v.status, version: v.flow.version }),
+    mutationFn: (v: { flow: Flow; status: "approved" | "rejected" | "review" }) =>
+      put<Flow>(`/api/flows/${v.flow.id}/status`, { status: v.status, version: v.flow.version, session_id: sessionId }),
     onSuccess: (f) => {
       qc.invalidateQueries({ queryKey: ["flows", pid] });
-      if (f.status === "approved") {
-        toast("승인했습니다. 에이전트가 실행을 시작합니다");
-        sendToAgent(`작업 흐름 '${f.title}'(#${f.id})을 승인했습니다. 계획대로 진행해 주세요.`);
-      } else {
-        toast("반려했습니다");
-        sendToAgent(`작업 흐름 '${f.title}'(#${f.id})을 반려했습니다. 무엇을 바꾸면 좋을지 물어보고 다시 제안해 주세요.`);
-      }
+      if (sessionId) qc.invalidateQueries({ queryKey: ["messages", sessionId] });
+      if (f.status === "approved") toast(!f.start_queued ? "승인했습니다. 에이전트가 끝까지 진행합니다" : connected ? "승인했습니다. 지금 답이 끝나면 바로 시작합니다" : "승인했습니다. PC Agent가 연결되면 바로 시작합니다");
+      else if (f.status === "review") toast("승인을 취소했습니다. 아무것도 실행하지 않았습니다");
+      else toast("반려했습니다");
     },
-    onError: (e: Error) => toast(e.message ?? "변경하지 못했습니다", true),
+    onError: (e: Error) => { qc.invalidateQueries({ queryKey: ["flows", pid] }); toast(e.message ?? "변경하지 못했습니다", true); },
   });
 }
 
@@ -156,7 +154,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
               <header className="step-head">
                 <span className="step-no">{i + 1}단계</span>
                 <b className="step-label">{n.label}</b>
-                <span className="chip">{NODE_TYPE[n.type] ?? n.type}{n.tool ? ` · ${n.tool}` : ""}</span>
+                <span className="chip">{NODE_TYPE[n.type] ?? n.type}{n.tool ? ` · ${toolName(n.tool)}` : ""}</span>
                 <span className={`chip ${n.status === "complete" ? "ok" : n.status === "failed" ? "err" : n.status === "in_progress" ? "info" : ""}`}>{NODE_STATUS[n.status]}</span>
                 <span className="grow" />
                 {n.status === "failed" && flow.status !== "review" && (
@@ -375,7 +373,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
   const note = (o: string) => s.outputs?.find((x) => x.name === o)?.note ?? "";
   const planned = (cases ?? []).some((c) => c.source === "doe"); // 밖에서 해석하려고 받아 갈 DOE 점이 있을 때만
   const source = dataSourceText(st.data_source);
-  const toolName = s.adapter === "data" ? (source || "불러온 데이터") : `${s.adapter}${s.adapter_config?.tool ? `/${String(s.adapter_config.tool)}` : ""}`;
+  const solver = s.adapter === "data" ? (source || "불러온 데이터") : st.tool_label || s.adapter;
   const fixed = Object.entries(s.import_info?.fixed ?? {});
   return (
     <div className="stack">
@@ -393,7 +391,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
           <span className="small muted">
             케이스 {st.counts.complete ?? 0}/{total} 완료
             {Object.entries(st.counts).filter(([k, n]) => k !== "complete" && n).map(([k, n]) => ` · ${CASE_STATUS[k]?.[0] ?? k} ${n}`).join("")}
-            {` · ${toolName}`}
+            {` · ${solver}`}
           </span>
           {st.running && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />실행 중</span>}
           {extracting.size > 0 && <span className="chip info"><span className="spinner" style={{ width: 10, height: 10 }} />Output 추출 중 {extracting.size}건</span>}

@@ -30,6 +30,7 @@ AGENT_STAGE = {
 }
 LOST_TURN_WINDOW_SEC = 3600  # 표시가 없는 옛 기록은 이보다 오래되면 건드리지 않는다
 FORCE_ACK_SEC = 10.0  # 다시 시작 요청을 받았다는 답을 기다리는 시간. 넘기면 반쯤 끊긴 연결로 보고 다시 연결될 때 보낸다
+FLOW_NUDGES = 2  # 승인한 흐름이 진전 없이 턴을 끝냈을 때 다시 시키는 횟수. 넘기면 실패로 알린다. 무한히 돌며 사용 한도를 쓰면 안 된다
 
 
 @dataclass
@@ -67,6 +68,7 @@ class TurnState:
     ensure_turns: dict[str, str] = field(default_factory=dict)  # CLI 이름 → 지금 그 세션을 준비하는 턴
     lost_output: int = 0  # DB 문제로 저장하지 못한 출력 수(턴이 끝날 때 한 번 알린다)
     market_read: set[str] = field(default_factory=set)  # 이 대화에서 읽었다고 이미 적은 마켓 스킬
+    flow_id: int | None = None  # 이 턴이 진행하는 승인된 작업 흐름. 턴이 끝날 때 남은 단계를 확인한다
 
 
 class AgentHub:
@@ -178,6 +180,7 @@ class AgentHub:
                 self._note_lost_turns(uid, {t.get("chat_id") for t in turns.values()})
         finally:
             conn.ready.set()
+        self._flush_user_flows(uid)  # PC Agent가 없을 때 받은 승인을 이제 전한다. 서버를 다시 시작했어도 DB에 남아 있다
 
     def _link_back(self, st: TurnState) -> bool:
         with st.lock:
@@ -257,6 +260,7 @@ class AgentHub:
             st.agent_msg_id = st.thought_msg_id = None
             st.tool_msgs, st.open_tools = tool_msgs, open_tools
             st.user_msg_id = asked.id if asked else None  # 끝날 때 표시해야 다음 재시작에서 "끊긴 요청"으로 잘못 안내하지 않는다
+            st.flow_id = (asked.meta or {}).get("flow_id") if asked else None
             st.typical_start_sec = self.start_times.get(st.user_id, {}).get(st.agent)
         with self._lock:
             if sid:
@@ -299,6 +303,8 @@ class AgentHub:
                                          "event": {"kind": "tool_call_update", "message_id": m.id, "meta": m.meta}})
                     manager.publish({"type": "agent_event", "project_id": chat.project_id, "session_id": chat.id,
                                      "event": {"kind": "turn_ended", "stop_reason": "disconnected"}})
+                    if (asked.meta or {}).get("flow_id"):  # 승인한 흐름을 하던 요청이 끊겼다. 다시 시킨다(뒤의 _flush_user_flows가 보낸다)
+                        self._flow_turn_over(self._state(chat), asked.meta["flow_id"])
         except Exception:  # 안내를 못 해도 연결은 살린다
             log.exception("끊긴 요청 안내 실패")
 
@@ -389,9 +395,10 @@ class AgentHub:
             lock.release()
 
     # ---------- 턴 ----------
-    def send_prompt(self, chat_id: int, text: str, attachments: list[dict] | None = None) -> str:
+    def send_prompt(self, chat_id: int, text: str, attachments: list[dict] | None = None, flow_id: int | None = None, shown: str | None = None, auto: str | None = None) -> str:
         """요청을 저장하고 바로 돌아온다. CLI 준비와 전달은 뒤의 스레드에서 한다. 이미 진행 중이면 AgentError.
-        attachments: [{id, filename, size, sha256}] — PC Agent가 프로젝트 폴더 inputs/로 내려받은 뒤 에이전트에 전달한다."""
+        attachments: [{id, filename, size, sha256}] — PC Agent가 프로젝트 폴더 inputs/로 내려받은 뒤 에이전트에 전달한다.
+        flow_id·shown·auto: 서버가 사용자를 대신해 보내는 말(_flush_flows). shown은 대화에 보이는 글, auto는 그 종류다."""
         attachments = attachments or []
         with SessionLocal() as db:
             chat = db.get(models.ChatSession, chat_id)
@@ -401,7 +408,7 @@ class AgentHub:
             uid, turn_id = chat.user_id, uuid.uuid4().hex
             with st.lock:
                 if st.busy:  # 시작 중이어도 막는다. 새로고침 뒤 다시 보내 세션이 둘 열리는 일을 막는다
-                    raise AgentError("에이전트가 아직 이전 요청을 처리 중입니다")
+                    raise AgentError("에이전트가 아직 이전 요청을 처리 중입니다 → 답이 끝난 뒤에 다시 보내 주세요. 바로 바꾸려면 중지를 누르세요.")
                 now = time.time()
                 st.busy, st.turn_id, st.agent = True, turn_id, chat.agent
                 st.prompt_sent, st.prompt_msg, st.sent_boot, st.cancel_requested = False, None, None, False
@@ -410,15 +417,17 @@ class AgentHub:
                 st.agent_msg_id = st.thought_msg_id = None
                 st.open_tools = set()
                 st.lost_output = 0
+                st.flow_id = flow_id
                 st.stage = self._first_stage(uid, chat.agent, chat.agent_session_id)
                 st.stage_detail = None
                 st.typical_start_sec = self.start_times.get(uid, {}).get(chat.agent)
             try:
                 if chat.title == "새 대화":
-                    chat.title = text[:40]
+                    chat.title = (shown or text)[:40]
                 # turn_open: 서버가 다시 시작되면 끝을 알 길이 없다. 끝날 때 turn_done으로 바꿔 끊긴 요청을 가린다
-                m = models.ChatMessage(session_id=chat.id, role="user", content=text,
-                                       meta={"turn_open": True, **({"attachments": attachments} if attachments else {})})
+                m = models.ChatMessage(session_id=chat.id, role="user", content=shown or text,
+                                       meta={"turn_open": True, **({"attachments": attachments} if attachments else {}),
+                                             **({"flow_id": flow_id} if flow_id else {}), **({"auto": auto} if auto else {})})
                 db.add(m)
                 db.commit()
                 msg_id = st.user_msg_id = m.id
@@ -554,6 +563,7 @@ class AgentHub:
             open_tools, st.open_tools = st.open_tools, set()
             lost, st.lost_output = st.lost_output, 0
             reached_cli = st.prompt_sent
+            flow_id, st.flow_id = st.flow_id, None
             self._ended[st.turn_id] = None
             if len(self._ended) > 1000:
                 self._ended.pop(next(iter(self._ended)))
@@ -566,6 +576,146 @@ class AgentHub:
             self._note(st, f"서버가 저장하지 못해 이 답의 출력 일부({lost}건)가 빠졌습니다. 작업 자체는 계속되었습니다.")
         self._mark_done(st, stop_reason, reached_cli)
         self._broadcast(st, {"kind": "turn_ended", "stop_reason": stop_reason})
+        self._after_turn(st, stop_reason, flow_id)
+
+    # ---------- 승인한 작업 흐름 ----------
+    # 승인을 받으면 서버가 끝까지 책임진다. 브라우저가 보내던 때는 답하는 중에 누른 승인이 409로 사라져 흐름이 approved로 멈췄다.
+    #   상태 \ 사건    | 승인             | 턴 끝(정상·오류·끊김)               | 사용자가 중지         | PC Agent 연결
+    #   답하는 중      | 줄 세움          | 곧바로 보냄                         | 승인 되돌림(review)   | -
+    #   쉬는 중        | 곧바로 보냄      | -                                   | -                     | -
+    #   PC Agent 없음  | 줄 세움          | -                                   | -                     | 곧바로 보냄
+    #   흐름 진행 중   | -                | 남은 단계가 있으면 다시 시킴(한도)  | stopped               | 턴을 되살림
+    # 사용자는 승인 뒤에 묻는 말을 받지 않는다. 계획을 바꾸려면 중지하고 입력창에 적거나, 새 흐름을 제안받는다.
+    def active_chat(self, user_id: int, project_id: int) -> int | None:
+        """이 사람이 이 프로젝트에서 지금 진행 중인 대화. AI가 제안한 흐름이 어느 대화에서 나왔는지 여기서 안다."""
+        return next((st.chat_id for st in self._user_states(user_id) if st.busy and st.project_id == project_id), None)
+
+    def adopt_flow(self, flow_id: int, chat_id: int | None, user_id: int, project_id: int):
+        """AI가 단계를 움직였다. 사용자의 말로 이어 가는 중이어도 이제 이 턴은 그 흐름을 진행하는 턴이다."""
+        st = self.chats.get(chat_id) if chat_id else self.chats.get(self.active_chat(user_id, project_id) or 0)
+        if st and st.busy and st.user_id == user_id and st.project_id == project_id:
+            with st.lock:
+                if st.busy and st.flow_id is None:
+                    st.flow_id = flow_id
+
+    def _after_turn(self, st: TurnState, stop_reason: str, flow_id: int | None):
+        """턴이 끝난 뒤의 뒷정리. 실패해도 대화를 막지 않는다. 턴 끝을 알리는 길마다 부르므로 한 곳에 둔다."""
+        try:
+            if stop_reason == "cancelled":
+                self._flows_stopped(st, flow_id)
+            elif flow_id:
+                self._flow_turn_over(st, flow_id)
+            self._flush_flows(st.chat_id)
+        except Exception:
+            log.exception("작업 흐름 뒷정리 실패: 대화 %s", st.chat_id)
+
+    def _flows_stopped(self, st: TurnState, flow_id: int | None):
+        """사용자가 멈췄다. 진행하던 흐름은 멈춤으로 두고, 아직 전하지 못한 승인은 되돌린다. '중지'를 누른 뒤에 일이 시작되면 안 된다."""
+        notes: list[str] = []
+        changed: list[tuple[int, str]] = []
+        with SessionLocal() as db:
+            for f in db.query(models.Flow).filter_by(chat_id=st.chat_id).all():
+                if f.status in ("approved", "in_progress") and (f.start_queued or f.id == flow_id):
+                    if f.status == "approved" and not _flow_started(f):
+                        f.status, f.approved_by = "review", None
+                        notes.append(f"단계를 시작하기 전에 중지해서 작업 흐름 '{f.title}'의 승인을 되돌렸습니다 → 진행하려면 카드에서 다시 승인해 주세요.")
+                    else:
+                        f.status = "stopped"
+                        notes.append(f"작업 흐름 '{f.title}'을 멈췄습니다. 여기까지의 결과는 그대로 있습니다 → 바꿀 점을 입력창에 적거나 '이어서 진행해 줘'라고 보내면 이어 갑니다.")
+                elif not f.start_queued:  # 반려를 전하려던 참이면 흐름은 이미 반려 상태이니 말만 거둔다
+                    continue
+                f.handoff = None
+                f.version += 1
+                changed.append((f.id, f.status))
+            db.commit()
+        for note in notes:
+            self._note(st, note)
+        for fid, status in changed:
+            manager.publish({"type": "flow_updated", "project_id": st.project_id, "data": {"id": fid, "status": status}})
+
+    def _flow_turn_over(self, st: TurnState, flow_id: int):
+        """승인한 흐름을 하던 턴이 끝났다. 남은 단계가 있으면 다시 시키고, 진전 없이 반복되면 실패로 알린다. 조용히 멈춘 채 남기지 않는다."""
+        note = None
+        with SessionLocal() as db:
+            f = db.get(models.Flow, flow_id)
+            if not f or f.status not in ("approved", "in_progress"):
+                return  # 끝났거나 실패했거나 사용자가 정리했다
+            nodes = f.nodes or []
+            done = sum(n.get("status") in ("complete", "skipped") for n in nodes)
+            if done == len(nodes):
+                return
+            newer = db.query(models.Flow.id).filter(models.Flow.project_id == f.project_id, models.Flow.id > f.id, models.Flow.status == "review").first()
+            h = dict(f.handoff or {})
+            if newer:  # AI가 계획을 바꿔 새 흐름을 제안했다. 그쪽이 승인을 기다리니 옛 흐름을 더 밀지 않는다
+                f.status, f.handoff = "stopped", None
+            elif (h.get("nudges", 0) if done <= h.get("done_at", -1) else 0) >= FLOW_NUDGES:
+                left = next(n for n in nodes if n.get("status") not in ("complete", "skipped"))
+                nodes = [dict(n) for n in nodes]
+                for n in nodes:
+                    if n["id"] == left["id"]:
+                        n["status"], n["detail"] = "failed", "에이전트가 이 단계를 이어 가지 못했습니다"
+                f.nodes, f.status = nodes, "failed"
+                f.handoff = {**h, "state": "gave_up"}
+                note = (f"에이전트가 승인한 작업 흐름 '{f.title}'을 '{left.get('label') or left['id']}' 단계에서 더 이어 가지 못했습니다. 여기까지의 결과는 그대로 있습니다 "
+                        "→ 흐름 단계의 '원인 찾기'를 누르거나, 바꿀 점을 입력창에 적어 주세요.")
+            else:
+                nudges = h.get("nudges", 0) + 1 if done <= h.get("done_at", -1) else 1
+                f.handoff = {**h, "state": "queued", "kind": "continue", "nudges": nudges, "done_at": done}
+            f.version += 1
+            db.commit()
+            status = f.status
+        if note:
+            self._note(st, note)
+        manager.publish({"type": "flow_updated", "project_id": st.project_id, "data": {"id": flow_id, "status": status}})
+
+    def _flush_flows(self, chat_id: int | None):
+        """이 대화에 기다리는 승인·반려를 보낸다. 답하는 중이거나 PC Agent가 없으면 그대로 둔다(턴 끝·연결이 다시 부른다). 몇 번 불러도 한 번만 보낸다."""
+        if not chat_id:
+            return
+        with SessionLocal() as db:
+            chat = db.get(models.ChatSession, chat_id)
+            if not chat:
+                return
+            st = self._state(chat)
+        with st.lock:  # 승인과 턴 끝이 엇갈려도 둘 다 보내지 않게 확인과 표시를 묶는다
+            if st.busy or not registry.get(st.user_id):
+                return
+            with SessionLocal() as db:
+                f = next((x for x in db.query(models.Flow).filter_by(chat_id=chat_id).order_by(models.Flow.id) if x.start_queued), None)
+                if f is None:
+                    return
+                kind = f.handoff.get("kind")
+                text, shown = _flow_words(f, kind)
+                flow_id, status, project_id = f.id, f.status, f.project_id
+                queued = f.handoff
+                f.handoff = {**queued, "state": "sent"}
+                db.commit()
+            try:
+                self.send_prompt(chat_id, text, flow_id=None if kind == "rejected" else flow_id, shown=shown, auto=kind)
+            except AgentError as e:  # 그새 끊겼다. 다시 연결되면 보낸다
+                log.info("작업 흐름 결정을 전하지 못했습니다: %s", e)
+                with SessionLocal() as db:
+                    f = db.get(models.Flow, flow_id)
+                    if f:
+                        f.handoff = queued
+                        db.commit()
+                return
+        manager.publish({"type": "flow_updated", "project_id": project_id, "data": {"id": flow_id, "status": status}})
+
+    def flow_decided(self, chat_id: int | None):
+        """화면에서 승인·반려했다. 지금 전할 수 있으면 전한다."""
+        self._flush_flows(chat_id)
+
+    def _flush_user_flows(self, user_id: int):
+        try:
+            with SessionLocal() as db:
+                rows = (db.query(models.Flow).join(models.ChatSession, models.Flow.chat_id == models.ChatSession.id)
+                        .filter(models.ChatSession.user_id == user_id).order_by(models.Flow.id).all())
+                chats = {f.chat_id for f in rows if f.start_queued}
+            for chat_id in sorted(chats):
+                self._flush_flows(chat_id)
+        except Exception:  # 전하지 못해도 연결은 살린다. 다음 연결·턴 끝에 다시 한다
+            log.exception("기다리는 작업 흐름을 전하지 못했습니다")
 
     def _mark_done(self, st: TurnState, stop_reason: str = "", reached_cli: bool = True):
         """요청 메시지에 끝났다고 남긴다. 서버를 다시 시작한 뒤 "끊긴 요청"과 가리고, 중지한 요청을 지난 대화 요약에서 가리는 데 쓴다."""
@@ -866,6 +1016,25 @@ class AgentHub:
                    "raw_input": tc.get("rawInput"), "options": params.get("options", [])}
         st.pending_permissions[request_id] = payload
         self._broadcast(st, {"kind": "permission_request", **payload})
+
+
+def _flow_started(f: models.Flow) -> bool:
+    return any(n.get("status") not in (None, "pending") for n in f.nodes or [])
+
+
+def _flow_words(f: models.Flow, kind: str | None) -> tuple[str, str]:
+    """에이전트에게 보내는 말과 대화에 보이는 말. 데모는 '승인했습니다'·'반려했습니다'를 보고 움직인다."""
+    if kind == "rejected":
+        text = f"작업 흐름 '{f.title}'(#{f.id})을 반려했습니다. 무엇을 바꾸면 좋을지 물어보고 다시 제안해 주세요."
+        return text, text
+    if kind == "continue":
+        left = [n.get("label") or n["id"] for n in f.nodes or [] if n.get("status") not in ("complete", "skipped")]
+        return (f"작업 흐름 '{f.title}'(#{f.id})이 아직 끝나지 않았습니다. 남은 단계: {', '.join(left)}. 승인받은 계획이니 사용자에게 묻지 말고, 정하지 않은 값은 기본값으로 정해 단계 설명에 적고 끝까지 진행하세요. "
+                "이미 끝난 단계는 update_node로 complete로 적으세요. 정말 진행할 수 없는 단계는 update_node로 failed와 원인·할 일을 적고 사용자에게 알리세요.",
+                f"남은 단계({', '.join(left)})를 이어서 진행합니다.")
+    shown = f"작업 흐름 '{f.title}'(#{f.id})을 승인했습니다. 계획대로 진행해 주세요."
+    return (f"{shown} 승인받은 계획이니 끝까지 진행하고 중간에 사용자에게 묻지 마세요. 정하지 않은 값은 기본값으로 정해 단계 설명에 적으세요. "
+            "정말 진행할 수 없는 단계는 update_node로 failed와 원인·할 일을 적고 사용자에게 알리세요.", shown)
 
 
 def _content_text(content) -> str:

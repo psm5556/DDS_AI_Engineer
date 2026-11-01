@@ -104,10 +104,19 @@ class Flow(TimestampMixin, Base):
     goal = Column(Text, default="")
     nodes = Column(JSON, default=list)
     edges = Column(JSON, default=list)
-    # review(검토) → approved → in_progress(진행) → complete(완료) | failed | rejected
+    # review(검토) → approved → in_progress(진행) → complete(완료) | failed | stopped(사용자가 멈춤) | rejected
     status = Column(String(20), default="review", nullable=False)
     version = Column(Integer, default=1, nullable=False)
     approved_by = Column(Integer, ForeignKey("users.id"))  # 승인한 사람. 다른 멤버의 스크립트를 내 PC에서 돌리려면 내가 승인한 흐름이어야 한다
+    chat_id = Column(Integer, ForeignKey("chat_sessions.id", ondelete="SET NULL"))  # 이 흐름을 제안받거나 승인한 대화. 승인을 에이전트에게 전하는 곳이다
+    # 승인을 에이전트에게 전하는 일(server/app/agent/hub.py). {state: queued|sent|gave_up, kind: approved|rejected|continue, nudges, done_at}
+    # 브라우저가 보내던 때는 답하는 중에 누른 승인이 사라져 흐름이 approved로 멈췄다. 그래서 서버가 DB에 적어 두고 끝까지 책임진다
+    handoff = Column(JSON)
+
+    @property
+    def start_queued(self) -> bool:
+        """승인·반려를 받았지만 아직 에이전트에게 전하지 못했다(지금 답하는 중이거나 PC Agent가 없다)."""
+        return (self.handoff or {}).get("state") == "queued"
 
 
 class Artifact(Base):
@@ -168,6 +177,11 @@ class Study(TimestampMixin, Base):
     @property
     def has_recipe(self) -> bool:
         return bool(self.recipe)
+
+    @property
+    def practice(self) -> bool:
+        """값이 실제 해석이 아니라 연습용 계산(mock)이다. 표를 더했어도 연습용 값이 섞이므로 그대로 알린다."""
+        return self.adapter == "mock"
 
 
 class Case(TimestampMixin, Base):

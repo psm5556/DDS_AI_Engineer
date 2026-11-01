@@ -30,11 +30,11 @@ def propose_flow(title: str, nodes: list[dict[str, Any]], edges: list[dict[str, 
     edges: [{"source": "cad", "target": "solve", "label": "STEP"}]
     반환된 flow_id를 기억했다가 update_node / publish_artifact에 사용한다.
     정하지 않은 조건(DOE 점 수, 범위 등)은 합리적인 기본값을 정해 노드 detail에 적는다 — 사용자에게 따로 묻지 않는다.
-    제안 후에는 턴을 끝내고 "승인하면 시작합니다" 한 줄만 안내한다.
+    제안 후에는 턴을 끝내고 "승인하면 시작합니다" 한 줄만 안내한다. 승인 뒤에는 묻지 않고 끝까지 진행한다.
     """
     pid = resolve_pid(project_id)
     f = api.post(f"/api/projects/{pid}/flows", {"title": title, "goal": goal, "nodes": nodes, "edges": edges})
-    return {"flow_id": f["id"], "status": f["status"], "message": "사용자 승인을 기다리세요. 승인되면 실행을 이어가라는 메시지가 옵니다."}
+    return {"flow_id": f["id"], "status": f["status"], "message": "턴을 끝내고 사용자 승인을 기다리세요. 승인되면 서버가 실행을 이어가라는 메시지를 보냅니다. 승인 뒤에는 묻지 말고 끝까지 진행하세요."}
 
 
 @mcp.tool()
@@ -50,7 +50,7 @@ def list_flows(project_id: int | None = None, limit: int = 20) -> dict:
 
 @mcp.tool()
 def get_flow(flow_id: int) -> dict:
-    """Flow의 상태(review/approved/in_progress/complete/failed/rejected)와 노드 상태를 조회한다."""
+    """Flow의 상태(review/approved/in_progress/complete/failed/stopped/rejected)와 노드 상태를 조회한다. stopped는 사용자가 중지한 흐름이다."""
     f = api.get(f"/api/flows/{flow_id}")
     return {"flow_id": f["id"], "title": f["title"], "status": f["status"],
             "nodes": [{k: n.get(k) for k in ("id", "label", "status", "detail")} for n in f["nodes"]]}

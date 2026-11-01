@@ -27,7 +27,12 @@ class ServerApi:
             except Exception:
                 detail = r.text
             raise ServerError(f"서버 오류 {r.status_code}: {detail}")
-        return r.json()
+        try:
+            return r.json()
+        except ValueError:  # 그대로 두면 AI에게 'Expecting value: line 1 column 1'만 간다. 옛 서버는 없는 API에 화면(HTML)을 200으로 준다
+            where = f"{r.request.method} {r.request.url.path}"
+            raise ServerError(f"서버가 알 수 없는 답을 보냈습니다({where}, {r.headers.get('content-type') or '형식 없음'}) → 이 기능이 없는 옛 서버이거나 "
+                              f"서버 주소가 틀렸을 수 있습니다. 서버 주소({self.s.server_url})를 확인하고 서버를 최신 코드로 다시 시작하세요.") from None
 
     def get(self, path: str, **params) -> Any:
         return self._check(self.client.get(path, params=params or None))
