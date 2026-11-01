@@ -2958,7 +2958,7 @@ def get_insights(db: Session, study: models.Study) -> dict:
         # 연습 함수 값은 스터디 상태와 따로 늦게 끝난다. 저장된 결과에 넣지 않고 응답할 때 붙인다
         value = {**value, "sections": [{**x, "bench": line} if x["key"] == "active" else x for x in value["sections"]]}
     nx = (value.get("overview") or {}).get("next")
-    if nx and nx.get("key") == "report" and service.report_is_current(db, study.project_id):
+    if nx and nx.get("key") == "report" and service.report_is_current(db, study.project_id, study.work_id):
         # 이미 쓴 보고서를 또 쓰라고 하지 않는다. 보고서는 스터디 상태와 따로 바뀌므로 저장된 결과에 넣지 않고 응답할 때 고른다
         value = {**value, "overview": {**value["overview"], "next": None}}
     return {k: v for k, v in value.items() if k != "owner"}
@@ -3171,7 +3171,7 @@ def publish(db: Session, study: models.Study, flow_id: int | None, node_id: str 
     name, out = study.name, []
 
     def put(kind: str, title: str, payload: dict):
-        a = service.publish_artifact(db, study.project_id, kind, title, payload, flow_id, node_id)
+        a = service.publish_study_artifact(db, study, kind, title, payload, flow_id, node_id)
         caption = title.split("] ", 1)[-1]
         out.append({"artifact_id": a.id, "kind": kind, "title": title, "embed": f"![{caption}](artifact:{a.id})"})
 

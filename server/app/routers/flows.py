@@ -6,12 +6,12 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from .. import models, schemas, work_service
 from ..agent.hub import hub
 from ..config import settings
 from ..database import get_db
 from ..deps import get_current_user, get_or_404, get_project_for_member, require_jwt, require_member
-from ..study.service import flow_summaries, publish_artifact
+from ..study.service import check_flow, flow_summaries, publish_artifact
 from ..ws import manager
 
 router = APIRouter(prefix="/api", tags=["flows"])
@@ -29,18 +29,20 @@ def _changed(f: models.Flow):
 
 
 @router.get("/projects/{project_id}/flows", response_model=list[schemas.FlowResponse])
-def list_flows(project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
-    return db.query(models.Flow).filter_by(project_id=project.id).order_by(models.Flow.id.desc()).all()
+def list_flows(scope: work_service.WorkScope = Depends(work_service.work_scope), db: Session = Depends(get_db)):
+    q = db.query(models.Flow).filter_by(project_id=scope.project.id)
+    return work_service.narrow(q, models.Flow, scope.read()).order_by(models.Flow.id.desc()).all()
 
 
 @router.get("/projects/{project_id}/flows/summary", response_model=list[schemas.FlowSummary])
-def flow_summary(project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
+def flow_summary(scope: work_service.WorkScope = Depends(work_service.work_scope), db: Session = Depends(get_db)):
     """지난 흐름 찾기: 흐름마다 단계 이름과 연결된 스터디·모델을 짧게 돌려준다."""
-    return flow_summaries(db, project.id)
+    # 지금 돌리는 Task로 좁히지 않는다. '지난번처럼 다시'는 다른 Task의 흐름을 찾는 일이다. 헤더를 밝히면(2단계) 그 Task만, all_works면 전체다
+    return flow_summaries(db, scope.project.id, None if scope.all_works else scope.hint)
 
 
 @router.post("/projects/{project_id}/flows", response_model=schemas.FlowResponse)
-def create_flow(body: schemas.FlowCreate, project: models.Project = Depends(get_project_for_member),
+def create_flow(body: schemas.FlowCreate, scope: work_service.WorkScope = Depends(work_service.work_scope),
                 user=Depends(get_current_user), db: Session = Depends(get_db)):
     ids = [n.id for n in body.nodes]
     if len(set(ids)) != len(ids):
@@ -48,7 +50,9 @@ def create_flow(body: schemas.FlowCreate, project: models.Project = Depends(get_
     for e in body.edges:
         if e.source not in ids or e.target not in ids:
             raise HTTPException(400, f"엣지가 없는 노드를 가리킵니다: {e.source} → {e.target}")
-    f = models.Flow(project_id=project.id, title=body.title, goal=body.goal, chat_id=hub.active_chat(user.id, project.id),
+    project, work = scope.project, scope.write()
+    # 이 Task의 대화에서 나온 제안이다. 옆 Task에서 돌던 대화에 승인을 전하면 엉뚱한 AI가 시작한다
+    f = models.Flow(project_id=project.id, work_id=work.id, title=body.title, goal=body.goal, chat_id=hub.active_chat(user.id, project.id, work.id),
                     nodes=[n.model_dump() for n in body.nodes], edges=[e.model_dump() for e in body.edges])
     db.add(f)
     db.commit()
@@ -97,7 +101,7 @@ def _decision_chat(db: Session, f: models.Flow, user, session_id: int | None) ->
     흐름을 REST로 직접 만든 스크립트처럼 대화가 없으면 전할 곳도 없다."""
     for cid in (session_id, f.chat_id):
         chat = db.get(models.ChatSession, cid) if cid else None
-        if chat and chat.user_id == user.id and chat.project_id == f.project_id:
+        if chat and chat.user_id == user.id and chat.project_id == f.project_id and chat.work_id == f.work_id:
             return chat.id
     return None
 
@@ -128,20 +132,29 @@ def update_node(flow_id: int, node_id: str, body: schemas.FlowNodeUpdate, user=D
     db.commit()
     _changed(f)
     if f.status == "in_progress":
-        hub.adopt_flow(f.id, f.chat_id, user.id, f.project_id)
+        hub.adopt_flow(f.id, f.chat_id, user.id, f.project_id, f.work_id)
     return f
 
 
 # ---------- 아티팩트 ----------
 @router.get("/projects/{project_id}/artifacts", response_model=list[schemas.ArtifactResponse])
-def list_artifacts(project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
-    return db.query(models.Artifact).filter_by(project_id=project.id).order_by(models.Artifact.id.desc()).all()
+def list_artifacts(scope: work_service.WorkScope = Depends(work_service.work_scope), db: Session = Depends(get_db)):
+    q = db.query(models.Artifact).filter_by(project_id=scope.project.id)
+    return work_service.narrow(q, models.Artifact, scope.read()).order_by(models.Artifact.id.desc()).all()
 
 
 @router.post("/projects/{project_id}/artifacts", response_model=schemas.ArtifactResponse)
-def create_artifact(body: schemas.ArtifactCreate, project: models.Project = Depends(get_project_for_member),
+def create_artifact(body: schemas.ArtifactCreate, scope: work_service.WorkScope = Depends(work_service.work_scope),
                     db: Session = Depends(get_db)):
-    return publish_artifact(db, project.id, body.kind, body.title, body.payload, body.flow_id, body.node_id)
+    project = scope.project
+    try:
+        check_flow(db, project.id, body.flow_id, scope.hint)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    # 흐름을 밝혔으면 그 흐름의 Task가 가장 정확하다. 헤더가 없는 옛 Agent도 여기서 맞는다
+    flow = db.get(models.Flow, body.flow_id) if body.flow_id else None
+    work_id = (flow.work_id if flow else None) or scope.write().id
+    return publish_artifact(db, project.id, body.kind, body.title, body.payload, body.flow_id, body.node_id, work_id=work_id)
 
 
 @router.delete("/artifacts/{artifact_id}")
@@ -150,7 +163,7 @@ def delete_artifact(artifact_id: int, user=Depends(require_jwt), db: Session = D
     require_member(a.project_id, user, db)
     db.delete(a)
     db.commit()
-    manager.publish({"type": "artifact_updated", "project_id": a.project_id, "data": {"id": a.id, "deleted": True}})
+    manager.publish({"type": "artifact_updated", "project_id": a.project_id, "work_id": a.work_id, "data": {"id": a.id, "deleted": True}})
     return {"ok": True}
 
 

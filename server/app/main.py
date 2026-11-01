@@ -11,13 +11,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import log_redact, market_service, models
+from . import log_redact, market_service, models, work_service
 from .agent.hub import hub
 from .agent.link import REPLACED_CODE, AgentConnection, registry
 from .config import ROOT
 from .database import Base, SessionLocal, engine, ensure_columns
 from .deps import SCOPE_DEVTEST, effective_admin, user_from_token
-from .routers import agents, auth, devtest, flows, insights, market, projects, reports, sessions, studies, training
+from .routers import agents, auth, devtest, flows, insights, market, projects, reports, sessions, studies, training, works
 from .study import dataset, service, table_job
 from .ws import manager
 
@@ -94,6 +94,7 @@ def _after_link_lost(conn: AgentConnection):
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     ensure_columns()
+    work_service.migrate_works()
     _backfill_project_uids()
     _backfill_model_versions()
     _recover_stranded_flows()
@@ -157,7 +158,7 @@ async def json_charset(request, call_next):
     if resp.headers.get("content-type") == "application/json":
         resp.headers["content-type"] = "application/json; charset=utf-8"
     return resp
-for r in (auth.router, projects.router, sessions.router, flows.router, reports.router, studies.router, insights.router, training.router, agents.router, devtest.router, market.router):
+for r in (auth.router, projects.router, works.router, sessions.router, flows.router, reports.router, studies.router, insights.router, training.router, agents.router, devtest.router, market.router):
     app.include_router(r)
 
 

@@ -317,6 +317,6 @@ def _announce(study: models.Study, ds: models.TrainingDataset):
             lines.append(f"- 제외 {len(ds.excluded)}개: " + " / ".join(f"{r} ({n}개)" for r, n in reasons))
         if ds.error:
             lines.append(f"- {ds.error}")
-        service.publish_artifact(db, study.project_id, "markdown", f"[{study.name}] 학습 데이터 — {ds.name}", {"text": "\n".join(lines)},
+        service.publish_study_artifact(db, study, "markdown", f"[{study.name}] 학습 데이터 — {ds.name}", {"text": "\n".join(lines)},
                                  ds.flow_id, ds.node_id)
     manager.publish({"type": "study_updated", "project_id": study.project_id, "data": {"id": study.id}})

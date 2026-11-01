@@ -39,6 +39,7 @@ class TurnState:
     chat_id: int
     project_id: int
     user_id: int
+    work_id: int | None = None  # 이 기록의 Task. 2단계에서 CLI의 작업 폴더를 여기서 정한다
     agent: str = ""
     sid: str | None = None
     busy: bool = False
@@ -102,7 +103,7 @@ class AgentHub:
         with self._lock:
             st = self.chats.get(chat.id)
             if st is None or st.user_id != chat.user_id:  # SQLite가 지운 id를 다시 쓸 수 있다
-                st = self.chats[chat.id] = TurnState(chat_id=chat.id, project_id=chat.project_id, user_id=chat.user_id,
+                st = self.chats[chat.id] = TurnState(chat_id=chat.id, project_id=chat.project_id, user_id=chat.user_id, work_id=chat.work_id,
                                                      agent=chat.agent, sid=chat.agent_session_id)
             return st
 
@@ -299,9 +300,9 @@ class AgentHub:
                                               if last.id != asked.id else "서버가 다시 시작되는 동안 이 요청이 끊겼습니다 → 같은 요청을 다시 보내 주세요."))
                     db.commit()
                     for m in closed:
-                        manager.publish({"type": "agent_event", "project_id": chat.project_id, "session_id": chat.id,
+                        manager.publish({"type": "agent_event", "project_id": chat.project_id, "session_id": chat.id, "work_id": chat.work_id,
                                          "event": {"kind": "tool_call_update", "message_id": m.id, "meta": m.meta}})
-                    manager.publish({"type": "agent_event", "project_id": chat.project_id, "session_id": chat.id,
+                    manager.publish({"type": "agent_event", "project_id": chat.project_id, "session_id": chat.id, "work_id": chat.work_id,
                                      "event": {"kind": "turn_ended", "stop_reason": "disconnected"}})
                     if (asked.meta or {}).get("flow_id"):  # 승인한 흐름을 하던 요청이 끊겼다. 다시 시킨다(뒤의 _flush_user_flows가 보낸다)
                         self._flow_turn_over(self._state(chat), asked.meta["flow_id"])
@@ -355,7 +356,7 @@ class AgentHub:
             with self._lock:
                 self.by_sid.pop(old, None)
             # 조용히 맥락을 잃지 않게 사용자에게 한 번 알린다
-            self._note(st, "이전 AI 세션을 이어 붙일 수 없어 새 세션으로 이어 갑니다. 지금까지의 대화 요약을 함께 넘겼습니다.")
+            self._note(st, "이전 AI를 이어 붙일 수 없어 AI를 새로 시작해 이어 갑니다. 지금까지의 기록 요약을 함께 넘겼습니다.")
         self._bind(st, sid)
         return sid
 
@@ -586,13 +587,31 @@ class AgentHub:
     #   PC Agent 없음  | 줄 세움          | -                                   | -                     | 곧바로 보냄
     #   흐름 진행 중   | -                | 남은 단계가 있으면 다시 시킴(한도)  | stopped               | 턴을 되살림
     # 사용자는 승인 뒤에 묻는 말을 받지 않는다. 계획을 바꾸려면 중지하고 입력창에 적거나, 새 흐름을 제안받는다.
-    def active_chat(self, user_id: int, project_id: int) -> int | None:
-        """이 사람이 이 프로젝트에서 지금 진행 중인 대화. AI가 제안한 흐름이 어느 대화에서 나왔는지 여기서 안다."""
-        return next((st.chat_id for st in self._user_states(user_id) if st.busy and st.project_id == project_id), None)
+    def active_chat(self, user_id: int, project_id: int, work_id: int | None = None) -> int | None:
+        """이 사람이 이 프로젝트에서 지금 진행 중인 대화. AI가 제안한 흐름이 어느 대화에서 나왔는지 여기서 안다.
+        work_id를 주면 그 Task의 대화만 본다. 옆 Task의 해석이 도는 중에 다른 Task에서 일할 수 있다."""
+        busy = [st for st in self._user_states(user_id) if st.busy and st.project_id == project_id and (not work_id or st.work_id == work_id)]
+        return max(busy, key=lambda st: st.started_at).chat_id if busy else None
 
-    def adopt_flow(self, flow_id: int, chat_id: int | None, user_id: int, project_id: int):
+    def active_work(self, user_id: int, project_id: int) -> int | None:
+        """이 사람이 이 프로젝트에서 지금 돌리는 Task. 헤더 없이 온 요청(옛 PC Agent)의 답. 둘 이상이면 가장 늦게 시작한 쪽이다."""
+        chat_id = self.active_chat(user_id, project_id)
+        st = self.chats.get(chat_id) if chat_id else None
+        return st.work_id if st else None
+
+    def recent_work(self, user_id: int, project_id: int) -> int | None:
+        """이 사람이 이 프로젝트에서 마지막으로 요청한 Task(서버를 다시 시작하면 잊는다). 턴이 끝난 뒤 늦게 오는 요청이 옆 Task로 새지 않게."""
+        rows = [st for st in self._user_states(user_id) if st.project_id == project_id and st.started_at]
+        return max(rows, key=lambda st: st.started_at).work_id if rows else None
+
+    def busy_works(self) -> set[int]:
+        """지금 AI가 답하는 Task들."""
+        with self._lock:
+            return {st.work_id for st in self.chats.values() if st.busy and st.work_id}
+
+    def adopt_flow(self, flow_id: int, chat_id: int | None, user_id: int, project_id: int, work_id: int | None = None):
         """AI가 단계를 움직였다. 사용자의 말로 이어 가는 중이어도 이제 이 턴은 그 흐름을 진행하는 턴이다."""
-        st = self.chats.get(chat_id) if chat_id else self.chats.get(self.active_chat(user_id, project_id) or 0)
+        st = self.chats.get(chat_id) if chat_id else self.chats.get(self.active_chat(user_id, project_id, work_id) or 0)
         if st and st.busy and st.user_id == user_id and st.project_id == project_id:
             with st.lock:
                 if st.busy and st.flow_id is None:
@@ -644,7 +663,8 @@ class AgentHub:
             done = sum(n.get("status") in ("complete", "skipped") for n in nodes)
             if done == len(nodes):
                 return
-            newer = db.query(models.Flow.id).filter(models.Flow.project_id == f.project_id, models.Flow.id > f.id, models.Flow.status == "review").first()
+            # 같은 Task 안에서만 본다. 옆 Task의 새 제안이 이 Task의 승인된 흐름을 멈추면 안 된다
+            newer = db.query(models.Flow.id).filter(models.Flow.project_id == f.project_id, models.Flow.work_id == f.work_id, models.Flow.id > f.id, models.Flow.status == "review").first()
             h = dict(f.handoff or {})
             if newer:  # AI가 계획을 바꿔 새 흐름을 제안했다. 그쪽이 승인을 기다리니 옛 흐름을 더 밀지 않는다
                 f.status, f.handoff = "stopped", None
@@ -831,7 +851,7 @@ class AgentHub:
 
     # ---------- 이벤트 ----------
     def _broadcast(self, st: TurnState, event: dict):
-        manager.publish({"type": "agent_event", "project_id": st.project_id, "session_id": st.chat_id, "event": event})
+        manager.publish({"type": "agent_event", "project_id": st.project_id, "session_id": st.chat_id, "work_id": st.work_id, "event": event})
 
     def _broadcast_stage(self, st: TurnState):
         if st.busy:

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from .. import models, schemas, work_service
 from ..agent.hub import hub
 from ..agent.link import AgentError, registry
 from ..database import get_db
@@ -17,14 +17,16 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
-def _to_response(p: models.Project, user: models.User, db: Session) -> dict:
+def _to_response(p: models.Project, user: models.User, db: Session, works: list[dict] | None = None) -> dict:
     members = [{"user_id": m.user_id, "display_name": m.user.display_name, "username": m.user.username,
                 "role": m.role} for m in p.members]
-    last = db.query(models.Flow).filter_by(project_id=p.id).order_by(models.Flow.id.desc()).first()
+    if works is None:
+        works = work_service.briefs(db, [p.id], user)[p.id]
+    status, title = work_service.project_status(works)
     fav = db.query(models.ProjectFavorite).filter_by(user_id=user.id, project_id=p.id).first() is not None
     return {**schemas.ProjectBase.model_validate(p).model_dump(), "members": members, "is_favorite": fav,
             "user_role": member_role(p.id, user, db) or ("master" if effective_admin(user) else None),
-            "flow_status": last.status if last else None, "flow_title": last.title if last else None}
+            "flow_status": status, "flow_title": title, "works": works}
 
 
 def _last_work(db: Session, ids: list[int]) -> dict[int, datetime]:
@@ -64,8 +66,10 @@ def list_projects(user: models.User = Depends(get_current_user), db: Session = D
     if not effective_admin(user):
         q = q.join(models.ProjectMember).filter(models.ProjectMember.user_id == user.id)
     projects = q.all()
-    last = _last_work(db, [p.id for p in projects])
-    rows = [{**_to_response(p, user, db), "updated_at": max(p.updated_at, last.get(p.id, p.updated_at))} for p in projects]
+    ids = [p.id for p in projects]
+    last = _last_work(db, ids)
+    works = work_service.briefs(db, ids, user)
+    rows = [{**_to_response(p, user, db, works[p.id]), "updated_at": max(p.updated_at, last.get(p.id, p.updated_at))} for p in projects]
     return sorted(rows, key=lambda r: (r["updated_at"], r["id"]), reverse=True)
 
 

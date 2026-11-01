@@ -452,7 +452,7 @@ def test_load_failure_replaces_session_with_recap_and_one_notice(client, me):
         _end(ws, q["turn_id"], chat, "sid-next", 4)
         _wait(lambda: not _status(client, me, chat)["busy"])
         notes = [x["content"] for x in _msgs(client, me, chat) if x["role"] == "system"]
-        assert len(notes) == 1 and "새 세션" in notes[0]
+        assert len(notes) == 1 and "새로 시작" in notes[0]
         assert SessionLocal().get(models.ChatSession, chat).agent_session_id == "sid-next"
 
 

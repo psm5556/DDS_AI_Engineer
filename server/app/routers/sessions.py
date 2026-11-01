@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from .. import models, schemas
+from .. import models, schemas, work_service
 from ..agent.hub import hub
 from ..agent.link import AgentError, registry
 from ..config import settings
@@ -38,7 +38,8 @@ def _check_agent(conn, agent: str):
 def _session_for_owner(session_id: int, user: models.User, db: Session) -> models.ChatSession:
     chat = _session_for_member(session_id, user, db)
     if chat.user_id != user.id:
-        raise HTTPException(403, "대화를 시작한 사람만 이 대화에 요청할 수 있습니다. 새 대화를 만들어 주세요.")
+        owner = db.get(models.User, chat.user_id)
+        raise HTTPException(403, work_service.not_mine_message(owner.display_name if owner else "다른 멤버"))
     return chat
 
 
@@ -49,14 +50,19 @@ def list_sessions(project: models.Project = Depends(get_project_for_member), db:
 
 @router.post("/projects/{project_id}/sessions", response_model=schemas.ChatSessionResponse)
 def create_session(body: schemas.ChatSessionCreate | None = None, project: models.Project = Depends(get_project_for_member),
-                   user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+                   user: models.User = Depends(get_current_user), db: Session = Depends(get_db), header: int | None = Depends(work_service.header_hint)):
+    """기록을 하나 더 연다. 화면은 쓰지 않고(Task를 만들 때 함께 생긴다) 스크립트·시험과 옛 호출을 위해 남긴다. 남의 Task에는 열지 않는다."""
     conn = registry.get(user.id)
     agent = (body.agent if body else None) or (conn.info.get("default_agent") if conn else None)
     if not agent:  # 정해진 값으로 채우면 사용자가 고르지 않은 CLI가 뜬다(Agent가 막 붙어 hello가 오기 전에 실제로 있었다)
         raise HTTPException(409, "사용할 AI 에이전트를 아직 알 수 없습니다 → 입력창에서 에이전트를 고르거나 PC Agent가 연결된 뒤 다시 시도하세요")
     _check_agent(conn, agent)
-    s = models.ChatSession(project_id=project.id, user_id=user.id, agent=agent)
-    db.add(s)
+    work = work_service.write_work(db, project.id, user, body.work_id if body else None, header)
+    if not work_service.is_mine(work, user.id):
+        if body and body.work_id:
+            raise HTTPException(403, work_service.not_mine_message(work_service.owner_label(db, work)))
+        work = work_service.new_work(db, project.id, user.id)
+    s = work_service.add_chat(db, work, user.id, agent)
     db.commit()
     return s
 
@@ -79,9 +85,12 @@ def send_prompt(session_id: int, body: schemas.PromptRequest, user: models.User 
         a = db.get(models.Attachment, aid)
         if not a or a.project_id != chat.project_id:
             raise HTTPException(404, "첨부 파일을 찾을 수 없습니다")
+        if a.work_id is None:  # 놓을 때는 Task를 정하지 않고 보낼 때 정한다. 그래야 새 Task로 옮겨 갈 수 있다
+            a.work_id = chat.work_id
         atts.append({"id": a.id, "filename": a.filename, "size": a.size, "sha256": a.sha256})
     text = body.text.strip() or "첨부한 파일을 확인해 주세요."
     _check_agent(registry.get(chat.user_id), chat.agent)
+    db.commit()
     try:
         # 바로 돌아온다. CLI 준비는 뒤에서 하고 화면은 turn_started·turn_stage로 단계를 본다
         turn_id = hub.send_prompt(session_id, text, atts)
@@ -241,8 +250,9 @@ async def upload_attachment(file: UploadFile = File(...), project: models.Projec
 
 
 @router.get("/projects/{project_id}/attachments", response_model=list[schemas.AttachmentResponse])
-def list_attachments(project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
-    return db.query(models.Attachment).filter_by(project_id=project.id).order_by(models.Attachment.id.desc()).all()
+def list_attachments(scope: work_service.WorkScope = Depends(work_service.work_scope), db: Session = Depends(get_db)):
+    q = db.query(models.Attachment).filter_by(project_id=scope.project.id)
+    return work_service.narrow(q, models.Attachment, scope.read()).order_by(models.Attachment.id.desc()).all()
 
 
 @router.get("/attachments/{attachment_id}/download")
