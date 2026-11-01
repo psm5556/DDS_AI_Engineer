@@ -786,6 +786,58 @@ class MarketNotices(BaseModel):
     review_waiting: int  # 관리부서에게만 0이 아닐 수 있다
 
 
+class MarketOptionBody(BaseModel):
+    name: str
+    description: str = ""
+    service_url: str = ""
+
+
+class MarketOptionChoiceBody(BaseModel):
+    on: bool
+
+
+class MarketOptionView(BaseModel):
+    """사용자에게 보이는 값. 서비스 주소는 사용자에게 보내지 않는다."""
+    id: int
+    name: str
+    description: str
+    on: bool
+
+
+class MarketOptionList(BaseModel):
+    enabled: bool
+    items: list[MarketOptionView]
+
+
+class MarketOptionAdminRow(BaseModel):
+    id: int
+    name: str
+    description: str
+    service_url: str
+    status: Literal["draft", "published", "lowered"]
+    status_label: str
+    on_count: int
+    updated_at: datetime
+    created_by: str | None
+
+
+class MarketOptionAdminList(BaseModel):
+    items: list[MarketOptionAdminRow]
+    settings: MarketSettings
+    legacy_count: int  # 이전 방식으로 올린 스킬 항목 수
+
+
+class MarketBuiltinRow(BaseModel):
+    id: str
+    name: str
+    description: str
+
+
+class MarketBuiltin(BaseModel):
+    mcp: list[MarketBuiltinRow]
+    tools: list[MarketBuiltinRow]  # 내장 CAD·CAE 도구. 개수는 이 목록의 길이다
+
+
 class DevTestAllow(BaseModel):
     allow: bool
 

@@ -444,6 +444,29 @@ class MarketInstall(Base):
     created_at = Column(DateTime, default=_now, nullable=False)
 
 
+class MarketOption(TimestampMixin, Base):
+    """관리자가 제공하는 옵션 항목. 화면과 구조만 있고 AI에게 전달하는 방식은 아직 정하지 않았다(docs/market-package-spec.md 맨 위)."""
+    __tablename__ = "market_options"
+    __table_args__ = {"sqlite_autoincrement": True}
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False, unique=True)
+    description = Column(Text, default="", nullable=False)
+    service_url = Column(Text, default="", nullable=False)  # 관리자에게만 보인다
+    status = Column(String(20), default="draft", nullable=False)  # draft·published·lowered
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+
+
+class MarketOptionChoice(Base):
+    """사용자가 켠 옵션. 계정에 저장한다. 지금은 선택만 저장되고 AI에게 전달되지 않는다."""
+    __tablename__ = "market_option_choices"
+    __table_args__ = (UniqueConstraint("user_id", "option_id"),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    option_id = Column(Integer, ForeignKey("market_options.id", ondelete="CASCADE"), nullable=False, index=True)
+    on = Column(Boolean, default=True, nullable=False)
+    updated_at = Column(DateTime, default=_now, onupdate=_now, nullable=False)
+
+
 class MarketEvent(Base):
     """누가 언제 무엇을 했는지. 추가만 한다."""
     __tablename__ = "market_events"

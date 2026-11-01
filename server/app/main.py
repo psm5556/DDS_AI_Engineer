@@ -17,7 +17,7 @@ from .agent.link import REPLACED_CODE, AgentConnection, registry
 from .config import ROOT
 from .database import Base, SessionLocal, engine, ensure_columns
 from .deps import SCOPE_DEVTEST, effective_admin, user_from_token
-from .routers import agents, auth, devtest, flows, insights, market, projects, reports, sessions, studies, training
+from .routers import agents, auth, devtest, flows, insights, market, market_options, projects, reports, sessions, studies, training
 from .study import dataset, service, table_job
 from .ws import manager
 
@@ -144,7 +144,7 @@ async def limit_market_upload(request, call_next):
     if request.url.path == "/api/market/submissions" and request.method == "POST":
         size = request.headers.get("content-length")
         if size is None or not size.isdigit():
-            return JSONResponse({"detail": "올린 크기를 알 수 없습니다 → 웹앱의 등록 화면이나 scripts/market_publish.py로 올려 주세요"}, status_code=411)
+            return JSONResponse({"detail": "올린 크기를 알 수 없습니다 → 관리자가 scripts/market_publish.py로 올려 주세요"}, status_code=411)
         if int(size) > market.MAX_UPLOAD_BODY:
             return JSONResponse({"detail": f"너무 큽니다({int(size) // (1024 * 1024)}MB) → 해석 결과·모델 파일은 빼고 스크립트와 문서만 올려 주세요"}, status_code=413)
     return await call_next(request)
@@ -157,7 +157,7 @@ async def json_charset(request, call_next):
     if resp.headers.get("content-type") == "application/json":
         resp.headers["content-type"] = "application/json; charset=utf-8"
     return resp
-for r in (auth.router, projects.router, sessions.router, flows.router, reports.router, studies.router, insights.router, training.router, agents.router, devtest.router, market.router):
+for r in (auth.router, projects.router, sessions.router, flows.router, reports.router, studies.router, insights.router, training.router, agents.router, devtest.router, market.router, market_options.router):
     app.include_router(r)
 
 

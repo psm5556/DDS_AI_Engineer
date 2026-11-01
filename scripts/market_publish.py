@@ -1,6 +1,6 @@
-"""폴더를 묶어 마켓에 올린다(관리부서·명령줄용). 웹의 등록과 같은 API와 같은 검사를 지난다.
+"""폴더를 묶어 마켓에 올린다(관리자 전용, 일반 사용자는 서버가 거절한다). 이전 방식의 스킬 등록 API와 검사를 지난다.
   python scripts/market_publish.py <폴더> --server http://서버:7014 [--user 아이디] [--pin 123456]
-    (옵션 없음)  초안만 만든다. 웹앱 > 마켓 > 내가 등록에서 이어서 정한다
+    (옵션 없음)  초안만 만든다. 이어서 정할 화면은 지금 없다
     --private    나만 쓰기: 올리고 바로 내 PC에 설치한다
     --review     부서에 검토 요청
     --official   관리부서 제공으로 바로 공개(관리자 + PIN). 표시 항목이 있으면 --ack-all도 필요하다
@@ -105,7 +105,7 @@ def main() -> int:
         r = c.post(f"{base}/approve", json={"pin": pin, "official": True, "acks": [f["rule"] for f in flags], "fingerprint": seen})
         done = "관리부서 제공으로 공개했습니다"
     else:
-        print("\n초안만 만들었습니다 → 웹앱 > 마켓 > 내가 등록에서 공개 범위를 정하세요")
+        print("\n초안만 만들었습니다 → 공개하려면 --official을 붙여 다시 실행하세요. 같은 내용이면 초안을 고쳐 다시 올립니다")
         return 0
     if r.status_code != 200:
         sys.exit(f"처리하지 못했습니다: {detail(r)}")

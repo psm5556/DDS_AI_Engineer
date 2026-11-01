@@ -15,6 +15,19 @@ from server.app.database import SessionLocal  # noqa: E402
 PIN = "123456"
 
 
+@pytest.fixture(autouse=True)
+def legacy_registration():
+    """일반 사용자의 등록은 이제 서버가 거절한다(test_market_options.py가 본다). 그 코드와 그때 만든 항목은 남아 있으므로,
+    이 파일은 그 항목이 있는 DB를 만들려고 등록 관문만 예전 조건(웹 로그인)으로 돌린다. 나머지 검사는 그대로다."""
+    from server.app.deps import require_jwt
+    from server.app.main import app
+    from server.app.routers.market import can_register
+
+    app.dependency_overrides[can_register] = require_jwt
+    yield
+    app.dependency_overrides.pop(can_register, None)
+
+
 def _name(prefix="pkg") -> str:
     return f"{prefix}-{uuid.uuid4().hex[:12]}"  # 비슷한 이름 표시에 걸리지 않게 서로 다르게 만든다
 

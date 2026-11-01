@@ -132,43 +132,12 @@ export interface AgentInstance {
 export interface ApiToken { id: number; name: string; created_at: string; last_used_at: string | null; token?: string }
 
 // ---------- 마켓 ----------
-export type MarketInstallState = "none" | "reserved" | "installing" | "installed" | "failed" | "conflict" | "agent_too_old" | "agent_old" | "needs_consent" | "recalled" | "unavailable" | "paused";
-export interface MarketCap { key: string; label: string }
-export interface MarketFlagHit { path: string; line: number | null; text: string }
-export interface MarketFlag { rule: string; title: string; why: string; hits: MarketFlagHit[]; total?: number; truncated?: boolean }
-export interface MarketReport { passed: boolean; flags: MarketFlag[]; fixes: string[]; warnings: string[]; other_scripts: string[] }
-export interface MarketDraft {
-  version: string; fingerprint: string; check_report: MarketReport | null; self_approve_blocked: boolean; display_name: string | null; description: string | null; category: string;
-  examples: string[]; requires_tools: string[]; code: boolean; notes: string;
-}
-export interface MarketVersionRow {
-  version: string; status: string; status_label: string; grade: string; grade_label: string; size: number; sha256: string; fingerprint: string; notes: string;
-  submitted_by: string | null; reviewed_by: string | null; reviewed_at: string | null; review_note: string; recall_reason: string | null; recall_fallback: boolean | null;
-  replacement: string | null; evidence: unknown; created_at: string; capabilities: MarketCap[]; kind: string; file_count: number; provenance: { source?: string };
-}
-export interface MarketPackage {
-  id: number; key: string; name: string; display_name: string | null; description: string | null; category: string; official: boolean; owner_name: string; mine: boolean; public: boolean;
-  kind: string; code: boolean; version: string | null; status: string | null; status_label: string; grade: string | null; grade_label: string; requires_tools: string[]; tools_missing: string[];
-  capabilities: MarketCap[]; examples: string[]; installs: number; evidence: unknown; installable: boolean; recommended: boolean; search_text: string;
-  deprecated_note: string | null; draft_version: string | null;
-  install: {
-    installed: boolean; state: MarketInstallState; version: string | null; error: string | null; needs_consent: boolean; new_caps?: MarketCap[]; offline?: boolean;
-    conflicts?: { project_id: number | null; project: string; message: string }[]; pinned?: { project_id: number | null; project: string; version: string }[];
-  };
-  recalled: { reason: string; at: string | null; replacement: string | null } | null;
-  versions?: MarketVersionRow[]; skills?: string[]; review_note?: string | null; check_report?: MarketReport | null; self_approve_blocked?: boolean; fingerprint?: string | null;
-  evidence_verified?: boolean; draft?: MarketDraft;
-}
-export interface MarketList { enabled: boolean; items: MarketPackage[]; base_skills: number; agent: { connected: boolean; market_api: boolean; tools_ready: string[] } }
-export interface MarketSubmission { package: MarketPackage; version: string; report: MarketReport; self_approve_blocked: boolean; fingerprint: string }
-export interface MarketReviewRow extends MarketVersionRow {
-  package_id: number; name: string; display_name: string; description: string; owner_name: string; official: boolean; installs: number; pcs_on_version: number; code: boolean; report: MarketReport;
-  requires_tools: string[]; self_approve_blocked: boolean; category: string; examples: string[];
-}
-export interface MarketReview { queue: MarketReviewRow[]; published: MarketReviewRow[]; settings: { enabled: boolean; gateway_on: boolean } }
-export interface MarketFileRow { path: string; size: number; sha256: string }
-export interface MarketCoverage { rows: { user: string; hostname: string; connected: boolean; applied: boolean; state: string; outdated: boolean; last_seen: string }[]; applied: number; off: number; pending: number; outdated: number }
-export interface MarketDiff { previous: string | null; files: { path: string; status: string; diff: string | null; reason?: string; truncated?: boolean; total_lines?: number }[] }
+export interface MarketOption { id: number; name: string; description: string; on: boolean }
+export interface MarketOptionList { enabled: boolean; items: MarketOption[] }
+export interface MarketOptionAdminRow { id: number; name: string; description: string; service_url: string; status: "draft" | "published" | "lowered"; status_label: string; on_count: number; updated_at: string; created_by: string | null }
+export interface MarketOptionAdmin { items: MarketOptionAdminRow[]; settings: { enabled: boolean }; legacy_count: number }
+export interface MarketBuiltinRow { id: string; name: string; description: string }
+export interface MarketBuiltin { mcp: MarketBuiltinRow[]; tools: MarketBuiltinRow[] }
 export interface MarketNotice { id: number; kind: string; text: string; package_id: number | null; version: string | null; created_at: string }
 export interface MarketNotices { items: MarketNotice[]; review_waiting: number }
 

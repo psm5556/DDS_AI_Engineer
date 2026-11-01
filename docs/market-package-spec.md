@@ -1,5 +1,13 @@
 # 마켓 패키지 규격
 
+> **지금 상태: 화면과 구조만 있고, 서비스 방식은 사내 개발에서 정한다.**
+> 검토한 안: HTTP 서비스 등록 + 서버 중계, 스킬 폴더를 MCP로 감싸기.
+>
+> - 사용자 화면은 기본 제공 묶음과 옵션 카드(토글)뿐이다. 켠 값은 계정에 저장만 되고 **AI에게 전달되지 않는다.** 화면에 그렇게 적는다(`OPTION_PENDING_TEXT`, 연결이 생기면 지운다).
+> - 옵션 항목은 `market_options`·`market_option_choices` 표와 `server/app/routers/market_options.py`에 있다. 쓰기는 관리자 웹 로그인만 되고, 공개·내리기·삭제는 PIN을 다시 받는다. 서비스 주소는 관리자에게만 보이고 서버가 연결해 보지 않는다.
+> - **일반 사용자의 등록은 서버가 거절한다**(`/submissions`, `private`, `request-review`). 이것 때문에 아래 글의 "사람마다"·"내 것 · 나만"·"검토 요청"은 지금 새로 생기지 않는다.
+> - 아래 규격은 이전 방식(스킬 묶음을 PC에 설치)의 것이다. 서비스 방식을 정하기 전에 되돌릴 수 없게 지우지 않으려고 코드(`market_check.py`, `market_service.py`, `agent/dds_agent/market.py`, 설치 API)와 함께 그대로 둔다. 이미 설치한 PC는 전처럼 동작한다. 화면은 없고 API와 `scripts/market_publish.py`(관리자)로만 다룰 수 있다.
+
 마켓에 올리는 항목의 형식과 기준입니다. 서버의 검사기(`server/app/market_check.py`)가 이 규칙을 그대로 적용합니다. 규칙을 바꾸면 이 문서와 `server/tests/test_market_check.py`를 함께 고칩니다.
 
 지금 받는 것은 **스킬**(AI에게 주는 작업 방법)뿐입니다. **기능**(MCP, AI가 실행하는 도구)은 실제 AI 도구에서 시험한 뒤 2단계에서 받습니다.
@@ -172,11 +180,11 @@ CP949·UTF-16 문서를 UTF-8로, 여러 줄 설명을 한 줄로, `name`을 폴
 
 | 길 | 방법 |
 |---|---|
-| 웹 | 마켓 > 등록에 폴더나 zip을 놓습니다 |
+| 웹 | 지금은 화면이 없습니다 |
 | 명령줄 | `python scripts/market_publish.py <폴더> --server http://서버:7014 [--private\|--review\|--official]` |
 | 나중에 | 대화에서 등록(2단계), 자산화 제출(3단계). 모두 `POST /api/market/submissions` 한 곳으로 들어옵니다 |
 
-자산화 제출은 같은 API에 `source=capture`, `capture_id`, `evidence`를 붙입니다. 자동 공개 경로는 없고 같은 검토 대기열을 지납니다. 등록은 웹 로그인으로만 됩니다(토큰은 403). AI가 초안을 올리는 자산화를 만들 때는 이 길을 넓히지 말고 사람이 확인하는 좁은 길을 따로 둡니다.
+자산화 제출은 같은 API에 `source=capture`, `capture_id`, `evidence`를 붙입니다. 자동 공개 경로는 없고 같은 검토 대기열을 지납니다. 등록은 관리자 웹 로그인으로만 됩니다(토큰과 일반 사용자는 403). AI가 초안을 올리는 자산화를 만들 때는 이 길을 넓히지 말고 사람이 확인하는 좁은 길을 따로 둡니다.
 
 ## 8. 못 막는 것
 

@@ -10,10 +10,10 @@ import { PinInput } from "../components/PinInput";
 import { SetupChecklist } from "../components/SetupReadiness";
 import { when } from "../format";
 import { useToast } from "../toast";
-import type { AgentInstance, AgentRelease, MarketNotices, User } from "../types";
+import type { AgentInstance, AgentRelease, User } from "../types";
 import MarketAdmin from "./MarketAdmin";
 
-/** 관리: 사용자 승인 · PC Agent 현황(버전·연결·작업) · Agent 배포 버전 · 마켓 검토 */
+/** 관리: 사용자 승인 · PC Agent 현황(버전·연결·작업) · Agent 배포 버전 · 마켓 옵션 */
 export default function AdminPage() {
   const { user } = useAuth();
   const [params] = useSearchParams();
@@ -21,14 +21,12 @@ export default function AdminPage() {
     const t = params.get("tab");
     return t === "users" || t === "releases" || t === "market" ? t : "agents";
   });
-  const { data: notices } = useQuery({ queryKey: ["market", "notices"], queryFn: () => get<MarketNotices>("/api/market/notices"), enabled: !!user?.is_admin });
-  const waiting = notices?.review_waiting ?? 0;
   if (!user?.is_admin) return <Navigate to="/" replace />;
   return (
     <div className="page wide">
-      <div className="proj-head"><div className="grow"><h1>관리</h1><div className="proj-sub">사용자 승인 · PC Agent 모니터링 · 버전 배포 · 마켓 검토</div></div></div>
+      <div className="proj-head"><div className="grow"><h1>관리</h1><div className="proj-sub">사용자 승인 · PC Agent 모니터링 · 버전 배포 · 마켓 옵션</div></div></div>
       <nav className="stepper proj-tabs">
-        {([["agents", "PC Agent 현황"], ["users", "사용자"], ["releases", "Agent 배포"], ["market", waiting ? `마켓 (검토 ${waiting})` : "마켓"]] as const).map(([k, l]) => (
+        {([["agents", "PC Agent 현황"], ["users", "사용자"], ["releases", "Agent 배포"], ["market", "마켓"]] as const).map(([k, l]) => (
           <button key={k} className={`ptab ${tab === k ? "on" : ""}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </nav>
@@ -97,7 +95,7 @@ function Users() {
     {grant && (
       <PinModal title={`${grant.user.display_name} 관리자 권한 ${grant.value ? "주기" : "빼기"}`} confirm={grant.value ? "권한 주기" : "권한 빼기"} danger={!grant.value} onClose={() => setGrant(null)}
         onConfirm={(p) => { set.mutate({ id: grant.user.id, body: { is_admin: grant.value, admin_pin: p } }); setGrant(null); }}>
-        {grant.value ? "관리자는 마켓 항목을 공개·회수하고 Agent를 배포할 수 있습니다." : "관리자 화면을 쓸 수 없게 됩니다."}
+        {grant.value ? "관리자는 마켓 옵션을 관리하고 Agent를 배포할 수 있습니다." : "관리자 화면을 쓸 수 없게 됩니다."}
       </PinModal>
     )}
     <div className="table-wrap panel" style={{ padding: 0 }}><table>

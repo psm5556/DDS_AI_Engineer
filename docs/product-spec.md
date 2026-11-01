@@ -431,23 +431,16 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 | 사용자 | 승인, 사용 중지, PIN 초기화(내 PIN 필요), 관리자 권한 변경(내 PIN 필요) |
 | Agent 배포 | 설치 파일 올리기, "서버 코드로 첫 버전 배포", 최신 지정, 변경 내용 |
 | PC Agent 현황 | 연결 PC, 버전, 실행 중 케이스, 원격 업데이트 |
-| 마켓 | 검토 대기(파일, 직전 버전과의 차이, 표시 항목별 확인, 이름표 고치기), 공개 항목(버전별 PC 수, 이름표·내리기·회수), 회수 현황(PC별 적용, 옛 Agent는 업데이트 필요), 마켓 켜고 끄기. 쓰기는 모두 PIN을 다시 받는다. 탭 이름과 사이드바 숫자에 검토 대기 수가 보인다 |
+| 마켓 | 옵션 표(이름, 설명, 서비스 주소, 공개 상태, 켠 사람 수, 수정일)와 추가·수정·공개·내리기·삭제, 마켓 켜고 끄기. 추가 폼은 이름·설명·서비스 주소만 받고 언제나 초안으로 만든다. 공개·내리기·삭제·마켓 켜고 끄기는 PIN을 다시 받는다. 옵션이 아직 AI에게 전달되지 않는다는 문구가 표 위와 폼에 있다. 이전 방식으로 올린 스킬 항목이 있으면 수만 보여 준다 |
 
 ### 3-11. 마켓 (`/market`)
-사내 스킬을 찾아 설치하고, 내가 만든 것을 올린다. 형식과 기준은 `docs/market-package-spec.md`. 깊이는 페이지 하나 + 오른쪽 서랍 하나다.
+AI가 쓰는 MCP(AI가 쓰는 도구 연결)를 카드로 본다. 사용자가 올리는 화면은 없다. **화면과 구조만 있고 서비스 방식은 사내 개발에서 정한다**(`docs/market-package-spec.md` 맨 위).
 
-- **알림**: 맨 위에 회수·반려·공개 소식과(관리자) 검토 대기 수. 사이드바의 마켓 옆 숫자로도 보인다. 회수는 그 스킬을 쓴 대화에도 안내로 남고, 보고서 자료에 회수 표시가 붙는다.
-- **목록**: 검색(띄어 쓴 단어마다 찾고, 설명 전체·예시·스킬 이름·툴 이름을 본다), 탭(전체·스킬·설치됨·내가 등록. 기능(MCP)이 생기면 기능 탭이 보인다), 이 PC의 툴에 맞는 추천 줄(PC Agent가 꺼져 있거나 맞는 것이 없으면 숨김), 분류별 카드.
-- **카드**: 이름, 한 줄 설명, 등급, 코드 있음, 툴 유무(PC Agent가 꺼져 있거나 옛 버전이면 있다고도 없다고도 하지 않는다), 버튼 하나(설치 / 설치 중 / 설치 예약됨 / 설치됨 / 다시 확인 필요 / 다시 시도 / 일부 프로젝트 겹침 / 마켓 꺼짐 / 회수됨 등).
-- **서랍(자세히)**: 할 수 있는 일, 이렇게 말해 보세요(설치한 뒤에 누를 수 있고, 새 프로젝트 입력창을 채움), 필요한 툴, 내 PC에서 하는 일, 시험 기록(있으면 등록자가 적은 내용이라고 적는다), 변경 내역, 파일 보기(그림은 그대로 보임), 설치·제거. 프로젝트별 겹침, 옛 버전을 쓰는 프로젝트와 "지금 새 버전으로 바꾸기", 내린 이유, 반려 사유, 이름표 고치기(공개 전, 만든 사람), 초안 이어서 고치기.
-- **서랍(등록)**: 폴더·zip을 놓으면 왼쪽에 서버가 채운 값, 오른쪽에 검사 결과. 버튼은 나만 쓰기, 부서에 검토 요청, 관리자에게 바로 공개(PIN). 빈 화면에 SKILL.md 설명, 시작 틀 받기, 형식과 기준 보기가 있다. 5 MB를 넘는 파일은 보내기 전에 파일 이름과 함께 거절한다.
-
-문구 규칙(약속을 넘지 않는다)
-- "안전함"이라고 쓰지 않는다. "자동 검사 통과. 자동 검사는 탐지일 뿐이며 안전을 보장하지 않습니다."
-- "AI가 쓸 수 있습니다"로 쓴다. 반드시 쓴다고 약속하지 않는다.
-- 설치는 내 계정의 모든 프로젝트에 적용된다고 적는다. 제거해도 복사된 스크립트는 남는다고 적는다.
-- 자동 검사가 찾은 일을 보여 줄 때 "이 외의 일도 할 수 있습니다"를 함께 적는다. Python 외 스크립트는 자동 검사하지 않았다고 적는다.
-- "검토 완료"가 실제 툴에서 돌려 봤다는 뜻이 아님을 적는다. 기록이 없으면 "실제 툴 시험 기록 없음".
+- **알림**: 맨 위에 내림·삭제·회수 소식. 사이드바의 마켓 옆 숫자로도 보인다. [확인]을 누르면 사라진다.
+- **찾기**: 이름과 설명을 단어마다 찾는다. 종류 표시와 필터는 없다.
+- **기본 제공**: DDS MCP 4개와 `CAD·CAE 도구 N종` 카드 하나. `기본 제공 · 켜짐`, `내 PC에서 동작`으로 표시하고 끌 수 없다. N은 `agent-context/skills`에서 읽는다. 도구 카드를 누르면 목록을 보여 준다.
+- **옵션**: 관리자가 공개한 항목의 카드. 이름, 한 줄 설명, 토글. 머리에 `옵션 연결은 준비 중입니다. 지금은 선택만 저장되고 AI에게 전달되지 않습니다.`를 적는다. 토글 뒤 알림도 `사용합니다`라고 하지 않는다. 없으면 `관리자가 제공하는 옵션이 아직 없습니다`.
+- **복합 상황**: 켠 값은 계정에 저장되어 PC와 상관없다. 내리거나 삭제하면 켠 사람의 값이 꺼지고 이유를 한 번 알린다. 다시 공개해도 저절로 켜지지 않는다. 마켓이 꺼져 있으면 새로 켤 수 없고 끌 수는 있다. 내린 항목을 켜려 하면 서버가 거절한다.
 
 ---
 
@@ -791,6 +784,7 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 | share_links | token, model_id, expires_at, enabled, uses | |
 | agent_releases · agent_instances | 버전·파일 / 연결 PC·버전·상태·마켓 항목 상태(`market`) | |
 | market_packages · market_versions · market_installs | 마켓 항목 / 내용이 고정된 버전(상태·등급·파일 목록·검사 결과) / 누가 설치했는가 | 쓰는 버전과 `rev`는 저장하지 않고 계산한다 |
+| market_options · market_option_choices | 관리자가 제공하는 옵션(이름·설명·서비스 주소·공개 상태) / 사용자가 켠 값 | 켠 값은 저장만 되고 AI에게 전달되지 않는다 |
 | market_events · market_calls · market_notices · market_settings | 누가 무엇을 했는지(추가만) / 스킬 읽음·대화에 회수를 알린 기록(인자 없음) / 사람에게 알릴 일 / 마켓 켜고 끄기 | |
 
 새 열은 `database.ensure_columns()`가 기존 DB에 자동으로 추가한다(nullable만). 열을 지우거나 이름을 바꿀 때는 마이그레이션을 따로 쓴다.
@@ -800,7 +794,7 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 ## 6. 서버 API (주요)
 | 분류 | 경로 |
 |---|---|
-| 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin`(웹 로그인만, 로그인과 같은 잠금) · `GET·POST·DELETE /api/tokens`(발급은 웹 로그인만) · `GET·PUT /api/users` · 관리자 API는 웹 로그인만 된다. 관리자의 AI도 멤버인 프로젝트에서만 일한다. **사람 전용(웹 로그인만):** 작업 흐름 승인·반려, 권한 허용, 프로젝트·대화·결과·스크립트 묶음 삭제, 멤버 변경, Simulator 공유, 토큰 발급·폐기, PIN, 자동 업데이트 설정, 툴 경로, 작업 폴더 변경·선택, 폴더 열기, AI 도구 설치, 마켓 등록·공개·설치. 토큰은 403이고 상태가 바뀌지 않는다. 개발 AI의 원격 검증만 `/api/devtest`의 좁은 길로 승인·허용한다(허용 중, 내역 남음) |
+| 인증 | `POST /api/auth/register·login` · `GET /api/auth/me` · `PUT /api/auth/pin`(웹 로그인만, 로그인과 같은 잠금) · `GET·POST·DELETE /api/tokens`(발급은 웹 로그인만) · `GET·PUT /api/users` · 관리자 API는 웹 로그인만 된다. 관리자의 AI도 멤버인 프로젝트에서만 일한다. **사람 전용(웹 로그인만):** 작업 흐름 승인·반려, 권한 허용, 프로젝트·대화·결과·스크립트 묶음 삭제, 멤버 변경, Simulator 공유, 토큰 발급·폐기, PIN, 자동 업데이트 설정, 툴 경로, 작업 폴더 변경·선택, 폴더 열기, AI 도구 설치, 마켓 등록·공개·설치, 옵션 켜고 끄기. 토큰은 403이고 상태가 바뀌지 않는다. 개발 AI의 원격 검증만 `/api/devtest`의 좁은 길로 승인·허용한다(허용 중, 내역 남음) |
 | 프로젝트 | `GET·POST /api/projects` · `GET·PUT·DELETE /api/projects/{p}` · 즐겨찾기 · 멤버 |
 | 대화 | `GET·POST /api/projects/{p}/sessions` · `PUT·DELETE /api/sessions/{s}` · `POST …/prompt·cancel·permission·force-restart` · `GET …/messages·status`(busy·stage·stage_detail·started_at·elapsed_sec·typical_start_sec·link·pending_permissions) · 첨부 |
 | 작업 흐름 | `GET·POST /api/projects/{p}/flows` · `GET /api/flows/{f}` · `PUT …/status`(승인·반려를 서버가 `session_id` 대화로 전한다. 아직 못 전했으면 `start_queued`) · `PUT …/nodes/{n}` |
@@ -812,7 +806,8 @@ PC Agent가 끊겨도 대화 기록을 설치 안내로 바꾸지 않는다. 기
 | 학습 데이터 | `POST·GET /api/studies/{s}/datasets` · `GET /api/datasets/{d}` · `GET /api/datasets/{d}/manifest` |
 | 모델·Simulator | `GET /api/projects/{p}/models` · `GET /api/models/{m}/spec`(versions·current_model_id) · `POST …/deploy`(현재 버전 지정·되돌리기) · `…/predict·predict_batch` · 공유 `/api/models/{m}/shares`, `/api/shares/{t}/…` · 필드 `/api/field-models/{f}/mesh·predict`, `GET /api/studies/{s}/field-models?model_id=` · 목록 `GET /api/simulators`, `DELETE /api/simulators/shared/{share}` · 카드 그림 `GET /api/models/{m}/thumbnail`, `GET /api/shares/{t}/thumbnail`(그림 없음은 204) |
 | PC Agent | `/api/agent/status·diagnose·install·tools…` · `/api/projects/{p}/local/folder·tree·open` · 배포 `/api/releases…` · `/api/instances…` · `/api/setup.exe`·`/api/install.ps1` |
-| 마켓 | `GET /api/market/packages[/{이름·번호}]` · `…/versions/{v}/files[/{경로}]·download·diff` · `POST /api/market/submissions`(결과는 항상 초안) · `POST …/versions/{v}/private·request-review`(웹 로그인, 본 내용의 지문 `fingerprint` 필수) · `PATCH …/versions/{v}/labels`(이름표. 공개 전 만든 사람, 공개 뒤 웹 관리자 + PIN) · `DELETE …/versions/{v}`(공개한 적 없는 버전) · `GET /api/market/review` · `POST …/versions/{v}/approve·reject·deprecate·withdraw`(웹 관리자 + PIN, approve는 `fingerprint` 필수) · `GET …/coverage` · `GET·PUT /api/market/settings` · `GET /api/market/installs/mine` · `PUT·DELETE /api/market/installs/{이름·번호}` · `POST /api/market/installs/{이름·번호}/retry`(웹 로그인: AI가 스스로 설치하지 못한다) · `GET /api/market/notices` · `POST /api/market/notices/{id}/read` · `GET /api/market/format` · `GET /api/market/templates/{이름}` |
+| 마켓 옵션 | `GET /api/market/builtin`(기본 제공 묶음) · `GET /api/market/options`(공개 중인 옵션과 내가 켠 값, 서비스 주소 없음) · `PUT /api/market/options/{번호}/choice`(웹 로그인) · `GET·POST /api/market/admin/options` · `PATCH·DELETE /api/market/admin/options/{번호}` · `POST …/{번호}/publish·lower`(웹 관리자. 공개·내리기·삭제는 PIN) |
+| 마켓(이전 방식의 스킬, 화면 없음. 등록·`private`·`request-review`는 관리자만) | `GET /api/market/packages[/{이름·번호}]` · `…/versions/{v}/files[/{경로}]·download·diff` · `POST /api/market/submissions`(결과는 항상 초안) · `POST …/versions/{v}/private·request-review`(웹 로그인, 본 내용의 지문 `fingerprint` 필수) · `PATCH …/versions/{v}/labels`(이름표. 공개 전 만든 사람, 공개 뒤 웹 관리자 + PIN) · `DELETE …/versions/{v}`(공개한 적 없는 버전) · `GET /api/market/review` · `POST …/versions/{v}/approve·reject·deprecate·withdraw`(웹 관리자 + PIN, approve는 `fingerprint` 필수) · `GET …/coverage` · `GET·PUT /api/market/settings` · `GET /api/market/installs/mine` · `PUT·DELETE /api/market/installs/{이름·번호}` · `POST /api/market/installs/{이름·번호}/retry`(웹 로그인: AI가 스스로 설치하지 못한다) · `GET /api/market/notices` · `POST /api/market/notices/{id}/read` · `GET /api/market/format` · `GET /api/market/templates/{이름}` |
 
 실시간 이벤트(브라우저 `/ws`)
 - `flow_updated` · `artifact_updated` · `report_updated`
