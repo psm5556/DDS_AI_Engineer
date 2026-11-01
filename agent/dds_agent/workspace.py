@@ -3,19 +3,24 @@
 %USERPROFILE%\\DDS_Workspace\\
   index.json                          내 PC의 전체 프로젝트 ↔ 서버 연결 색인
   .dds-lock                           작업 공간을 고치는 동안 잡는 잠금(Agent·MCP 프로세스 사이)
-  P0012_<프로젝트이름>\\
-    project.json                      프로젝트 ID·이름·서버 주소 (서버와 연결 고리)
-    inputs\\ scripts\\ runs\\ live\\ reports\\
-    studies\\S003_<스터디이름>\\
-      study.json  cases.csv
-      cases\\C0001_doe\\ C0021_bo\\ C0031_al\\   ← 케이스마다 case.json·params.json·results.json·run.log·images\\·fields\\·툴 산출물
+  P0012_<Project이름>\\
+    project.json                      Project ID·이름·서버 주소 (서버와 연결 고리)
+    (숨김) 규칙·스킬 1벌                CLAUDE.md AGENTS.md GEMINI.md .claude .gemini .agents
+    inputs\\ scripts\\ runs\\ studies\\ live\\ reports\\   ← 이전 기록(legacy)만 쓴다
+    T01_<Task이름>\\                   ← Task마다 하나. AI의 작업 폴더(cwd)
+      work.json                       Task id·uid·번호·이름 (서버와 연결 고리)
+      inputs\\ scripts\\ runs\\ live\\ reports\\
+      studies\\S003_<스터디이름>\\
+        study.json  cases.csv
+        cases\\C0001_doe\\ C0021_bo\\ C0031_al\\   ← 케이스마다 case.json·params.json·results.json·run.log·images\\·fields\\·툴 산출물
 
 - 폴더 이름의 번호(P/S/C + 서버 ID)가 연결의 기준이다. 이름 부분은 사람이 알아보기 위한 것이라 바뀌어도 된다(번호로 찾는다).
-- 프로젝트 폴더는 항상 P0012_<이름>이고 프로젝트 이름을 따라간다. 번호만 있는 폴더는 만들지 않는다.
+- Project 폴더는 항상 P0012_<이름>, Task 폴더는 항상 T01_<이름>이고 이름을 따라간다. 번호만 있는 폴더는 만들지 않는다.
   Windows는 프로세스가 cwd를 둔 폴더의 이름을 바꾸지 못한다(WinError 5·32). CLI를 끄지 않으므로 그동안은 새 이름을 접합으로 보여 주고
   실제 이름은 안전할 때 바꾼다. 절차는 sync_name, 기록은 docs/local-data.md '폴더 이름'.
-- 사용자가 프로젝트마다 작업 폴더를 직접 정할 수 있다(D:\\Work\\... 등). index.json의 links(uid → 절대 경로)에
-  이 PC 기준으로 기록하고, 그 폴더 안에도 같은 구조(project.json·inputs·studies…)를 만든다. 이 폴더의 이름은 바꾸지 않는다.
+- 사용자가 Project마다 폴더를 직접 정할 수 있다(D:\\Work\\... 등). index.json의 links(uid → 절대 경로)에
+  이 PC 기준으로 기록하고, 그 폴더 안에도 같은 구조(project.json·T01_…)를 만든다. 이 폴더의 이름은 바꾸지 않는다.
+- Task 폴더는 AI 시작이나 케이스 실행 때만 만든다. 조회로는 절대 만들지 않는다(find_work). 이전 기록(legacy)은 Project 폴더에서 그대로 돈다.
 - 원본(inputs)은 읽기 전용으로 다루고, 케이스는 복사본으로 실행한다.
 """
 from __future__ import annotations
@@ -31,10 +36,11 @@ import stat
 import threading
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from .context import _set_hidden, dds_items, dds_owned_files, forget_git_block, git_hide_aliases
+from .context import _set_hidden, dds_items, dds_owned_files, dds_work_items, forget_git_block, git_hide_aliases
 
 log = logging.getLogger("dds_agent.workspace")
 
@@ -42,7 +48,11 @@ SUBDIRS = ("inputs", "scripts", "runs", "studies", "live", "reports")
 MOVING = "dds-moving"  # 이름을 바꾸는 중의 임시 이름. P0012_로 시작하게 두어 도중에 끊겨도 번호로 다시 찾는다
 PROBE = "dds-probe"
 ALIAS_KEEP = 8  # 옛 이름 접합을 남기는 수. CAD 파일·스크립트에 옛 경로가 적혀 있을 수 있어 넉넉히 둔다
-PATH_RESERVE = 110  # 프로젝트 폴더 아래 studies\S003_…\cases\C0001_…\fields\파일 이 쓰는 길이
+PATH_RESERVE = 110  # Task 폴더 아래 studies\S003_…\cases\C0001_…\fields\파일 이 쓰는 길이
+PROJECT_RESERVE = PATH_RESERVE + 29  # Project 폴더 아래에는 \T01_<24자>가 더 든다
+PROJECT_FILE, WORK_FILE = "project.json", "work.json"
+_TASK_NAME = re.compile(r"T\d+_")
+NO_FOLDER_NOTICE = "이 Task의 폴더는 아직 이 PC에 없습니다 → 내 Task라면 AI에게 요청하면 폴더가 만들어집니다."
 SLUG_MAX, SLUG_MIN = 24, 8
 RENAME_RETRY = (0.05, 0.15, 0.3, None)  # 보안 프로그램이 잠깐 잡을 수 있다(측정 400ms). 더 잡고 있으면 다음 기회에 한다
 MERGE_NOTE_DAYS = 14
@@ -268,6 +278,28 @@ def _guard(root: Path):
                 os.close(fd)  # 닫으면 잠금도 풀린다
 
 
+@dataclass(frozen=True)
+class _Slot:
+    """이름을 맞추는 폴더 자리. sync_name의 절차(접합·임시 이름·옛 이름)는 Project와 Task가 같고 놓이는 곳과 기록 파일만 다르다."""
+    parent: Path  # 폴더가 놓인 곳
+    prefix: str  # P0012 · T01
+    record: str  # project.json · work.json
+    reserve: int  # 이 폴더 아래 파일이 쓰는 경로 길이
+
+    @property
+    def is_project(self) -> bool:
+        return self.record == PROJECT_FILE
+
+
+def work_tag(work: dict) -> str:
+    return f"T{int(work['seq']):02d}"
+
+
+def real_work(work: dict | None) -> bool:
+    """자기 폴더가 있는 Task인가. 이전 기록(legacy)과 Task를 모르는 호출(옛 서버)은 Project 폴더를 쓴다."""
+    return bool(work and work.get("uid") and work.get("seq") is not None and not work.get("legacy"))
+
+
 class Workspace:
     def __init__(self, root: Path, server_url: str = ""):
         self.root = Path(root)
@@ -297,11 +329,12 @@ class Workspace:
     def _user_link(self, p: Path) -> bool:
         return _is_alias(p) and not self._our_alias(p)
 
-    def _pick_own(self, project_id: int, rows: list[tuple[Path, dict]], row: dict) -> Path:
+    def _project_slot(self, project_id: int) -> _Slot:
+        return _Slot(self.root, f"P{project_id:04d}", PROJECT_FILE, PROJECT_RESERVE)
+
+    def _pick_own(self, moving: str, rows: list[tuple[Path, dict]], row: dict) -> Path:
         """같은 uid의 폴더가 여럿이면(탐색기로 복사한 백업) 진짜를 고른다. 이름을 바꾸면 이름 순서가 달라지므로 순서로 고르면 복사본으로 넘어간다.
         색인이 가리키는 폴더가 진짜이고, 색인이 없으면 project.json의 folder가 자기 이름인 폴더다(복사본은 원본의 이름을 들고 있다)."""
-        moving = f"P{project_id:04d}_{MOVING}"
-
         def rank(item: tuple[Path, dict]) -> int:
             c, i = item
             plan = i.get("moving") if isinstance(i.get("moving"), dict) else {}
@@ -333,34 +366,35 @@ class Workspace:
         if uid:
             mine = [(c, i) for c, i in infos if i.get("uid") == uid]
             if mine:
-                return self._pick_own(project_id, mine, row if row.get("uid") == uid else {})
+                return self._pick_own(f"P{project_id:04d}_{MOVING}", mine, row if row.get("uid") == uid else {})
             return next((c for c, i in infos if self._adoptable(i, name)), None)
         cur = row.get("folder")
         cur_dir = self.root / cur if cur else None  # 직접 정한 폴더는 절대 경로로 들어 있다(root / 절대경로 = 그 경로)
         if cur_dir and cur_dir.is_dir():
             return Path(os.path.realpath(cur_dir)) if self._our_alias(cur_dir) else cur_dir
-        return self._pick_own(project_id, infos, {}) if infos else None
+        return self._pick_own(f"P{project_id:04d}_{MOVING}", infos, {}) if infos else None
 
     def find(self, project_id: int) -> Path | None:
         with _guard(self.root):
             return self._find(project_id)
 
-    def _fit(self, prefix: str) -> int:
-        """폴더 이름에 쓸 수 있는 길이. 작업 공간 경로가 길면 줄여 그 아래 파일이 260자를 넘지 않게 한다."""
-        room = 259 - len(str(self.root)) - 1 - len(prefix) - 1 - PATH_RESERVE
+    @staticmethod
+    def _fit(slot: _Slot) -> int:
+        """폴더 이름에 쓸 수 있는 길이. 놓일 곳의 경로가 길면 줄여 그 아래 파일이 260자를 넘지 않게 한다."""
+        room = 259 - len(str(slot.parent)) - 1 - len(slot.prefix) - 1 - slot.reserve
         return max(SLUG_MIN, min(SLUG_MAX, room))
 
-    def _pick_name(self, project_id: int, name: str | None, uid: str | None, d: Path | None = None, own: tuple = ()) -> str | None:
-        """새 이름을 고른다. 다른 프로젝트의 폴더를 덮지 않게 uid를 붙인다(서버 DB를 새로 만들면 번호·이름이 겹칠 수 있다)."""
-        prefix = f"P{project_id:04d}"
-        tail_name = slug(name, self._fit(prefix))
+    def _pick_name(self, slot: _Slot, name: str | None, uid: str | None, d: Path | None = None, own: tuple = ()) -> str | None:
+        """새 이름을 고른다. 다른 Project·Task의 폴더를 덮지 않게 uid를 붙인다(서버 DB를 새로 만들면 번호·이름이 겹칠 수 있다)."""
+        prefix = slot.prefix
+        tail_name = slug(name, self._fit(slot))
         base = f"{prefix}_{tail_name}" + ("_" if tail_name in (MOVING, PROBE) else "")  # 임시 이름과 겹치면 이름을 바꾸는 중으로 착각한다
         tails = ["", f"_{uid[:6]}", *(f"_{uid[:6]}-{n}" for n in range(2, 6))] if uid else [""]
         for tail in tails:
             cand = base + tail
             if d is not None and _same_name(cand, d.name):
                 return cand
-            p = self.root / cand
+            p = slot.parent / cand
             if (not os.path.lexists(p) or (cand in own and (_is_alias(p) or _empty_dir(p)))
                     or (d is not None and _is_alias(p) and _same_path(p, d))):
                 return cand
@@ -384,7 +418,8 @@ class Workspace:
                         raise FileNotFoundError(f"프로젝트 폴더 '{p.name}'가 가리키는 '{os.path.realpath(p)}'에 연결할 수 없습니다 → "
                                                 "외장 드라이브나 네트워크 연결을 확인한 뒤 다시 시도하세요.")
                     _drop_alias(p)  # 실제 폴더가 지워졌다. 끊긴 접합이 새 폴더의 이름을 막지 않게 한다
-                picked = self._pick_name(project_id, name, uid) or f"{prefix}_{slug(name, self._fit(prefix))}_{uid or ''}"[:80]
+                slot = self._project_slot(project_id)
+                picked = self._pick_name(slot, name, uid) or f"{prefix}_{slug(name, self._fit(slot))}_{uid or ''}"[:80]
                 d = self.root / picked
             for sub in SUBDIRS:
                 (d / sub).mkdir(parents=True, exist_ok=True)
@@ -458,7 +493,7 @@ class Workspace:
             if linked or not self._in_root(d) or self._user_link(d):  # 사용자가 고른 폴더·이어 둔 링크는 이름을 바꾸지 않는다
                 res = {"found": True, "custom": True, "path": str(d), "pending": False}
             else:
-                d, res = self._settle(project_id, uid, d, info, may_move)
+                d, res = self._settle(self._project_slot(project_id), uid, d, info, may_move, project_id)
             if info != before:
                 info["updated"] = _now()
                 _write_json(d / "project.json", info)
@@ -477,8 +512,9 @@ class Workspace:
         names = {*_plain_names(info.get("aliases")), *_plain_names([info.get("visible")])}
         return sorted(names - {info.get("folder")})
 
-    def _settle(self, project_id: int, uid: str | None, d: Path, info: dict, may_move) -> tuple[Path, dict]:
-        prefix = f"P{project_id:04d}"
+    def _settle(self, slot: _Slot, uid: str | None, d: Path, info: dict, may_move, project_id: int | None = None) -> tuple[Path, dict]:
+        """project_id는 Project 자리일 때만 쓴다: 번호만 있는 예전 폴더는 Project에만 있다."""
+        prefix = slot.prefix
         name = info.get("name") or ""
         moving = d.name == f"{prefix}_{MOVING}"
         if not _plain_names([info.get("visible")]):  # 망가진 기록으로 작업 공간 밖을 건드리지 않는다
@@ -486,11 +522,11 @@ class Workspace:
         plan = info.pop("moving", None)
         if isinstance(plan, dict) and plan.get("to") and _same_name(plan["to"], d.name) and _plain_names([plan.get("from")]) and not moving:
             # 실제 이름은 바뀌었는데 뒷정리 전에 Agent가 죽었다. 사람이 바꾼 이름으로 보면 옛 이름 접합이 끝내 생기지 않는다
-            self._finish_move(d, d.name, plan["from"], info.get("visible") or plan["from"], info, plan.get("for") or name)
+            self._finish_move(slot, d, d.name, plan["from"], info.get("visible") or plan["from"], info, plan.get("for") or name)
         visible = info.get("visible") or d.name
         # 사람이 탐색기에서 실제 폴더 이름을 바꿨다: 접합은 끊겼고, 사람이 지은 이름을 존중한다(프로젝트 이름이 다시 바뀌면 따라간다)
         if info.get("folder_for") is not None and info.get("folder") not in (None, d.name) and not moving:
-            alias = self.root / visible
+            alias = slot.parent / visible
             if _is_alias(alias) and not alias.exists():
                 _drop_alias(alias)
             if info.pop("hid_real", False):
@@ -501,15 +537,16 @@ class Workspace:
         if not moving:
             info["folder"] = d.name
         can_move = may_move() if callable(may_move) else bool(may_move)
-        if can_move:
-            self._absorb_strays(project_id, uid, d, info, name)
-        else:
-            self._note_strays(project_id, uid, d, info, name)
+        if slot.is_project:
+            if can_move:
+                self._absorb_strays(project_id, uid, d, info, name)
+            else:
+                self._note_strays(project_id, uid, d, info, name)
         if not _usable(name):  # 쓸 글자가 없는 이름: 지금 폴더를 둔다
             if moving and can_move:
                 old = info.get("folder") or prefix
-                if not os.path.lexists(self.root / old) and _rename_retry(d, self.root / old):
-                    d = self.root / old
+                if not os.path.lexists(slot.parent / old) and _rename_retry(d, slot.parent / old):
+                    d = slot.parent / old
             return d, self._state(d, info)
         # 접합을 못 만들어 기다리는 이름은 다시 고를 때도 같은 이름이어야 한다
         own = (*_plain_names(info.get("aliases")), visible, *_plain_names([info.get("want")]))
@@ -518,21 +555,21 @@ class Workspace:
         elif info.get("folder_for") == name and not moving:  # 이 이름으로 이미 정했다. 사람이 지은 이름·uid 접미사를 그대로 둔다
             want = visible
         else:
-            want = self._pick_name(project_id, name, uid, d, own)
+            want = self._pick_name(slot, name, uid, d, own)
         if want is None:
             log.warning("폴더 이름을 고르지 못했습니다: %s", name)
             return d, self._state(d, info)
         if want == d.name:
-            self._show_real(d, visible, info, name)
+            self._show_real(slot, d, visible, info, name)
             return d, self._state(d, info)
         if can_move:
-            new = self._move(d, want, visible, info, name, prefix)
+            new = self._move(slot, d, want, visible, info, name)
             if new is not None:
-                if info.get("stray_names"):  # 바꾸는 사이에 옛 이름으로 진짜 폴더가 생겼다
+                if slot.is_project and info.get("stray_names"):  # 바꾸는 사이에 옛 이름으로 진짜 폴더가 생겼다
                     self._absorb_strays(project_id, uid, new, info, name)
                 return new, {**self._state(new, info), "moved": True, "old": info.get("moved_from")}
         if not _same_name(want, d.name):
-            self._show_as(d, want, visible, info, name)
+            self._show_as(slot, d, want, visible, info, name)
         else:  # 대소문자만 다르면 접합을 만들 수 없다(이미 있는 이름으로 본다). 실제 이름만 바꿀 수 있다
             info.update(pending=True, want=want)
         return d, self._state(d, info)
@@ -540,25 +577,25 @@ class Workspace:
     def _state(self, d: Path, info: dict) -> dict:
         return {"found": True, "path": str(d), "visible": info.get("visible") or d.name, "pending": bool(info.get("pending") or info.get("stray_wait"))}
 
-    def _hide_old_visible(self, visible: str, keep: str, d: Path, info: dict):
+    def _hide_old_visible(self, slot: _Slot, visible: str, keep: str, d: Path, info: dict):
         """앞서 보여 주던 이름을 숨긴다. 지우지 않는다: 그 이름으로 연 탐색기 창·옛 경로가 끊기지 않게."""
         if visible in (keep, d.name):
             return
-        p = self.root / visible
+        p = slot.parent / visible
         if _is_alias(p):
             _set_hidden(p, True)
             info["aliases"] = [a for a in info.get("aliases") or [] if a != visible] + [visible]
 
-    def _show_real(self, d: Path, visible: str, info: dict, name: str):
+    def _show_real(self, slot: _Slot, d: Path, visible: str, info: dict, name: str):
         """실제 이름이 이미 맞다(처음부터 맞거나 실제 이름으로 되돌아왔다)."""
-        self._hide_old_visible(visible, d.name, d, info)
+        self._hide_old_visible(slot, visible, d.name, d, info)
         if info.pop("hid_real", False):
             _set_hidden(d, False)
         info.update(folder=d.name, visible=None, pending=False, folder_for=name)
         info.pop("want", None)
 
-    def _show_as(self, d: Path, want: str, visible: str, info: dict, name: str):
-        p = self.root / want
+    def _show_as(self, slot: _Slot, d: Path, want: str, visible: str, info: dict, name: str):
+        p = slot.parent / want
         try:
             if _is_alias(p) and not _same_path(p, d):
                 _drop_alias(p)  # 이 프로젝트의 끊긴 접합(_pick_name이 own에서 골랐다)
@@ -570,22 +607,22 @@ class Workspace:
             log.info("접합을 만들지 못했습니다(%s): %s", want, e)
             info.update(pending=True, want=want)
             return
-        old = visible if visible not in (want, d.name) and _is_alias(self.root / visible) else None
+        old = visible if visible not in (want, d.name) and _is_alias(slot.parent / visible) else None
         info["aliases"] = [a for a in info.get("aliases") or [] if a not in (want, old)] + ([old] if old else [])
         info.update(hid_real=True, visible=want, pending=True, folder_for=name)
         info.pop("want", None)
         # 숨기기 전에 기록한다. 기록 없이 숨기면 나중에 실제 이름을 바꿔도 숨김을 풀지 못해 프로젝트가 탐색기에서 사라진다.
         # 쓰기가 실패하면 여기서 멈춘다: 아직 아무것도 숨기지 않았고 다음 기회에 다시 한다
-        _write_json(d / "project.json", info)
+        _write_json(d / slot.record, info)
         _set_hidden(p, False)
         if old:
-            _set_hidden(self.root / old, True)
+            _set_hidden(slot.parent / old, True)
         _set_hidden(d, True)  # 탐색기에 같은 폴더가 둘로 보이지 않게
 
-    def _move(self, d: Path, want: str, visible: str, info: dict, name: str, prefix: str) -> Path | None:
+    def _move(self, slot: _Slot, d: Path, want: str, visible: str, info: dict, name: str) -> Path | None:
         """실제 이름을 바꾼다. 먼저 임시 이름으로 옮겨 잠금부터 확인한다: 잠겨 있으면 접합을 건드리지 않아 보이는 이름이 끊기지 않는다."""
-        tmp = self.root / f"{prefix}_{MOVING}"
-        target = self.root / want
+        tmp = slot.parent / f"{slot.prefix}_{MOVING}"
+        target = slot.parent / want
         resumed = _same_name(d.name, tmp.name)
         if not resumed:
             if os.path.lexists(tmp):
@@ -600,7 +637,7 @@ class Workspace:
         had_alias = False
         try:
             # 무엇을 하려는지 먼저 남긴다. 바꾼 직후 죽으면 이 기록으로 사람이 바꾼 이름과 구별해 뒷정리를 마친다
-            _write_json(tmp / "project.json", {**info, "moving": {"to": want, "from": old, "for": name}})
+            _write_json(tmp / slot.record, {**info, "moving": {"to": want, "from": old, "for": name}})
             had_alias = _is_alias(target)
             if had_alias:
                 _drop_alias(target)
@@ -617,17 +654,17 @@ class Workspace:
                 except OSError as e2:  # 다음 번에 임시 이름에서 이어 간다
                     log.warning("되돌리지 못했습니다: %s", e2)
             return None
-        self._finish_move(target, want, old, visible, info, name)
+        self._finish_move(slot, target, want, old, visible, info, name)
         return target
 
-    def _finish_move(self, target: Path, want: str, old: str | None, visible: str, info: dict, name: str):
+    def _finish_move(self, slot: _Slot, target: Path, want: str, old: str | None, visible: str, info: dict, name: str):
         """실제 이름을 바꾼 뒤의 뒷정리. 옛 이름을 숨긴 접합으로 남겨 옛 절대 경로가 그대로 돌게 한다."""
         names = [*_plain_names(info.get("aliases")), *_plain_names([visible, old])]
         kept, strays = [], []
         for n in names:  # 앞선 접합은 옛 경로를 가리켜 끊겼다. 지우고 다시 만든다
             if n in kept or _same_name(n, want) or n.endswith(MOVING):
                 continue
-            p = self.root / n
+            p = slot.parent / n
             if _is_alias(p):
                 try:
                     _drop_alias(p)
@@ -646,8 +683,8 @@ class Workspace:
         alive = []
         for n in kept:
             try:
-                _make_alias(target, self.root / n)
-                _set_hidden(self.root / n, True)
+                _make_alias(target, slot.parent / n)
+                _set_hidden(slot.parent / n, True)
                 alive.append(n)
             except OSError as e:
                 log.info("옛 이름 접합을 만들지 못했습니다(%s): %s", n, e)
@@ -657,11 +694,13 @@ class Workspace:
         info.update(folder=want, visible=None, pending=False, folder_for=name, aliases=alive, moved_from=old)
         if strays:
             info["stray_names"] = [*(info.get("stray_names") or []), *strays]
-        try:  # 실패해도 다음 동기화가 맞춘다
-            if old:
-                forget_git_block(self.root / old, target)
-        except OSError as e:
-            log.info("git 제외 목록을 고치지 못했습니다: %s", e)
+        if slot.is_project:  # Task의 제외 항목은 Project 구간의 T*/ 패턴 하나로 끝난다
+            try:  # 실패해도 다음 동기화가 맞춘다
+                if old:
+                    forget_git_block(slot.parent / old, target)
+            except OSError as e:
+                log.info("git 제외 목록을 고치지 못했습니다: %s", e)
+            self._relink_works(target)
 
     # ---------- 번호만 있는 폴더 ----------
     def _strays(self, project_id: int, uid: str | None, d: Path, name: str, info: dict) -> list[tuple[Path, dict]]:
@@ -747,6 +786,141 @@ class Workspace:
         else:
             info.pop("stray_names", None)
 
+    # ---------- Task 폴더 ----------
+    def _work_slot(self, pdir: Path, work: dict) -> _Slot:
+        return _Slot(pdir, work_tag(work), WORK_FILE, PATH_RESERVE)
+
+    def _find_work(self, pdir: Path, work: dict) -> Path | None:
+        """번호로 찾고 work.json의 uid로 확인한다. 이름은 바뀌어도 되고, 번호가 같아도 uid가 다르면(서버 DB를 새로 만든 경우) 남의 폴더다.
+        탐색기로 복사한 백업도 uid가 같으므로 Project와 같은 규칙으로 진짜를 고른다."""
+        tag = work_tag(work)
+        rows = []
+        for c in sorted(pdir.glob(f"{tag}_*")):
+            # 우리가 만든 접합은 같은 폴더의 다른 이름일 뿐이다. 끊긴 접합도 후보가 아니다
+            if _is_alias(c) and (not c.exists() or _same_path(Path(os.path.realpath(c)).parent, pdir)):
+                continue
+            if c.is_dir():
+                info = _read_json(c / WORK_FILE)
+                if info.get("uid") == work["uid"]:
+                    rows.append((c, info))
+        return self._pick_own(f"{tag}_{MOVING}", rows, {}) if rows else None
+
+    def find_work(self, project_id: int, work: dict | None, project_uid: str | None = None) -> Path | None:
+        """일하는 폴더를 찾기만 한다. 조회가 부른다: 다른 PC에서 만든 내 Task나 남의 Task를 구경했다고 폴더가 생기면 안 된다."""
+        with _guard(self.root):
+            pdir = self._find(project_id, None, project_uid)
+            if pdir is None or not pdir.is_dir():
+                return None
+            return self._find_work(pdir, work) if real_work(work) else pdir
+
+    def work_dir(self, project_id: int, work: dict | None, project_name: str | None = None, project_uid: str | None = None) -> Path:
+        """일하는 폴더. 없으면 만든다. AI 시작과 케이스 실행만 부른다.
+        이전 기록과 Task를 모르는 호출은 Project 폴더다. 이름으로 폴더를 바꾸지 않는다(sync_work_name 한 곳에서만)."""
+        pdir = self.project_dir(project_id, project_name, project_uid)
+        if not real_work(work):
+            return pdir
+        with _guard(self.root):
+            d = self._find_work(pdir, work)
+            if d is None:
+                slot = self._work_slot(pdir, work)
+                name = work.get("name")
+                for stale in pdir.glob(f"{slot.prefix}_*"):  # 끊긴 접합이 새 폴더의 이름을 막지 않게 한다
+                    if _is_alias(stale) and not stale.exists():
+                        _drop_alias(stale)
+                picked = self._pick_name(slot, name, work["uid"]) or f"{slot.prefix}_{slug(name, self._fit(slot))}_{work['uid']}"[:80]
+                d = pdir / picked
+                d.mkdir(parents=True, exist_ok=True)
+                info = {"work_id": work.get("id"), "uid": work["uid"], "seq": work["seq"], "name": name or "", "project_id": project_id,
+                        "project_uid": project_uid, "server": self.server_url, "folder": d.name, "created": _now(), "updated": _now()}
+                if _usable(name):
+                    info["folder_for"] = name
+                _write_json(d / WORK_FILE, info)
+            for sub in SUBDIRS:
+                (d / sub).mkdir(parents=True, exist_ok=True)
+            return d
+
+    def sync_work_name(self, project_id: int, project_uid: str | None, work: dict, may_move=False) -> dict:
+        """Task 폴더 이름을 Task 이름에 맞춘다. 규칙은 sync_name과 같다. 이 PC에 폴더가 없으면 만들지 않는다."""
+        if not real_work(work):
+            return {"found": False}
+        with _guard(self.root):
+            pdir = self._find(project_id, None, project_uid)
+            d = self._find_work(pdir, work) if pdir is not None and pdir.is_dir() else None
+            if d is None:
+                self._note_pending_work(project_id, project_uid, work, False)
+                return {"found": False}
+            info = _read_json(d / WORK_FILE)
+            before = dict(info)
+            names_before = self._alias_names(before)
+            if _usable(work.get("name")):
+                info["name"] = work["name"]
+            d, res = self._settle(self._work_slot(pdir, work), work["uid"], d, info, may_move)
+            if info != before:
+                info["updated"] = _now()
+                _write_json(d / WORK_FILE, info)
+            self._note_pending_work(project_id, project_uid, work, res["pending"])
+            if self._alias_names(info) != names_before:
+                self._git_hide_work_names(pdir, work_tag(work), info)
+            return res
+
+    def _git_hide_work_names(self, pdir: Path, tag: str, info: dict):
+        try:
+            git_hide_aliases(pdir, 0, self._alias_names(info), label=tag)
+        except (OSError, ValueError) as e:
+            log.info("git 제외 목록을 고치지 못했습니다: %s", e)
+
+    def _note_pending_work(self, project_id: int, project_uid: str | None, work: dict, pending: bool):
+        """기다리는 Task를 index.json에 남긴다. 그래야 Agent를 다시 시작해도 폴더를 다 뒤지지 않고 이어 간다."""
+        try:
+            idx = _read_json(self.root / "index.json")
+            rows = idx.get("works_pending") or {}
+            if pending == (work["uid"] in rows):
+                return
+            if pending:
+                rows[work["uid"]] = {"project_id": project_id, "project_uid": project_uid, "id": work.get("id"), "seq": work["seq"], "uid": work["uid"]}
+            else:
+                rows.pop(work["uid"], None)
+            idx["works_pending"] = rows
+            _write_json(self.root / "index.json", idx)
+        except OSError as e:  # 다음 호출이 다시 맞춘다
+            log.warning("index.json을 고치지 못했습니다: %s", e)
+
+    def pending_works(self) -> list[tuple[int, str | None, dict]]:
+        """이름 바꾸기를 기다리는 Task: (Project id, Project uid, Task). 이름은 work.json에 있다."""
+        rows = _read_json(self.root / "index.json").get("works_pending") or {}
+        out = []
+        for r in rows.values():
+            if isinstance(r, dict) and r.get("uid") and isinstance(r.get("seq"), int) and isinstance(r.get("project_id"), int):
+                out.append((r["project_id"], r.get("project_uid"), {"id": r.get("id"), "uid": r["uid"], "seq": r["seq"]}))
+        return out
+
+    def _relink_works(self, pdir: Path):
+        """Project의 실제 이름이 바뀌면 안쪽 접합의 대상 경로가 낡는다. 옛 이름 접합을 거쳐 한동안 돌아도 그것이 지워지면 끊기므로 새 경로로 다시 만든다.
+        순서는 Task → Project → 여기다. 못 만든 이름은 기다리는 Task라 다음 동기화가 다시 만든다."""
+        for d in pdir.glob("T*_*"):
+            try:
+                if _is_alias(d) or not d.is_dir():
+                    continue
+                info = _read_json(d / WORK_FILE)
+            except OSError as e:
+                log.info("Task 기록을 읽지 못했습니다(%s): %s", d.name, e)
+                continue
+            if not info.get("uid"):
+                continue
+            for n in self._alias_names(info):
+                p = pdir / n
+                try:
+                    if _is_alias(p):
+                        _drop_alias(p)
+                        _make_alias(d, p)
+                        _set_hidden(p, n != info.get("visible"))
+                except OSError as e:
+                    log.info("Task 접합을 다시 만들지 못했습니다(%s): %s", n, e)
+            if self._alias_names(info):
+                m = _TASK_NAME.match(d.name)
+                if m:
+                    self._git_hide_work_names(pdir, d.name[:m.end() - 1], info)
+
     # ---------- 보여 줄 이름 ----------
     def visible_dir(self, project_id: int, name: str | None = None, uid: str | None = None) -> Path:
         """사람에게 보여 줄 경로. 평소에는 실제 폴더이고, 이름이 잠겨 있으면 새 이름의 접합이다."""
@@ -758,15 +932,34 @@ class Workspace:
                 return p
         return d
 
+    def visible_work_dir(self, project_id: int, work: dict | None, name: str | None = None, uid: str | None = None) -> Path | None:
+        """사람에게 보여 줄 일하는 폴더. 없으면 None."""
+        d = self.find_work(project_id, work, uid)
+        if d is None:
+            return None
+        shown = self.visible_dir(project_id, name, uid)
+        if not real_work(work):
+            return shown
+        v = next(iter(_plain_names([_read_json(d / WORK_FILE).get("visible")])), None)
+        leaf = v if v and _is_alias(d.parent / v) and _same_path(d.parent / v, d) else d.name
+        return shown / leaf
+
     def old_paths(self, d: Path) -> list[str]:
         """이 폴더를 아직 가리키는 옛 이름 경로. 오래된 것부터."""
-        names = _plain_names(_read_json(d / "project.json").get("aliases"))
-        return [str(self.root / n) for n in names if _is_alias(self.root / n) and _same_path(self.root / n, d)]
+        record = d / WORK_FILE if (d / WORK_FILE).is_file() else d / PROJECT_FILE
+        names = _plain_names(_read_json(record).get("aliases"))
+        return [str(d.parent / n) for n in names if _is_alias(d.parent / n) and _same_path(d.parent / n, d)]
 
-    def shown_path(self, project_id: int, target: Path, name: str | None = None, uid: str | None = None) -> Path:
+    def shown_path(self, project_id: int, target: Path, name: str | None = None, uid: str | None = None, work: dict | None = None) -> Path:
         """실제 경로 → 사람에게 보여 줄 경로. 숨겨 둔 실제 폴더를 탐색기로 열지 않는다."""
-        base = self.project_dir(project_id, name, uid).resolve()
-        shown = self.visible_dir(project_id, name, uid)
+        if work is not None:
+            base, shown = self.find_work(project_id, work, uid), self.visible_work_dir(project_id, work, name, uid)
+            if base is None or shown is None:
+                return Path(target)
+            base = base.resolve()
+        else:
+            base = self.project_dir(project_id, name, uid).resolve()
+            shown = self.visible_dir(project_id, name, uid)
         try:
             return shown / Path(target).resolve().relative_to(base)
         except ValueError:
@@ -776,10 +969,10 @@ class Workspace:
         """파일 탭에 보여 줄 말. 숨기지 않는다: 실제 이름을 지금 못 바꾸는 한계와 옮긴 파일을 알린다."""
         lines = []
         if info.get("want"):
-            lines.append(f"폴더 이름은 지금 작업이 끝난 뒤 '{info['want']}'(으)로 바뀝니다 → 작업은 그대로 계속하면 됩니다.")
+            lines.append(f"폴더 이름은 이 폴더를 쓰는 AI와 해석이 끝난 뒤 '{info['want']}'(으)로 바뀝니다 → 하던 일은 그대로 계속하면 됩니다.")
         elif info.get("visible") and info["visible"] != d.name:
             lines.append(f"탐색기에는 '{info['visible']}'(으)로 보입니다. AI 세션이나 해석이 이 폴더를 쓰는 동안 실제 폴더 이름('{d.name}')은 "
-                         "그대로이고, 세션이 끝난 뒤 바뀝니다 → 작업은 그대로 계속하면 됩니다.")
+                         "그대로이고, 세션이 끝난 뒤 바뀝니다 → 하던 일은 그대로 계속하면 됩니다.")
         now = datetime.now()
         for m in info.get("merged") or []:
             frm, left, moved = m.get("from"), m.get("left_count") or 0, m.get("moved") or 0
@@ -819,12 +1012,23 @@ class Workspace:
         if p.exists() and not p.is_dir():
             raise ValueError("파일이 아니라 폴더를 고르세요")
         try:
-            owner = _read_json(p / "project.json")
+            owner = _read_json(p / PROJECT_FILE)
         except OSError as e:
             raise ValueError(f"이 폴더를 읽을 수 없습니다({e}) → 폴더 권한을 확인하거나 다른 폴더를 고르세요") from e
         if owner.get("uid") and owner.get("uid") != uid:
-            raise ValueError(f"다른 프로젝트('{owner.get('name') or owner.get('project_id')}')가 쓰고 있는 폴더입니다")
+            raise ValueError(f"다른 Project('{owner.get('name') or owner.get('project_id')}')가 쓰고 있는 폴더입니다")
+        self._refuse_inside_work(p)
         return p
+
+    @staticmethod
+    def _refuse_inside_work(p: Path):
+        """Task 폴더나 그 안쪽을 Project 폴더로 쓰면 두 Project가 한 폴더에 섞인다. project.json이 없어 위의 검사를 지나간다."""
+        for up in (p, *p.parents):
+            try:
+                if (up / WORK_FILE).is_file():
+                    raise ValueError(f"Task 폴더('{up.name}') 안은 Project 폴더로 쓸 수 없습니다 → 이 폴더 바깥의 다른 폴더를 고르세요")
+            except OSError:  # 읽을 수 없는 위쪽 폴더는 볼 수 없는 것이다. 막을 이유가 아니다
+                continue
 
     def set_folder(self, project_id: int, name: str | None, uid: str, path: str | None) -> dict:
         """이 프로젝트의 작업 폴더를 직접 정한다(path=None이면 기본 위치로 되돌린다). 기존 파일은 옮기지 않는다."""
@@ -843,15 +1047,22 @@ class Workspace:
             _write_json(self.root / "index.json", idx)
         return self.folder_info(project_id, name, uid)
 
-    def folder_info(self, project_id: int, name: str | None, uid: str | None) -> dict:
+    def folder_info(self, project_id: int, name: str | None, uid: str | None, work: dict | None = None) -> dict:
+        custom = bool(uid and self._links().get(uid))
+        if work is not None:  # Task를 말하면 찾기만 한다. 조회로 폴더를 만들지 않는다
+            d = self.find_work(project_id, work, uid)
+            if d is None:
+                return {"path": "", "real": "", "custom": custom, "root": str(self.root), "missing": True, "notice": NO_FOLDER_NOTICE}
+            return {"path": str(self.visible_work_dir(project_id, work, name, uid)), "real": str(d), "custom": custom, "root": str(self.root),
+                    "notice": self._notice(d, _read_json(d / (WORK_FILE if real_work(work) else PROJECT_FILE)))}
         d = self.project_dir(project_id, name, uid)
-        return {"path": str(self.visible_dir(project_id, name, uid)), "real": str(d), "custom": bool(uid and self._links().get(uid)),
-                "root": str(self.root), "notice": self._notice(d, _read_json(d / "project.json"))}
+        return {"path": str(self.visible_dir(project_id, name, uid)), "real": str(d), "custom": custom,
+                "root": str(self.root), "notice": self._notice(d, _read_json(d / PROJECT_FILE))}
 
     # ---------- 스터디·케이스 ----------
     def study_dir(self, project_id: int, study_id: int, study_name: str | None = None, project_name: str | None = None,
-                  project_uid: str | None = None) -> Path:
-        base = self.project_dir(project_id, project_name, project_uid) / "studies"
+                  project_uid: str | None = None, work: dict | None = None) -> Path:
+        base = self.work_dir(project_id, work, project_name, project_uid) / "studies"
         found = sorted(base.glob(f"S{study_id:03d}_*")) + sorted(base.glob(f"S{study_id:03d}"))
         legacy = base / f"study_{study_id}"
         d = found[0] if found else legacy if legacy.exists() else base / (f"S{study_id:03d}_{slug(study_name)}" if study_name else f"S{study_id:03d}")
@@ -936,28 +1147,52 @@ class Workspace:
             return False
 
     # ---------- 탐색 ----------
-    def resolve(self, project_id: int, rel: str, project_name: str | None = None, project_uid: str | None = None) -> Path:
-        base = self.project_dir(project_id, project_name, project_uid).resolve()
+    def _base(self, project_id: int, project_name: str | None, project_uid: str | None, work: dict | None) -> Path:
+        if work is None:  # Task를 모르는 호출(옛 서버, Project 메뉴)
+            return self.project_dir(project_id, project_name, project_uid).resolve()
+        d = self.find_work(project_id, work, project_uid)
+        if d is None:
+            raise FileNotFoundError(NO_FOLDER_NOTICE)
+        return d.resolve()
+
+    def resolve(self, project_id: int, rel: str, project_name: str | None = None, project_uid: str | None = None, work: dict | None = None) -> Path:
+        base = self._base(project_id, project_name, project_uid, work)
         target = (base / (rel or "")).resolve()
-        if base != target and base not in target.parents:
-            raise ValueError("프로젝트 폴더 밖의 경로입니다")
+        if base != target and base not in target.parents:  # Task를 말했으면 옆 Task와 다른 Project도 밖이다
+            raise ValueError("이 Task 폴더 밖의 경로입니다" if real_work(work) else "Project 폴더 밖의 경로입니다")
         return target
 
     def tree(self, project_id: int, rel: str = "", project_name: str | None = None, limit: int = 500,
-             project_uid: str | None = None) -> dict:
-        d = self.resolve(project_id, rel, project_name, project_uid)
+             project_uid: str | None = None, work: dict | None = None) -> dict:
+        if work is not None and self.find_work(project_id, work, project_uid) is None:
+            # 다른 PC에서 만든 내 Task, 아직 AI를 시작하지 않은 Task, 남의 Task. 빈 목록이지 오류가 아니다
+            return {"root": "", "path": "", "entries": [], "custom": bool(project_uid and self._links().get(project_uid)), "missing": True, "notice": NO_FOLDER_NOTICE}
+        d = self.resolve(project_id, rel, project_name, project_uid, work)
         if not d.exists():
             raise FileNotFoundError(f"없는 경로입니다: {rel}")
-        base = self.project_dir(project_id, project_name, project_uid).resolve()
+        base = self._base(project_id, project_name, project_uid, work)
         entries = []
-        dds = dds_items(base)  # 탐색기에서 숨긴 DDS 규칙·스킬은 웹 파일 탭에도 내보이지 않는다
-        kids = [p for p in d.iterdir() if str(p.relative_to(base)).replace("\\", "/") not in dds]
+        own_task = real_work(work)
+        dds = dds_work_items(base) if own_task else dds_items(base)  # 탐색기에서 숨긴 DDS 규칙·스킬은 웹 파일 탭에도 내보이지 않는다
+        kids = []
+        for p in d.iterdir():
+            if str(p.relative_to(base)).replace("\\", "/") in dds or (_TASK_NAME.match(p.name) and _is_alias(p)):
+                continue
+            # 이전 기록을 볼 때 Project 폴더의 Task 폴더는 그 Task의 것이다
+            if work is not None and not own_task and d == base and _TASK_NAME.match(p.name) and (p / WORK_FILE).is_file():
+                continue
+            kids.append(p)
         for p in sorted(kids, key=lambda x: (x.is_file(), x.name.lower()))[:limit]:
             st = p.stat()
             entries.append({"name": p.name, "path": str(p.relative_to(base)).replace("\\", "/"), "dir": p.is_dir(),
                             "size": None if p.is_dir() else st.st_size,
                             "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds")})
-        shown = self.visible_dir(project_id, project_name, project_uid)
-        return {"root": str(shown if _is_alias(shown) else base), "path": str(d.relative_to(base)).replace("\\", "/") if d != base else "",
+        if work is not None:
+            shown = self.visible_work_dir(project_id, work, project_name, project_uid) or base
+            root = str(shown)
+        else:
+            shown = self.visible_dir(project_id, project_name, project_uid)
+            root = str(shown if _is_alias(shown) else base)
+        return {"root": root, "path": str(d.relative_to(base)).replace("\\", "/") if d != base else "",
                 "entries": entries, "custom": bool(project_uid and self._links().get(project_uid)),
-                "notice": self._notice(base, _read_json(base / "project.json"))}
+                "notice": self._notice(base, _read_json(base / (WORK_FILE if own_task else PROJECT_FILE)))}

@@ -317,6 +317,7 @@ class AgentHub:
     def _ensure_session(self, st: TurnState, conn: AgentConnection, turn_id: str, agent: str) -> str | None:
         """이 대화의 CLI 세션을 돌려준다. 살아 있으면 그대로(session/load는 Gemini에서 세션을 dispose한다),
         없으면 load, load가 "지원 안 함/없음"이면 new. 턴이 그새 끝났어도 끝까지 해 둔다(다음 요청이 빨라진다)."""
+        notice = None
         with SessionLocal() as db:
             chat = db.get(models.ChatSession, st.chat_id)
             if not self._ours(st, chat, agent):
@@ -324,6 +325,9 @@ class AgentHub:
             old, pid = chat.agent_session_id, chat.project_id
             pname = chat.project.name if chat.project else None
             puid = chat.project.uid if chat.project else None
+            work, notice = self._session_work(db, conn, chat, old)
+        if notice:
+            self._note(st, notice)
         if old and old in self.live.setdefault(st.user_id, set()):
             self._bind(st, old)
             return old
@@ -332,7 +336,7 @@ class AgentHub:
         if old:
             if warm and self._current(st, turn_id):
                 self._set_stage(st, "session_load")
-            if runner.load_session(old, pid, agent, pname, puid, turn_id):
+            if runner.load_session(old, pid, agent, pname, puid, turn_id, work):
                 self.running.setdefault(st.user_id, set()).add(agent)
                 with SessionLocal() as db:
                     if not self._ours(st, db.get(models.ChatSession, st.chat_id), agent):
@@ -342,7 +346,7 @@ class AgentHub:
                 return old
         if warm and self._current(st, turn_id):
             self._set_stage(st, "session_new")
-        sid = runner.new_session(pid, agent, pname, puid, turn_id)
+        sid = runner.new_session(pid, agent, pname, puid, turn_id, work)
         self.running.setdefault(st.user_id, set()).add(agent)
         with st.lock, SessionLocal() as db:  # 확인과 저장을 한 번에: 사이에 작업 폴더가 바뀌면 옛 폴더의 세션이 남는다
             chat = db.get(models.ChatSession, st.chat_id)
@@ -359,6 +363,21 @@ class AgentHub:
             self._note(st, "이전 AI를 이어 붙일 수 없어 AI를 새로 시작해 이어 갑니다. 지금까지의 기록 요약을 함께 넘겼습니다.")
         self._bind(st, sid)
         return sid
+
+    def _session_work(self, db, conn: AgentConnection, chat: models.ChatSession, old: str | None) -> tuple[dict | None, str | None]:
+        """세션을 어느 폴더에서 열지 정한다. (PC Agent에 보낼 Task, 대화에 한 번 남길 안내).
+        폴더를 모르는 옛 Agent로 처음 시작하는 Task는 이전 기록처럼 Project 폴더를 쓴다. 이 Task는 앞으로도 그렇다: 세션과 결과가 그 폴더에 쌓이기 때문이다.
+        이미 시작한 Task면 표시를 바꾸지 않는다(새 Agent가 만든 폴더가 다른 PC에 있을 수 있다)."""
+        work = db.get(models.Work, chat.work_id) if chat.work_id else None
+        if work is None:
+            return None, None
+        if conn.info.get("work_folders"):
+            return work.folder_view(), None
+        if work.legacy or old or db.query(models.ChatSession.id).filter(models.ChatSession.work_id == work.id, models.ChatSession.agent_session_id.isnot(None)).first():
+            return None, None
+        work.legacy = True
+        db.commit()
+        return None, "PC Agent를 업데이트하면 다음 Task부터 폴더가 나뉩니다 → 트레이에서 다시 시작하세요"
 
     def _bind(self, st: TurnState, sid: str):
         with self._lock:
@@ -398,7 +417,7 @@ class AgentHub:
     # ---------- 턴 ----------
     def send_prompt(self, chat_id: int, text: str, attachments: list[dict] | None = None, flow_id: int | None = None, shown: str | None = None, auto: str | None = None) -> str:
         """요청을 저장하고 바로 돌아온다. CLI 준비와 전달은 뒤의 스레드에서 한다. 이미 진행 중이면 AgentError.
-        attachments: [{id, filename, size, sha256}] — PC Agent가 프로젝트 폴더 inputs/로 내려받은 뒤 에이전트에 전달한다.
+        attachments: [{id, filename, size, sha256}] — PC Agent가 그 세션의 inputs/(Task 폴더)로 내려받은 뒤 에이전트에 전달한다.
         flow_id·shown·auto: 서버가 사용자를 대신해 보내는 말(_flush_flows). shown은 대화에 보이는 글, auto는 그 종류다."""
         attachments = attachments or []
         with SessionLocal() as db:
@@ -637,10 +656,10 @@ class AgentHub:
                 if f.status in ("approved", "in_progress") and (f.start_queued or f.id == flow_id):
                     if f.status == "approved" and not _flow_started(f):
                         f.status, f.approved_by = "review", None
-                        notes.append(f"단계를 시작하기 전에 중지해서 작업 흐름 '{f.title}'의 승인을 되돌렸습니다 → 진행하려면 카드에서 다시 승인해 주세요.")
+                        notes.append(f"단계를 시작하기 전에 중지해서 Task Flow '{f.title}'의 승인을 되돌렸습니다 → 진행하려면 카드에서 다시 승인해 주세요.")
                     else:
                         f.status = "stopped"
-                        notes.append(f"작업 흐름 '{f.title}'을 멈췄습니다. 여기까지의 결과는 그대로 있습니다 → 바꿀 점을 입력창에 적거나 '이어서 진행해 줘'라고 보내면 이어 갑니다.")
+                        notes.append(f"Task Flow '{f.title}'을 멈췄습니다. 여기까지의 결과는 그대로 있습니다 → 바꿀 점을 입력창에 적거나 '이어서 진행해 줘'라고 보내면 이어 갑니다.")
                 elif not f.start_queued:  # 반려를 전하려던 참이면 흐름은 이미 반려 상태이니 말만 거둔다
                     continue
                 f.handoff = None
@@ -676,7 +695,7 @@ class AgentHub:
                         n["status"], n["detail"] = "failed", "에이전트가 이 단계를 이어 가지 못했습니다"
                 f.nodes, f.status = nodes, "failed"
                 f.handoff = {**h, "state": "gave_up"}
-                note = (f"에이전트가 승인한 작업 흐름 '{f.title}'을 '{left.get('label') or left['id']}' 단계에서 더 이어 가지 못했습니다. 여기까지의 결과는 그대로 있습니다 "
+                note = (f"에이전트가 승인한 Task Flow '{f.title}'을 '{left.get('label') or left['id']}' 단계에서 더 이어 가지 못했습니다. 여기까지의 결과는 그대로 있습니다 "
                         "→ 흐름 단계의 '원인 찾기'를 누르거나, 바꿀 점을 입력창에 적어 주세요.")
             else:
                 nudges = h.get("nudges", 0) + 1 if done <= h.get("done_at", -1) else 1
@@ -1045,14 +1064,14 @@ def _flow_started(f: models.Flow) -> bool:
 def _flow_words(f: models.Flow, kind: str | None) -> tuple[str, str]:
     """에이전트에게 보내는 말과 대화에 보이는 말. 데모는 '승인했습니다'·'반려했습니다'를 보고 움직인다."""
     if kind == "rejected":
-        text = f"작업 흐름 '{f.title}'(#{f.id})을 반려했습니다. 무엇을 바꾸면 좋을지 물어보고 다시 제안해 주세요."
+        text = f"Task Flow '{f.title}'(#{f.id})을 반려했습니다. 무엇을 바꾸면 좋을지 물어보고 다시 제안해 주세요."
         return text, text
     if kind == "continue":
         left = [n.get("label") or n["id"] for n in f.nodes or [] if n.get("status") not in ("complete", "skipped")]
-        return (f"작업 흐름 '{f.title}'(#{f.id})이 아직 끝나지 않았습니다. 남은 단계: {', '.join(left)}. 승인받은 계획이니 사용자에게 묻지 말고, 정하지 않은 값은 기본값으로 정해 단계 설명에 적고 끝까지 진행하세요. "
+        return (f"Task Flow '{f.title}'(#{f.id})이 아직 끝나지 않았습니다. 남은 단계: {', '.join(left)}. 승인받은 계획이니 사용자에게 묻지 말고, 정하지 않은 값은 기본값으로 정해 단계 설명에 적고 끝까지 진행하세요. "
                 "이미 끝난 단계는 update_node로 complete로 적으세요. 정말 진행할 수 없는 단계는 update_node로 failed와 원인·할 일을 적고 사용자에게 알리세요.",
                 f"남은 단계({', '.join(left)})를 이어서 진행합니다.")
-    shown = f"작업 흐름 '{f.title}'(#{f.id})을 승인했습니다. 계획대로 진행해 주세요."
+    shown = f"Task Flow '{f.title}'(#{f.id})을 승인했습니다. 계획대로 진행해 주세요."
     return (f"{shown} 승인받은 계획이니 끝까지 진행하고 중간에 사용자에게 묻지 마세요. 정하지 않은 값은 기본값으로 정해 단계 설명에 적으세요. "
             "정말 진행할 수 없는 단계는 update_node로 failed와 원인·할 일을 적고 사용자에게 알리세요.", shown)
 

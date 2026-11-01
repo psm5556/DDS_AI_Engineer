@@ -122,7 +122,7 @@ PyVista 오프스크린 렌더링은 원격/서비스 세션에서 OpenGL이 없
 - **WB 프로젝트 잠금**: 이전 실행이 비정상 종료하면 `.lock` 파일이 남는다. 케이스마다 `.wbpz`를 새로 풀면 피할 수 있다.
 - **출력 파라미터가 갱신되지 않음**: Mechanical 결과의 Maximum 옆 "P" 체크가 빠졌거나 업데이트가 부분 실패한 경우다. `ExportAllDesignPointsData` CSV에서 값과 상태를 확인한다.
 - **PyMAPDL 실행 실패**: `launch_mapdl`이 MAPDL 실행파일을 못 찾으면 `--exec-file`이나 환경변수 `PYMAPDL_MAPDL_EXEC`로 경로를 지정한다. 포트 충돌 시 이전 프로세스를 정리한다.
-- **PyMAPDL 작업 폴더**: `run_location`을 케이스 폴더 하위로 지정해야 `.rst`와 `.err`가 케이스에 남는다. 에러는 `file.err`을 확인한다.
+- **PyMAPDL Task 폴더**: `run_location`을 케이스 폴더 하위로 지정해야 `.rst`와 `.err`가 케이스에 남는다. 에러는 `file.err`을 확인한다.
 - **APDL 배치**: `solve.out`에서 `*** ERROR ***`을 검색한다. 매크로에서 정의되지 않은 파라미터는 0으로 읽히므로 `params.inp` 키 이름 오타에 주의한다.
 - **PyMechanical**: `App(version=242)`의 버전 숫자는 설치 버전과 같아야 한다. 한 파이썬 프로세스에서 App은 하나만 만들 수 있다.
 - **DPF**: `.rst` 파일이 열려 있는 동안(MAPDL 세션이 살아 있는 동안) 읽기가 실패하면 MAPDL을 종료한 뒤 읽는다.

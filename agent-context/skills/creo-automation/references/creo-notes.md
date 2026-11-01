@@ -21,7 +21,7 @@ c.connect()                                              # [확인]
 c.start_creo("C:/creoson/nitro_proe_remote.bat")         # [확인] TODO(사내검증) retries/use_desktop
 c.creo_set_creo_version(7)                               # TODO(사내검증) Creo 7+ 필요 여부
 c.is_creo_running()                                      # [확인]
-c.creo_cd("C:/case")                                     # [확인] 작업 폴더
+c.creo_cd("C:/case")                                     # [확인] Task 폴더
 c.file_open("bracket.prt", dirname="C:/case", display=True)   # [확인]
 c.file_get_active()                                      # [확인] TODO(사내검증) 반환 형식
 c.parameter_list(file_="bracket.prt")                    # [확인] [{"name","type","value",...}]
@@ -41,7 +41,7 @@ c.disconnect()
 ```
 
 ## 3. trail 파일
-- Creo는 세션마다 작업 폴더에 `trail.txt.N`을 기록한다. 이 파일을 `-i:rpc_input`(또는 `parametric trail.txt`)로 재생하면 같은 작업을 반복한다.
+- Creo는 세션마다 Task 폴더에 `trail.txt.N`을 기록한다. 이 파일을 `-i:rpc_input`(또는 `parametric trail.txt`)로 재생하면 같은 작업을 반복한다.
 - `parametric.exe -g:no_graphics -i:rpc_input trail.txt`: 그래픽 없이 재생한다. TODO(사내검증): 사내 버전에서 옵션 이름과, 그래픽 의존 단계(뷰·이미지)가 있으면 실패하는지
 - 편집 요령
   - 대화상자 입력값이 줄 단위로 기록된다. 바꿀 값만 `@@name@@`으로 바꾼다.

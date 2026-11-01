@@ -1214,6 +1214,7 @@ def test_e16_member_continues_without_my_pc(client):  # noqa: F811
 
     class _Conn:
         user_id = me["id"]
+        info = {}
 
         def send(self, msg):
             sent.append(msg)

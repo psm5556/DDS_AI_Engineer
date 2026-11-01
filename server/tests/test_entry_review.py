@@ -44,7 +44,7 @@ def _paste(client, h, pid, text, outputs=None):  # noqa: F811
 
 class _Conn:
     def __init__(self, user_id):
-        self.user_id, self.sent = user_id, []
+        self.user_id, self.sent, self.info = user_id, [], {}
 
     def send(self, msg):
         self.sent.append(msg)

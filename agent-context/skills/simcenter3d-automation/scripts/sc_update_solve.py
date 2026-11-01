@@ -15,7 +15,7 @@ Simcenter 3D 케이스 저널: CAD 파라미터 변경 -> Idealized/FEM 업데�
   save=0|1              해석 전에 변경된 sim/fem/prt 를 저장(케이스 폴더 사본이므로 안전)
   extract_python=<exe>  지정 시 해석 후 '<exe> <extract_script> --extract-only' 실행 -> results.json
   extract_script=<py>   sc_run_case.py 경로(extract_python 과 함께)
-  case_dir=<폴더>       기본: 현재 작업 폴더
+  case_dir=<폴더>       기본: 현재 Task 폴더
 
 params.json 키 처리 순서:
   1) BC_PARAM_MAP 에 있으면 하중/구속 크기로 반영(아래 표, 기본 비어 있음)

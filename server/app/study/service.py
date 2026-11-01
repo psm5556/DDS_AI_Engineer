@@ -490,6 +490,13 @@ def _release(db: Session, study: models.Study, cases: list[models.Case], why: st
     return len(cases)
 
 
+def _work_fields(db: Session, conn, study: models.Study) -> dict:
+    """케이스 메시지에 넣을 Task. PC Agent가 그 Task 폴더에서 케이스를 돌린다. 옛 Agent와 서버에서 도는 연습용 계산은 없다."""
+    from ..agent.link import work_fields
+
+    return work_fields(conn, db.get(models.Work, study.work_id) if study.work_id else None)
+
+
 def reconcile_cases(conn, active: list[int], can_settle: bool = False):
     """PC Agent가 연결될 때 상태를 맞춘다. 그 PC에서 돌지 않는 케이스는 끝난 것으로 친다.
     Agent가 죽었다 살아나면 해석도 함께 끝났는데 알려 줄 쪽이 없어 '실행 중'이 영원히 남기 때문이다.
@@ -520,9 +527,10 @@ def reconcile_cases(conn, active: list[int], can_settle: bool = False):
             rest = [c for c in cases if c not in ask]
             if ask:
                 project = db.get(models.Project, study.project_id)
+                folder = _work_fields(db, conn, study)
                 settle += [{"case_id": c.id, "study_id": study.id, "project_id": study.project_id, "project_name": project.name, "project_uid": project.uid,
                             "study_name": study.name, "source": c.source, "run_dir": c.run_dir, "params": c.params, "adapter": study.adapter,
-                            "adapter_config": study.adapter_config or {}} for c in ask]
+                            "adapter_config": study.adapter_config or {}, **folder} for c in ask]
             if rest:
                 _release(db, study, rest, "실행하던 PC에 이 케이스가 남아 있지 않습니다. PC Agent가 다시 시작되어 해석이 끝나지 못했을 수 있습니다 → 다시 돌리려면 그 케이스를 지정해 다시 실행하세요")
         with _batch_lock:
@@ -598,10 +606,11 @@ def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, us
         db.commit()
         project = db.get(models.Project, study.project_id)
         fixed = fixed_values(study)  # 표에서 고정값으로 뺀 값도 해석에는 필요하다
+        folder = _work_fields(db, conn, study)
         jobs = [{"case_id": c.id, "study_id": study_id, "project_id": study.project_id, "project_name": project.name, "project_uid": project.uid,
                  "study_name": study.name, "source": c.source, "params": {**fixed, **c.params}, "variables": study.variables,
                  "objectives": study.objectives, "adapter": study.adapter, "adapter_config": study.adapter_config or {},
-                 "dry_run": dry_run}
+                 "dry_run": dry_run, **folder}
                 for c in cases]
         project_id = study.project_id
     manager.publish({"type": "study_updated", "project_id": project_id, "data": {"id": study_id}})
@@ -844,7 +853,7 @@ def extract_outputs_async(study_id: int, names: list[str], user_id: int, case_id
                                 "project_name": project.name, "project_uid": project.uid, "study_name": study.name,
                                 "source": c.source, "params": c.params, "results": c.results or {}, "run_dir": c.run_dir,
                                 "adapter": study.adapter, "adapter_config": study.adapter_config or {},
-                                "steps": steps, "names": names}))
+                                "steps": steps, "names": names, **_work_fields(db, conn, study)}))
     with _batch_lock:
         _extracting.setdefault(study_id, set()).update(j["case_id"] for _, j in jobs)
     for conn, job in jobs:

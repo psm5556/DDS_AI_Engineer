@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -258,6 +259,16 @@ class Stack:
         r = self.c.post(f"/api/projects/{self.pid}/sessions", json={"agent": self.cli_name})
         r.raise_for_status()
         return r.json()["id"]
+
+    def make_legacy(self, chat: int):
+        """이 기록의 Task를 '이전 기록'처럼 만든다: Project 폴더에서 돈다. 서버는 요청마다 DB를 읽으므로 바로 듣는다."""
+        with sqlite3.connect(self.tmp / "server" / "app.db", timeout=30) as db:
+            db.execute("UPDATE works SET legacy = 1 WHERE id = (SELECT work_id FROM chat_sessions WHERE id = ?)", (chat,))
+
+    def study_in_project_folder(self, study_id: int):
+        """이 스터디의 Task를 Project 폴더에서 돌게 한다. 폴더 규칙이 아니라 다른 것을 시험할 때 스크립트를 미리 놓으려고 쓴다."""
+        with sqlite3.connect(self.tmp / "server" / "app.db", timeout=30) as db:
+            db.execute("UPDATE works SET legacy = 1 WHERE id = (SELECT work_id FROM studies WHERE id = ?)", (study_id,))
 
     def post_prompt(self, chat: int, text: str):
         return self.c.post(f"/api/sessions/{chat}/prompt", json={"text": text})

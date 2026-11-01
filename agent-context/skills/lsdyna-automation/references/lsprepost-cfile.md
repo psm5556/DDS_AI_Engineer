@@ -9,7 +9,7 @@ lsprepost -nographics c=dds_images.cfile
 
 ## 명령을 확인하는 가장 확실한 방법 (필수)
 1. LS-PrePost GUI에서 d3plot 열기 → 원하는 fringe, state, 뷰 → File > Print(PNG 저장)를 한 번 수행한다.
-2. LS-PrePost를 종료하면 작업 폴더(또는 홈)에 **`lspost.cfile`**이 남는다. 이 파일에 방금 한 조작이 명령으로 기록돼 있다. GUI 하단 메시지 창에도 명령이 표시된다.
+2. LS-PrePost를 종료하면 Task 폴더(또는 홈)에 **`lspost.cfile`**이 남는다. 이 파일에 방금 한 조작이 명령으로 기록돼 있다. GUI 하단 메시지 창에도 명령이 표시된다.
 3. 그 내용을 복사해 경로만 바꿔서 템플릿으로 쓴다.
 
 ## 템플릿 명령 (scripts/dyna_images.cfile)

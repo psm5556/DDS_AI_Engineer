@@ -64,7 +64,7 @@ set tpl [file join [hm_info -appinfo SPECIFIEDPATH TEMPLATES_DIR] feoutput optis
 hm_answernext yes
 *feoutputwithdata $tpl "model.fem" 0 0 1 1 0         ;# TODO(사내검증) argument values
 ```
-- **가장 확실한 방법은 GUI에서 같은 작업을 한 번 하고 `command.tcl`(작업 폴더나 Documents)에 기록된 줄을 복사하는 것이다.** 속성 attribute ID와 export 인자는 버전과 템플릿마다 다르다.
+- **가장 확실한 방법은 GUI에서 같은 작업을 한 번 하고 `command.tcl`(Task 폴더나 Documents)에 기록된 줄을 복사하는 것이다.** 속성 attribute ID와 export 인자는 버전과 템플릿마다 다르다.
 - 모핑: HyperMorph shape를 GUI에서 만들어 저장한 뒤, 적용 명령을 command.tcl에서 복사해 배율을 파라미터로 바꾼다. `TODO(사내검증)`
 - HyperMesh Python API(2022 이후, `import hm`, `hm.entities`)도 대안이다. 실행 방식(배치 실행파일, 인자)과 객체 속성 이름이 버전마다 달라 `TODO(사내검증)`이다. 사내 표준이 Tcl이면 Tcl을 유지한다.
 - 자세한 내용: [references/hypermesh-tcl.md](references/hypermesh-tcl.md)

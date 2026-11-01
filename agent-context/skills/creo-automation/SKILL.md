@@ -45,7 +45,7 @@ description: PTC Creo Parametric 자동화 — Creoson(JSON over HTTP, creopyson
 - Creoson은 Creo 세션 하나를 쓰므로 **병렬 실행하지 않는다**(스터디 병렬도 1). 케이스가 끝나면 모델을 세션에서 지운다(`file_erase`). 그래야 다음 케이스가 메모리의 옛 모델을 쓰지 않는다.
 
 ### 2-2. trail 배치
-1. Creo에서 같은 작업을 한 번 한다: 모델 열기 → Tools → Parameters에서 값 변경 → Regenerate → File → Save As → Save a Copy(STL). 그동안 trail이 기록된다(작업 폴더의 `trail.txt.N`).
+1. Creo에서 같은 작업을 한 번 한다: 모델 열기 → Tools → Parameters에서 값 변경 → Regenerate → File → Save As → Save a Copy(STL). 그동안 trail이 기록된다(Task 폴더의 `trail.txt.N`).
 2. 기록된 trail에서 값 부분을 `@@thickness@@`처럼 바꾸고, 파일 경로를 케이스 폴더 상대 경로로 바꾼다. 끝에 종료 명령(`~ Command `ProCmdExit``)이 있어야 Creo가 끝난다. TODO(사내검증)
 3. 스터디 어댑터:
 ```json
@@ -87,7 +87,7 @@ description: PTC Creo Parametric 자동화 — Creoson(JSON over HTTP, creopyson
 - **3D 형상 학습**: `fields=1`이면 STL을 `stl_to_fields.py`로 `fields/shape.npz`(`points`, `triangles`, `values`)로 바꾼다. 플랫폼이 이를 업로드해 설계변수 → 3D 형상 모델을 학습한다(규약 1-1). `values`는 기본 0(형상만)이고, `--values dist_centroid|x|y|z`로 기하량을 넣을 수 있다. STL 형상량 `stl_volume`, `stl_area`, `stl_cx..`, `stl_bbox_*`가 results.json에 추가된다.
 
 ## 7. 이미지 저장 → images/
-- Creoson `interface_export_image("JPEG", filename, height, width, dpi)`로 저장하고 Pillow로 `images/iso.png`로 바꾼다. 그래픽 창이 있는 세션에서만 된다. 실패해도 케이스는 성공으로 둔다. TODO(사내검증): 저장 폴더(Creo 작업 폴더), 뷰 방향 지정(`view_activate`로 저장된 뷰 사용)
+- Creoson `interface_export_image("JPEG", filename, height, width, dpi)`로 저장하고 Pillow로 `images/iso.png`로 바꾼다. 그래픽 창이 있는 세션에서만 된다. 실패해도 케이스는 성공으로 둔다. TODO(사내검증): 저장 폴더(Creo Task 폴더), 뷰 방향 지정(`view_activate`로 저장된 뷰 사용)
 - `-g:no_graphics` trail 배치에서는 이미지가 없다. STL을 내보내 플랫폼 3D 뷰로 본다.
 
 ## 8. Live Link (열어 둔 Creo와 함께 모델링)

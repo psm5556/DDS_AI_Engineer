@@ -7,7 +7,7 @@ hmopengl -tcl script.tcl           # GUI 실행 + 스크립트(디버깅용)  TO
 ```
 - 스크립트는 cwd(케이스 폴더)를 `[pwd]`로 얻는다. Tcl에는 인자를 넘길 수 없으므로 `params.json`을 직접 읽는다(템플릿의 `dds_read_params`. 평탄한 JSON만 지원).
 - 에러가 나면 `exit 1`로 끝낸다. 결과 파일이 없으면 플랫폼이 실패로 처리한다.
-- **command.tcl**: GUI 작업은 모두 Tcl 명령으로 기록된다. 버전별 정확한 문법은 이 파일에서 복사한다. 저장 위치는 작업 폴더나 Documents이며, 설정에 따라 다르다.
+- **command.tcl**: GUI 작업은 모두 Tcl 명령으로 기록된다. 버전별 정확한 문법은 이 파일에서 복사한다. 저장 위치는 Task 폴더나 Documents이며, 설정에 따라 다르다.
 
 ## 명령 구분
 - `*`로 시작하는 명령은 모델을 바꾼다(modify). 예: `*createmark`, `*setvalue`

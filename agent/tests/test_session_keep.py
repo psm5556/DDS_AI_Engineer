@@ -653,7 +653,7 @@ def dds_cae(monkeypatch, tmp_path):
         return tmp_path / "proj"
 
     (tmp_path / "proj").mkdir()
-    monkeypatch.setattr(mod, "settings", SimpleNamespace(project_dir=project_dir, tools={}, tool_commands={}, tool_env={}, runner="local", hpc={}))
+    monkeypatch.setattr(mod, "settings", SimpleNamespace(work_base=project_dir, project_dir=project_dir, tools={}, tool_commands={}, tool_env={}, runner="local", hpc={}))
     monkeypatch.setattr(mod, "fresh_tools", lambda: None)
     monkeypatch.setattr(mod, "resolve_pid", lambda pid: 1)
     return mod

@@ -5,6 +5,8 @@
 - 새 Agent 버전에서 빠진 스킬은 프로젝트 폴더에서도 지운다. 지난번에 복사한 목록(.dds-skills.json)에 있던 것만 지우므로
   사용자가 직접 만든 스킬은 남는다.
 - 사용자의 규칙 파일은 지우지 않는다. 표시한 구간에만 DDS 규칙을 넣고 그 밖의 글은 한 글자도 바꾸지 않는다.
+- 규칙·스킬은 Project 폴더에 1벌이다. Task 폴더에는 AGENTS.md·GEMINI.md·.gemini/settings.json과 기록 파일만 둔다(sync_work_context).
+  CLAUDE.md는 Task 폴더에 두지 않는다. Claude는 부모의 CLAUDE.md를 읽으므로 두면 규칙을 두 번 읽는다.
 - DDS만 만든 항목은 Hidden 속성을 붙여 탐색기와 웹 파일 탭에서 뺀다. 폴더를 깔끔하게 하려는 것이지 보호 수단이 아니다.
   CLI가 찾는 데는 지장이 없다(docs/local-data.md에 CLI별 확인 결과).
 """
@@ -38,7 +40,12 @@ STAMP = ".dds-context-stamp"  # 1행: 마지막으로 복사한 규칙·스킬�
 GEMINI_IGNORE = ".geminiignore"
 MARKET_FILE = ".dds-market.json"  # 마켓 스킬의 지문과 목록. 기본 스킬의 지문과 따로 둔다: 설치 한 번에 기본 스킬 수백 개를 다시 복사하지 않게
 MARKET_TMP = ".dds-market-tmp"
-FORMAT = "3"  # 규칙 파일 형식이 바뀌면 올린다. 지문이 달라져 기존 프로젝트도 한 번 다시 맞춘다
+FORMAT = "4"  # 규칙 파일 형식이 바뀌면 올린다. 지문이 달라져 기존 프로젝트도 한 번 다시 맞춘다
+WORK_RULES = {"AGENTS.md": ".agents/skills", "GEMINI.md": ".gemini/skills"}  # Task 폴더의 규칙 파일 → 그 CLI의 스킬 폴더
+WORK_STAMP = ".dds-work-stamp"  # 1행: 지문, 2행: 규칙 파일별 크기·DDS 전용 여부, 숨긴 항목(JSON)
+GEMINI_SETTINGS = ".gemini/settings.json"
+WORK_FORMAT = "1"
+TASK_GIT_PATTERNS = ("T*/AGENTS.md", "T*/GEMINI.md", "T*/.gemini/", f"T*/{WORK_STAMP}")
 
 # 표시 구간 밖은 사용자 글이다. 파일 앞뒤 어디에 있어도 이 구간만 바꾼다
 RULES_START = "<!-- DDS Conversa 규칙 시작: 이 구간은 자동으로 바뀝니다. 직접 쓴 글은 구간 밖에 두세요 -->"
@@ -403,7 +410,8 @@ def _git_hide(project_dir: Path, repo: tuple[Path, Path], items: list[str]) -> t
             items.append(GEMINI_IGNORE)
             keep.append(GEMINI_IGNORE)
     listed = keep if reopened else [i for i in keep if i in _FILES]
-    lines = "\n".join(_pattern(prefix + i) + ("" if i in _FILES else "/") for i in sorted(listed))
+    lines = "\n".join([_pattern(prefix + i) + ("" if i in _FILES else "/") for i in sorted(listed)]
+                      + [_pattern(prefix) + pat for pat in TASK_GIT_PATTERNS])  # Task 폴더마다 적지 않는다. 글자 그대로 넣어야 *가 패턴이 된다
     # 한 저장소에 프로젝트가 여럿일 수 있다. 구간에 프로젝트 경로를 적어 서로의 항목을 지우지 않는다
     tag = "/" + prefix
     try:
@@ -438,17 +446,18 @@ def forget_git_block(old_dir: Path, new_dir: Path):
             _write_bytes(exclude, new)
 
 
-def git_hide_aliases(root: Path, project_id: int, names: list[str]):
-    """프로젝트 폴더의 다른 이름(접합)을 제외 목록에 적는다. git은 접합을 보통 폴더로 보아 규칙·스킬·파일 전체를 새 파일로 잡는다.
+def git_hide_aliases(root: Path, project_id: int, names: list[str], label: str | None = None):
+    """Project·Task 폴더의 다른 이름(접합)을 제외 목록에 적는다. git은 접합을 보통 폴더로 보아 규칙·스킬·파일 전체를 새 파일로 잡는다.
     `git add -A`면 같은 파일이 이름마다 또 올라간다. 접합이 파일로 보이는 OS도 있어 경로 끝에 /를 붙이지 않는다.
-    프로젝트 폴더 자체가 저장소이면 접합은 저장소 밖이라 할 일이 없다(root에서 저장소를 찾지 못한다)."""
+    Project 폴더 자체가 저장소이면 Project의 접합은 저장소 밖이라 할 일이 없다(root에서 저장소를 찾지 못한다).
+    label: Task의 접합이면 그 번호(T01). root는 그때 Project 폴더다."""
     repo = _find_repo(root)
     if not repo:
         return
     top, git_dir = repo
     here = Path(os.path.abspath(root))
     prefix = "" if here == top else here.relative_to(top).as_posix() + "/"
-    tag = f"[/{prefix}P{project_id:04d} 접합]"
+    tag = f"[/{prefix}{label or f'P{project_id:04d}'} 접합]"
     start, end = f"# DDS Conversa 시작 {tag}: 이 구간은 자동으로 바뀝니다. 직접 쓴 줄은 구간 밖에 두세요", f"# DDS Conversa 끝 {tag}"
     exclude = git_dir / "info" / "exclude"
     with _git_lock:
@@ -509,19 +518,22 @@ def _tidy(project_dir: Path, stamp: str, state: dict | None, rules: dict, dirty:
 
 
 # ---------- 동기화 ----------
-def _skill_index(skills_root: Path, summaries: dict[str, str] | None = None, skip: set[str] | frozenset[str] = frozenset()) -> str:
+def _skill_index(skills_root: Path, summaries: dict[str, str] | None = None, skip: set[str] | frozenset[str] = frozenset(),
+                 where: str = ".claude/skills", base: str | None = None) -> str:
     """summaries: 마켓 스킬의 서버 요약. 등록자의 설명을 모든 AI의 지침에 그대로 넣지 않는다.
-    skip: 회수·제거했는데 파일이 잡혀 있어 아직 지우지 못한 스킬. 폴더가 남아 있어도 AI에게 쓰라고 알리지 않는다."""
-    # 경로는 프로젝트 폴더 기준이다. 절대 경로를 적으면 프로젝트 이름을 바꿀 때 낡고, 규칙 파일을 커밋하면 이 PC의 경로가 함께 올라간다
+    skip: 회수·제거했는데 파일이 잡혀 있어 아직 지우지 못한 스킬. 폴더가 남아 있어도 AI에게 쓰라고 알리지 않는다.
+    where·base: 목록에 적을 스킬 폴더와 그 경로의 기준. Task 폴더의 규칙 파일은 ../.agents/skills처럼 부모의 1벌을 가리킨다."""
+    # 경로는 규칙 파일이 있는 폴더 기준이다. 절대 경로를 적으면 이름을 바꿀 때 낡고, 규칙 파일을 커밋하면 이 PC의 경로가 함께 올라간다
     summaries = summaries or {}
-    lines = ["", "## 부록: 사용 가능한 스킬", "필요할 때 아래 SKILL.md를 읽고 따르세요. 경로는 이 프로젝트 폴더 기준입니다."]
+    base = base or "경로는 이 규칙 파일이 있는 Project 폴더 기준입니다. Task 폴더(T01_…)에서 일할 때는 앞에 `../`를 붙이세요."
+    lines = ["", "## 부록: 사용 가능한 스킬", f"필요할 때 아래 SKILL.md를 읽고 따르세요. {base}"]
     if os.name == "nt":  # PowerShell·ripgrep이 Hidden 항목을 건너뛰어 스킬이 없다고 오해할 수 있다
         lines.append("사용자 폴더를 깔끔하게 두려고 이 스킬 폴더에 Hidden 속성을 붙여 두었습니다. 아래 경로는 그대로 읽으면 됩니다. "
                      "목록을 볼 때 PowerShell은 `Get-ChildItem -Force`, ripgrep은 `--hidden`을 쓰세요.")
     lines.append("")
     for d in sorted(p for p in skills_root.iterdir() if (p / "SKILL.md").exists() and p.name not in skip):
         if d.name in summaries:
-            lines.append(f"- **{d.name}** — {market_store._one_line(summaries[d.name])}  \n  `.claude/skills/{d.name}/SKILL.md`")
+            lines.append(f"- **{d.name}** — {market_store._one_line(summaries[d.name])}  \n  `{where}/{d.name}/SKILL.md`")
             continue
         try:  # 사용자 스킬은 cp949일 수도 있다. 설명 하나 때문에 동기화 전체가 멈추면 안 된다
             text = (d / "SKILL.md").read_bytes().decode("utf-8", "replace")
@@ -529,7 +541,7 @@ def _skill_index(skills_root: Path, summaries: dict[str, str] | None = None, ski
             log.warning("스킬 설명을 읽지 못해 목록에서 뺐습니다(%s): %s", d.name, e)
             continue
         m = re.search(r"^description:\s*(.+)$", text, re.M)
-        lines.append(f"- **{d.name}** — {m.group(1).strip() if m else ''}  \n  `.claude/skills/{d.name}/SKILL.md`")
+        lines.append(f"- **{d.name}** — {m.group(1).strip() if m else ''}  \n  `{where}/{d.name}/SKILL.md`")
     return "\n".join(lines) + "\n"
 
 
@@ -767,3 +779,116 @@ def _sync(project_dir: Path) -> bool:
                           "다른 프로그램이 파일을 잠그고 있거나 쓰기 권한이 없는지 확인한 뒤 다시 시도하세요") from e
     _tidy(project_dir, stamp, state, rules, dirty=True)
     return True
+
+
+# ---------- Task 폴더 ----------
+def _read_work_state(work_dir: Path) -> dict | None:
+    try:
+        head, _, body = (work_dir / WORK_STAMP).read_text(encoding="utf-8").partition("\n")
+        st = json.loads(body)
+        rules = {k: [int(v[0]), bool(v[1])] for k, v in st["rules"].items() if k in WORK_RULES}
+        hidden = [r for r in st["hidden"] if isinstance(r, str) and ".." not in Path(r).parts and not Path(r).is_absolute()]
+    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
+        return None
+    return {"stamp": head.strip(), "rules": rules, "hidden": hidden, "include": st.get("include")}
+
+
+def dds_work_items(work_dir: Path) -> set[str]:
+    """DDS가 Task 폴더에서 숨긴 항목. 웹 파일 탭이 탐색기와 같은 목록을 보여 주는 데 쓴다."""
+    state = _read_work_state(work_dir)
+    return set(state["hidden"]) if state else set()
+
+
+def _parent_rules_read(work_dir: Path) -> bool:
+    """CLI가 Project 폴더의 규칙 파일도 읽는 배치인가. Codex·Gemini는 저장소 최상위부터 cwd까지의 규칙 파일을 모두 읽고(저장소가 없으면 cwd만),
+    파일이 달라 같은 글을 두 번 받는다. 저장소가 Task 폴더 안에서 시작하면 부모를 읽지 않는다."""
+    repo = _find_repo(work_dir)
+    return bool(repo and Path(os.path.abspath(work_dir)) != repo[0])
+
+
+def _work_rule_body(project_dir: Path, skills: str, inherited: bool, copied: bool) -> str:
+    where = skills if copied else f"../{skills}"
+    base = "경로는 이 Task 폴더 기준입니다. 위 폴더(Project 폴더)에 1벌만 있으니 고치지 말고, 쓸 때는 `scripts/`로 복사합니다."
+    if copied:
+        base = "경로는 이 Task 폴더 기준입니다. 쓸 때는 `scripts/`로 복사합니다."
+    doc = _market_doc(project_dir)
+    index = _skill_index(project_dir / ".claude" / "skills", _market_summaries(project_dir), skip=set(doc["residue"]) - _skill_names(), where=where, base=base)
+    if inherited:  # 규칙 본문은 위 폴더의 파일로 이미 들어온다. 스킬 경로의 기준만 다르게 알려 준다
+        return "# 이 폴더는 Task 폴더입니다\n규칙 본문은 위 폴더(Project 폴더)의 규칙 파일에 있습니다.\n" + index
+    return (CONTEXT_DIR / "INSTRUCTIONS.md").read_text(encoding="utf-8") + index
+
+
+def _merge_gemini_settings(path: Path, project_dir: Path, known: str | None) -> bool | None:
+    """Task 폴더에서 위 폴더의 스킬과 원본을 읽게 한다. 사용자가 이 파일에 쓴 다른 설정은 그대로 둔다. 절대 경로를 쓴다(Project 이름을 바꾸면 다음 동기화가 맞춘다).
+    known: 지난번에 우리가 넣은 경로. 이름이 바뀌었으면 옛 경로를 뺀다. 이 파일에는 적지 않는다: Gemini가 모르는 설정 키를 오류로 볼 수 있다.
+    읽지 못한 파일은 덮지 않는다: 사용자 설정이 망가진 채 남아 있으면 Gemini가 알려 준다.
+    True: DDS만 쓴 파일이다(숨긴다). False: 사용자 설정이 들었다. None: 고치지 못했다."""
+    try:
+        cur = json.loads(path.read_bytes().decode("utf-8-sig"))
+        if not isinstance(cur, dict):
+            return None
+    except FileNotFoundError:
+        cur = {}
+    except ValueError:
+        log.info("%s를 읽지 못해 고치지 않았습니다", path)
+        return None
+    ctx = cur.setdefault("context", {}) if isinstance(cur.get("context", {}), dict) else None
+    if ctx is None:
+        return None
+    want = str(project_dir)
+    dirs = [d for d in ctx.get("includeDirectories") or [] if isinstance(d, str)]
+    new = [d for d in dirs if d != known and d != want] + [want]
+    if new != dirs:
+        ctx["includeDirectories"] = new
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _write_bytes(path, json.dumps(cur, ensure_ascii=False, indent=2).encode("utf-8"))
+    return set(cur) == {"context"} and set(ctx) == {"includeDirectories"} and new == [want]
+
+
+def sync_work_context(work_dir: Path, project_dir: Path, copy_skills: tuple[str, ...] | list[str] = ()) -> bool:
+    """Task 폴더에 그 Task에서 CLI를 띄우는 데 필요한 것만 둔다. 복사했으면 True.
+    Claude는 부모의 CLAUDE.md·.claude/skills를 읽어 여기에 아무것도 필요 없다. Codex·Gemini는 cwd의 규칙 파일이 스킬의 ../ 경로를 알려 준다.
+    copy_skills: 부모의 스킬을 읽지 못하는 CLI 이름. 그 CLI만 스킬을 Task 폴더에 복사한다(Task마다 파일 수십 개). 사내 관문 G1~G6 결과로 정한다.
+    한 번 복사한 폴더는 다른 CLI로 이어도 그대로 쓴다. 지우면 그 CLI의 다음 세션이 또 복사해야 한다."""
+    copied_dirs = {"gemini": ".gemini/skills", "codex": ".agents/skills"}
+    copies = sorted(rel for name, rel in copied_dirs.items() if name in (copy_skills or ()) or (work_dir / rel).is_dir())
+    with _folder_locks.setdefault(os.path.normcase(os.path.abspath(work_dir)), threading.Lock()):
+        inherited = _parent_rules_read(work_dir)
+        market = _market_doc(project_dir)
+        stamp = hashlib.sha1(json.dumps([WORK_FORMAT, _source_stamp(), market["stamp"], sorted(market["residue"]), inherited, copies, str(project_dir)],
+                                        ensure_ascii=False).encode()).hexdigest()
+        state = _read_work_state(work_dir)
+        fresh = bool(state and state["stamp"] == stamp and set(WORK_RULES) <= set(state["rules"])
+                     and all(_size(work_dir / n) == state["rules"][n][0] for n in WORK_RULES)
+                     and all((work_dir / rel).is_dir() for rel in copies))
+        if fresh:
+            for rel in state["hidden"]:
+                _set_hidden(work_dir / rel, True)
+            return False
+        rules = {name: _put_block(work_dir / name, _work_rule_body(project_dir, skills, inherited, skills in copies), RULES_START, RULES_END)
+                 for name, skills in WORK_RULES.items()}
+        settings_own = False
+        try:
+            settings_own = _merge_gemini_settings(work_dir / GEMINI_SETTINGS, project_dir, state.get("include") if state else None)
+        except OSError as e:  # Gemini를 쓰지 않으면 상관없다. 쓰면 위 폴더의 스킬을 못 읽어 AI가 사용자에게 알린다
+            log.info("%s를 고치지 못했습니다: %s", work_dir / GEMINI_SETTINGS, e)
+        for rel in copies:
+            src = project_dir / rel
+            try:
+                shutil.copytree(src, work_dir / rel, dirs_exist_ok=True, copy_function=_copy_file, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            except OSError as e:
+                raise RuntimeError(_copy_failed(work_dir, src, work_dir / rel, e)) from e
+        hidden = [WORK_STAMP, *(n for n, (_, own) in rules.items() if own)]
+        gemini_top = work_dir / ".gemini"
+        if gemini_top.is_dir() and settings_own and _names(gemini_top) <= {"settings.json", "skills"}:
+            hidden.append(".gemini")
+        if copies and (work_dir / ".agents").is_dir() and _names(work_dir / ".agents") <= {"skills"}:
+            hidden.append(".agents")
+        record = {"rules": rules, "hidden": hidden, "include": str(project_dir)}
+        _write_bytes(work_dir / WORK_STAMP, f"{stamp}\n{json.dumps(record, ensure_ascii=False)}".encode())
+        for rel in (state["hidden"] if state else []):
+            if rel not in hidden:
+                _set_hidden(work_dir / rel, False)
+        for rel in hidden:
+            _set_hidden(work_dir / rel, True)
+        return True

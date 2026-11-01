@@ -250,7 +250,7 @@ def main():
                 syn.Quit(False)   # TODO(사내검증): Quit 인자(저장 여부) 의미
             except Exception as e:
                 log("Synergy.Quit failed (ignore): %s" % e)
-        # TODO(사내검증): 프로젝트에서 연 스터디가 --sdy 파일과 같은 파일인지(프로젝트 폴더 내 실제 .sdy 이름) 확인
+        # TODO(사내검증): 프로젝트에서 연 스터디가 --sdy 파일과 같은 파일인지(Task 폴더 내 실제 .sdy 이름) 확인
 
     if a.no_run:
         return 0

@@ -199,6 +199,13 @@ def project_names_message(db: Session, user: models.User) -> dict:
     return {"type": "project.names", "projects": [{"project_id": p.id, "project_uid": p.uid, "project_name": p.name} for p in q.all()]}
 
 
+def work_names_message(db: Session, user: models.User) -> dict:
+    """이 사람의 Task 이름. 꺼져 있는 동안 바뀐 이름을 PC Agent가 연결할 때 따라간다. 폴더는 Task 주인의 PC에 있고, 없으면 만들지 않는다."""
+    rows = (db.query(models.Work, models.Project.uid).join(models.Project, models.Work.project_id == models.Project.id)
+            .filter(models.Work.owner_id == user.id, models.Work.legacy.is_(False)).all())
+    return {"type": "work.names", "works": [{"project_id": w.project_id, "project_uid": puid, "work": w.folder_view()} for w, puid in rows]}
+
+
 @router.get("/settings", response_model=schemas.AgentSettings)
 def get_agent_settings(user=Depends(get_current_user)):
     return {"auto_update": _auto_update_on(user)}
@@ -237,6 +244,10 @@ def record_instance(conn: AgentConnection, msg: dict, connected: bool = True):
         if msg.get("type") == "hello":
             me = db.get(models.User, conn.user_id)
             names = project_names_message(db, me)
+            if msg.get("work_folders"):  # Project보다 먼저 보낸다: 받는 쪽이 Task 이름을 먼저 맞춘다
+                works = work_names_message(db, me)
+                if works["works"]:
+                    conn.send(works)
             if names["projects"]:
                 conn.send(names)
             conn.send(settings_message(me))  # 마지막에 보낸다: agent.settings가 hello 처리가 끝났다는 표시다

@@ -55,6 +55,7 @@ def _started(s: Stack, name: str) -> tuple[int, int, Path]:
     sid = s.c.post(f"/api/projects/{s.pid}/studies", json={
         "name": name, "adapter": "script", "adapter_config": {"tool": "python", "script": f"scripts/{name}_solver.py"},
         "variables": [{"name": "x", "lower": 0, "upper": 1}], "objectives": [{"name": "y", "goal": "min"}]}).json()["id"]
+    s.study_in_project_folder(sid)  # 위에서 스크립트를 Project 폴더에 두었다
     assert s.c.post(f"/api/studies/{sid}/doe", json={"n": 1, "method": "lhs", "seed": 1}).status_code == 200
     assert s.c.post(f"/api/studies/{sid}/run", json={}).json() == {"queued": 1}
     case_id = s.c.get(f"/api/studies/{sid}/cases").json()[0]["id"]

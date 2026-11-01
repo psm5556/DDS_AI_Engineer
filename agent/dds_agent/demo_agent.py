@@ -144,7 +144,7 @@ def pick_entry(body: str) -> tuple[str, str | None]:
 
 
 _ASKS_MEANING = re.compile(r"(뭐야|뭐예요|뭔가요|뭐지|뭘까|무엇인가요|무엇이야|무슨 뜻|무슨 말|뜻이|뜻은)")
-_THIS_PROJECT = ("이 ", "이번", "지금", "현재", "내 ", "우리", "최근", "몇", "프로젝트", "스터디")  # "이 모델 R²가 뭐야?"는 말뜻이 아니라 내 값을 묻는 것이다
+_THIS_PROJECT = ("이 ", "이번", "지금", "현재", "내 ", "우리", "최근", "몇", "프로젝트", "Project", "스터디")  # "이 모델 R²가 뭐야?"는 말뜻이 아니라 내 값을 묻는 것이다
 _TERMS = {
     "R²": "R²(결정계수)는 예측 모델이 실제 값을 얼마나 잘 따르는지 나타내는 값입니다. 1에 가까울수록 정확합니다.",
     "DOE": "DOE(실험 계획법)는 적은 해석 횟수로 설계 범위를 고르게 살피도록 해석할 점을 고르는 방법입니다.",
@@ -357,9 +357,9 @@ class DemoAgent:
         if s.flow_id is None:
             s.mode = s.mode if s.revising else pick_mode(body)
             s.revising = False
-            await s.say("요청을 분석하고 있습니다. 전체 작업 흐름을 먼저 제안할게요.", thought=True)
+            await s.say("요청을 분석하고 있습니다. 전체 Task Flow를 먼저 제안할게요.", thought=True)
             if "[첨부 파일" in body:
-                await s.say(f"첨부하신 파일을 작업 폴더에서 확인했습니다: {', '.join(attached_files(body))}\n\n")
+                await s.say(f"첨부하신 파일을 Task 폴더에서 확인했습니다: {', '.join(attached_files(body))}\n\n")
             if s.mode == "washer2":
                 title, desc = "세탁기 진동과 바닥 전달력 함께 보기", "연습용 계산: DOE 24건 → 예측 모델 → 능동학습 6건 → 두 목표 최적화 8건 → 판단 정리 → 보고서"
                 nodes = [
@@ -424,7 +424,7 @@ class DemoAgent:
             r = await s.tool("dds-flow", "propose_flow", {"title": title, "goal": body[:200], "nodes": nodes,
                                                          "edges": [{"source": x, "target": y} for x, y in pairs]})
             s.flow_id = r["flow_id"]
-            await s.say("작업 흐름을 캔버스에 올렸습니다. 값은 실제 해석이 아니라 **연습용 계산**입니다. 확인 후 **승인**을 눌러 주시면 끝까지 진행합니다.")
+            await s.say("Task Flow를 캔버스에 올렸습니다. 값은 실제 해석이 아니라 **연습용 계산**입니다. 확인 후 **승인**을 눌러 주시면 끝까지 진행합니다.")
             return
 
         flow = await s.tool("dds-flow", "get_flow", {"flow_id": s.flow_id})
@@ -434,7 +434,7 @@ class DemoAgent:
         if flow["status"] == "rejected":  # 반려는 끝이 아니다. 고칠 점을 받아 다시 제안한다(FlowCard가 그렇게 안내한다)
             n = re.search(r"(\d+)\s*점", body)
             if "반려했습니다" in body or not any(k in body for k in _DOING_WORD):
-                await s.say("작업 흐름을 반려하셔서 아무것도 돌리지 않았습니다. 무엇을 바꿀까요? 예: 'DOE를 10점으로 줄여서 다시 제안해 줘'")
+                await s.say("Task Flow를 반려하셔서 아무것도 돌리지 않았습니다. 무엇을 바꿀까요? 예: 'DOE를 10점으로 줄여서 다시 제안해 줘'")
                 return
             s.flow_id = None
             if s.mode in PLANNED_MODES:  # 묶어 둔 계획은 처음 요청에 달려 있다. 고치려면 그 요청부터 다시 받는다
@@ -445,14 +445,14 @@ class DemoAgent:
             await self.scenario(s, text)
             return
         if flow["status"] not in ("approved", "in_progress", "stopped"):
-            await s.say("작업 흐름이 아직 승인 전입니다. 카드에서 **승인**을 누르면 시작합니다. 고칠 점이 있으면 반려한 뒤 입력창에 적어 주세요.")
+            await s.say("Task Flow가 아직 승인 전입니다. 카드에서 **승인**을 누르면 시작합니다. 고칠 점이 있으면 반려한 뒤 입력창에 적어 주세요.")
             return
         started = next((n for n in flow["nodes"] if n["status"] not in ("pending", "complete", "skipped")), None)
         if started or any(n["status"] == "complete" for n in flow["nodes"]):
             # 데모의 시나리오는 처음부터만 돈다. 이어 간다고 하고 처음부터 돌리면 같은 결과가 두 벌 생긴다. 실패로 적으면 서버도 더 시키지 않는다
             left = started or next(n for n in flow["nodes"] if n["status"] != "complete")
             await s.tool("dds-flow", "update_node", {"flow_id": s.flow_id, "node_id": left["id"], "status": "failed", "detail": "데모는 중간부터 이어 갈 수 없습니다"})
-            await s.say("데모 시나리오는 중간부터 이어 갈 수 없습니다 → 새 프로젝트에서 처음부터 다시 시작해 주세요.")
+            await s.say("데모 시나리오는 중간부터 이어 갈 수 없습니다 → 새 Project에서 처음부터 다시 시작해 주세요.")
             return
         # 승인 뒤에는 끝까지 간다. 다만 다른 멤버가 만든 스크립트는 내 PC에서 돌기 전에 한 번 더 확인한다(서버의 승인 확인과 별개인 안전장치)
         if s.mode == "takeover" and not await self.ask_permission(s, s.plan.get("permission") or "케이스 실행", {"study": s.mode, "cases": s.plan.get("doe")}):
@@ -547,7 +547,7 @@ class DemoAgent:
 
     async def _pending_study(self, s) -> dict | None:
         """해석을 기다리는 점이 남은 스터디(DOE 계획만 뽑아 둔 것). 2주 뒤 새 대화에서 말해도 찾을 수 있어야 한다."""
-        studies = (await s.tool("dds-study", "list_studies", {}))["studies"]
+        studies = (await s.tool("dds-study", "list_studies", {"all_works": True}))["studies"]
         return next((x for x in studies if x["counts"].get("pending")), None)
 
     # ---------- DOE 계획만 뽑고 나중에 해석 연결 ----------
@@ -577,7 +577,7 @@ class DemoAgent:
         r = await s.tool("dds-flow", "propose_flow", {"title": f"{target['name']} 이어서 해석", "goal": f"대기 중인 {n}점을 이 PC에서 해석합니다", "nodes": self._solve_nodes(f"대기 {n}점"),
                                                      "edges": [{"source": "solve", "target": "train"}, {"source": "train", "target": "deploy"}]})
         s.flow_id = r["flow_id"]
-        await s.say(f"해석 방법을 연결했습니다. 대기 중인 {n}점을 돌리는 작업 흐름을 올렸습니다. **승인**을 눌러 주시면 시작합니다.")
+        await s.say(f"해석 방법을 연결했습니다. 대기 중인 {n}점을 돌리는 Task Flow를 올렸습니다. **승인**을 눌러 주시면 시작합니다.")
 
     @staticmethod
     def _solve_nodes(detail: str) -> list[dict]:
@@ -626,15 +626,15 @@ class DemoAgent:
 
     # ---------- 신규 모델로 지난번처럼 ----------
     async def _same_flow_again(self, s, body: str):
-        flows = (await s.tool("dds-flow", "list_flows", {}))["flows"]
+        flows = (await s.tool("dds-flow", "list_flows", {"all_works": True}))["flows"]
         last = next((f for f in flows if f["studies"]), None)
         if not last:
-            await s.say("다시 돌릴 지난 작업 흐름이 이 프로젝트에 없습니다 → 다른 프로젝트라면 어느 프로젝트인지 알려 주시거나, 무엇을 돌릴지 말씀해 주세요.")
+            await s.say("다시 돌릴 지난 Task Flow가 이 Project에 없습니다 → 다른 Project라면 어느 Project인지 알려 주시거나, 무엇을 돌릴지 말씀해 주세요.")
             return
         ranges = {a: (float(lo), float(hi)) for a, lo, hi in _RANGE.findall(body)}
         new_files = attached_files(body) + [p for p in _named_paths(body) if Path(p).suffix]
         if not new_files and not ranges:  # 옛 모델로 또 돌리면 옛 결과와 같다. 없으면 부탁한다
-            await s.say(f"지난 흐름 '{last['title']}'을 찾았습니다. 새 모델 파일을 첨부해 주시면 옛 모델과 달라진 점을 먼저 알려 드리고 작업 흐름을 올리겠습니다.")
+            await s.say(f"지난 흐름 '{last['title']}'을 찾았습니다. 새 모델 파일을 첨부해 주시면 옛 모델과 달라진 점을 먼저 알려 드리고 Task Flow를 올리겠습니다.")
             return
         old = await s.tool("dds-study", "get_study", {"study_id": last["studies"][0]["id"]})
         variables, changes = [], []
@@ -663,10 +663,10 @@ class DemoAgent:
 
     # ---------- 다른 멤버가 이어받기 ----------
     async def _save_recipe(self, s, body: str):
-        studies = (await s.tool("dds-study", "list_studies", {}))["studies"]
+        studies = (await s.tool("dds-study", "list_studies", {"all_works": True}))["studies"]
         st = next((x for x in studies if x["name"] in body), None) or next((x for x in studies if x["adapter"] == "script"), None)
         if not st:
-            await s.say("묶을 스크립트 스터디가 이 프로젝트에 없습니다 → 스크립트로 해석하는 스터디를 먼저 만들어 주세요.")
+            await s.say("묶을 스크립트 스터디가 이 Project에 없습니다 → 스크립트로 해석하는 스터디를 먼저 만들어 주세요.")
             return
         try:
             r = await s.tool("dds-study", "save_recipe", {"study_id": st["study_id"], "files": re.findall(r"scripts/[\w./-]+", body)})
@@ -676,10 +676,10 @@ class DemoAgent:
         await s.say(f"'{st['name']}' 스크립트 {len(r['files'])}개를 서버에 올렸습니다({r['version']}판). 다른 멤버 PC에서도 받아 쓸 수 있습니다.")
 
     async def _takeover(self, s, body: str):
-        studies = (await s.tool("dds-study", "list_studies", {}))["studies"]
+        studies = (await s.tool("dds-study", "list_studies", {"all_works": True}))["studies"]
         st = next((x for x in studies if x["name"] in body), None) or next((x for x in studies if x["has_recipe"]), None) or next(iter(studies), None)
         if not st:
-            await s.say("이어받을 스터디가 이 프로젝트에 없습니다 → 프로젝트 멤버로 추가됐는지 확인해 주세요.")
+            await s.say("이어받을 스터디가 이 Project에 없습니다 → Project 멤버로 추가됐는지 확인해 주세요.")
             return
         s.study_id = st["study_id"]
         try:
@@ -708,7 +708,7 @@ class DemoAgent:
     async def _takeover_run(self, s, st: dict, body: str):
         rec = await s.tool("dds-study", "restore_recipe", {"study_id": st["study_id"]})
         if rec["input_files_missing"]:
-            await s.say(f"스크립트는 받았지만 입력 모델이 이 PC에 없습니다: {', '.join(rec['input_files_missing'])} → 그 파일을 대화에 첨부해 주세요. 묶음에는 입력 모델이 들어가지 않습니다.")
+            await s.say(f"스크립트는 받았지만 입력 모델이 이 PC에 없습니다: {', '.join(rec['input_files_missing'])} → 그 파일을 입력창에 첨부해 주세요. 묶음에는 입력 모델이 들어가지 않습니다.")
             return
         if rec["conflicts"]:
             await s.say(f"이 PC에 내용이 다른 같은 파일이 있습니다: {', '.join(rec['conflicts'])} → 덮어써도 되는지 알려 주세요. 묻지 않고 덮어쓰지 않습니다.")
@@ -728,11 +728,11 @@ class DemoAgent:
     # ---------- 이미 있는 모델로 하는 일 ----------
     async def _model_work(self, s, body: str) -> bool:
         """예측·되돌리기·공유·최적 후보. 새 대화에서 말해도 해석을 돌리지 않는다. 모델이 없으면 False(처음부터 하는 요청으로 넘긴다)."""
-        models = (await s.tool("dds-study", "list_models", {}))["models"]
+        models = (await s.tool("dds-study", "list_models", {"all_works": True}))["models"]
         if not models:
             return False
         live = next((m for m in models if m["deployed"]), models[0])
-        studies = (await s.tool("dds-study", "list_studies", {}))["studies"]
+        studies = (await s.tool("dds-study", "list_studies", {"all_works": True}))["studies"]
         study = next((x for x in studies if x["study_id"] == live["study_id"]), None)
         if "되돌려" in body:
             older = next((m for m in models if m["study_id"] == live["study_id"] and (m.get("version") or 0) < (live.get("version") or 0)), None)
@@ -747,7 +747,7 @@ class DemoAgent:
             return True
         if "이 스터디로" in body:
             if study and study["adapter"] != "data":
-                await s.say("이 스터디는 해석을 새로 돌려 최적 설계를 찾습니다. 몇 점을 더 돌릴지 알려 주시면 작업 흐름을 올리겠습니다.")
+                await s.say("이 스터디는 해석을 새로 돌려 최적 설계를 찾습니다. 몇 점을 더 돌릴지 알려 주시면 Task Flow를 올리겠습니다.")
                 return True
             goal = _OBJECTIVE.search(body)
             # 줄일지 키울지 지어내지 않는다. 수명을 최소로 찾으면 가장 나쁜 설계를 최적이라고 답한다
@@ -853,24 +853,24 @@ class DemoAgent:
             await s.say(f"지원 툴 {len(tools)}종 중 이 PC에서 바로 쓸 수 있는 것은 {len(ready)}종입니다{': ' + ', '.join(ready[:8]) if ready else ''}. "
                         "없는 툴은 해석을 돌릴 때만 필요합니다. 표나 기존 해석 결과로 예측 모델을 만드는 일은 툴 없이 됩니다.")
             return
-        if any(k in body for k in ("다른 프로젝트", "모든 프로젝트", "전체 프로젝트")):
+        if any(k in body for k in ("다른 프로젝트", "모든 프로젝트", "전체 프로젝트", "다른 Project", "모든 Project", "전체 Project")):
             found = (await s.tool("dds-study", "list_studies", {"all_projects": True}))["studies"]
             names = ", ".join(f"{x['project_name']}: {x['name']}" for x in found[:10]) or "없음"
-            await s.say(f"내가 멤버인 프로젝트의 스터디 {len(found)}개입니다. {names}. 같은 설정으로 쓰려면 복제해 드릴 수 있습니다.")
+            await s.say(f"내가 멤버인 Project의 스터디 {len(found)}개입니다. {names}. 같은 설정으로 쓰려면 복제해 드릴 수 있습니다.")
             return
-        if not any(k in body for k in ("스터디", "모델", "Simulator", "시뮬레이터", "케이스", "결과", "프로젝트", "정확도", "R²")):
-            await s.say("표(CSV·XLSX)나 해석 결과 폴더가 있으면 바로 예측 모델과 Simulator를 만들고, 없으면 작업 흐름을 제안해 해석부터 합니다. 무엇을 가지고 계신지 알려 주세요.")
+        if not any(k in body for k in ("스터디", "모델", "Simulator", "시뮬레이터", "케이스", "결과", "프로젝트", "Project", "정확도", "R²")):
+            await s.say("표(CSV·XLSX)나 해석 결과 폴더가 있으면 바로 예측 모델과 Simulator를 만들고, 없으면 Task Flow를 제안해 해석부터 합니다. 무엇을 가지고 계신지 알려 주세요.")
             return
-        studies = (await s.tool("dds-study", "list_studies", {}))["studies"]
-        models = (await s.tool("dds-study", "list_models", {}))["models"]
+        studies = (await s.tool("dds-study", "list_studies", {"all_works": True}))["studies"]
+        models = (await s.tool("dds-study", "list_models", {"all_works": True}))["models"]
         if not studies:
-            await s.say("이 프로젝트에는 아직 스터디가 없습니다. 표나 해석 결과 폴더를 주시면 바로 만들 수 있습니다.")
+            await s.say("이 Project에는 아직 스터디가 없습니다. 표나 해석 결과 폴더를 주시면 바로 만들 수 있습니다.")
             return
         names = ", ".join(f"{x['name']}({sum(x['counts'].values())}건)" for x in studies[:5])
         live = [m for m in models if m["deployed"]]
         best = next(iter(live or models), None)
         tail = f" 가장 최근 모델의 R²는 {', '.join(f'{k} {v:.3f}' for k, v in best['r2'].items())}입니다." if best else ""
-        await s.say(f"이 프로젝트에는 스터디 {len(studies)}개({names})와 예측 모델 {len(models)}개가 있고, 그중 {len(live)}개가 Simulator로 배포돼 있습니다.{tail}")
+        await s.say(f"이 Project에는 스터디 {len(studies)}개({names})와 예측 모델 {len(models)}개가 있고, 그중 {len(live)}개가 Simulator로 배포돼 있습니다.{tail}")
 
     async def _data_follow_up(self, s, body: str):
         """표·해석 폴더로 만든 스터디의 이어지는 요청. 돌릴 해석이 없으니 Branin을 새로 돌리지 않는다."""
@@ -944,7 +944,7 @@ class DemoAgent:
         # 화면과 같은 규칙: 아직 판단하지 못한 항목은 말하지 않는다
         lines = [f"- **{by[k]['question']}** {by[k]['state']}. {by[k]['sentence']}" for k in ("pareto", "active", "convergence") if k in by and by[k]["state"] != "아직 판단 못 함"]
         await s.say("두 목표 최적화와 능동학습을 마쳤습니다.\n\n" + "\n".join(lines)
-                    + "\n\n값은 실제 해석이 아니라 연습용 계산입니다. 자세한 판단은 오른쪽 **작업 흐름** 탭의 단계마다 있습니다.")
+                    + "\n\n값은 실제 해석이 아니라 연습용 계산입니다. 자세한 판단은 오른쪽 **Task Flow** 탭의 단계마다 있습니다.")
 
     async def _washer(self, s, fid, node):
         """드럼세탁기 탈수 진동: 해석 모델 → DOE 60·해석 → 진동 예측 모델 → 베이지안 최적화 → Simulator → 보고서."""
@@ -1099,7 +1099,7 @@ class DemoAgent:
             await (self._washer_report(s) if s.mode == "washer" else self._generic_report(s))
             await s.say("최신 결과로 보고서를 다시 썼습니다. 오른쪽 **보고서** 탭에서 볼 수 있습니다.")
             return
-        await s.say("이 작업 흐름은 끝났습니다. '보고서 다시 써 줘'나 'Output 추가'를 요청할 수 있습니다.")
+        await s.say("이 Task Flow는 끝났습니다. '보고서 다시 써 줘'나 'Output 추가'를 요청할 수 있습니다.")
 
     async def _branin(self, s, fid, node):
         await node("doe", "in_progress")

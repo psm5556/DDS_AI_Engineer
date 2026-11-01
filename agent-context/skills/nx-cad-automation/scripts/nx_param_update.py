@@ -15,7 +15,7 @@ NX CAD 파라메트릭 케이스 템플릿 (DDS 규약 준수)
   export_stl=0|1     STL 내보내기  -> <case>/export/<이름>.stl
   save_as=0|1        변경된 파트를 <case>/<이름>_case.prt 로 Save As
   image=0|1          images/iso.png 저장 시도(배치에서 실패해도 케이스는 성공 처리)
-  case_dir=<폴더>    케이스 폴더(기본: 현재 작업 폴더)
+  case_dir=<폴더>    케이스 폴더(기본: 현재 Task 폴더)
 
 params.json 의 키 = NX expression 이름(대소문자 정확히), 값 = 해당 expression 단위 기준 숫자.
 NX 내장 Python 3 용. f-string 미사용.

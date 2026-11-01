@@ -267,8 +267,8 @@ def test_instructions_do_not_promise_paths_that_do_not_exist():
     # 긴 추출이 승인 대상인지 두 규칙이 어긋나지 않는다
     head = text.split("## 1. Flow 승인", 1)[1].split("1. 요청을 받으면", 1)[0]
     assert "값만 뽑는 일은 오래 걸려도 승인 대상이 아닙니다" in head
-    # 프로젝트 이름은 막 만든 프로젝트에서만
-    assert "막 만들어진 프로젝트" in text
+    # Project 이름은 막 만든 Project에서만
+    assert "막 만들어진 Project" in text
 
 
 def test_add_outputs_description_does_not_copy_large_results():

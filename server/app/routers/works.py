@@ -89,7 +89,7 @@ def get_work(work_id: int, user: models.User = Depends(get_current_user), db: Se
 
 @router.put("/works/{work_id}", response_model=schemas.WorkDetail)
 def rename_work(work_id: int, body: schemas.WorkUpdate, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
-    """사람이 정한 이름은 AI가 바꾸지 않는다(name_auto). PC 폴더는 3단계에서 따라간다."""
+    """사람이 정한 이름은 AI가 바꾸지 않는다(name_auto). PC 폴더도 따라간다."""
     w = _manageable(work_id, user, db)
     if body.version is not None and w.version != body.version:
         raise HTTPException(409, "다른 사람이 먼저 바꿨습니다 → 새로고침한 뒤 다시 하세요")
@@ -100,6 +100,7 @@ def rename_work(work_id: int, body: schemas.WorkUpdate, user: models.User = Depe
     w.version += 1
     db.commit()
     _changed(w.project_id, w.id)
+    work_service.tell_agents_renamed(db, w)
     return _detail(db, w, user)
 
 
@@ -119,6 +120,29 @@ def delete_work(work_id: int, user: models.User = Depends(require_jwt), db: Sess
     insights.forget(work_service.delete_work(db, w))
     _changed(pid, wid, deleted=True)
     return {"ok": True}
+
+
+@router.put("/projects/{project_id}/works/current")
+def name_current_work(body: schemas.WorkAiInfo, scope: work_service.WorkScope = Depends(work_service.work_scope),
+                      user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """AI가 지금 Task의 이름을 정한다(dds-flow.set_work_info). 처음 자동으로 붙인 이름만 바꾸고, 그 뒤로는 사용자가 바꿔 달라고 했을 때만 바꾼다."""
+    w = work_service.resolve(db, scope.project.id, user, scope.explicit, scope.header)
+    if w is None:
+        raise HTTPException(404, "이 Project에 내 Task가 없습니다 → 먼저 Task를 시작하세요")
+    if not work_service.is_mine(w, user.id):
+        raise HTTPException(403, work_service.not_mine_message(work_service.owner_label(db, w)))
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(422, "이름을 입력하세요")
+    if w.legacy or (not w.name_auto and not body.force):
+        return {"work_id": w.id, "name": w.name, "changed": False,
+                "note": "이전 기록은 이름을 바꾸지 않습니다" if w.legacy else "이미 정한 이름입니다. 사용자가 바꿔 달라고 하면 force=True로 바꾸세요"}
+    w.name, w.name_auto = name, False
+    w.version += 1
+    db.commit()
+    _changed(w.project_id, w.id)
+    work_service.tell_agents_renamed(db, w)
+    return {"work_id": w.id, "name": w.name, "changed": True}
 
 
 @router.get("/works/{work_id}/messages", response_model=list[schemas.ChatMessageResponse])

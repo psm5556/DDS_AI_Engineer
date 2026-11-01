@@ -32,7 +32,7 @@ description: Autodesk Moldflow Insight/Synergy 사출 성형 해석 배치 자�
 
 경로 키는 `moldflow_runstudy`, `moldflow_studyrlt`이다(PC Agent가 자동으로 찾는다). Python 스크립트는 환경변수 `DDS_TOOL_MOLDFLOW_RUNSTUDY`, `DDS_TOOL_MOLDFLOW_STUDYRLT`로 경로를 받는다.
 
-**A. 공정조건 DOE (프로젝트 폴더 통째 복사, COM 수정)**
+**A. 공정조건 DOE (Task 폴더 통째 복사, COM 수정)**
 ```json
 {"tool": "moldflow_synergy", "script": "scripts/mf_case_run.py",
  "args": ["--project", "cover/cover.mpi", "--study-name", "cover_fpcw", "--sdy", "cover/cover_fpcw.sdy"],
@@ -60,7 +60,7 @@ description: Autodesk Moldflow Insight/Synergy 사출 성형 해석 배치 자�
           {"tool": "python", "script": "scripts/mf_parse_output.py", "args": []}]}
 ```
 - `args` 값은 템플릿 치환되지 않는다. 경로는 케이스 폴더 기준 상대경로로 적는다.
-- TODO(사내검증): `.sdy` 하나만 복사해서 `runstudy`가 도는지(B, C). 안 되면 A처럼 프로젝트 폴더를 통째로 `inputs`에 넣는다.
+- TODO(사내검증): `.sdy` 하나만 복사해서 `runstudy`가 도는지(B, C). 안 되면 A처럼 Task 폴더를 통째로 `inputs`에 넣는다.
 
 ## 3. 파라미터 변경 (설계변수)
 | 설계변수 | 방법 |

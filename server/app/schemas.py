@@ -955,8 +955,13 @@ class FlowSummary(BaseModel):
     studies: list[FlowStudyLink] = []
 
 
+class WorkAiInfo(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    force: bool = False  # 사용자가 바꿔 달라고 했을 때만. 사람이 정한 이름을 AI가 스스로 바꾸지 않는다
+
+
 class LocalOpen(BaseModel):
-    path: str = ""  # 프로젝트 작업 폴더 기준 상대 경로 (비우면 프로젝트 폴더)
+    path: str = ""  # Task 폴더(work_id를 주면) 또는 Project 폴더 기준 상대 경로 (비우면 그 폴더)
     with_viewer: bool = False  # True면 결과 파일을 등록된 CAE 뷰어로 연다
 
 

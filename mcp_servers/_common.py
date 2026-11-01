@@ -58,12 +58,12 @@ class DdsMCP(MCPServer):
 
 
 def fresh_tools():
-    """PC Agent가 실행 중에 새로 찾거나 사용자가 고른 툴 경로(tools.json)를 다시 읽는다 — 긴 대화 중에 툴을 설치해도 따라가게."""
+    """PC Agent가 실행 중에 새로 찾거나 사용자가 고른 툴 경로(tools.json)를 다시 읽는다 — 세션 중에 툴을 설치해도 따라가게."""
     apply_tools(settings)
 
 
 def resolve_pid(explicit: int | None = None) -> int:
-    """우선순위: 인자 → 세션 환경변수(DDS_PROJECT_ID) → 서버의 최근 대화 프로젝트."""
+    """우선순위: 인자 → 세션 환경변수(DDS_PROJECT_ID) → 서버의 최근 요청 Project."""
     if explicit:
         return int(explicit)
     if os.environ.get("DDS_PROJECT_ID"):

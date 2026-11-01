@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +18,11 @@ class ServerError(Exception):
 class ServerApi:
     def __init__(self, settings: AgentSettings | None = None):
         self.s = settings or load_settings()
-        self.client = httpx.Client(base_url=self.s.server_url, timeout=60,
-                                   headers={"Authorization": f"Bearer {self.s.token}"})
+        headers = {"Authorization": f"Bearer {self.s.token}"}
+        # MCP 환경에만 있다. 서버는 이 요청을 어느 Task의 것으로 볼지 여기서 안다(옛 서버는 무시한다). 도구마다 work_id를 받지 않아도 된다
+        if os.environ.get("DDS_WORK_ID"):
+            headers["X-DDS-Work"] = os.environ["DDS_WORK_ID"]
+        self.client = httpx.Client(base_url=self.s.server_url, timeout=60, headers=headers)
 
     def _check(self, r: httpx.Response) -> Any:
         if r.status_code >= 400:
