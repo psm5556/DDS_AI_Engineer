@@ -64,7 +64,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `market-templates/` | 이전 방식으로 올리던 스킬의 시작 틀과 예제. Agent 배포에 들어가지 않는다 |
 | `deploy/linux/` | Linux 서버 systemd 서비스 파일 |
 | `scripts/` | `dev_live.py` · `prepare_onsite.py`(사내 서버 준비, Linux 서버용 설치 묶음 `--pack`·`--import-pack`) · `fetch_runtimes.py` · `build_agent_bundle.py` · `market_publish.py`(관리자가 스킬 폴더를 올리기) · `install-agent.ps1` · `e2e_*.py` · `hero/`(로그인 화면의 해석 결과 생성기. 실행에는 쓰이지 않고, 별도 환경에 gmsh가 필요하다. 결과는 `frontend/public/hero/`) |
-| `docs/` | `handoff.md` 인수인계 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 · `cae-data-hdf5.md` 해석 데이터(case.h5) · `market-package-spec.md` 마켓 패키지 형식과 기준 · `shape-learning-plan.md` 형상 학습 계획(train.h5·GPU 서버·PhysicsNeMo) · `product-spec.md` 디자인·기능 명세서 · `inhouse-ai-guide.md` 사내 AI 지침(기능·디자인 요구사항, 다음 일감) |
+| `docs/` | `handoff.md` 인수인계(0절이 지금 상태와 다음 할 일) · `design/` 설계 기록과 사용자 결정 원본 · `onsite-ai-runbook.md` 서버 준비 · `onsite-validation.md` 실제 툴 검증 · `local-data.md` 로컬 폴더 규칙 · `skill-contract.md` 스킬 규약 · `cae-data-hdf5.md` 해석 데이터(case.h5) · `market-package-spec.md` 마켓 패키지 형식과 기준 · `shape-learning-plan.md` 형상 학습 계획(train.h5·GPU 서버·PhysicsNeMo) · `product-spec.md` 디자인·기능 명세서 · `inhouse-ai-guide.md` 사내 AI 지침(기능·디자인 요구사항, 다음 일감) |
 | `data/`·`dist/`·`frontend/dist/` | **git에 없음**(.gitignore). DB·설치 파일·런타임·빌드 결과 |
 
 ## 4. 변경 후 반드시 검증
@@ -146,7 +146,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 
 ## 7. 사내 환경에서 주의할 점
 - 실제 CAD/CAE 툴 연동은 집 PC(라이선스 없음)에서 검증하지 못했다.
-  - 스킬에 `TODO(사내검증)` 표시가 약 560곳 있다.
+  - 스킬에 `TODO(사내검증)` 표시가 약 650줄 있다.
   - 첫 실행은 반드시 작은 모델로 한다.
 - 사내에서는 Linux 서버에서 개발·배포하고 툴은 사용자 PC에만 있다. 개발 AI는 `docs/pc-verification.md`의 원격 검증으로 그 PC에서 직접 시험하고 고친다.
 - 외부 인터넷에서 무언가를 받으려 하지 않는다(설치·런타임은 `prepare_onsite.py`가 사내 자원만으로 만든다).

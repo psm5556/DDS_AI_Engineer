@@ -1,14 +1,14 @@
 # 사내 AI 개발 지침 — 기능·디자인 요구사항
 
 > 대상: 사내 서버에서 이 저장소를 개발하는 AI 코딩 에이전트
-> 기준: 2026-10-30, 커밋 `f9ad79f` 이후, PC Agent 0.2.9
+> 기준: 요구사항 본문은 2026-10-30에 쓴 것이고, 다음 할 일(4절)과 말은 2026-11-01, PC Agent 0.3.2 기준이다. 화면 말은 `Project`·`Task`·`Task Flow`다. 본문에 옛말(프로젝트·작업 흐름)이 남은 곳은 이 말로 읽는다
 > 이 문서는 **지켜야 할 요구사항과 확인 방법, 다음에 할 일**을 적는다. 지금 화면·API의 자세한 설명은 [product-spec.md](product-spec.md), 개발 절차는 [AGENTS.md](../AGENTS.md)를 본다.
 
 ## 0. 먼저 읽을 것
 1. 이 문서
 2. [AGENTS.md](../AGENTS.md): 검증 명령, 커밋 규칙
 3. [product-spec.md](product-spec.md): 화면별·기능별 명세
-4. 맡은 일에 따라: [cae-data-hdf5.md](cae-data-hdf5.md), [skill-contract.md](skill-contract.md), [onsite-validation.md](onsite-validation.md), [pc-test-bridge.md](pc-test-bridge.md)
+4. 맡은 일에 따라: [cae-data-hdf5.md](cae-data-hdf5.md), [skill-contract.md](skill-contract.md), [onsite-validation.md](onsite-validation.md), [pc-verification.md](pc-verification.md), [design/README.md](design/README.md)
 
 문서와 코드가 다르면 코드를 먼저 확인한다. 코드가 요구사항을 어기면 고치고, 문서가 낡았으면 문서를 고친다.
 
@@ -173,11 +173,11 @@
 ## 4. 다음에 할 일 (순서대로)
 | 순서 | 일 | 완료 기준 | 참고 |
 |---|---|---|---|
-| 1 | 서버 준비와 PC Agent 0.2.9 배포. `h5py==3.16.0`이 사내 미러에서 설치되는지 확인 | 관리 > Agent 배포 점검표가 모두 초록, PC Agent 새 버전 연결 | [onsite-ai-runbook.md](onsite-ai-runbook.md) |
+| 1 | 서버 준비와 PC Agent 배포. `h5py==3.16.0`이 사내 미러에서 설치되는지 확인. 배포에 PIN을 받게 바뀌었다. `e2e_install.py` | 관리 > Agent 배포 점검표가 모두 초록, PC Agent 새 버전 연결 | [onsite-ai-runbook.md](onsite-ai-runbook.md) |
 | 2 | 데모로 전체 확인 | [product-spec.md](product-spec.md) 10-3 순서대로 통과 | |
-| 3 | **실제 AI CLI로 F-02·F-03·F-14·F-20 확인**, 어긋나면 INSTRUCTIONS·MCP 설명을 고친다 | 질문 없이 흐름 제안, 짧은 답변, 해석이 담긴 보고서 | `agent-context/INSTRUCTIONS.md` |
-| 4 | **PC 테스트 통로 구현**(사내 AI가 서버에서 사용자 PC의 실제 툴을 직접 시험) | 지침의 테스트와 실제 확인 통과 | [pc-test-bridge.md](pc-test-bridge.md) |
-| 5 | 실제 툴 연동 검증: 많이 쓰는 툴부터. 스킬의 `TODO(사내검증)`(스킬 폴더에 약 630줄)을 줄인다 | 툴별 요청 성공, 확인한 곳의 표시 삭제, 결과는 사람이 확인 | [onsite-validation.md](onsite-validation.md) |
+| 3 | **실제 AI CLI 3종으로 F-02·F-03·F-14·F-20과 Task 폴더 관문 G1~G6 확인**, 어긋나면 INSTRUCTIONS·MCP 설명을 고친다 | 질문 없이 흐름 제안, 짧은 답변, 해석이 담긴 보고서, 규칙·스킬이 Task 폴더에서 읽힘 | [design/work-final.md](design/work-final.md) 11절 |
+| 4 | 실제 툴 연동 검증: 많이 쓰는 툴부터. PC 테스트 통로(`scripts/pc_verify.py`)는 이미 있다. 스킬의 `TODO(사내검증)`(약 650줄)을 줄인다 | 툴별 요청 성공, 확인한 곳의 표시 삭제, 결과는 사람이 확인 | [pc-verification.md](pc-verification.md), [onsite-validation.md](onsite-validation.md) |
+| 5 | 오작동 AI 시험 도구 → 공통 장치 M1~M8 → 해석 중 입력창 → 비매개변수 형상 → 마켓 서비스 | [handoff.md](handoff.md) 0절의 순서 | [design/README.md](design/README.md) |
 | 6 | HDF5 실제 확인: 큰 모델의 크기·시간, 툴별 추출 스크립트(F-42), 원본 없이 Output 추가(F-44) | 측정값 기록, `upload_max_mb`와 서버 보관 정책은 담당 프로가 결정 | [cae-data-hdf5.md](cae-data-hdf5.md) 7절 |
 | 7 | 남은 개선: 여백 토큰 나머지 적용, 오래된 예측 모델 정리. 감각 개편(`design-renewal-plan.md` 8절)의 움직임을 사내 PC에서 직접 확인: 로그인 3D 프레임, Geist Mono가 사내 npm 미러에 있는지 | 항목별 | [product-spec.md](product-spec.md) 11절 |
 
