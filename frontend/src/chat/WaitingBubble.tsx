@@ -25,7 +25,7 @@ function eulReul(name: string): string {
 }
 
 const STARTING_DETAIL: Record<string, string> = {
-  context_sync: "작업 규칙과 스킬을 준비하고 있습니다",
+  context_sync: "AI 규칙과 스킬을 준비하고 있습니다",
   cli_start: "프로그램을 띄우고 있습니다",
   initialize: "프로그램이 답하기를 기다리고 있습니다",
 };
@@ -69,16 +69,16 @@ export function WaitingBubble({ clock, agentLabel, flowActivity, toolActivity, o
       notes.push(SLOW_NOTICE);
       break;
     case "session_new":
-      label = "새 대화를 여는 중";
-      notes = ["AI 도구와 작업 도구를 연결하고 있습니다. 첫 대화는 시간이 조금 걸립니다.", SLOW_NOTICE];
+      label = "AI를 준비하는 중";
+      notes = ["AI 도구를 연결하고 있습니다. 처음에는 시간이 조금 걸립니다.", SLOW_NOTICE];
       break;
     case "session_load":
-      label = "이전 대화를 이어 붙이는 중";
+      label = "이전 기록을 이어 붙이는 중";
       notes = ["지난 내용을 AI 도구가 다시 읽고 있습니다.", SLOW_NOTICE];
       break;
     case "reconnecting":
       label = "PC Agent 연결을 다시 잡는 중";
-      notes = ["작업은 PC에서 계속됩니다. 연결되면 그동안의 내용을 이어서 보여 줍니다."];
+      notes = ["일은 PC에서 계속됩니다. 연결되면 그동안의 내용을 이어서 보여 줍니다."];
       break;
     case "tool":
       label = flowActivity ?? toolActivity ?? "도구를 실행하는 중";
@@ -92,7 +92,7 @@ export function WaitingBubble({ clock, agentLabel, flowActivity, toolActivity, o
       } else if (idle >= IDLE_NOTICE_SEC) {
         label = flowActivity ?? "답을 기다리는 중";
         clockSec = idle;
-        notes = ["오래 걸리는 작업일 수 있습니다."];
+        notes = ["오래 걸리는 일일 수 있습니다."];
       } else {
         label = flowActivity ?? "생각하는 중";
         clockSec = stageElapsed;
@@ -108,7 +108,7 @@ export function WaitingBubble({ clock, agentLabel, flowActivity, toolActivity, o
     label = "중지하는 중";
     clockSec = stopSec;
     notes = noReply
-      ? ["AI 도구가 답하지 않습니다. 다시 시작하면 진행 중인 작업과 멈춘 스크립트가 끝나고, 다음 요청 때 이전 대화를 이어 붙입니다. 화면에 열린 CAD 프로그램은 그대로 둡니다."]
+      ? ["AI 도구가 답하지 않습니다. 다시 시작하면 진행 중인 일과 멈춘 스크립트가 끝나고, 다음 요청 때 이전 기록을 이어 붙입니다. 화면에 열린 CAD 프로그램은 그대로 둡니다."]
       : ["AI 도구가 하던 일을 마무리하고 있습니다."];
   }
   const stuck = starting && elapsed >= START_STUCK_SEC;
@@ -116,7 +116,7 @@ export function WaitingBubble({ clock, agentLabel, flowActivity, toolActivity, o
   if (serverDown) {
     label = "서버 연결을 다시 잡는 중";
     clockSec = elapsed;
-    notes = ["이 화면이 웹앱 서버에 닿지 않아 진행 상황을 받지 못합니다. PC의 작업은 계속될 수 있고, 다시 연결되면 이어서 보여 줍니다."];
+    notes = ["이 화면이 웹앱 서버에 닿지 않아 진행 상황을 받지 못합니다. PC의 일은 계속될 수 있고, 다시 연결되면 이어서 보여 줍니다."];
   }
 
   return (

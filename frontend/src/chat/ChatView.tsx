@@ -4,9 +4,8 @@ import {
   FileUp, Loader2, PanelRight, ScatterChart, ShieldQuestion, Table2, Workflow, Wrench, X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, get, post } from "../api";
-import { useAuth } from "../auth";
 import { useCanvas } from "../canvas/CanvasContext";
 import { useFlowDecision } from "../canvas/views";
 import { AgentGlyph } from "../components/AgentGlyph";
@@ -17,17 +16,21 @@ import { clockOf, WaitingBubble, type TurnClock } from "./WaitingBubble";
 import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/AgentPicker";
 import { clip, readableArgs, toolLabel } from "./labels";
 import { Skeleton } from "../components/Skeleton";
-import { AGENT_PREFILL, AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, PRACTICE_EXAMPLES, localIso, toolName, type Prefill } from "../format";
+import { AGENT_PREFILL, AGENT_SEND, FLOW_STATUS, NODE_STATUS, NODE_TYPE, PRACTICE_EXAMPLES, localIso, toolName, when, type Prefill } from "../format";
 import { useLive, useServerDown } from "../live";
 import { useToast } from "../toast";
 import { orderNodes } from "../flow/order";
-import type { AgentInstance, AgentStatus, Artifact, Attachment, ChatMessage, ChatSession, Flow, PermissionRequest, SessionStatus, TurnStatus } from "../types";
+import type { AgentInstance, AgentStatus, Artifact, Attachment, ChatMessage, ChatSession, Flow, PermissionRequest, SessionStatus, TurnStatus, WorkDetail } from "../types";
+import { autoTaskName, COPY, taskPath, W } from "../work/copy";
+import { useWorkList } from "../work/scope";
 
-/** 가운데 대화: 사용자는 말로 지시하고, 에이전트의 작업 흐름 제안·실행 확인·결과가 대화 안의 카드로 이어진다.
- *  같은 내용은 오른쪽 라이브 캔버스에 크게 쌓인다. */
+/** 가운데 기록: 사용자는 말로 지시하고, 에이전트의 Task Flow 제안·실행 확인·결과가 기록 안의 카드로 이어진다.
+ *  같은 내용은 오른쪽 탭에 크게 쌓인다. 기록은 Task에 하나다. 이전 기록만 옛 대화 여러 개를 시간순으로 합쳐 보여 준다.
+ *  wid가 없으면 새 Task 화면이다. 보낼 때 Task와 기록이 만들어진다. */
 
 type Item =
   | { kind: "msg"; at: string; m: ChatMessage }
+  | { kind: "divider"; at: string; chat: number; text: string }
   | { kind: "tools"; at: string; items: ChatMessage[] }
   | { kind: "flow"; at: string; f: Flow }
   | { kind: "arts"; at: string; items: Artifact[] };
@@ -60,26 +63,29 @@ function fillPieces(xs: ChatMessage[], pieces: Map<number, { off: number; text: 
   return changed ? out : xs;
 }
 
-export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: {
-  pid: number; sid: number | null; onSession: (id: number) => void;
+export function ChatView({ pid, wid, work, firstTask, onWork, initialPrompt, onInitialSent }: {
+  pid: number; wid: number | null; work: WorkDetail | null; firstTask?: boolean; onWork: (id: number) => void;
   initialPrompt?: { text: string; attachmentIds: number[] } | null; onInitialSent?: () => void;
 }) {
-  const { user } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
   const canvas = useCanvas();
+  const nav = useNavigate();
   const [preferred, setPreferred] = usePreferredAgent();
-  // 진행 중인 턴(없으면 null). 새 대화를 보내면 주소가 바뀌며 이 화면이 다시 만들어지므로, 보낸 쪽이 캐시에 남긴 것으로 이어 받는다
-  const [clock, setClock] = useState<TurnClock | null>(() => (sid ? qc.getQueryData<TurnClock>(["turn", sid]) ?? null : null));
+  // 보내는 곳: 이 Task 안 내 최근 기록. 표로 시작한 Task처럼 아직 없으면 보낼 때 만들고 여기에 적는다
+  const [madeChat, setMadeChat] = useState<number | null>(null);
+  const sid = work?.active_chat_id ?? madeChat;
+  // 진행 중인 턴(없으면 null). 새 Task를 보내면 주소가 바뀌며 이 화면이 다시 만들어지므로, 보낸 쪽이 캐시에 남긴 것으로 이어 받는다
+  const [clock, setClock] = useState<TurnClock | null>(() => (wid ? qc.getQueryData<TurnClock>(["turn", wid]) ?? null : null));
   const busy = !!clock;
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const liveTick = useRef(0); // 상태를 읽는 사이에 이벤트가 오면 그 이벤트가 더 새롭다
   const sending = useRef(false);
-  const newChatId = useRef<number | null>(null); // 새 대화의 첫 요청이 실패해도 빈 대화를 또 만들지 않는다
+  const newWork = useRef<WorkDetail | null>(null); // 새 Task의 첫 요청이 실패해도 빈 Task를 또 만들지 않는다
   const [perms, setPerms] = useState<PermissionRequest[]>([]);
   const [statusKnown, setStatusKnown] = useState(!sid || !!clock); // 진행 중인지 읽기 전에는 보내기를 열어 두지 않는다(409만 받는다)
-  const [pendingFirst, setPendingFirst] = useState<string | null>(null); // 새 대화의 첫 요청: 답을 받아 주소가 바뀌기 전까지 여기서 보여 준다
+  const [pendingFirst, setPendingFirst] = useState<string | null>(null); // 새 Task의 첫 요청: 답을 받아 주소가 바뀌기 전까지 여기서 보여 준다
   const [pollFailed, setPollFailed] = useState(false);
   const liveDown = useServerDown();
   const serverDown = liveDown || pollFailed;
@@ -98,18 +104,17 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     // 연결 직후 hello가 오기 전에는 쓸 수 있는 에이전트를 모른다. 방송을 놓쳐도 입력창이 오래 막히지 않게 짧게 다시 읽는다
     refetchInterval: (q) => (q.state.data?.connected && !q.state.data.info?.agents?.length ? 2000 : 30000),
   });
-  const { data: sessions } = useQuery({ queryKey: ["sessions", pid], queryFn: () => get<ChatSession[]>(`/api/projects/${pid}/sessions`) });
-  const session = sessions?.find((s) => s.id === sid) ?? null;
+  const session = work?.chats.find((s) => s.id === sid) ?? null;
   // refetchOnMount: 이 화면을 떠난 사이의 글자를 이벤트로는 받지 못했다. 캐시로 그리면 답 가운데가 빈 채로 이어 붙는다
-  const { data: msgs, isError: msgsFailed } = useQuery({ queryKey: ["messages", sid], enabled: !!sid, refetchOnMount: "always", queryFn: () => get<ChatMessage[]>(`/api/sessions/${sid}/messages`) });
-  const { data: flows } = useQuery({ queryKey: ["flows", pid], queryFn: () => get<Flow[]>(`/api/projects/${pid}/flows`) });
-  const { data: arts } = useQuery({ queryKey: ["artifacts", pid], queryFn: () => get<Artifact[]>(`/api/projects/${pid}/artifacts`) });
+  const { data: msgs, isError: msgsFailed } = useQuery({ queryKey: ["messages", wid], enabled: !!wid, refetchOnMount: "always", queryFn: () => get<ChatMessage[]>(`/api/works/${wid}/messages`) });
+  const flows = useWorkList<Flow>("flows", pid, wid);
+  const arts = useWorkList<Artifact>("artifacts", pid, wid);
   useEffect(() => { // 기록을 다 읽은 직후: 읽는 사이 온 글자를 바로 채운다(다음 글자가 오래 안 올 수 있다)
-    if (!sid || !msgs) return;
+    if (!wid || !msgs) return;
     const filled = fillPieces(msgs, pieces.current);
-    if (filled !== msgs) qc.setQueryData(["messages", sid], filled);
-  }, [msgs, sid, qc]);
-  const readOnly = !!session && session.user_id !== user?.id;
+    if (filled !== msgs) qc.setQueryData(["messages", wid], filled);
+  }, [msgs, wid, qc]);
+  const readOnly = !!work && !work.mine; // 남의 Task는 보기만 한다. 말없이 내 Task로 넘어가지 않는다
   const chosen = resolveAgent(agent, preferred);
   agent?.info?.agents?.forEach((a) => agentLabels.set(a.name, a.label));
   const agentLabel = (name: string) => agentLabels.get(name) ?? (name || "AI 도구");
@@ -119,7 +124,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     if (!session || readOnly) return;
     try {
       await api(`/api/sessions/${session.id}`, { method: "PUT", body: { agent: name } });
-      qc.invalidateQueries({ queryKey: ["sessions", pid] });
+      qc.invalidateQueries({ queryKey: ["work", wid] });
       toast(`다음 요청부터 ${agentLabel(name)}(으)로 이어 갑니다`);
     } catch (e) { toast((e as Error).message, true); }
   };
@@ -147,20 +152,19 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
           }
         }
         // 끝을 놓쳤다. 그사이 쌓인 글을 읽어 온다
-        qc.invalidateQueries({ queryKey: ["messages", sid] });
-        qc.invalidateQueries({ queryKey: ["sessions", pid] });
+        qc.invalidateQueries({ queryKey: ["messages", wid] });
       }
       holdUntil.current = 0;
       setClock(s.busy ? clockOf(s) : null);
       setPerms(s.pending_permissions);
     }).catch(() => { setStatusKnown(true); setPollFailed(true); }).finally(() => { statusBusy.current = false; });
-  }, [sid, pid, qc]);
+  }, [sid, wid, qc]);
 
   useEffect(() => {
-    if (!sid) { setClock(null); setPerms([]); return; }
-    qc.removeQueries({ queryKey: ["turn", sid] });
+    if (wid) qc.removeQueries({ queryKey: ["turn", wid] });
+    if (!sid) { if (!sending.current) { setClock(null); setPerms([]); } setStatusKnown(true); return; }
     refreshStatus(); // 새로고침·재마운트 뒤에도 진행 상황과 경과 시간을 서버에서 다시 받는다
-  }, [sid, qc, refreshStatus]);
+  }, [sid, wid, qc, refreshStatus]);
 
   useEffect(() => {
     if (!busy) return;
@@ -171,21 +175,28 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   // 다시 연결되어 상태를 읽을 수 있게 되면 알림을 거둔다(진행 중이 아니면 위 주기 읽기가 돌지 않는다)
   useEffect(() => { if (pollFailed && !busy && !liveDown) setPollFailed(false); }, [pollFailed, busy, liveDown]);
 
-  // 대화 + 이 대화 이후에 생긴 플로우·결과를 시간순으로 엮는다
+  // 기록 + 이 Task의 흐름·결과를 시간순으로 엮는다. 탭과 기록이 같은 Task만 보므로 옆 Task의 흐름이 끼지 않는다
   const timeline = useMemo<Item[]>(() => {
-    if (!sid || !msgs) return [];
-    const since = session?.created_at ?? msgs[0]?.created_at ?? "";
+    if (!wid || !msgs) return [];
     const items: Item[] = [];
+    // 이전 기록은 옛 대화 여러 개를 합친 것이다. 누구의 대화에서 넘어왔는지 경계 줄로 보인다
+    const speakers = new Map((work?.chats ?? []).map((c) => [c.id, c]));
+    let chat: number | null = null;
     // 에이전트의 생각·툴 호출은 사람이 볼 필요가 적으므로 연달아 나온 것을 한 줄 묶음으로 접어 둔다
     for (const m of msgs) {
+      if (work?.legacy && speakers.size > 1 && m.session_id > 0 && m.session_id !== chat) {
+        chat = m.session_id;
+        const who = speakers.get(m.session_id);
+        items.push({ kind: "divider", at: m.created_at, chat: m.session_id, text: COPY.legacyDivider(who?.display_name ?? "", when(who?.created_at ?? m.created_at)) });
+      }
       const last = items[items.length - 1];
       const quiet = m.role === "tool" || m.role === "thought";
       if (quiet && last?.kind === "tools") last.items.push(m);
       else if (quiet) items.push({ kind: "tools", at: m.created_at, items: [m] });
       else items.push({ kind: "msg", at: m.created_at, m });
     }
-    (flows ?? []).filter((f) => f.created_at >= since).forEach((f) => items.push({ kind: "flow", at: f.created_at, f }));
-    (arts ?? []).filter((a) => a.created_at >= since).forEach((a) => items.push({ kind: "arts", at: a.created_at, items: [a] }));
+    (flows ?? []).forEach((f) => items.push({ kind: "flow", at: f.created_at, f }));
+    (arts ?? []).forEach((a) => items.push({ kind: "arts", at: a.created_at, items: [a] }));
     items.sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0));
     // 연달아 게시된 결과는 한 묶음으로
     const merged: Item[] = [];
@@ -195,7 +206,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
       else merged.push(it.kind === "arts" ? { ...it, items: [...it.items] } : it);
     }
     return merged;
-  }, [sid, msgs, flows, arts, session]);
+  }, [wid, msgs, flows, arts, work]);
 
   // 스크롤은 바닥 근처에 있을 때만 따라간다(위로 올려 읽는 사람을 끌어내리지 않는다).
   // 처음 열 때와 글자가 흘러나올 때는 즉시, 새 항목이 생길 때만 부드럽게.
@@ -231,22 +242,26 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   }, [timeline.length, msgs, busy, perms]);
 
   // 새로 생긴 항목만 등장 움직임을 준다. 메시지·흐름·결과는 따로 오므로 셋 다 온 뒤를 기준으로 삼는다
-  const fresh = useFreshKeys(!!sid && !!msgs && !!flows && !!arts);
+  const fresh = useFreshKeys(!!wid && !!msgs && !!flows && !!arts);
 
   useLive((e) => {
     // 브라우저 연결이나 PC Agent 연결이 바뀌면 그사이 놓친 것을 서버에서 다시 받는다
     if ((e.type === "live_reconnected" || e.type === "agent_status") && sid) {
       refreshStatus();
-      if (e.type === "live_reconnected") qc.invalidateQueries({ queryKey: ["messages", sid] });
+      if (e.type === "live_reconnected") qc.invalidateQueries({ queryKey: ["messages", wid] });
       return;
     }
     if (e.type === "live_reconnected") setPollFailed(false);
+    const key = ["messages", wid];
+    const resyncSoon = () => {
+      if (resync.current === null) resync.current = window.setTimeout(() => { resync.current = null; qc.invalidateQueries({ queryKey: key }); }, RESYNC_MS);
+    };
     if (e.type !== "agent_event" || e.session_id !== sid || !sid) {
-      if (e.type === "agent_event" && e.project_id === pid) qc.invalidateQueries({ queryKey: ["sessions", pid] });
+      // 이전 기록은 다른 멤버의 대화도 같은 기록이다. 글자를 이어 붙이지 않고 잠시 뒤 다시 읽는다
+      if (e.type === "agent_event" && wid && e.work_id === wid) resyncSoon();
       return;
     }
     const ev = e.event as Record<string, unknown>;
-    const key = ["messages", sid];
     const upd = (fn: (xs: ChatMessage[]) => ChatMessage[]) => qc.setQueryData<ChatMessage[]>(key, (xs) => fn(xs ?? []));
     const now = localIso();
     // 상태를 담은 이벤트만 "읽는 중인 상태보다 새롭다"고 표시한다. 글자 조각까지 세면 답이 흐르는 동안 상태를 영영 받지 못해
@@ -260,9 +275,6 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
       setClock((c) => c && { at: c.at, turn: { ...c.turn, idle_sec: -(Date.now() - c.at) / 1000 } });
       if (!busyRef.current && !statusBusy.current) refreshStatus();
     };
-    const resyncSoon = () => {
-      if (resync.current === null) resync.current = window.setTimeout(() => { resync.current = null; qc.invalidateQueries({ queryKey: key }); }, RESYNC_MS);
-    };
     switch (ev.kind) {
       case "turn_started":
         setClock(clockOf(ev as unknown as TurnStatus));
@@ -272,7 +284,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
       case "turn_ended":
         setClock(null); setPerms([]);
         pieces.current.clear();
-        qc.invalidateQueries({ queryKey: key }); qc.invalidateQueries({ queryKey: ["sessions", pid] });
+        qc.invalidateQueries({ queryKey: key });
         break;
       case "chunk": {
         heard();
@@ -306,29 +318,43 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     }
   });
 
-  const send = useCallback(async (text: string, attachmentIds: number[] = []) => {
+  const send = useCallback(async (text: string, attachmentIds: number[] = [], fileName?: string) => {
     const t = text.trim();
     if (!t && !attachmentIds.length) return true;
     const tempId = -Date.now();
     let id = sid;
+    let target = wid;
     let fresh = false;
     sending.current = true;
     stopWanted.current = false;
     try {
-      if (!id || readOnly) {
+      if (readOnly) throw new Error(COPY.readOnly(work?.owner_name ?? ""));
+      if (!target || !id) {
         if (!chosen) throw new Error("쓸 수 있는 AI 에이전트를 찾지 못했습니다 → PC Agent 연결을 확인하거나 설정에서 AI 도구를 설치하세요.");
-        if (!id) setPendingFirst(t || "첨부한 파일을 확인해 주세요.");
+        if (!target) setPendingFirst(t || "첨부한 파일을 확인해 주세요.");
         setClock(clockOf(SENDING_TURN));
-        id = newChatId.current ?? (await post<ChatSession>(`/api/projects/${pid}/sessions`, { agent: chosen })).id;
-        newChatId.current = id;
-        fresh = true;
-        qc.invalidateQueries({ queryKey: ["sessions", pid] });
+        if (!target) {
+          // 첫 화면에서 온 첫 Task는 '첫 Task'로 두고, 그 뒤는 요청 앞부분으로 부른다. 보낼 때 비로소 만들어진다
+          const name = firstTask ? null : autoTaskName(t, fileName);
+          const made = newWork.current ?? await post<WorkDetail>(`/api/projects/${pid}/works`, { name, name_auto: true, agent: chosen });
+          newWork.current = made;
+          qc.setQueryData(["work", made.id], made); // 주소가 바뀔 때 뼈대 화면이 끼지 않게
+          target = made.id;
+          id = made.active_chat_id;
+          fresh = true;
+          qc.invalidateQueries({ queryKey: ["projects"] });
+          qc.invalidateQueries({ queryKey: ["project", pid] });
+        } else {
+          id = (await post<ChatSession>(`/api/works/${target}/chat`, { agent: chosen })).id;
+          setMadeChat(id);
+          qc.invalidateQueries({ queryKey: ["work", target] });
+        }
       }
-      if (!stopWanted.current) setClock(clockOf(SENDING_TURN)); // 새 대화를 만드는 사이 중지를 눌렀다면 '중지하는 중'을 덮지 않는다
+      if (!stopWanted.current) setClock(clockOf(SENDING_TURN)); // 새 Task를 만드는 사이 중지를 눌렀다면 '중지하는 중'을 덮지 않는다
       atBottom.current = true; // 내가 보낸 말은 위로 올려 읽던 중이어도 따라간다
-      qc.setQueryData<ChatMessage[]>(["messages", id], (xs) => [...(xs ?? []),
+      qc.setQueryData<ChatMessage[]>(["messages", target], (xs) => [...(xs ?? []),
         { id: tempId, session_id: id!, role: "user", content: t || "첨부한 파일을 확인해 주세요.", meta: null, created_at: localIso() }]);
-      // 서버가 CLI를 기다리지 않고 바로 답한다. 새 대화는 답을 받은 뒤에 주소를 바꾼다:
+      // 서버가 CLI를 기다리지 않고 바로 답한다. 새 Task는 답을 받은 뒤에 주소를 바꾼다:
       // 새 화면이 읽는 상태에 이 턴이 있고, 실패하면 적은 요청과 첨부가 그대로 남은 입력창으로 돌아올 수 있다
       await post(`/api/sessions/${id}/prompt`, { text: t, attachment_ids: attachmentIds });
       sending.current = false;
@@ -336,11 +362,11 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
         stopWanted.current = false;
         post(`/api/sessions/${id}/cancel`).catch((e: Error) => toast(e.message, true));
       }
-      qc.invalidateQueries({ queryKey: ["messages", id] });
+      qc.invalidateQueries({ queryKey: ["messages", target] });
       if (fresh) {
-        newChatId.current = null;
-        qc.setQueryData(["turn", id], clockOf(SENDING_TURN));
-        onSession(id);
+        newWork.current = null;
+        qc.setQueryData(["turn", target], clockOf(SENDING_TURN));
+        onWork(target!);
       } else refreshStatus();
       return true;
     } catch (e) {
@@ -348,7 +374,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
       setClock(null);
       setPendingFirst(null);
       stopWanted.current = false;
-      if (id) qc.setQueryData<ChatMessage[]>(["messages", id], (xs) => (xs ?? []).filter((m) => m.id !== tempId));
+      if (target) qc.setQueryData<ChatMessage[]>(["messages", target], (xs) => (xs ?? []).filter((m) => m.id !== tempId));
       toast((e as Error).message, true);
       sending.current = false;
       refreshStatus(); // 진행 중이라 거절된 경우(409) 진행 표시와 중지 버튼을 되돌린다
@@ -356,18 +382,18 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     } finally {
       sending.current = false;
     }
-  }, [pid, sid, readOnly, chosen, onSession, qc, toast, refreshStatus]);
+  }, [pid, sid, wid, work, firstTask, readOnly, chosen, onWork, qc, toast, refreshStatus]);
 
   // 첫 화면에서 입력한 요청(과 첨부)을 이어서 보낸다
   useEffect(() => {
     if (initialPrompt && agentKnown && !sentInitial.current) {
       sentInitial.current = true;
-      onInitialSent?.(); // 새 대화가 만들어지며 화면이 다시 그려져도 두 번 보내지 않게 먼저 비운다
+      onInitialSent?.(); // 새 Task가 만들어지며 화면이 다시 그려져도 두 번 보내지 않게 먼저 비운다
       const { text, attachmentIds } = initialPrompt;
       void send(text, attachmentIds).then(async (ok) => {
         if (ok) return;
         // 입력창에 쓴 적 없는 요청이라 Composer가 되돌려 줄 수 없다. 첫 화면에서 쓴 요청과 첨부를 잃지 않게 여기서 채운다
-        const all = attachmentIds.length ? await get<Attachment[]>(`/api/projects/${pid}/attachments`).catch(() => [] as Attachment[]) : [];
+        const all = attachmentIds.length ? await get<Attachment[]>(`/api/projects/${pid}/attachments?all_works=true`).catch(() => [] as Attachment[]) : [];
         setSeed((s) => ({ text, n: (s?.n ?? 0) + 1, attachments: all.filter((a) => attachmentIds.includes(a.id)) }));
       });
     }
@@ -377,7 +403,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   const suggestions = useMemo(() => {
     const review = (flows ?? []).find((f) => f.status === "review");
     const done = (flows ?? []).some((f) => f.status === "complete");
-    if (review) return [`작업 흐름 '${review.title}'에서 바꿀 점: `, "이 작업 흐름의 각 단계를 자세히 설명해 줘", "승인 전에 필요한 입력 파일과 툴 경로를 점검해 줘"];
+    if (review) return [`${W.flow} '${review.title}'에서 바꿀 점: `, `이 ${W.flow}의 각 단계를 자세히 설명해 줘`, "승인 전에 필요한 입력 파일과 툴 경로를 점검해 줘"];
     if (done) return ["최신 결과로 보고서를 다시 작성해 줘", "Output 추가: ", "능동학습으로 예측 모델 정확도를 더 높여 줘",
       "최적 설계점에서 실제 해석으로 확인(검증 해석)해 줘", "응력 분포를 3D로 보고 싶어 — 형상·필드 모델을 학습해 줘", "Simulator를 설계팀과 공유할 수 있게 배포해 줘"];
     if (timeline.length) return ["지금 진행 상황을 요약해 줘", "실패한 케이스 원인을 찾아서 고쳐 줘", "다음 단계로 진행해 줘"];
@@ -397,7 +423,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
     return () => window.removeEventListener(AGENT_PREFILL, h);
   }, []);
 
-  // 지금 진행 중인 작업 흐름 단계(프롬프트를 보낸 뒤의 말풍선에만 쓴다)
+  // 지금 진행 중인 흐름 단계(프롬프트를 보낸 뒤의 말풍선에만 쓴다)
   const flowActivity = useMemo(() => {
     const f = (flows ?? []).find((x) => x.status === "in_progress" || x.status === "approved");
     if (!f) return null;
@@ -427,7 +453,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
   };
 
   return (
-    <section className="chat" aria-label="에이전트와 대화">
+    <section className="chat" aria-label="이 Task의 기록">
       <div className="chat-body" ref={bodyRef} onScroll={onScroll}>
         <div className="chat-col" ref={colRef}>
           {serverDown ? (
@@ -445,20 +471,29 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
               <p>에이전트(Gemini·Claude·Codex)와 CAD/CAE 툴은 내 PC에서 실행됩니다. 설치 파일 하나로 준비됩니다.</p>
               <p>입력·출력 표가 있으면 PC Agent 없이도 오른쪽 데이터 탭에서 표를 붙여 넣어 바로 Simulator를 만들 수 있습니다.</p>
               <Link className="btn primary" to="/settings">PC Agent 설치·연결</Link></div>
-          ) : !sid && pendingFirst ? (
+          ) : !wid && pendingFirst ? (
             <div className="tl-item enter"><Message m={{ id: 0, session_id: 0, role: "user", content: pendingFirst, meta: null, created_at: "" }} /></div>
-          ) : sid && !msgs ? (
-            // 아직 읽지 못한 것과 비어 있는 것은 다르다. 새 대화 화면을 보이면 요청이 사라진 줄 안다
-            msgsFailed ? <div className="notice err" role="alert"><AlertTriangle size={15} /><span>대화 기록을 불러오지 못했습니다 → 잠시 뒤 새로고침해 주세요.</span></div>
+          ) : wid && !msgs ? (
+            // 아직 읽지 못한 것과 비어 있는 것은 다르다. 빈 화면을 보이면 요청이 사라진 줄 안다
+            msgsFailed ? <div className="notice err" role="alert"><AlertTriangle size={15} /><span>기록을 불러오지 못했습니다 → 잠시 뒤 새로고침해 주세요.</span></div>
               : <Skeleton rows={4} />
-          ) : !sid || !timeline.length ? (
+          ) : !wid ? (
+            <div className="chat-empty">
+              <AgentGlyph size={32} /><b>{COPY.newTaskTitle}</b>
+              <p>{COPY.newTaskBody}</p>
+              {!disabled && !busy && statusKnown && <div className="chat-suggest">{CHAT_SUGGEST.map((s) => <button key={s} onClick={() => void send(s)}>{s}</button>)}</div>}
+            </div>
+          ) : !timeline.length && readOnly ? (
+            <div className="chat-empty"><AgentGlyph size={32} /><b>{COPY.emptyOthers}</b></div>
+          ) : !timeline.length ? (
             <div className="chat-empty">
               <AgentGlyph size={32} /><b>무엇을 자동화할까요?</b>
               <p>CAD 변경, 해석, 결과 추출, 예측 모델·최적화를 말로 요청하세요. 엑셀 표를 여기에 붙여 넣거나 해석 결과 폴더를 알려 주어 시작해도 됩니다.</p>
-              <p>해석을 새로 돌리거나 내 모델을 바꾸는 일은 작업 흐름을 먼저 보여 주고 승인을 받습니다. 조회·후처리, 가진 데이터로 예측 모델·Simulator 만들기, 보고서는 바로 합니다.</p>
-              {!disabled && !busy && statusKnown && <div className="chat-suggest">{CHAT_SUGGEST.map((s) => <button key={s} onClick={() => void send(s)}>{s}</button>)}</div>}
+              <p>해석을 새로 돌리거나 내 모델을 바꾸는 일은 {W.flow}를 먼저 보여 주고 승인을 받습니다. 조회·후처리, 가진 데이터로 예측 모델·Simulator 만들기, 보고서는 바로 합니다.</p>
+              {!disabled && !busy && statusKnown && !readOnly && <div className="chat-suggest">{CHAT_SUGGEST.map((s) => <button key={s} onClick={() => void send(s)}>{s}</button>)}</div>}
             </div>
           ) : timeline.map((it) => {
+            if (it.kind === "divider") return <div key={`d${it.chat}-${it.at}`} className="tl-divider" role="separator">{it.text}</div>;
             const key = it.kind === "flow" ? `f${it.f.id}` : it.kind === "arts" ? `a${it.items[0].id}` : it.kind === "tools" ? `t${it.items[0].id}` : `m${it.m.id}`;
             // 내 메시지는 임시 id로 먼저 붙고 서버 id로 바뀐다 — 바뀔 때 다시 등장하지 않게 임시일 때만 움직인다
             const enter = fresh(key) && !(it.kind === "msg" && it.m.role === "user" && it.m.id > 0);
@@ -481,13 +516,14 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
 
       <div className="chat-composer">
         <div className="chat-col">
-          <Composer projectId={pid} onSimulator={(_, s, m) => canvas.openSimulator(s, m)} suggestions={suggestions} busy={busy && !readOnly} stopping={!!clock?.turn.cancelling} onStop={cancel}
-            disabled={disabled || !statusKnown} seed={seed}
-            onSend={(o) => send(o.text, o.attachmentIds)}
-            placeholder={readOnly ? "다른 멤버의 대화입니다. 보내면 내 새 대화로 시작합니다" : busy ? "진행 중입니다. 끝나면 이어서 요청할 수 있습니다"
-              : !statusKnown ? "대화를 불러오는 중입니다" : agent?.connected && !agentKnown ? "PC Agent가 준비되는 중입니다"
-              : disabled ? "PC Agent 연결 후 요청할 수 있습니다. 표는 지금 붙여 넣어 Simulator를 만들 수 있습니다" : "무엇이든 요청하세요"}
-            leftBar={readOnly ? <span className="chip">{session ? agentLabel(session.agent) : ""} · 읽기 전용</span>
+          <Composer projectId={pid} workId={wid} workMine={!!work?.mine} suggestions={readOnly ? [] : suggestions} busy={busy && !readOnly} stopping={!!clock?.turn.cancelling} onStop={cancel}
+            onSimulator={(p, s, m, w) => { if (w != null && w !== wid) nav(taskPath(p, w), { state: { canvasTab: "simulator", studyId: s, modelId: m } }); else canvas.openSimulator(s, m); }}
+            disabled={disabled || !statusKnown || readOnly} seed={seed}
+            onSend={(o) => send(o.text, o.attachmentIds, o.fileName)}
+            placeholder={readOnly ? COPY.readOnly(work?.owner_name ?? "") : busy ? "진행 중입니다. 끝나면 이어서 요청할 수 있습니다"
+              : !statusKnown ? "기록을 불러오는 중입니다" : agent?.connected && !agentKnown ? "PC Agent가 준비되는 중입니다"
+              : disabled ? "PC Agent 연결 후 요청할 수 있습니다. 표는 지금 붙여 넣어 Simulator를 만들 수 있습니다" : wid ? COPY.askHere : COPY.askNew}
+            leftBar={readOnly ? <span className="chip">{session ? `${agentLabel(session.agent)} · ` : ""}{COPY.viewOnly}</span>
               : <AgentPicker value={session?.agent ?? chosen ?? ""} onChange={(n) => void switchAgent(n)} disabled={disabled || busy} />} />
         </div>
       </div>
@@ -497,7 +533,7 @@ export function ChatView({ pid, sid, onSession, initialPrompt, onInitialSent }: 
 
 const KIND_ICON = { table: Table2, scatter: ScatterChart, line: LineChart, bar: BarChart3, parallel: LineChart, markdown: FileText, image: ImageIcon };
 
-/** 대화 속 결과: 한 줄 목록(대화가 무거워지지 않게) — 누르면 오른쪽 캔버스에서 크게 연다 */
+/** 기록 속 결과: 한 줄 목록(기록이 무거워지지 않게) — 누르면 오른쪽 탭에서 크게 연다 */
 function ArtifactChips({ items }: { items: Artifact[] }) {
   const canvas = useCanvas();
   const [all, setAll] = useState(false);
@@ -508,7 +544,7 @@ function ArtifactChips({ items }: { items: Artifact[] }) {
       {shown.map((a) => {
         const Icon = KIND_ICON[a.kind] ?? FileText;
         return (
-          <button key={a.id} className="chat-art-row chat-art-open" onClick={() => canvas.showArtifact(a.id, a.flow_id)} title="작업 흐름 탭의 그 단계에서 보기">
+          <button key={a.id} className="chat-art-row chat-art-open" onClick={() => canvas.showArtifact(a.id, a.flow_id)} title={`${W.flow} 탭의 그 단계에서 보기`}>
             <Icon size={14} className="kind" /><span className="chat-art-title">{a.title}</span><ChevronRight size={14} className="muted" />
           </button>
         );
@@ -518,7 +554,7 @@ function ArtifactChips({ items }: { items: Artifact[] }) {
   );
 }
 
-/** 대화 속 작업 흐름 카드: 실행 순서대로 단계 목록 + 진행률 + 승인/반려 (그래프는 캔버스에서) */
+/** 기록 속 흐름 카드: 실행 순서대로 단계 목록 + 진행률 + 승인/반려 (그래프는 캔버스에서) */
 function FlowCard({ pid, sid, f, readOnly, connected }: { pid: number; sid: number | null; f: Flow; readOnly: boolean; connected: boolean }) {
   const canvas = useCanvas();
   const decide = useFlowDecision(pid, sid, connected);
@@ -533,7 +569,7 @@ function FlowCard({ pid, sid, f, readOnly, connected }: { pid: number; sid: numb
       <div className="chat-card-head">
         <Workflow size={16} className="brand" /><b>{f.title}</b><span className={`chip ${st.chip}`}>{st.label}</span>
         <span className="grow" />
-        <button className="small ghost" onClick={() => canvas.showFlow(f.id)} title="오른쪽 캔버스에 흐름도로 보기"><PanelRight size={13} />흐름도</button>
+        <button className="small ghost" onClick={() => canvas.showFlow(f.id)} title="오른쪽 탭에 흐름도로 보기"><PanelRight size={13} />흐름도</button>
       </div>
       {review && <p className="small">에이전트가 아래 순서로 진행하려고 합니다. 확인하고 승인해 주세요.</p>}
       <ol className={`flow-steps ${f.status === "in_progress" ? "live" : ""}`}>
@@ -589,10 +625,10 @@ function ToolGroup({ items }: { items: ChatMessage[] }) {
   wasRunning.current = !!running;
   if (!tools.length) return null; // 생각만 있는 묶음은 보이지 않는다(진행 중에는 아래 '생각하는 중…'이 보인다)
   const label = running ? `${clip(toolLabel(running.meta?.title || running.content)[0])} 중…`
-    : tools.length === 1 ? clip(toolLabel(tools[0].meta?.title || tools[0].content)[0]) : `작업 ${tools.length}건`;
+    : tools.length === 1 ? clip(toolLabel(tools[0].meta?.title || tools[0].content)[0]) : `도구 사용 ${tools.length}건`;
   return (
     <div className="cv-toolgroup">
-      <button className="cv-toolgroup-head" onClick={() => setOpen(!open)} aria-expanded={open} title="에이전트가 한 작업(툴 사용·생각) 기록">
+      <button className="cv-toolgroup-head" onClick={() => setOpen(!open)} aria-expanded={open} title="에이전트가 한 일(툴 사용·생각) 기록">
         {running ? <Loader2 size={12} className="spin" /> : failed ? <X size={12} className="err" /> : <Check size={12} className={`ok ${justDone.current ? "pop-in" : ""}`} />}
         <span className="cv-toolgroup-label">{label}{failed ? ` · 실패 ${failed}` : ""}</span>
         <span className="small muted">{open ? "접기" : "자세히"}</span>
@@ -611,7 +647,7 @@ function Message({ m, streaming }: { m: ChatMessage; streaming?: boolean }) {
       <div className="bubble">{m.content}</div>
       {!!m.meta?.attachments?.length && (
         <div className="msg-files">{m.meta.attachments.map((a) => (
-          <span key={a.id} className="file-chip" title={`내 PC 프로젝트 폴더 inputs/${a.filename}`}><FileUp size={12} /><span className="n">{a.filename}</span>
+          <span key={a.id} className="file-chip" title={`내 PC 폴더 inputs/${a.filename}`}><FileUp size={12} /><span className="n">{a.filename}</span>
             <span className="s">{a.size > 1e6 ? `${(a.size / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(a.size / 1e3))} KB`}</span></span>
         ))}</div>
       )}
@@ -661,7 +697,7 @@ function PermissionCard({ p, readOnly, onAnswer }: { p: PermissionRequest; readO
         <dl className="perm-args">{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
       ) : p.raw_input != null && <pre className="cv-perm-input">{JSON.stringify(p.raw_input, null, 2).slice(0, 1500)}</pre>}
       {!readOnly && <p className="small muted">허용하면 에이전트가 이 작업을 내 PC에서 실행합니다. 거부하면 멈추고 다른 방법을 묻습니다.</p>}
-      {readOnly ? <p className="small muted">대화를 시작한 사람이 확인합니다.</p> : (
+      {readOnly ? <p className="small muted">이 {W.task}의 주인이 확인합니다.</p> : (
         <div className="row chat-card-foot">
           <span className="grow" />
           {reject.map((o) => <button key={o.optionId} className="small" onClick={() => onAnswer(o.optionId)}><CircleSlash size={13} />{o.name}</button>)}

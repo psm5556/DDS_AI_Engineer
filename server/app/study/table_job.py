@@ -48,7 +48,7 @@ def _stopped_by_delete(db: Session, job: models.TableJob) -> bool:
     if job.project_id is not None:
         return False
     job.seen = True  # 알림 칸에 띄우지 않는다. 질문 화면이 아직 보고 있으면 이 이유를 읽는다
-    _fail(db, job, "프로젝트를 삭제해 Simulator 만들기를 멈췄습니다")
+    _fail(db, job, "Project를 삭제해 Simulator 만들기를 멈췄습니다")
     return True
 
 

@@ -57,7 +57,7 @@ export function SetupChecklist() {
   return (
     <section className="block setup-check">
       {askPin && <PinModal title="서버 코드로 첫 버전 배포" confirm="배포" busy={publish.isPending} onClose={() => setAskPin(false)} onConfirm={(pin) => publish.mutate(pin)}>
-        연결된 PC가 작업이 없을 때 이 버전을 자동으로 받습니다.</PinModal>}
+        연결된 PC가 쉬고 있을 때 이 버전을 자동으로 받습니다.</PinModal>}
       <div className="block-head"><h3>PC Agent 설치 준비</h3>
         <span className={`chip ${st.ready ? "ok" : "warn"}`}>{st.ready ? "사용자가 바로 설치할 수 있습니다" : "준비가 더 필요합니다"}</span></div>
       <ul>

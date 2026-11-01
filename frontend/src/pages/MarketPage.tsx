@@ -1,3 +1,4 @@
+import { W } from "../work/copy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileCode2, FolderUp, Search, ShieldCheck, Store, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
@@ -34,7 +35,7 @@ function buttonFor(p: MarketPackage, off?: boolean): { label: string; can: boole
   if (s === "installed") return { label: "설치됨", can: false };
   if (s === "needs_consent") return { label: "다시 확인 필요", can: true };
   if (s === "failed") return { label: "다시 시도", can: !off };
-  if (s === "conflict") return { label: "일부 프로젝트 겹침", can: false };
+  if (s === "conflict") return { label: `일부 ${W.project} 겹침`, can: false };
   if (s === "agent_old" || s === "agent_too_old") return { label: "업데이트 필요", can: false };
   return { label: "쓸 수 없음", can: false };
 }
@@ -42,7 +43,7 @@ function buttonFor(p: MarketPackage, off?: boolean): { label: string; can: boole
 const STATE_TEXT: Partial<Record<MarketPackage["install"]["state"], string>> = {
   reserved: "설치 예약됨 → PC Agent를 켜면 자동으로 설치됩니다",
   installing: "PC Agent가 받고 있습니다. 끝나면 이 화면이 저절로 바뀝니다",
-  installed: "설치했습니다. AI가 쓸 수 있는 대화에는 다음 요청 때 알려 줍니다. 대화는 그대로입니다.",
+  installed: `설치했습니다. AI가 쓸 수 있는 ${W.task}에는 다음 요청 때 알려 줍니다. 기록은 그대로입니다.`,
   paused: "관리부서가 마켓을 잠시 꺼서 지금은 쓰지 않습니다 → 다시 켜지면 저절로 돌아옵니다",
   agent_old: "PC Agent를 업데이트하면 설치됩니다 → 트레이 메뉴의 '업데이트 확인'을 누르세요",
   needs_consent: "새 버전이 더 많은 일을 합니다. 확인할 때까지 이전 버전을 씁니다",
@@ -152,7 +153,7 @@ export default function MarketPage() {
       <div className="market-head">
         <div className="grow">
           <h1>마켓</h1>
-          <p className="page-sub">스킬(에이전트의 작업 방법)을 골라 설치하면 AI가 쓸 수 있습니다. 설치는 내 계정의 모든 프로젝트에 적용됩니다.</p>
+          <p className="page-sub">스킬(에이전트의 작업 방법)을 골라 설치하면 AI가 쓸 수 있습니다. 설치는 내 계정의 모든 {W.project}에 적용됩니다.</p>
         </div>
         <button className="primary" disabled={off} onClick={() => setRegistering(true)}><Upload size={15} />등록</button>
       </div>
@@ -270,14 +271,14 @@ function DetailDrawer({ id, tools, known, off, onDraft, onClose }: { id: number;
         : stateText && <div className={`notice ${st === "failed" ? "err" : st === "installed" && !p.install.offline ? "ok" : "info"}`}>{stateText}</div>}
       {conflicts.length > 0 && (
         <div className="notice warn"><div>
-          <b>이 프로젝트에서는 쓰지 못합니다.</b> 다른 프로젝트에서는 씁니다.
+          <b>이 {W.project}에서는 쓰지 못합니다.</b> 다른 {W.project}에서는 씁니다.
           <ul>{conflicts.map((c) => <li key={c.project}>{c.project}: {c.message}</li>)}</ul>
         </div></div>
       )}
       {pinned.length > 0 && (
         <div className="notice info market-pin"><div>
-          {pinned.map((x) => <div key={x.project}>{x.project}: 진행 중인 대화가 쓰던 {x.version}을 계속 씁니다. 계산이 섞이지 않게 붙들어 둔 것입니다.</div>)}
-          <div className="small">그 대화에 한 시간 동안 요청이 없으면 {p.version}(으)로 바뀝니다.</div>
+          {pinned.map((x) => <div key={x.project}>{x.project}: 진행 중인 {W.task}가 쓰던 {x.version}을 계속 씁니다. 계산이 섞이지 않게 붙들어 둔 것입니다.</div>)}
+          <div className="small">그 {W.task}에 한 시간 동안 요청이 없으면 {p.version}(으)로 바뀝니다.</div>
           <button className="small" disabled={install.isPending} onClick={() => install.mutate(true)}>지금 {p.version}(으)로 바꾸기</button>
         </div></div>
       )}
@@ -302,7 +303,7 @@ function DetailDrawer({ id, tools, known, off, onDraft, onClose }: { id: number;
           <h4>이렇게 말해 보세요</h4>
           {!canTryExample && <p className="small muted">설치한 뒤에 누를 수 있습니다. 설치하지 않으면 AI에게 이 스킬이 없습니다.</p>}
           <div className="market-examples">
-            {p.examples.map((x) => <button key={x} className="small" disabled={!canTryExample} onClick={() => nav("/", { state: { seed: x } })} title="새 프로젝트의 입력창에 채웁니다">{x}</button>)}
+            {p.examples.map((x) => <button key={x} className="small" disabled={!canTryExample} onClick={() => nav("/", { state: { seed: x } })} title={`새 ${W.project}의 입력창에 채웁니다`}>{x}</button>)}
           </div>
         </>
       )}
@@ -324,7 +325,7 @@ function DetailDrawer({ id, tools, known, off, onDraft, onClose }: { id: number;
           </div>
         </div>
       ) : <p className="small">문서뿐입니다. AI가 읽고 따릅니다. 문서만으로도 AI의 행동은 바뀔 수 있습니다.</p>}
-      {p.code && <p className="small muted">같은 프로젝트에 진행 중인 대화가 있으면 그 대화가 쓰던 버전을 유지합니다. 그 대화가 끝나거나 한 시간 쉬면 새 버전이 적용됩니다.</p>}
+      {p.code && <p className="small muted">같은 {W.project}에 진행 중인 {W.task}가 있으면 그 {W.task}가 쓰던 버전을 유지합니다. 그 {W.task}가 끝나거나 한 시간 쉬면 새 버전이 적용됩니다.</p>}
 
       <h4>시험 기록</h4>
       {p.evidence
@@ -472,7 +473,7 @@ function RegisterDrawer({ draft, onClose }: { draft?: MarketPackage; onClose: ()
   const done = (text: string) => { qc.invalidateQueries({ queryKey: ["market"] }); toast(text); onClose(); };
   const fail = (e: Error) => setError(e.message);
   const seen = d?.fingerprint; // 지금 화면에 보이는 내용에만 결정이 적용된다
-  const mine = useMutation({ mutationFn: () => post(`${base}/private`, { meta: meta(), fingerprint: seen }), onSuccess: () => done("나만 쓰기로 정했습니다. AI가 쓸 수 있는 대화에는 다음 요청 때 알려 줍니다"), onError: fail });
+  const mine = useMutation({ mutationFn: () => post(`${base}/private`, { meta: meta(), fingerprint: seen }), onSuccess: () => done(`나만 쓰기로 정했습니다. AI가 쓸 수 있는 ${W.task}에는 다음 요청 때 알려 줍니다`), onError: fail });
   const review = useMutation({ mutationFn: () => post(`${base}/request-review`, { meta: meta(), fingerprint: seen }), onSuccess: () => done("부서에 검토를 요청했습니다"), onError: fail });
   const publish = useMutation({
     mutationFn: (pin: string) => post(`${base}/approve`, { pin, acks: flags.map((f) => f.rule), official, meta: meta(), fingerprint: seen }),

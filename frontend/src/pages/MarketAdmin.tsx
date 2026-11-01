@@ -1,3 +1,4 @@
+import { W } from "../work/copy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, get, post, put } from "../api";
@@ -131,7 +132,7 @@ function ReviewModal({ row, onClose }: { row: MarketReviewRow; onClose: () => vo
         <div><b>사람이 읽어 확인할 것</b> (자동 검사로 찾지 못합니다)
           <ul>
             <li>공학 판단이 맞는가: 계수, 허용값, 실패 기준</li>
-            <li>프로젝트 고유 값이 남아 있지 않은가: 재료 물성, 고객사 모델명, 설계값</li>
+            <li>{W.project} 고유 값이 남아 있지 않은가: 재료 물성, 고객사 모델명, 설계값</li>
             <li>툴을 실행한다면 CPU 수와 동시 실행 수가 라이선스를 소진하지 않는가</li>
           </ul>
         </div>
@@ -206,8 +207,8 @@ function RecallModal({ row, onClose, onDone }: { row: MarketReviewRow; onClose: 
       <button onClick={onClose}>취소</button>
       <button className="danger" disabled={!reason.trim()} onClick={() => setAskPin(true)}>회수</button>
     </>}>
-      <p className="small market-modal-text">설치한 PC의 모든 프로젝트에서 스킬을 지우고, 진행 중인 대화에는 다음 요청 때 쓰지 말라고 알립니다. 설치했거나 AI가 읽은 사람에게는 사유를 알립니다. 지금 돌고 있는 요청은 멈추지 않습니다. AI가 <code>scripts/</code>나 레시피로 복사한 것과 이미 읽은 내용은 지우지 못합니다.</p>
-      <div className="field"><span className="lbl">회수 사유 (설치한 사람의 카드와 대화에 보입니다)</span><textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} /></div>
+      <p className="small market-modal-text">설치한 PC의 모든 {W.project}에서 스킬을 지우고, 진행 중인 {W.task}에는 다음 요청 때 쓰지 말라고 알립니다. 설치했거나 AI가 읽은 사람에게는 사유를 알립니다. 지금 돌고 있는 요청은 멈추지 않습니다. AI가 <code>scripts/</code>나 레시피로 복사한 것과 이미 읽은 내용은 지우지 못합니다.</p>
+      <div className="field"><span className="lbl">회수 사유 (설치한 사람의 카드와 {W.task}에 보입니다)</span><textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} /></div>
       <div className="field market-radio"><span className="lbl">회수한 뒤 쓸 버전</span>
         <label className="small"><input type="radio" name="fallback" checked={fallback === "none"} onChange={() => setFallback("none")} />복귀 없음 (기본). 새 버전이 나올 때까지 아무도 쓰지 못합니다</label>
         <label className="small"><input type="radio" name="fallback" checked={fallback === "previous"} onChange={() => setFallback("previous")} />이전 버전으로 복귀. 이전 버전에 같은 오류가 없을 때만 고르세요</label>
@@ -225,7 +226,7 @@ function CoverageModal({ row, onClose }: { row: MarketReviewRow; onClose: () => 
       {data && (
         <>
           <div className="todo-pills market-pills"><span>적용<b>{data.applied}</b></span><span>꺼져 있는 PC<b>{data.off}</b></span><span>적용 중<b>{data.pending}</b></span>{data.outdated > 0 && <span>업데이트 필요<b>{data.outdated}</b></span>}</div>
-          <p className="small muted market-modal-text">꺼져 있는 PC는 켜질 때 적용됩니다. 켜져 있는데 회수를 받지 못한 PC의 대화는 시작하지 않습니다.{data.outdated > 0 && " '업데이트 필요'는 마켓을 모르는 옛 PC Agent입니다. 항목을 받은 적이 없어 지울 것이 없고, 답을 기다리지 않아도 됩니다."}</p>
+          <p className="small muted market-modal-text">꺼져 있는 PC는 켜질 때 적용됩니다. 켜져 있는데 회수를 받지 못한 PC의 {W.task}는 시작하지 않습니다.{data.outdated > 0 && " '업데이트 필요'는 마켓을 모르는 옛 PC Agent입니다. 항목을 받은 적이 없어 지울 것이 없고, 답을 기다리지 않아도 됩니다."}</p>
           <div className="table-wrap panel market-table"><table>
             <thead><tr><th>사용자</th><th>PC</th><th>상태</th><th>마지막 연결</th></tr></thead>
             <tbody>

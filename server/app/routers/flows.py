@@ -70,7 +70,7 @@ def apply_flow_status(flow_id: int, body: schemas.FlowStatusUpdate, user: models
     if f.version != body.version:
         raise HTTPException(409, "다른 사용자가 수정했습니다. 새로고침 후 다시 시도하세요.")
     if body.status == "review" and f.status == "approved" and not f.start_queued:  # 이미 에이전트에게 전한 승인은 되돌릴 수 없다. 멈추려면 중지다
-        raise HTTPException(409, "에이전트가 이미 시작했습니다 → 멈추려면 대화의 중지 버튼을 누르세요.")
+        raise HTTPException(409, "에이전트가 이미 시작했습니다 → 멈추려면 입력창의 중지 버튼을 누르세요.")
     f.status = body.status
     if body.status == "approved":
         f.approved_by = user.id

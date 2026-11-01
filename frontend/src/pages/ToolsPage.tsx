@@ -67,7 +67,7 @@ export default function ToolsPage() {
   return (
     <div className="page tools-page">
       <h1>CAD·CAE 툴</h1>
-      <p className="page-sub">대화에서 툴 이름을 말하면 에이전트가 해당 스킬로 자동화합니다. 툴은 PC Agent가 내 PC에서 알아서 찾고, 설치·제거하면 저절로 반영합니다.</p>
+      <p className="page-sub">입력창에 툴 이름을 적으면 에이전트가 해당 스킬로 자동화합니다. 툴은 PC Agent가 내 PC에서 알아서 찾고, 설치·제거하면 저절로 반영합니다.</p>
 
       {/* 상태 한 줄: 무엇을 확인했는지와 '다시 확인'을 붙여 둔다 */}
       <div className="tools-status">

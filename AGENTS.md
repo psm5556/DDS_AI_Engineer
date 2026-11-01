@@ -50,7 +50,8 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | 경로 | 내용 |
 |---|---|
 | `server/app/` | FastAPI. `main.py`(앱·정적 파일), `models.py`(SQLAlchemy), `schemas.py`, `config.py`(포트·data_dir) |
-| `server/app/routers/` | `auth` 계정·PIN · `projects` 프로젝트·멤버 · `sessions` 대화·첨부·내 PC 폴더 · `flows` 작업 흐름·결과 · `studies` DOE·케이스·모델·Simulator·공유 · `agents` PC Agent 배포·설치·모니터링 · `market` 마켓 등록·검토·설치·회수 |
+| `server/app/work_service.py` | Project > Task(`Work`): 어느 Task에 넣고 읽을지(`work_scope`·`write_work`, 헤더 `X-DDS-Work`), 이전 `migrate_works`, 합산 상태, 검색, 삭제 |
+| `server/app/routers/` | `auth` 계정·PIN · `projects` 프로젝트·멤버 · `works` Task · `sessions` 대화·첨부·내 PC 폴더 · `flows` 작업 흐름·결과 · `studies` DOE·케이스·모델·Simulator·공유 · `agents` PC Agent 배포·설치·모니터링 · `market` 마켓 등록·검토·설치·회수 |
 | `server/app/agent/` | `hub.py` 대화 턴·세션 관리(ACP 이벤트 → 메시지) · `link.py` PC Agent WebSocket 연결과 요청/응답 |
 | `server/app/study/` | `doe`(LHS/Sobol) · `surrogate`(GP) · `bayesopt`(EI·제약) · `fieldmodel`(3D 형상·필드 PCA+GP) · `thumbnail`(Simulator 카드 그림) · `service` · `importer`(표·폴더 등록) · `table_job`(표 → 학습 → 배포 서버 작업) · `recipe`(스크립트 묶음) · `insights_calc`·`insights`(판단 도우미) |
 | `server/app/report.py`·`report_md.py`·`assets/` | Word·HTML 보고서와 공통 틀 · 본문 markdown 해석 · 로고·파비콘 사본 |
@@ -58,7 +59,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | `mcp_servers/` | AI CLI가 쓰는 MCP 툴: `dds_flow`(작업 흐름·결과 게시·보고서) · `dds_cae`(스크립트·툴 실행, `list_tools`) · `dds_study`(DOE·학습·BO·배포) · `dds_live`(실행 중인 CAD/CAE와 Live Link) |
 | `cae_adapters/` | `catalog.py`(지원 툴 29종 단일 목록·기본 설치 경로·설치 흔적 단어) · `tool_commands.py`(실행 명령 키) · `script.py`(케이스 스크립트 실행) · `mock.py`(연습용 솔버) · `tabular.py`(표 읽기) · `result_scan.py`(해석 폴더 찾기) · `recipe_bundle.py`(스크립트 묶음) |
 | `agent-context/` | AI CLI에게 주는 작업 규칙(`INSTRUCTIONS.md`)과 툴별 스킬(`skills/<툴>/SKILL.md`·`scripts/`). PC Agent가 프로젝트 폴더로 동기화하고(`agent/dds_agent/context.py`), DDS만 만든 항목은 탐색기에서 숨긴다. 사용자 규칙 파일은 표시 구간만 고친다(`docs/local-data.md`) |
-| `frontend/src/` | React+TS. `pages/`(첫 화면·작업 공간·툴·Simulator·설정·관리) · `chat/`(대화·입력창) · `canvas/`(오른쪽 패널 탭) · `components/`(`HeroMesh` 로그인 3D, `AgentGlyph` 에이전트 기호·글자 로고, `Skeleton`) · `motion.ts`(움직임 도구) · `modern.css`(최종 디자인 층) |
+| `frontend/src/` | React+TS. `work/`(Task 문구 `copy.ts`·범위 `scope.ts`·메뉴·다른 Task 알림) · `pages/`(첫 화면·작업 공간·툴·Simulator·설정·관리) · `chat/`(대화·입력창) · `canvas/`(오른쪽 패널 탭) · `components/`(`HeroMesh` 로그인 3D, `AgentGlyph` 에이전트 기호·글자 로고, `Skeleton`) · `motion.ts`(움직임 도구) · `modern.css`(최종 디자인 층) |
 | `installer/` | `DdsAgentSetup.cs` → `DDS-Agent-Setup.exe`(서버가 없거나 소스가 새로우면 자동 빌드). 색은 `tokens.css` 값을 쓴다 |
 | `market-templates/` | 마켓에 올릴 스킬의 시작 틀과 예제. Agent 배포에 들어가지 않는다 |
 | `deploy/linux/` | Linux 서버 systemd 서비스 파일 |
@@ -85,8 +86,11 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 ## 5. 작업 규칙
 **UI·UX** (사용자: 사내 CAE 엔지니어, AI 전문가 아님)
 - 화면 문구는 한국어, 쉬운 말로 쓴다. "무엇을 하면 무엇이 된다"가 보이게 한다. 영어 약어는 처음 나올 때 풀어 쓴다.
+  - 예외로 영어 그대로 쓰는 말: `Project`, `Task`, `Task Flow`, `Simulator`, `Output`. 이 낱말은 `frontend/src/work/copy.ts`의 `W` 한 곳에서 가져온다(`server/tests/test_work_wording.py`가 막는다). 조사는 읽는 소리를 따른다: Task가·Task를·Task로, Project가·Project를.
+  - 용어: Project는 부품·제품 하나, Task는 그 부품으로 하는 일 한 건(코드 이름 `Work`, API `works`. 흐름 노드 type `task`와 겹치지 않게 코드는 그대로 둔다), Task Flow는 코드의 `flow`. 화면에 `대화`·`새 대화`·`세션`·`작업 폴더`를 쓰지 않는다. 가운데 칸은 `기록`이라 부른다.
+  - 폴더 메뉴는 나눈다. Project 메뉴: 이름·설명 바꾸기 · 즐겨찾기 · 멤버·공유 · Project 폴더 열기 · Project 폴더 바꾸기 · 삭제. Task 메뉴: 이름 바꾸기 · Task 폴더 열기 · 이 Task의 AI 끝내기 · 삭제. 아직 없는 기능은 `copy.ts`의 `FEATURE`로 숨긴다.
 - Claude·Codex 데스크톱 앱 방식을 따른다.
-  - 단계(depth)는 최소로 한다.
+  - 단계(depth)는 최소로 한다. 사이드바는 두 단계다: Project 아래에 Task가 붙고 더 깊어지지 않는다.
   - 같은 기능의 버튼을 두 곳에 만들지 않는다.
   - 상태는 한 곳에서 보여 준다(예: PC Agent 상태는 사이드바 아래).
   - 아이콘만 있는 버튼은 뜻이 분명할 때만 쓰고, 아니면 글자를 붙인다.
@@ -121,6 +125,7 @@ scripts\dev_live.cmd claude   # 같은 실행을 별도 콘솔 창으로(더블�
 | MCP 툴 추가 | `mcp_servers/dds_*.py`(FastMCP 데코레이터) → 서버 API(필요 시) → `agent-context/INSTRUCTIONS.md`에 사용법 |
 | 대화 흐름(승인·권한·결과 카드) | `frontend/src/chat/ChatView.tsx` · 서버 `server/app/agent/hub.py`. 승인을 에이전트에게 전하는 일은 서버가 한다(화면에서 보내지 않는다). 상태×사건 표는 `docs/product-spec.md` 3-3절, 시험은 `server/tests/test_flow_handoff.py` |
 | 데모·예시 문구 | 시나리오 `agent/dds_agent/demo_agent.py`(기본은 드럼 세탁기, 값은 모두 연습용 계산) · 화면 예시 `frontend/src/format.ts` `PRACTICE_EXAMPLES` · 둘이 맞는지는 `agent/tests/test_demo_examples.py` |
+| Project > Task | 규칙 `server/app/work_service.py`, API `routers/works.py`, 이벤트의 `work_id`는 `ws.py` 한 곳, 화면 `components/Sidebar.tsx`·`pages/WorkspacePage.tsx`·`frontend/src/work/`, 시험 `server/tests/test_works_*.py`·`test_work_wording.py`·smoke의 'Project > Task', 설계 규칙 `docs/product-spec.md` 3-3절 |
 | 오른쪽 패널 탭 | `frontend/src/canvas/CanvasPanel.tsx` · `views.tsx`(작업 흐름: 흐름도 고정 + 'N단계' 결과 스크롤 · 데이터: 입력/출력·학습 데이터·케이스) · `ReportView.tsx`(보고서) · `SimulatorTab.tsx`(Simulator·모델 버전) · 단계 번호 `frontend/src/flow/order.ts` |
 | 표로 바로 Simulator | 표는 **붙여넣기로만** 받는다(회사 파일은 보안 프로그램으로 암호화됨) · 화면 `frontend/src/canvas/TableImport.tsx`(입력창·붙여넣기 창이 함께 쓴다, 묻는 것은 출력 열뿐) · 파서 `cae_adapters/tabular.py` `read_pasted` · 등록 `server/app/study/importer.py` · 라우트 `routers/studies.py` `/tables/preview/text`·`/projects/{p}/studies/import/text` · 시험 `server/tests/test_entry_points.py`·`npm run smoke` |
 | Simulator | 화면 `frontend/src/pages/SimulatorPage.tsx`(`SimulatorView`를 탭과 넓은 화면이 함께 쓴다) · 목록 `SimulatorsPage.tsx` · 버전·3D 묶기 `server/app/study/service.py` `deploy_version`·`field_models_for` · 목록·공유 `server/app/routers/studies.py` · 규칙 `docs/product-spec.md` 3-7절 |

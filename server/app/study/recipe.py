@@ -67,7 +67,7 @@ def _safe_path(name: str) -> str:
     n = name.replace("\\", "/")
     parts = n.split("/")
     if n.startswith("/") or re.match(r"^[A-Za-z]:", n) or ":" in n or "\x00" in n or any(not p.strip(" .") for p in parts):  # "..", "... " 처럼 점·공백뿐인 이름은 Windows에서 상위 폴더가 될 수 있다
-        raise RecipeRejected(f"묶음에 안전하지 않은 경로가 있습니다: {name[:80]} → 프로젝트 폴더 안의 상대 경로만 넣어 주세요")
+        raise RecipeRejected(f"묶음에 안전하지 않은 경로가 있습니다: {name[:80]} → Project 폴더 안의 상대 경로만 넣어 주세요")
     for part in parts:
         # 이름 끝의 점·공백은 Windows와 zipfile이 지운다. helper.pyc. 가 _BLOCKED_EXT를 지나 PC에서 helper.pyc 로 풀려 실행되면 안 된다
         if part != part.rstrip(" ."):
@@ -175,10 +175,10 @@ def _config_warnings(config: dict, paths: set[str]) -> list[str]:
             warnings.append(f"설정의 스크립트 '{rel}'이(가) 묶음에 없습니다 → 다른 멤버 PC에서 '스크립트가 없습니다'로 실패합니다. 묶음에 넣어 주세요")
     for rel in inputs:
         if str(rel).replace("\\", "/") not in paths:
-            warnings.append(f"입력 파일 '{rel}'은(는) 묶음에 없습니다 → 다른 멤버는 같은 파일을 대화에 첨부해야 돌릴 수 있습니다")
+            warnings.append(f"입력 파일 '{rel}'은(는) 묶음에 없습니다 → 다른 멤버는 같은 파일을 입력창에 첨부해야 돌릴 수 있습니다")
     for rel in [*wanted, *inputs]:
         if re.match(r"^([A-Za-z]:|[\\/])", str(rel)):
-            warnings.append(f"절대 경로 '{rel}'은(는) 다른 PC에 없습니다 → 프로젝트 폴더 기준 상대 경로로 바꿔 주세요")
+            warnings.append(f"절대 경로 '{rel}'은(는) 다른 PC에 없습니다 → Project 폴더 기준 상대 경로로 바꿔 주세요")
     return warnings
 
 

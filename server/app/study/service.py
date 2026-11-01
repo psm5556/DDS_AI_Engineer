@@ -549,14 +549,14 @@ def _check_run_allowed(db: Session, study: models.Study, user_id: int, flow_id: 
     flow = db.get(models.Flow, fid) if fid else None
     if flow is not None and flow.status in ("review", "rejected"):
         state = "반려된" if flow.status == "rejected" else "아직 승인 전인"
-        raise NeedsApproval(f"이 스터디는 {state} 작업 흐름 '{flow.title}'에 묶여 있어 돌리지 않습니다 → 작업 흐름을 승인하거나 고쳐서 다시 제안해 승인을 받으세요")
+        raise NeedsApproval(f"이 스터디는 {state} Task Flow '{flow.title}'에 묶여 있어 돌리지 않습니다 → Task Flow을 승인하거나 고쳐서 다시 제안해 승인을 받으세요")
     recipe = study.recipe or {}
     author = recipe.get("created_by")
     if study.adapter == "script" and author and author != user_id:
         approved = flow is not None and flow.status in ("approved", "in_progress") and flow.approved_by == user_id
         if not approved:
             raise NeedsApproval(f"{recipe.get('created_by_name') or '다른 멤버'}님이 만든 스크립트입니다. 이 PC에서 돌리려면 승인을 받아야 합니다 "
-                                "→ 작업 흐름 카드에 만든 사람을 적어 제안하고, 승인한 뒤 그 흐름 번호로 돌리세요")
+                                "→ Task Flow 카드에 만든 사람을 적어 제안하고, 승인한 뒤 그 흐름 번호로 돌리세요")
 
 
 def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, user_id: int, flow_id: int | None = None) -> tuple[int, int]:

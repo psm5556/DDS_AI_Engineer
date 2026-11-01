@@ -8,7 +8,7 @@ import { reducedMotion } from "../motion";
 import type { Attachment } from "../types";
 
 /** 보낼 때 넘기는 첨부: 이미 올린 것(id)과, 프로젝트가 아직 없어 나중에 올릴 파일 */
-export interface Outgoing { text: string; attachmentIds: number[]; pendingFiles: File[] }
+export interface Outgoing { text: string; attachmentIds: number[]; pendingFiles: File[]; fileName?: string }
 
 interface Item { key: string; file: File; progress: number; att?: Attachment; error?: string }
 
@@ -40,10 +40,12 @@ const fmtSize = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math
 /** 입력창: → 키로 추천 프롬프트 받기(회색 글자로 미리 보임) · 파일 첨부(버튼·끌어 놓기·붙여넣기) · Enter 보내기
  *  projectId가 있으면 첨부를 바로 올리고, 없으면(첫 화면) 보낼 때 pendingFiles로 넘긴다. */
 export function Composer({
-  projectId, suggestions, onSend, busy, stopping, onStop, disabled, placeholder, big, leftBar, autoFocus, hint, seed, typing, onSimulator,
+  projectId, workId, workMine, suggestions, onSend, busy, stopping, onStop, disabled, placeholder, big, leftBar, autoFocus, hint, seed, typing, onSimulator,
 }: {
+  /** 지금 연 Task. 붙여 넣은 표가 들어갈 곳을 정한다 */
+  workId?: number | null; workMine?: boolean;
   /** 표를 붙여 넣으면 AI 없이 만든 Simulator를 여는 곳 */
-  onSimulator: (projectId: number, studyId: number, modelId: number) => void;
+  onSimulator: (projectId: number, studyId: number, modelId: number, workId?: number | null) => void;
   projectId?: number; suggestions: string[]; onSend: (o: Outgoing) => void | boolean | Promise<void | boolean>; busy?: boolean;
   /** 중지를 눌렀고 끝나기를 기다리는 중 */
   stopping?: boolean;
@@ -172,6 +174,7 @@ export function Composer({
     const out: Outgoing = {
       text: t, attachmentIds: items.filter((i) => i.att).map((i) => i.att!.id),
       pendingFiles: projectId ? [] : items.filter((i) => !i.error).map((i) => i.file),
+      fileName: items.find((i) => !i.error)?.file.name, // 글 없이 모델 파일만 놓았을 때 Task 이름이 된다
     };
     // AI로 보내기로 한 표만 서버에 첨부로 저장한다. 행은 AI 도구 인자가 아니라 파일로 간다
     if (table != null) {
@@ -211,8 +214,8 @@ export function Composer({
       )}
       {table != null && (
         <div className="composer-table">
-          <TableQuestion pid={projectId ?? null} text={table} onCancel={() => { answered(); setTable(null); }} onMaking={onMaking}
-            onOpen={(p, s, m) => { leaving.current = !projectId; setTable(null); onSimulator(p, s, m); }} />
+          <TableQuestion pid={projectId ?? null} wid={workId} wMine={workMine} text={table} onCancel={() => { answered(); setTable(null); }} onMaking={onMaking}
+            onOpen={(p, s, m, w) => { leaving.current = !projectId; setTable(null); onSimulator(p, s, m, w); }} />
         </div>
       )}
       {queued != null && making && <div className="composer-ask" role="status"><span className="grow">{QUEUED_TEXT}</span>
@@ -273,7 +276,7 @@ export function Composer({
           <button type="submit" className="primary send" disabled={!canSend} aria-label="보내기" title={making ? MAKING_TEXT : undefined}><ArrowUp size={16} /></button>
         )}
       </div>
-      {drag && <div className="composer-drop">여기에 놓으면 첨부됩니다 — 에이전트가 내 PC 프로젝트 폴더(inputs)에 받아 둡니다</div>}
+      {drag && <div className="composer-drop">여기에 놓으면 첨부됩니다 — 에이전트가 내 PC의 inputs 폴더에 받아 둡니다</div>}
     </form>
   );
 }

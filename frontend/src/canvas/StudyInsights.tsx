@@ -1,3 +1,5 @@
+import { useCanvas } from "./CanvasContext";
+import { useWorkList } from "../work/scope";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -470,7 +472,7 @@ export interface FlowJudgements {
 
 /** 이 흐름에 보여 줄 판단을 모은다. 흐름이 없으면 모두 단계 밖이다 */
 export function useFlowJudgements(pid: number, flows: Flow[] | undefined, flow: Flow | null | undefined): FlowJudgements {
-  const { data: studies } = useQuery({ queryKey: ["studies", pid], queryFn: () => get<Study[]>(`/api/projects/${pid}/studies`) });
+  const studies = useWorkList<Study>("studies", pid, useCanvas().workId);
   const all = studies ?? [];
   const known = flows ?? [];
   const { onSteps, loose } = studiesForFlow(all, known, flow);

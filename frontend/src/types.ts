@@ -5,7 +5,19 @@ export interface Project {
   id: number; name: string; description: string; owner_id: number; version: number;
   created_at: string; updated_at: string; members: Member[]; user_role: "master" | "member" | null;
   flow_status: FlowStatus | null; flow_title: string | null; is_favorite: boolean;
+  works: WorkBrief[];
 }
+
+/** Task 한 줄(코드 이름 Work). 서버 schemas.WorkBrief */
+export interface WorkBrief {
+  id: number; uid: string | null; project_id: number; seq: number; name: string; owner_id: number; owner_name: string; legacy: boolean;
+  mine: boolean; can_manage: boolean; status: FlowStatus | null; flow_title: string | null; model_file: string | null; n_cases: number;
+  source_label: string | null; version: number; created_at: string; updated_at: string;
+}
+export interface WorkChat { id: number; user_id: number; display_name: string; agent: string; created_at: string }
+export interface WorkDetail extends WorkBrief { chats: WorkChat[]; active_chat_id: number | null; n_simulators: number; n_share_links: number }
+export interface WorkSearchHit { project_id: number; project_name: string; work_id: number; work_name: string; owner_name: string; created_at: string; model_file: string | null; matched: "name" | "file" | "result"; matched_text: string }
+export interface WorkSearchResult { projects: number[]; works: WorkSearchHit[] }
 
 export type FlowStatus = "review" | "approved" | "in_progress" | "complete" | "failed" | "stopped" | "rejected";
 export type NodeStatus = "pending" | "in_progress" | "complete" | "failed" | "skipped";
@@ -32,7 +44,7 @@ export interface Report {
 }
 export interface ReportSummary { id: number; title: string; created_at: string }
 
-export interface ChatSession { id: number; project_id: number; user_id: number; title: string; agent: string; agent_session_id: string | null; created_at: string }
+export interface ChatSession { id: number; project_id: number; work_id?: number | null; user_id: number; title: string; agent: string; agent_session_id: string | null; created_at: string }
 export interface ChatMessage {
   id: number; session_id: number; role: "user" | "agent" | "thought" | "tool" | "system"; content: string;
   meta: { tool_call_id?: string; title?: string; kind?: string; status?: string; raw_input?: unknown; output?: string;
@@ -94,7 +106,7 @@ export interface SurrogateModel {
 }
 /** 표 → 등록 → 학습 → 배포 서버 작업. 화면을 닫아도 이어지고 돌아오면 이것을 읽는다 */
 export interface TableJob {
-  id: number; project_id: number | null; study_id: number | null; model_id: number | null; name: string;
+  id: number; project_id: number | null; work_id?: number | null; study_id: number | null; model_id: number | null; name: string;
   status: "running" | "done" | "failed"; phase: "import" | "train" | "deploy" | "done"; rows: number; excluded_count: number;
   reused: boolean; error: string | null; seen: boolean; phase_sec: number; elapsed_sec: number;
 }

@@ -1,3 +1,4 @@
+import { W } from "../work/copy";
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -11,7 +12,7 @@ import { useTheme } from "../theme";
 
 /** 아래 띠: 일하는 흐름. 주홍 = 엔지니어가 하는 일, 청록 = AI가 하는 일(소개 자료와 같은 뜻) */
 const FLOW: [string, string, "human" | "ai"][] = [
-  ["요청", "말로 시킵니다", "human"], ["AI 계획", "작업 흐름을 그립니다", "ai"], ["승인", "보고 승인합니다", "human"],
+  ["요청", "말로 시킵니다", "human"], ["AI 계획", `${W.flow}을 그립니다`, "ai"], ["승인", "보고 승인합니다", "human"],
   ["실행", "CAD·CAE를 돌립니다", "ai"], ["보고서", "해석해 씁니다", "ai"],
 ];
 

@@ -45,7 +45,7 @@ export const NODE_STATUS: Record<NodeStatus, string> = {
 
 export const NODE_TYPE: Record<string, string> = {
   cad: "CAD", pre: "전처리", solve: "해석", post: "후처리", doe: "DOE", train: "학습",
-  optimize: "최적화", deploy: "배포", task: "작업",
+  optimize: "최적화", deploy: "배포", task: "단계",
 };
 
 export const ROLE_LABEL: Record<string, string> = { master: "관리자", member: "멤버" };

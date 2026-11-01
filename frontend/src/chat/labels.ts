@@ -1,18 +1,19 @@
+import { W } from "../work/copy";
 /** 에이전트 툴 호출·실행 확인을 사용자가 읽을 수 있는 말로 바꾼다 (원래 이름은 자세히 보기에 남긴다). */
 
 const TOOL_LABEL: Record<string, string> = {
-  "dds-flow.propose_flow": "작업 흐름 제안",
-  "dds-flow.get_flow": "작업 흐름 확인",
+  "dds-flow.propose_flow": `${W.flow} 제안`,
+  "dds-flow.get_flow": `${W.flow} 확인`,
   "dds-flow.update_node": "단계 진행 상황 표시",
   "dds-flow.publish_artifact": "결과 게시",
   "dds-flow.publish_image": "그림 게시",
-  "dds-flow.set_project_info": "프로젝트 이름 정리",
+  "dds-flow.set_project_info": `${W.project} 이름 정리`,
   "dds-flow.make_report": "보고서 파일 저장",
   "dds-flow.get_report_context": "보고서 자료 읽기",
   "dds-flow.write_report": "보고서 작성",
   "dds-cae.case_contract": "스크립트 규약 확인",
   "dds-cae.list_tools": "내 PC CAD/CAE 툴 확인",
-  "dds-cae.project_folder": "프로젝트 폴더 확인",
+  "dds-cae.project_folder": `${W.project} 폴더 확인`,
   "dds-cae.run_script": "스크립트 실행",
   "dds-study.list_adapters": "실행 방식 확인",
   "dds-study.create_study": "스터디 만들기",

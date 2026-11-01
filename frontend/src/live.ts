@@ -4,7 +4,7 @@ import { getToken } from "./api";
 
 /** 서버 실시간 이벤트(WebSocket /ws). 연결 하나를 앱 전체가 함께 쓰고, 끊기면 다시 붙는다. */
 export interface LiveEvent {
-  type: string; project_id?: number; session_id?: number; user_id?: number;
+  type: string; project_id?: number; session_id?: number; user_id?: number; work_id?: number | null;
   data?: Record<string, unknown>; event?: Record<string, unknown>; [k: string]: unknown;
 }
 type Listener = (e: LiveEvent) => void;
@@ -103,6 +103,7 @@ export function useLiveInvalidation() {
       case "project_updated":
         qc.invalidateQueries({ queryKey: ["projects"] });
         if (pid) qc.invalidateQueries({ queryKey: ["project", pid] });
+        qc.invalidateQueries({ queryKey: ["work"] }); // Task 이름·상태도 Project 소식으로 온다
         break;
       case "flow_updated":
         qc.invalidateQueries({ queryKey: ["flows", pid] });
@@ -123,7 +124,7 @@ export function useLiveInvalidation() {
         break;
       case "agent_event": {
         const kind = e.event?.kind;
-        if (kind === "turn_started" || kind === "turn_ended") refreshProjects();
+        if (kind === "turn_started" || kind === "turn_ended") refreshProjects(); // 사이드바 Task 줄의 '진행 중'
         break;
       }
       case "model_updated": // 배포·되돌리기를 하면 목록의 버전과 카드 그림도 바뀐다

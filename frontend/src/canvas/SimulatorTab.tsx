@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { W } from "../work/copy";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Loader2, Maximize2, Share2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -9,18 +10,19 @@ import { when } from "../format";
 import { memberFieldList, ShareModal, SimulatorView } from "../pages/SimulatorPage";
 import { useToast } from "../toast";
 import type { Study, SurrogateModel, TrainJob } from "../types";
+import { useWorkList } from "../work/scope";
 import { useCanvas } from "./CanvasContext";
 import { askInsightFocus } from "./StudyInsights";
 
 /** Simulator 탭: 대화와 결과를 그대로 둔 채 패널 안에서 바로 예측한다. Simulator는 스터디 하나이고, 모델은 그 버전이다 */
 export function SimulatorTab({ pid }: { pid: number }) {
   const c = useCanvas();
-  const { data: studies } = useQuery({ queryKey: ["studies", pid], queryFn: () => get<Study[]>(`/api/projects/${pid}/studies`) });
-  const { data: models } = useQuery({ queryKey: ["models", pid], queryFn: () => get<SurrogateModel[]>(`/api/projects/${pid}/models`) });
+  const studies = useWorkList<Study>("studies", pid, c.workId);
+  const models = useWorkList<SurrogateModel>("models", pid, c.workId);
   if (!studies || !models) return <Skeleton rows={5} />;
   if (!studies.length) {
     return <div className="empty-hero"><AgentGlyph size={32} /><b>아직 Simulator가 없습니다</b>
-      <p>예측 모델을 만들면 여기에서 바로 예측할 수 있습니다. 엑셀 표가 있으면 데이터 탭의 '표로 바로 Simulator'로 지금 만들 수 있고, 해석 결과가 있으면 대화로 요청하세요.</p></div>;
+      <p>예측 모델을 만들면 여기에서 바로 예측할 수 있습니다. 엑셀 표가 있으면 데이터 탭의 '표로 바로 Simulator'로 지금 만들 수 있고, 해석 결과가 있으면 입력창에 요청하세요.</p></div>;
   }
   const cur = studies.find((s) => s.id === c.studyId) ?? studies[0];
   return (
@@ -111,7 +113,7 @@ function StudySimulator({ pid, study, versions }: { pid: number; study: Study; v
 
       {preview && (
         <div className="notice sim-preview">
-          <span className="grow">{live ? `미리 보는 중: v${shown.version}. 공유 링크는 현재 버전(v${live.version})을 보여 줍니다.` : `배포 전: v${shown.version}. 프로젝트 멤버만 볼 수 있습니다.`}</span>
+          <span className="grow">{live ? `미리 보는 중: v${shown.version}. 공유 링크는 현재 버전(v${live.version})을 보여 줍니다.` : `배포 전: v${shown.version}. ${W.project} 멤버만 볼 수 있습니다.`}</span>
           <button className="small primary" disabled={deploy.isPending} onClick={() => deploy.mutate(shown)}>{!live ? "배포" : shown.id < live.id ? "이 버전으로 되돌리기" : "현재 버전으로"}</button>
         </div>
       )}

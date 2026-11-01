@@ -60,15 +60,15 @@ try {
   await page.waitForURL(`${BASE}/`, { timeout: 30000 });
 
   // 1. 새 대화의 첫 메시지: 재마운트돼도 말풍선·중지 버튼·경과 시간이 이어진다
-  await page.goto(`${BASE}/projects/${PID}/new`);
+  await page.goto(`${BASE}/projects/${PID}/w/new`);
   await input().waitFor();
   await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 30000 });
   await send("느린 시작을 확인해 주세요");
-  await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 15000 });
+  await page.waitForURL(/\/projects\/\d+\/w\/\d+/, { timeout: 15000 });
   await page.locator(".waiting-bubble", { hasText: "시작하는 중" }).waitFor({ timeout: 15000 });
   // 표를 붙여 넣을 수 있게 disabled가 아니라 readOnly로 막는다. 글자는 넣을 수 없고 보내기 대신 중지 버튼이 보인다
   await page.waitForFunction(() => document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 5000 }).catch(() => fail("기다리는 동안 입력창이 막혀야 합니다"));
-  await page.getByRole("button", { name: "중지" }).waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "중지", exact: true }).waitFor({ timeout: 5000 });
   if (!(await bubble().innerText()).includes("멈춘 것이 아닙니다")) fail("보안 검사 안내가 없습니다");
   const t1 = await clockSec();
   await page.waitForTimeout(2500);
@@ -124,15 +124,15 @@ try {
   await page.route("**/api/sessions/*/status", async (r) => { await new Promise((res) => setTimeout(res, 300)); await r.continue(); });
   await send("[slow 14] 흐르는 중 새로고침");
   await page.locator(".chat-msg.agent .bubble", { hasText: "조각1" }).last().waitFor({ timeout: 15000 });
-  await page.route("**/api/sessions/*/messages", async (r) => { await new Promise((res) => setTimeout(res, 1200)); await r.continue(); });
+  await page.route("**/api/works/*/messages", async (r) => { await new Promise((res) => setTimeout(res, 1200)); await r.continue(); });
   await page.reload();
   await input().waitFor();
   await page.waitForTimeout(600); // 기록을 아직 못 읽은 동안: 빈 새 대화 화면이 아니라 뼈대가 보여야 한다
   if (await page.getByText("무엇을 자동화할까요?").count()) fail("불러오는 중에 빈 새 대화 화면이 보입니다");
   if (await page.locator(".chat-suggest").count()) fail("불러오는 중에 추천 버튼이 보입니다");
-  await page.unroute("**/api/sessions/*/messages");
+  await page.unroute("**/api/works/*/messages");
   await bubble().waitFor({ timeout: 8000 });
-  await page.getByRole("button", { name: "중지" }).waitFor({ timeout: 3000 });
+  await page.getByRole("button", { name: "중지", exact: true }).waitFor({ timeout: 3000 });
   if (await input().isEditable()) fail("답이 흐르는 중 새로고침 뒤 입력창이 열렸습니다");
   await shot("streaming-reload");
   // 4-2. 다른 화면에 다녀와도 그사이 글자가 비지 않는다
@@ -208,14 +208,14 @@ try {
 
   // 4-6. 새 대화의 첫 요청이 서버에 닿기 전: 내 메시지가 보이고, 중지하면 받자마자 멈춘다
   await page.route("**/api/sessions/*/prompt", async (r) => { await new Promise((res) => setTimeout(res, 2000)); await r.continue(); }, { times: 1 });
-  await page.goto(`${BASE}/projects/${PID}/new`);
+  await page.goto(`${BASE}/projects/${PID}/w/new`);
   await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 30000 });
   await send("[wait] 보내자마자 중지");
   await page.locator(".chat-msg.user .bubble", { hasText: "보내자마자 중지" }).waitFor({ timeout: 1500 });
   if (await page.getByText("무엇을 자동화할까요?").count()) fail("보내는 중에 빈 새 대화 화면이 보입니다");
-  await page.getByRole("button", { name: "중지" }).click();
+  await page.getByRole("button", { name: "중지", exact: true }).click();
   await page.locator(".waiting-bubble", { hasText: "중지하는 중" }).waitFor({ timeout: 2000 });
-  await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 15000 });
+  await page.waitForURL(/\/projects\/\d+\/w\/\d+/, { timeout: 15000 });
   await idle(30000);
 
   // 4-7. 첫 화면에서 쓴 요청의 첫 전송이 실패해도 입력창에 그대로 돌아온다
@@ -224,13 +224,13 @@ try {
   await input().waitFor();
   await input().fill("첫 화면에서 쓴 긴 요청을 잃으면 안 된다");
   await input().press("Enter");
-  await page.waitForURL(/\/projects\/\d+\/(new|c\/\d+)/, { timeout: 30000 });
+  await page.waitForURL(/\/projects\/\d+\/w\/(new|\d+)/, { timeout: 30000 });
   await page.waitForFunction(() => document.querySelector('[aria-label="에이전트에게 요청"]')?.value.includes("잃으면 안 된다"), undefined, { timeout: 30000 });
   await shot("home-send-failed");
   await input().press("Enter");
   await page.locator(".chat-msg.agent .bubble", { hasText: "잃으면 안 된다" }).waitFor({ timeout: 90000 });
   await idle();
-  await page.goto(`${BASE}/projects/${PID}/new`);
+  await page.goto(`${BASE}/projects/${PID}/w/new`);
   await input().waitFor();
 
   // 4-8. 연결 직후 hello 전: 쓸 CLI를 모르면 보내지 못하게 하고, 정해 둔 이름으로 채우지 않는다
@@ -246,17 +246,17 @@ try {
   await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 10000 });
 
   // 5. 멈춘 도구: 중지해도 답이 없으면 30초 뒤 다시 시작 버튼이 나온다. 긴 대화에서 스크롤 없이 보여야 한다
-  await page.goto(`${BASE}/projects/${PID}/new`);
+  await page.goto(`${BASE}/projects/${PID}/w/new`);
   await page.waitForFunction(() => !document.querySelector('[aria-label="에이전트에게 요청"]')?.readOnly, undefined, { timeout: 30000 });
   await send("첫 번째 긴 요청 " + "내용을 길게 적습니다 ".repeat(300));
-  await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 15000 });
+  await page.waitForURL(/\/projects\/\d+\/w\/\d+/, { timeout: 15000 });
   await idle();
   await send("두 번째 긴 요청 " + "내용을 길게 적습니다 ".repeat(300));
   await page.waitForTimeout(500);
   await idle();
   await send("[hang] 멈춘 스크립트");
   await page.locator(".waiting-bubble", { hasText: /실행 중|도구를 실행/ }).waitFor({ timeout: 15000 });
-  await page.getByRole("button", { name: "중지" }).click();
+  await page.getByRole("button", { name: "중지", exact: true }).click();
   await page.locator(".waiting-bubble", { hasText: "중지하는 중" }).waitFor({ timeout: 10000 });
   const restart = page.getByRole("button", { name: "AI 도구 다시 시작" });
   await restart.waitFor({ timeout: 45000 });

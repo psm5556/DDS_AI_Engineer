@@ -119,7 +119,7 @@ def scenario_api(s: Stack, report: dict, start_delay: float):
     last = [e for e in read_log(s.state) if e["ev"] == "prompt"][-1]["text"]
     report["no_load_support"] = {"session_new": after["session_new"] - before["session_new"], "recap": "[이전 대화" in last}
     check(report["no_load_support"] == {"session_new": 1, "recap": True}, f"새 세션 {report['no_load_support']}")
-    check(sum("새 세션" in n for n in s.system_notes(chat)) == 1, "새 세션 안내는 한 번")
+    check(sum("새로 시작" in n for n in s.system_notes(chat)) == 1, "새 세션 안내는 한 번")
 
     print("7) Agent 재시작: 마지막 CLI·대화를 미리 띄움")
     chat2 = s.new_chat()

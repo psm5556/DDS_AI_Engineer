@@ -1,3 +1,4 @@
+import { COPY, W } from "../work/copy";
 import { useQuery } from "@tanstack/react-query";
 import { FileDown, ListTree, Sparkles } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -112,17 +113,18 @@ function useContents(reportId: number | undefined, parts: Part[]) {
   return { body, list, items, current, listGone, go, toList };
 }
 
-/** 보고서 탭: AI가 작업 흐름·결과·스터디를 읽고 새로 쓴 종합 보고서(단순히 결과를 모은 것이 아니다).
+/** 보고서 탭: AI가 ${W.flow}·결과·스터디를 읽고 새로 쓴 종합 보고서(단순히 결과를 모은 것이 아니다).
  *  'AI 보고서 작성'을 누르면 최신 결과로 다시 쓰고, 새 판이 쌓인다. Word·HTML은 보고 있는 판으로 받는다.
  *  표지·목차·맺음말은 파일(server/app/report.py)과 같은 틀이고, 글은 서버가 함께 준다. */
 export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
   const c = useCanvas();
   const toast = useToast();
   const [rid, setRid] = useState<number | null>(null); // null = 가장 최근 판
-  const { data: list } = useQuery({ queryKey: ["reports", pid, "list"], queryFn: () => get<ReportSummary[]>(`/api/projects/${pid}/reports`) });
+  const wid = c.workId;
+  const { data: list } = useQuery({ queryKey: ["reports", pid, wid, "list"], enabled: wid != null, queryFn: () => get<ReportSummary[]>(`/api/projects/${pid}/reports?work_id=${wid}`) });
   const { data: rep, isLoading } = useQuery({
-    queryKey: ["reports", pid, rid ?? "latest"],
-    queryFn: () => (rid ? get<Report>(`/api/reports/${rid}`) : get<Report | null>(`/api/projects/${pid}/reports/latest`)),
+    queryKey: ["reports", pid, wid, rid ?? "latest"], enabled: wid != null,
+    queryFn: () => (rid ? get<Report>(`/api/reports/${rid}`) : get<Report | null>(`/api/projects/${pid}/reports/latest?work_id=${wid}`)),
   });
   const latestId = list?.[0]?.id ?? 0;
   const ask = c.reportAsk;
@@ -141,12 +143,12 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
   };
   const writeBtn = (big?: boolean) => (
     <button className={`${big ? "" : "small "}primary`} onClick={write} disabled={writing || !arts.length}
-      title={!arts.length ? "결과가 생기면 쓸 수 있습니다" : "AI가 작업 흐름·결과·스터디를 읽고 보고서를 새로 씁니다"}>
+      title={!arts.length ? "결과가 생기면 쓸 수 있습니다" : "AI가 ${W.flow}·결과·스터디를 읽고 보고서를 새로 씁니다"}>
       {writing ? <span className="spinner" style={{ width: 12, height: 12 }} /> : <Sparkles size={13} />}
       {writing ? "작성 중…" : "AI 보고서 작성"}</button>
   );
   const save = (fmt: "docx" | "html") =>
-    download(`/api/projects/${pid}/report?format=${fmt}${rep ? `&report_id=${rep.id}` : ""}`, `보고서.${fmt}`).catch((e: Error) => toast(e.message, true));
+    download(`/api/projects/${pid}/report?format=${fmt}&work_id=${wid}${rep ? `&report_id=${rep.id}` : ""}`, `보고서.${fmt}`).catch((e: Error) => toast(e.message, true));
 
   if (isLoading) return <Skeleton rows={6} />;
   if (!rep) {
@@ -154,8 +156,8 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
       <div className="empty-hero">
         <AgentGlyph size={32} state={writing ? "thinking" : "idle"} />
         <b>{writing ? "AI가 보고서를 쓰고 있습니다" : "아직 보고서가 없습니다"}</b>
-        <p>{writing ? "작업 흐름과 결과를 읽고 해석하는 중입니다. 다 쓰면 여기에 바로 보입니다."
-          : "'AI 보고서 작성'을 누르면 AI가 작업 흐름과 결과(그래프·표·이미지)를 해석해 요약·결론·권고가 담긴 보고서를 씁니다. 결과가 바뀌면 다시 누르세요."}</p>
+        <p>{writing ? "${W.flow}과 결과를 읽고 해석하는 중입니다. 다 쓰면 여기에 바로 보입니다."
+          : arts.length ? `${COPY.emptyReport}. 'AI 보고서 작성'을 눌러도 됩니다. AI가 ${W.flow}와 결과(그래프·표·이미지)를 해석해 요약·결론·권고가 담긴 보고서를 씁니다.` : COPY.emptyReport}</p>
         {writeBtn(true)}
       </div>
     );
@@ -226,7 +228,7 @@ export function ReportView({ pid, arts }: { pid: number; arts: Artifact[] }) {
                 <figure key={i} className={`rep-fig kind-${a.kind}`}>
                   <ArtifactBody a={a} />
                   <figcaption><b>{label}</b> {p.caption || a.title}
-                    <button className="link-btn" onClick={() => c.showArtifact(a.id, a.flow_id)} title="작업 흐름 탭에서 이 결과가 나온 단계를 봅니다">단계에서 보기</button>
+                    <button className="link-btn" onClick={() => c.showArtifact(a.id, a.flow_id)} title="${W.flow} 탭에서 이 결과가 나온 단계를 봅니다">단계에서 보기</button>
                   </figcaption>
                 </figure>
               );

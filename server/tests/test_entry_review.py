@@ -573,7 +573,7 @@ def test_study_on_rejected_or_unapproved_flow_does_not_run(client, status):  # n
     f = _approved_flow(client, admin, pid, status)
     client.post(f"/api/studies/{sid}/doe", json={"n": 1, "seed": 9, "flow_id": f["id"]}, headers=admin)
     r = client.post(f"/api/studies/{sid}/run", json={}, headers=admin)
-    assert r.status_code == 403 and "작업 흐름" in r.json()["detail"] and "→" in r.json()["detail"]
+    assert r.status_code == 403 and "Task Flow" in r.json()["detail"] and "→" in r.json()["detail"]
 
 
 # ---------- 출력마다 값이 있는 행으로

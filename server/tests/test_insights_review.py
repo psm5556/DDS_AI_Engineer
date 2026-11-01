@@ -209,11 +209,12 @@ def _html(client, pid, rid, admin):
 def test_saved_edition_keeps_the_values_it_was_written_from(client):
     admin, _ = _auth(client, "admin")
     pid = client.post("/api/projects", json={"name": "판 고정"}, headers=admin).json()["id"]
+    wid = client.post(f"/api/projects/{pid}/works", json={}, headers=admin).json()["id"]
     with SessionLocal() as db:
-        aid = service.publish_artifact(db, pid, "table", "[스터디] 판단 요약", _table([["몇 건?", "처음 값 32건"]])).id
+        aid = service.publish_artifact(db, pid, "table", "[스터디] 판단 요약", _table([["몇 건?", "처음 값 32건"]]), work_id=wid).id
     rep = client.post(f"/api/projects/{pid}/reports", headers=admin, json={"title": "1판", "body": f"## 결과\n\n![요약](artifact:{aid})\n"}).json()
     with SessionLocal() as db:
-        again = service.publish_artifact(db, pid, "table", "[스터디] 판단 요약", _table([["몇 건?", "새 값 50건"]]))
+        again = service.publish_artifact(db, pid, "table", "[스터디] 판단 요약", _table([["몇 건?", "새 값 50건"]]), work_id=wid)
         assert again.id == aid  # 같은 제목이면 카드는 하나로 갱신된다
     html = _html(client, pid, rep["id"], admin)
     assert "처음 값 32건" in html and "새 값 50건" not in html
@@ -496,8 +497,8 @@ def test_renamed_training_cards_replace_the_old_ones_and_keep_their_ids(client):
     with SessionLocal() as db:
         _add_cases(db, sid, rows)
         s = db.get(models.Study, sid)
-        old_a = service.publish_artifact(db, pid, "scatter", f"[{s.name}] y 예측 정확도 (교차검증)", {"series": []}).id
-        old_b = service.publish_artifact(db, pid, "table", f"[{s.name}] Surrogate 성능", {"columns": [], "rows": []}).id
+        old_a = service.publish_study_artifact(db, s, "scatter", f"[{s.name}] y 예측 정확도 (교차검증)", {"series": []}).id
+        old_b = service.publish_study_artifact(db, s, "table", f"[{s.name}] Surrogate 성능", {"columns": [], "rows": []}).id
         service.train(db, s, None)
         titles = {a.id: a.title for a in db.query(models.Artifact).filter_by(project_id=pid)}
         assert titles[old_a] == f"[{s.name}] y 예측과 실제 비교" and titles[old_b] == f"[{s.name}] 예측 정확도 요약", titles

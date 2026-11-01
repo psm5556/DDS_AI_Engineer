@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 
-/** 대화(가운데)와 라이브 캔버스(오른쪽)가 함께 쓰는 상태.
- *  - 대화의 카드에서 결과를 누르면 작업 흐름 탭의 그 단계 결과로 이동
+/** 기록(가운데)과 오른쪽 탭이 함께 쓰는 상태. Task를 바꾸면 화면이 새로 뜨므로 Task마다 처음부터다.
+ *  - 기록의 카드에서 결과를 누르면 흐름 탭의 그 단계 결과로 이동
  *  - '실시간 따라가기'가 켜져 있으면 에이전트가 만든 결과로 캔버스가 자동 전환된다 */
 export type CanvasTab = "flow" | "report" | "data" | "simulator" | "files";
 
@@ -9,6 +9,8 @@ interface Focus { id: number; n: number }
 export interface ReportAsk { at: number; after: number }
 
 interface Ctx {
+  /** 지금 Task. 새 Task 화면에서는 null이고, 탭은 비어 있다 */
+  workId: number | null;
   tab: CanvasTab;
   setTab: (t: CanvasTab) => void;
   flowId: number | null;
@@ -41,7 +43,7 @@ const CanvasCtx = createContext<Ctx | null>(null);
 
 export interface CanvasArrival { tab: CanvasTab; studyId?: number; modelId?: number }
 
-export function CanvasProvider({ children, initial }: { children: ReactNode; initial?: CanvasArrival | null }) {
+export function CanvasProvider({ children, initial, workId = null }: { children: ReactNode; initial?: CanvasArrival | null; workId?: number | null }) {
   const [tab, setTabState] = useState<CanvasTab>(initial?.tab ?? "flow");
   const [flowId, setFlowId] = useState<number | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
@@ -73,9 +75,9 @@ export function CanvasProvider({ children, initial }: { children: ReactNode; ini
   }, [follow]);
 
   const value = useMemo(() => ({
-    tab, setTab, flowId, setFlowId, focus, showArtifact, showFlow, follow, setFollow, autoShow, openRequest, reportAsk, setReportAsk, studyId, setStudyId,
+    workId, tab, setTab, flowId, setFlowId, focus, showArtifact, showFlow, follow, setFollow, autoShow, openRequest, reportAsk, setReportAsk, studyId, setStudyId,
     openSimulator, simModel, clearSimModel, tableOpen, setTableOpen,
-  }), [tab, setTab, flowId, focus, showArtifact, showFlow, follow, autoShow, openRequest, reportAsk, studyId, openSimulator, simModel, clearSimModel, tableOpen]);
+  }), [workId, tab, setTab, flowId, focus, showArtifact, showFlow, follow, autoShow, openRequest, reportAsk, studyId, openSimulator, simModel, clearSimModel, tableOpen]);
   return <CanvasCtx.Provider value={value}>{children}</CanvasCtx.Provider>;
 }
 

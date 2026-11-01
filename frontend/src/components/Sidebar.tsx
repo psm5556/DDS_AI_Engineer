@@ -1,22 +1,30 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  ChevronsUpDown, Inbox, Layers, Loader2, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Send, Settings, Shield, SlidersHorizontal, SquarePen, Star, Store, Sun, Users, Wrench, X,
+  ChevronDown, ChevronRight, ChevronsUpDown, Inbox, Layers, Loader2, Plus, LogOut, Menu, Moon, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search, Send, Settings, Shield, SlidersHorizontal, SquarePen, Star, Store, Sun, Users, Wrench, X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Wordmark } from "./AgentGlyph";
 import { get } from "../api";
 import { useAuth } from "../auth";
-import { FLOW_STATUS } from "../format";
+import { FLOW_STATUS, when } from "../format";
 import { useTheme } from "../theme";
-import type { MarketNotices, Project } from "../types";
+import type { MarketNotices, Project, WorkBrief, WorkSearchHit, WorkSearchResult } from "../types";
+import { COPY, taskPath, W } from "../work/copy";
+import { currentWorkId } from "../work/scope";
+import { hasWorkMenu, WorkMenu } from "../work/WorkMenu";
 import { AgentStatusRow } from "./AgentBadge";
 import { ProjectMenu } from "./ProjectMenu";
 import type { PanelLayout } from "./sideLayout";
 
-/** 프로젝트 이름 앞 상태 표시 — 손이 가야 하는 것(승인 대기·진행 중·실패)만 보인다 */
-function StatusMark({ p }: { p: Project }) {
-  const s = p.flow_status;
+const WORKS_SHOWN = 5;
+const OPEN_KEY = "dds.sideOpen";
+function savedOpen(): Set<number> {
+  try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) ?? "[]") as number[]); } catch { return new Set(); }
+}
+
+/** 상태 표시 — 손이 가야 하는 것(승인 대기·진행 중·실패)만 보인다 */
+function StatusMark({ s }: { s: string | null }) {
   if (s === "in_progress" || s === "approved") return <Loader2 size={13} className="spin side-st run" aria-label="진행 중" />;
   if (s === "review") return <i className="side-st-dot review" title="승인 대기" aria-label="승인 대기" />;
   if (s === "failed") return <i className="side-st-dot failed" title="실패" aria-label="실패" />;
@@ -28,11 +36,11 @@ const VIEW_KEY = "dds.projectView";
 /** 프로젝트 보기. 관리자는 모든 프로젝트를 받지만, 멤버가 아닌 프로젝트는 공유받은 것이 아니다.
  *  그런 프로젝트도 관리자가 즐겨찾기하면 즐겨찾기에, 관리자가 만들고 빠진 프로젝트에 다른 멤버가 있으면 내가 공유한 것에 보인다 */
 const VIEWS: { id: ProjectView; label: string; icon: typeof Layers; empty: string; has: (p: Project, me: number | undefined) => boolean }[] = [
-  { id: "all", label: "전체", icon: Layers, empty: "아직 프로젝트가 없습니다. 하고 싶은 일을 말해 보세요.", has: () => true },
-  { id: "favorite", label: "즐겨찾기", icon: Star, empty: "즐겨찾기한 프로젝트가 없습니다. 프로젝트 메뉴에서 고르면 여기에 모입니다.", has: (p) => p.is_favorite },
-  { id: "sent", label: "내가 공유한 것", icon: Send, empty: "공유한 프로젝트가 없습니다. 프로젝트 메뉴의 멤버에서 동료를 더하면 여기에 보입니다.",
+  { id: "all", label: "전체", icon: Layers, empty: `아직 ${W.project}가 없습니다. 하고 싶은 일을 말해 보세요.`, has: () => true },
+  { id: "favorite", label: "즐겨찾기", icon: Star, empty: `즐겨찾기한 ${W.project}가 없습니다. ${W.project} 메뉴에서 고르면 여기에 모입니다.`, has: (p) => p.is_favorite },
+  { id: "sent", label: "내가 공유한 것", icon: Send, empty: `공유한 ${W.project}가 없습니다. ${W.project} 메뉴의 멤버에서 동료를 더하면 여기에 보입니다.`,
     has: (p, me) => p.owner_id === me && p.members.some((m) => m.user_id !== me) },
-  { id: "received", label: "공유 받은 것", icon: Inbox, empty: "공유 받은 프로젝트가 없습니다. 동료가 멤버로 더하면 여기에 보입니다.",
+  { id: "received", label: "공유 받은 것", icon: Inbox, empty: `공유 받은 ${W.project}가 없습니다. 동료가 멤버로 더하면 여기에 보입니다.`,
     has: (p, me) => p.owner_id !== me && p.members.some((m) => m.user_id === me) },
 ];
 
@@ -43,10 +51,11 @@ function savedProjectView(): ProjectView {
   } catch { return "all"; }
 }
 
-/** 왼쪽 사이드바 (Claude·Codex 데스크톱 방식): Simulator · 구분선 · 새 프로젝트 · 프로젝트 검색 · 프로젝트 보기 아이콘(전체·즐겨찾기·내가 공유한 것·공유 받은 것)
- *  · 고른 보기의 평면 목록(최근 작업 순) · 아래 PC Agent·사용자. 접으면 같은 순서로 아이콘만 남는다.
- *  고른 보기 밖이라도 지금 연 프로젝트는 따로 한 줄 보인다. 방금 만든 프로젝트가 사라진 것처럼 보이지 않게.
- *  대화 전환은 프로젝트 화면 머리글에서 한다 — 사이드바는 한 단계만. */
+/** 왼쪽 사이드바 (Claude·Codex 데스크톱 방식): Simulator · 구분선 · 새 Project · Project 검색 · Project 보기 아이콘(전체·즐겨찾기·내가 공유한 것·공유 받은 것)
+ *  · 고른 보기의 목록(최근 활동 순) · 아래 PC Agent·사용자. 접으면 같은 순서로 아이콘만 남는다.
+ *  고른 보기 밖이라도 지금 연 Project는 따로 한 줄 보인다. 방금 만든 Project가 사라진 것처럼 보이지 않게.
+ *  사이드바는 두 단계다: Project 아래에 Task가 붙고 더 깊어지지 않는다. 연 Project는 항상 펼치고 나머지는 화살표로 펼치며 기억한다.
+ *  Task 줄은 만든 순서(최신이 위)다. 활동 순이면 해석 중에 줄이 뛰어 잘못 누른다. */
 export function Sidebar({ layout }: { layout: PanelLayout }) {
   const { user, logout } = useAuth();
   const nav = useNavigate();
@@ -58,6 +67,9 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
   const [meOpen, setMeOpen] = useState(false);
   const meRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ p: Project; x: number; y: number } | null>(null);
+  const [workMenu, setWorkMenu] = useState<{ w: WorkBrief; x: number; y: number } | null>(null);
+  const [opened, setOpened] = useState<Set<number>>(savedOpen);
+  const [longList, setLongList] = useState<Set<number>>(new Set()); // '이전 Task 더 보기'를 누른 Project
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
   // 검토 대기와 회수·검토 결과는 찾아가야만 보이면 안 된다. 바뀌면 market_updated로 다시 읽고, 놓쳐도 1분 안에 맞는다
   const { data: notices } = useQuery({ queryKey: ["market", "notices"], queryFn: () => get<MarketNotices>("/api/market/notices"), refetchInterval: 60000 });
@@ -65,6 +77,18 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
   const marketBadge = marketCount > 0 && <span className="chip warn market-count" aria-label={`확인할 일 ${marketCount}건`}>{marketCount}</span>;
   const themeLabel = theme === "dark" ? "밝은 화면" : "어두운 화면";
   const pid = Number(loc.pathname.match(/^\/projects\/(\d+)/)?.[1]) || null;
+  const wid = currentWorkId(loc.pathname);
+  const term = q.trim().toLowerCase();
+  // 파일 이름·결과 제목은 서버만 안다. 타자가 멈춘 뒤에 묻는다
+  const [asked, setAsked] = useState("");
+  useEffect(() => { const t = setTimeout(() => setAsked(term), 250); return () => clearTimeout(t); }, [term]);
+  const { data: searched } = useQuery({ queryKey: ["work-search", asked], enabled: asked.length > 0, staleTime: 5000,
+    queryFn: () => get<WorkSearchResult>(`/api/works/search?q=${encodeURIComponent(asked)}`) });
+  const hits = useMemo(() => {
+    const m = new Map<number, WorkSearchHit[]>();
+    if (term && asked === term) for (const h of searched?.works ?? []) m.set(h.project_id, [...(m.get(h.project_id) ?? []), h]);
+    return m;
+  }, [searched, term, asked]);
 
   useEffect(() => { setOpen(false); }, [loc.pathname]);
   useEffect(() => {
@@ -76,14 +100,15 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
     return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k); };
   }, [meOpen]);
 
+  const needsMe = (projects ?? []).some((p) => p.members.some((m) => m.user_id === user?.id) && (p.flow_status === "review" || p.flow_status === "failed"));
   if (layout.collapsed) {
     return (
       <aside className="sidebar rail" aria-label="사이드바 (접힘)">
-        <button className="icon-btn rail-btn" onClick={layout.toggle} aria-label="사이드바 펼치기" title="사이드바 펼치기 (Ctrl+B)"><PanelLeftOpen size={18} /></button>
+        <button className="icon-btn rail-btn" onClick={layout.toggle} aria-label={needsMe ? "사이드바 펼치기 · 승인 대기나 실패 있음" : "사이드바 펼치기"} title="사이드바 펼치기 (Ctrl+B)"><PanelLeftOpen size={18} />{needsMe && <i className="rail-dot" aria-hidden="true" />}</button>
         <NavLink className="icon-btn rail-btn" to="/simulators" aria-label="Simulator" title="Simulator"><SlidersHorizontal size={18} /></NavLink>
         <NavLink className="icon-btn rail-btn market-rail" to="/market" aria-label="마켓" title="마켓: 사내 스킬 찾기·설치·등록"><Store size={18} />{marketBadge}</NavLink>
         <hr className="rail-sep" />
-        <Link className="icon-btn rail-btn" to="/" aria-label="새 프로젝트" title="새 프로젝트"><SquarePen size={18} /></Link>
+        <Link className="icon-btn rail-btn" to="/" aria-label={COPY.newProject} title={COPY.newProjectTip}><SquarePen size={18} /></Link>
         <span className="grow" />
         <AgentStatusRow compact />
         <Link className="icon-btn rail-btn" to="/tools" aria-label="CAD·CAE 툴" title="CAD·CAE 툴"><Wrench size={18} /></Link>
@@ -92,8 +117,8 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
     );
   }
 
-  const term = q.trim().toLowerCase();
-  const found = (projects ?? []).filter((p) => !term || p.name.toLowerCase().includes(term) || p.description.toLowerCase().includes(term));
+  const found = (projects ?? []).filter((p) => !term || p.name.toLowerCase().includes(term) || p.description.toLowerCase().includes(term)
+    || p.works?.some((w) => w.name.toLowerCase().includes(term)) || hits.has(p.id));
   const chosen = VIEWS.find((v) => v.id === view) ?? VIEWS[0];
   const list = found.filter((p) => chosen.has(p, user?.id)); // 서버가 최근 작업 순으로 준다
   const current = projects?.find((p) => p.id === pid);
@@ -106,21 +131,76 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
     setView(v);
     try { localStorage.setItem(VIEW_KEY, v); } catch { /* 이번 화면에서만 기억한다 */ }
   };
-  const item = (p: Project) => {
-    const st = p.flow_status ? FLOW_STATUS[p.flow_status].label : "";
+  const toggleOpen = (id: number) => setOpened((old) => {
+    const next = new Set(old);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify([...next])); } catch { /* 이번 화면에서만 기억한다 */ }
+    return next;
+  });
+  const workRow = (w: WorkBrief, sub?: string) => {
+    const others = !w.mine;
+    const st = w.status ? FLOW_STATUS[w.status]?.label : "";
+    const tip = [w.name, COPY.made(when(w.created_at)), w.model_file, w.n_cases ? COPY.cases(w.n_cases) : "", st].filter(Boolean).join(" · ");
     return (
-      <div key={p.id} className={`side-item ${p.id === pid ? "active" : ""}`}
-        onContextMenu={(e) => { e.preventDefault(); setMenu({ p, x: e.clientX, y: e.clientY }); }}>
-        <NavLink to={`/projects/${p.id}`} className="side-link" title={[p.name, st].filter(Boolean).join(" · ")}>
-          <span className="side-name">{p.name}</span>
-          {/* 즐겨찾기 보기에서는 모두 즐겨찾기이므로 표시하지 않는다 */}
-          {p.is_favorite && view !== "favorite" && <Star size={12} className="side-fav" fill="currentColor" aria-label="즐겨찾기" />}
-          {p.members.length > 1 && <Users size={12} className="side-meta" aria-label={`멤버 ${p.members.length}명`} />}
-          <StatusMark p={p} />
+      <div key={w.id} className={`side-item side-work ${w.id === wid ? "active" : ""}`} data-work={w.id}
+        onContextMenu={(e) => { if (hasWorkMenu(w)) { e.preventDefault(); setWorkMenu({ w, x: e.clientX, y: e.clientY }); } }}>
+        <NavLink to={taskPath(w.project_id, w.id)} className="side-link" title={tip}>
+          <span className="side-name">{w.name}{others && <span className="side-owner"> · {w.owner_name}</span>}{sub && <span className="side-sub">{sub}</span>}</span>
+          <StatusMark s={w.status} />
+          {st && (w.status === "review" || w.status === "failed" || w.status === "in_progress" || w.status === "approved") && <span className={`side-st-text ${w.status}`}>{w.status === "approved" ? FLOW_STATUS.in_progress.label : st}</span>}
         </NavLink>
-        <button className="side-more" aria-label={`${p.name} 메뉴`} aria-haspopup="menu" title="이름 바꾸기 · 즐겨찾기 · 멤버 · 폴더 열기 · 삭제"
-          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ p, x: r.left, y: r.bottom + 4 }); }}>
-          <MoreHorizontal size={15} /></button>
+        {hasWorkMenu(w) && <button className="side-more" aria-label={`${w.name} ${COPY.menuTask}`} aria-haspopup="menu" title={COPY.menuTask}
+          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setWorkMenu({ w, x: r.left, y: r.bottom + 4 }); }}>
+          <MoreHorizontal size={15} /></button>}
+      </div>
+    );
+  };
+  const item = (p: Project) => {
+    const found = term ? hits.get(p.id) : undefined;
+    const nameHit = term ? (p.works ?? []).filter((w) => w.name.toLowerCase().includes(term)) : [];
+    const searching = !!term && (!!found?.length || nameHit.length > 0);
+    const open = p.id === pid || opened.has(p.id) || searching;
+    const st = p.flow_status ? FLOW_STATUS[p.flow_status].label : "";
+    const works = p.works ?? [];
+    const long = longList.has(p.id);
+    // 지금 연 Task는 '더 보기' 뒤에 숨지 않는다
+    const shown = long ? works : works.filter((w, i) => i < WORKS_SHOWN || w.id === wid);
+    const hidden = works.length - shown.length;
+    const hitRows = searching ? works.flatMap((w) => {
+      const hit = found?.find((h) => h.work_id === w.id);
+      if (!hit && !nameHit.includes(w)) return [];
+      return [workRow(w, ` · ${when(w.created_at)}${hit?.model_file ? ` · ${hit.model_file}` : w.model_file ? ` · ${w.model_file}` : ""}`)];
+    }) : [];
+    return (
+      <div key={p.id} className={`side-project ${open ? "open" : ""}`}>
+        <div className={`side-item ${p.id === pid ? "here" : ""}`} onContextMenu={(e) => { e.preventDefault(); setMenu({ p, x: e.clientX, y: e.clientY }); }}>
+          <button className="side-caret" disabled={p.id === pid} aria-expanded={open} aria-label={`${p.name} ${open ? "접기" : "펼치기"}`}
+            title={p.id === pid ? "지금 연 " + W.project + "는 항상 펼칩니다" : open ? "접기" : "펼치기"} onClick={() => toggleOpen(p.id)}>
+            {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button>
+          <Link to={`/projects/${p.id}`} className="side-link" title={[p.name, p.description, st].filter(Boolean).join(" · ")}>
+            <span className="side-name">{p.name}</span>
+            {/* 즐겨찾기 보기에서는 모두 즐겨찾기이므로 표시하지 않는다 */}
+            {p.is_favorite && view !== "favorite" && <Star size={12} className="side-fav" fill="currentColor" aria-label="즐겨찾기" />}
+            {p.members.length > 1 && <Users size={12} className="side-meta" aria-label={`멤버 ${p.members.length}명`} />}
+            {/* 펼치면 Task 줄에 있으므로 같은 상태를 두 번 보이지 않는다 */}
+            {!open && <StatusMark s={p.flow_status} />}
+          </Link>
+          <button className="side-more" aria-label={`${p.name} ${COPY.menuProject}`} aria-haspopup="menu" title={COPY.menuProject}
+            onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu({ p, x: r.left, y: r.bottom + 4 }); }}>
+            <MoreHorizontal size={15} /></button>
+        </div>
+        {open && (
+          <div className="side-works">
+            {searching ? hitRows : (
+              <>
+                <Link to={`/projects/${p.id}/w/new`} className="side-newtask" title={COPY.newTaskTip}><Plus size={13} />{COPY.newTask}</Link>
+                {shown.map((w) => workRow(w))}
+                {hidden > 0 && <button className="side-moretasks" onClick={() => setLongList((s) => new Set(s).add(p.id))}>{COPY.moreTasks(hidden)}</button>}
+                {long && works.length > WORKS_SHOWN && <button className="side-moretasks" onClick={() => setLongList((s) => { const n = new Set(s); n.delete(p.id); return n; })}>{COPY.fewerTasks}</button>}
+              </>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -132,7 +212,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         <button className="icon-btn" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={open ? "메뉴 닫기" : "메뉴 열기"}>
           {open ? <X size={18} /> : <Menu size={18} />}</button>
         <b>{current ? current.name : "DDS Conversa"}</b>
-        <Link className="icon-btn" to="/" aria-label="새 프로젝트"><SquarePen size={17} /></Link>
+        <Link className="icon-btn" to="/" aria-label={COPY.newProject}><SquarePen size={17} /></Link>
       </div>
       <div className="side-panel">
         <div className="side-brand-row">
@@ -143,13 +223,13 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
           <NavLink className="side-nav" to="/simulators" title="내 Simulator와 공유받은 Simulator"><SlidersHorizontal size={16} />Simulator</NavLink>
           <NavLink className="side-nav" to="/market" title="사내 스킬 찾기·설치·등록"><Store size={16} />마켓{marketBadge}</NavLink>
           <hr className="side-sep" />
-          <button className="side-nav" onClick={() => nav("/")}><SquarePen size={16} />새 프로젝트</button>
+          <button className="side-nav" title={COPY.newProjectTip} onClick={() => nav("/")}><SquarePen size={16} />{COPY.newProject}</button>
           <label className="side-nav side-find">
             <Search size={16} />
-            <input type="search" placeholder="프로젝트 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="프로젝트 검색" />
+            <input type="search" placeholder={COPY.projectSearch} value={q} onChange={(e) => setQ(e.target.value)} aria-label={COPY.projectSearch} />
           </label>
         </nav>
-        <div className="side-views" role="group" aria-label="프로젝트 보기">
+        <div className="side-views" role="group" aria-label={`${W.project} 보기`}>
           {VIEWS.map((v) => {
             const n = found.filter((p) => v.has(p, user?.id)).length;
             const dot = v.id === "all" && alert;
@@ -167,7 +247,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         <div className="side-body">
           {projects === undefined ? <p className="small muted side-empty">불러오는 중</p> : (
             <>
-              {pinned && <div className="side-group side-pinned"><h4>지금 연 프로젝트</h4>{item(pinned)}</div>}
+              {pinned && <div className="side-group side-pinned"><h4>지금 연 {W.project}</h4>{item(pinned)}</div>}
               <div className="side-group">
                 <h4>{chosen.label}</h4>
                 {list.map(item)}
@@ -198,6 +278,7 @@ export function Sidebar({ layout }: { layout: PanelLayout }) {
         )}
       </div>
       {menu && <ProjectMenu p={menu.p} at={menu} onClose={() => setMenu(null)} />}
+      {workMenu && <WorkMenu work={workMenu.w} at={workMenu} onClose={() => setWorkMenu(null)} />}
       <div className="side-resizer" role="separator" aria-orientation="vertical" aria-label="사이드바 너비 조절"
         aria-valuenow={layout.width} aria-valuemin={layout.min} aria-valuemax={layout.max} tabIndex={0}
         title="끌어서 너비 조절 · 두 번 누르면 기본 너비" onPointerDown={(e) => {

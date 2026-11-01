@@ -1,26 +1,29 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, MessageSquare, PanelRight, Pencil, SquarePen, Trash2, Users } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, PanelRight, Users, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { del, get, put } from "../api";
-import { useAuth } from "../auth";
+import { ApiError, get } from "../api";
 import { CanvasProvider, useCanvas, type CanvasArrival, type CanvasTab } from "../canvas/CanvasContext";
 import { CanvasPanel } from "../canvas/CanvasPanel";
 import { TableImportHost } from "../canvas/TableImport";
 import { MembersPanel } from "../canvas/views";
 import { ChatView } from "../chat/ChatView";
 import { Skeleton } from "../components/Skeleton";
-import { Confirm, Modal } from "../components/Modal";
-import { ProjectMenu, RenameModal } from "../components/ProjectMenu";
+import { Modal } from "../components/Modal";
+import { ProjectMenu } from "../components/ProjectMenu";
 import { useConversaLayout } from "../components/sideLayout";
-import { when } from "../format";
-import { useToast } from "../toast";
-import type { ChatSession, Project } from "../types";
+import type { ChatSession, Project, WorkDetail } from "../types";
+import { COPY, taskPath } from "../work/copy";
+import { pickWork } from "../work/scope";
+import { hasWorkMenu, WorkMenu } from "../work/WorkMenu";
 
-/** 프로젝트 작업 공간: 가운데 대화(주인공) + 오른쪽 캔버스(켜고 끄기).
- *  주소: /projects/:pid (최근 대화) · /projects/:pid/c/:sid (특정 대화) · /projects/:pid/new (새 대화) */
+const LEGACY_SEEN = "dds.legacyNoticeSeen";
+
+/** Project 화면: 가운데 Task의 기록(주인공) + 오른쪽 탭(켜고 끄기). 탭은 모두 이 Task의 것만 보여 준다.
+ *  주소: /projects/:pid (내 최근 Task로 넘김) · /projects/:pid/w/:wid · /projects/:pid/w/new (새 Task, 보낼 때 만들어진다)
+ *  옛 주소 /projects/:pid/c/:sid는 그 Task로, /projects/:pid/new는 /w/new로 넘긴다. */
 export default function WorkspacePage() {
-  const { pid: pidS, sid: sidS } = useParams();
+  const { pid: pidS, wid: widS, sid: sidS } = useParams();
   const pid = Number(pidS);
   const loc = useLocation();
   const nav = useNavigate();
@@ -33,69 +36,115 @@ export default function WorkspacePage() {
     : wide;
   const [members, setMembers] = useState(false);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const [workMenuAt, setWorkMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const isNew = widS === "new";
+  const oldNew = !widS && !sidS && loc.pathname.endsWith("/new");
+  const wid = widS && !isNew ? Number(widS) : null;
   // 첫 화면에서 넘어온 요청(과 첨부)
   const [initial, setInitial] = useState<{ text: string; attachmentIds: number[] } | null>(() => {
     const st = loc.state as { prompt?: string; attachmentIds?: number[] } | null;
     return st?.prompt || st?.attachmentIds?.length ? { text: st.prompt ?? "", attachmentIds: st.attachmentIds ?? [] } : null;
   });
   // '표로 바로 Simulator'나 넓은 Simulator 화면에서 넘어오면 그 Simulator 탭부터 연다.
-  // 주소 이력의 state는 새로고침에도 남으므로 읽자마자 지운다. 평범한 프로젝트 주소로 다시 와도 탭을 강제하지 않게
+  // 주소 이력의 state는 새로고침에도 남으므로 읽자마자 지운다. 평범한 주소로 다시 와도 탭을 강제하지 않게
   const [arrival, setArrival] = useState(() => arrivalFrom(loc.state));
   useEffect(() => {
+    if (!wid && !isNew) return; // 아직 넘기는 중이다. 도착한 화면이 읽어야 한다
     const a = arrivalFrom(loc.state);
     if (!a) return;
     setArrival(a);
     const { canvasTab: _t, studyId: _s, modelId: _m, ...rest } = loc.state as Record<string, unknown>;
     nav(loc.pathname + loc.search, { replace: true, state: Object.keys(rest).length ? rest : null });
-  }, [loc.state, loc.pathname, loc.search, nav]);
-  const isNew = loc.pathname.endsWith("/new");
-  const { data: p, error } = useQuery({ queryKey: ["project", pid], queryFn: () => get<Project>(`/api/projects/${pid}`) });
-  const { data: sessions } = useQuery({ queryKey: ["sessions", pid], queryFn: () => get<ChatSession[]>(`/api/projects/${pid}/sessions`) });
+  }, [loc.state, loc.pathname, loc.search, nav, wid, isNew]);
 
-  // 대화를 고르지 않았으면 가장 최근 대화로. 주소가 바뀌면 화면이 새로 뜨므로 도착 정보를 함께 넘긴다. 안 넘기면 대화가 있는 프로젝트에서 Simulator 탭을 잃는다
+  const { data: p, error } = useQuery({ queryKey: ["project", pid], queryFn: () => get<Project>(`/api/projects/${pid}`) });
+  const { data: work, error: workError } = useQuery({
+    queryKey: ["work", wid], enabled: wid != null, retry: false,
+    queryFn: () => get<WorkDetail>(`/api/works/${wid}`),
+  });
+  const lost = workError instanceof ApiError && workError.status === 404; // 지워진 Task의 주소다
+
+  // 주소 넘기기: 프로젝트 줄 → 내 최근 Task, 옛 대화 주소 → 그 Task. 표나 Simulator에서 온 도착 정보를 잃지 않게 state를 그대로 넘긴다
   useEffect(() => {
-    if (!sidS && !isNew && sessions?.length) {
-      nav(`/projects/${pid}/c/${sessions[0].id}`, { replace: true, state: arrival && { canvasTab: arrival.tab, studyId: arrival.studyId, modelId: arrival.modelId } });
+    if (oldNew) { nav(`/projects/${pid}/w/new`, { replace: true, state: loc.state }); return; }
+    if (sidS) {
+      get<ChatSession[]>(`/api/projects/${pid}/sessions`).then((rows) => {
+        const hit = rows.find((s) => s.id === Number(sidS));
+        nav(taskPath(pid, hit?.work_id ?? null), { replace: true, state: loc.state });
+      }).catch(() => nav(taskPath(pid), { replace: true }));
+      return;
     }
-  }, [sidS, isNew, sessions, pid, nav, arrival]);
-  const onSession = useCallback((id: number) => nav(`/projects/${pid}/c/${id}`, { replace: true }), [nav, pid]);
-  const sid = sidS ? Number(sidS) : null;
+    if (!widS && p) {
+      const target = pickWork(p.works);
+      nav(target ? taskPath(pid, target.id) : `/projects/${pid}/w/new`, { replace: true, state: loc.state });
+    }
+    if (lost) nav(taskPath(pid), { replace: true });
+    if (work && work.project_id !== pid) nav(taskPath(work.project_id, work.id), { replace: true });
+  }, [oldNew, sidS, widS, p, pid, nav, loc.state, lost, work]);
+
+  const onWork = useCallback((id: number) => nav(taskPath(pid, id), { replace: true }), [nav, pid]);
 
   if (error) return <div className="page"><div className="notice err">{(error as Error).message}</div></div>;
-  if (!p) return <Skeleton page rows={5} />;
+  if (workError && !lost) return <div className="page"><div className="notice err">{(workError as Error).message}</div></div>;
+  if (!p || (!isNew && !work)) return <Skeleton page rows={5} />;
   const canvasOn = !canvasLayout.collapsed;
+  const menu = !!work && hasWorkMenu(work);
+  const others = !!work && !work.mine;
 
   return (
-    <CanvasProvider initial={arrival}>
+    <CanvasProvider initial={arrival} workId={wid}>
       <ApplyArrival arrival={arrival} />
-      <TableImportHost pid={pid} />
+      <TableImportHost pid={pid} wid={wid} mine={!!work?.mine} />
       <div className={`workspace ${canvasOn ? "" : "canvas-collapsed"}`} style={{ "--canvas-w": `${canvasLayout.width}px` } as React.CSSProperties}>
         <div className="ws-main">
           <header className="ws-head">
-            <button className="ws-crumb ws-project" title="프로젝트 메뉴 — 이름 바꾸기 · 즐겨찾기 · 멤버 · 폴더 열기 · 삭제"
+            <button className="ws-crumb ws-project" title={COPY.menuProject}
               onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenuAt({ x: r.left, y: r.bottom + 4 }); }}>
               <span className="t">{p.name}</span><ChevronDown size={14} />
             </button>
             <span className="ws-sep" aria-hidden="true">/</span>
-            <ConversationSwitcher p={p} sessions={sessions ?? []} current={sid} />
+            {!work ? <span className="ws-crumb ws-task static"><span className="t">{COPY.newTask}</span></span> : (
+              <>
+                {menu ? (
+                  <button className="ws-crumb ws-task" title={COPY.menuTask}
+                    onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setWorkMenuAt({ x: r.left, y: r.bottom + 4 }); }}>
+                    <span className="t">{work.name}</span><ChevronDown size={14} />
+                  </button>
+                ) : <span className="ws-crumb ws-task static"><span className="t">{work.name}</span></span>}
+                {others && <span className="ws-owner small muted">{work.owner_name} · {COPY.viewOnly}</span>}
+              </>
+            )}
             <span className="grow" />
             <button className="ws-share" onClick={() => setMembers(true)} title={`멤버 ${p.members.length}명 — 함께 볼 사람 추가`} aria-label="멤버·공유">
               <Users size={15} />공유{p.members.length > 1 && <small>{p.members.length}</small>}</button>
             <button className={`icon-btn ws-icon ${canvasOn ? "on" : ""}`} onClick={canvasLayout.toggle} aria-pressed={canvasOn}
-              title={canvasOn ? "캔버스 닫기 (Ctrl+J)" : "캔버스 열기 — 작업 흐름·결과·데이터 (Ctrl+J)"} aria-label="캔버스 열기/닫기"><PanelRight size={17} /></button>
+              title={canvasOn ? COPY.canvasClose : COPY.canvasOpen} aria-label={canvasOn ? COPY.canvasClose : COPY.canvasOpen}><PanelRight size={17} /></button>
           </header>
-          <ChatView key={sid ?? "new"} pid={pid} sid={sid} onSession={onSession}
+          {work?.legacy && <LegacyNotice />}
+          <ChatView key={wid ?? "new"} pid={pid} wid={wid} work={work ?? null} firstTask={!p.works?.length} onWork={onWork}
             initialPrompt={initial} onInitialSent={() => setInitial(null)} />
         </div>
-        <CanvasPanel pid={pid} layout={canvasLayout} />
+        <CanvasPanel pid={pid} wid={wid} work={work ?? null} layout={canvasLayout} />
       </div>
       {menuAt && <ProjectMenu p={p} at={menuAt} onClose={() => setMenuAt(null)} />}
+      {workMenuAt && work && <WorkMenu work={work} at={workMenuAt} onClose={() => setWorkMenuAt(null)} />}
       {members && (
         <Modal title={`멤버·공유 — ${p.name}`} onClose={() => setMembers(false)}>
           <MembersPanel p={p} />
         </Modal>
       )}
     </CanvasProvider>
+  );
+}
+
+/** 이전 기록을 처음 볼 때 한 번만 알린다 */
+function LegacyNotice() {
+  const [seen, setSeen] = useState(() => { try { return !!localStorage.getItem(LEGACY_SEEN); } catch { return true; } });
+  if (seen) return null;
+  const close = () => { setSeen(true); try { localStorage.setItem(LEGACY_SEEN, "1"); } catch { /* 이번 화면에서만 기억한다 */ } };
+  return (
+    <div className="notice info ws-legacy" role="status"><span className="grow">{COPY.legacyFirst}</span>
+      <button className="icon-btn" aria-label="닫기" title="닫기" onClick={close}><X size={14} /></button></div>
   );
 }
 
@@ -124,70 +173,4 @@ function useNarrow() {
     return () => m.removeEventListener("change", h);
   }, []);
   return v;
-}
-
-/** 머리글의 대화 전환: 현재 대화 이름 ▾ → 새 대화 · 대화 목록(이름 바꾸기·삭제) */
-function ConversationSwitcher({ p, sessions, current }: { p: Project; sessions: ChatSession[]; current: number | null }) {
-  const { user } = useAuth();
-  const qc = useQueryClient();
-  const toast = useToast();
-  const nav = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [renaming, setRenaming] = useState<ChatSession | null>(null);
-  const [removing, setRemoving] = useState<ChatSession | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", h);
-    document.addEventListener("keydown", k);
-    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k); };
-  }, [open]);
-  const cur = sessions.find((s) => s.id === current);
-  const canEdit = (s: ChatSession) => s.user_id === user?.id || p.user_role === "master" || !!user?.is_admin;
-  const refresh = () => qc.invalidateQueries({ queryKey: ["sessions", p.id] });
-  const go = (to: string) => { setOpen(false); nav(to); };
-
-  return (
-    <div className="ws-conv" ref={ref}>
-      <button className="ws-crumb" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open} title="대화 바꾸기 · 새 대화">
-        <span className="t">{cur ? cur.title : "새 대화"}</span>
-        {sessions.length > 1 && <small className="muted">{sessions.length}</small>}
-        <ChevronDown size={14} />
-      </button>
-      {open && (
-        <div className="ws-conv-menu" role="menu">
-          <button role="menuitem" className="ws-conv-new" onClick={() => go(`/projects/${p.id}/new`)}><SquarePen size={14} />새 대화</button>
-          {sessions.length > 0 && <div className="ws-conv-sep">대화 {sessions.length}</div>}
-          <div className="ws-conv-list">
-            {sessions.map((s) => (
-              <div key={s.id} className={`ws-conv-item ${s.id === current ? "on" : ""}`}>
-                <button role="menuitem" className="ws-conv-open" onClick={() => go(`/projects/${p.id}/c/${s.id}`)} title={s.title}>
-                  {s.id === current ? <Check size={14} /> : <MessageSquare size={14} />}
-                  <span className="t">{s.title}</span>
-                  <span className="m">{s.user_id !== user?.id ? "멤버 · " : ""}{when(s.created_at)}</span>
-                </button>
-                {canEdit(s) && (
-                  <span className="ws-conv-acts">
-                    <button className="icon-btn" title="이름 바꾸기" aria-label={`${s.title} 이름 바꾸기`} onClick={() => { setOpen(false); setRenaming(s); }}><Pencil size={13} /></button>
-                    <button className="icon-btn danger" title="삭제" aria-label={`${s.title} 삭제`} onClick={() => { setOpen(false); setRemoving(s); }}><Trash2 size={13} /></button>
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {renaming && <RenameModal title="대화 이름 바꾸기" value={renaming.title} onClose={() => setRenaming(null)}
-        onSave={(title) => put(`/api/sessions/${renaming.id}`, { title }).then(() => { refresh(); setRenaming(null); toast("이름을 바꿨습니다"); })
-          .catch((e: Error) => toast(e.message, true))} />}
-      {removing && <Confirm title="대화 삭제" danger confirmLabel="삭제" onClose={() => setRemoving(null)}
-        message={<>‘{removing.title}’ 대화와 메시지가 삭제됩니다. 작업 흐름·결과·데이터는 프로젝트에 남습니다.</>}
-        onConfirm={() => del(`/api/sessions/${removing.id}`).then(() => {
-          refresh(); toast("대화를 삭제했습니다");
-          if (removing.id === current) nav(`/projects/${p.id}/new`);
-        }).catch((e: Error) => toast(e.message, true))} />}
-    </div>
-  );
 }

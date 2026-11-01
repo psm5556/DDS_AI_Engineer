@@ -176,7 +176,7 @@ def test_fallback_html_frame(fallback):
     assert "모음 과제" in fallback.html and "자동" in fallback.html
     # 작업 흐름·결과 제목이 목차가 되고, 그 아래 소제목(결과 안의 제목)은 목차에 넣지 않는다
     names = {i: t for i, t in page.headings}
-    assert [names[i] for i in page.toc_links] == ["작업 흐름 — 흐름", "결론", "케이스", "수렴"]
+    assert [names[i] for i in page.toc_links] == ["Task Flow — 흐름", "결론", "케이스", "수렴"]
     assert "소제목" in fallback.html and "<h3>소제목</h3>" in fallback.html
 
 

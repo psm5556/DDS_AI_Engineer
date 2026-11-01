@@ -78,7 +78,7 @@ def create_report(body: schemas.ReportCreate, scope: work_service.WorkScope = De
     have = {a for (a,) in db.query(models.Artifact.id).filter(models.Artifact.project_id == project.id,
                                                                models.Artifact.id.in_(ids))} if ids else set()
     if ids - have:
-        raise HTTPException(400, f"이 프로젝트에 없는 결과를 넣었습니다: artifact {', '.join(map(str, sorted(ids - have)))} "
+        raise HTTPException(400, f"이 Project에 없는 결과를 넣었습니다: artifact {', '.join(map(str, sorted(ids - have)))} "
                                  "→ report-context의 results에 있는 id만 쓰세요")
     # 저장한 판은 문서다. 글이 인용한 표·그림의 숫자를 쓸 때 값으로 함께 저장한다. 다시 게시해도 이 판의 숫자는 바뀌지 않는다
     arts = db.query(models.Artifact).filter(models.Artifact.id.in_(ids)).all() if ids else []

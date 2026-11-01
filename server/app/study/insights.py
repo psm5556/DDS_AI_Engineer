@@ -3179,7 +3179,7 @@ def publish(db: Session, study: models.Study, flow_id: int | None, node_id: str 
         # 화면과 같은 규칙이다. 아직 판단하지 못한 줄은 보고서에도 숙제처럼 남기지 않는다
         rows = [[x["title"], x["state_label"], x["sentence"]] for x in secs.values() if not x.get("pending") and not x.get("collapsed") and x["state"] != "unknown"]
         if rows:
-            put("table", f"[{name}] 판단 요약 (자세히 보기: 작업 흐름 탭)", {"columns": ["질문", "상태", "결론"], "rows": rows})
+            put("table", f"[{name}] 판단 요약 (자세히 보기: Task Flow 탭)", {"columns": ["질문", "상태", "결론"], "rows": rows})
     inf = secs.get("influence")
     if inf and (want is None or "influence" in want):
         for v in (inf.get("variants") or [])[:2]:

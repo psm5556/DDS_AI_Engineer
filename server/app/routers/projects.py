@@ -94,7 +94,7 @@ def get_project(project: models.Project = Depends(get_project_for_member),
 @router.put("/{project_id}", response_model=schemas.ProjectResponse)
 async def update_project(project_id: int, body: schemas.ProjectUpdate, user: models.User = Depends(get_current_user),
                          db: Session = Depends(get_db)):
-    p = get_or_404(db, models.Project, project_id, "프로젝트")
+    p = get_or_404(db, models.Project, project_id, "Project")
     require_master(project_id, user, db)
     if p.version != body.version:
         raise HTTPException(409, "다른 사용자가 수정했습니다. 새로고침 후 다시 시도하세요.")
@@ -112,7 +112,7 @@ async def update_project(project_id: int, body: schemas.ProjectUpdate, user: mod
 
 @router.delete("/{project_id}")
 async def delete_project(project_id: int, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
-    p = get_or_404(db, models.Project, project_id, "프로젝트")
+    p = get_or_404(db, models.Project, project_id, "Project")
     require_master(project_id, user, db)
     await manager.broadcast({"type": "project_updated", "project_id": p.id, "data": {"id": p.id, "deleted": True}})
     for chat_id, in db.query(models.ChatSession.id).filter_by(project_id=p.id):
@@ -145,7 +145,7 @@ def remove_favorite(project_id: int, user: models.User = Depends(get_current_use
 @router.put("/{project_id}/members/{user_id}", response_model=schemas.ProjectResponse)
 async def upsert_member(project_id: int, user_id: int, body: schemas.MemberUpsert,
                         user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
-    p = get_or_404(db, models.Project, project_id, "프로젝트")
+    p = get_or_404(db, models.Project, project_id, "Project")
     require_master(project_id, user, db)
     get_or_404(db, models.User, user_id, "사용자")
     m = db.query(models.ProjectMember).filter_by(project_id=project_id, user_id=user_id).first()
@@ -162,7 +162,7 @@ async def upsert_member(project_id: int, user_id: int, body: schemas.MemberUpser
 @router.delete("/{project_id}/members/{user_id}", response_model=schemas.ProjectResponse)
 async def remove_member(project_id: int, user_id: int, user: models.User = Depends(require_jwt),
                         db: Session = Depends(get_db)):
-    p = get_or_404(db, models.Project, project_id, "프로젝트")
+    p = get_or_404(db, models.Project, project_id, "Project")
     require_master(project_id, user, db)
     masters = db.query(models.ProjectMember).filter_by(project_id=project_id, role="master").count()
     m = db.query(models.ProjectMember).filter_by(project_id=project_id, user_id=user_id).first()
