@@ -130,6 +130,17 @@ def test_project_name_is_not_replaced_once_in_use(env, tmp_path):
     assert env.c.get(f"/api/projects/{env.pid}", headers=env.h).json()["name"] == "바꿔 달라고 함"
 
 
+def test_second_task_does_not_rename_the_project(env, tmp_path):
+    """결과는 Task별로 보이므로, 지금 Task만 보고 '아직 안 쓰는 Project'로 읽으면 Task 이름이 Project 이름을 덮는다."""
+    dds_flow.set_project_info(name="드럼 세탁기")
+    dds_study.import_table(str(_write_csv(tmp_path / "a.csv", _rows(8))), name="첫 Task의 표")
+    second = env.c.post(f"/api/projects/{env.pid}/works", json={"name": "두 번째"}, headers=env.h).json()
+    dds_flow.api.client.headers["X-DDS-Work"] = str(second["id"])  # 실제로는 세션의 DDS_WORK_ID가 이 헤더가 된다
+    assert dds_flow.api.get(f"/api/projects/{env.pid}/studies") == []  # 정말 이 Task에는 아무것도 없다
+    assert dds_flow.set_project_info(name="두 번째 Task의 일")["skipped"]
+    assert env.c.get(f"/api/projects/{env.pid}", headers=env.h).json()["name"] == "드럼 세탁기"
+
+
 # ---------- 데모: 있는 모델로 하는 일, 반려
 @pytest.fixture()
 def deployed(env, tmp_path):

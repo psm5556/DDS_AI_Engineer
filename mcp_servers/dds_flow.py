@@ -128,7 +128,8 @@ def set_project_info(name: str | None = None, description: str | None = None, pr
     스터디·Task Flow가 이미 있는 Project는 바꾸지 않는다. 멤버 모두가 쓰는 이름이다. 사용자가 이름을 바꿔 달라고 했을 때만 force=True."""
     pid = resolve_pid(project_id)
     p = api.get(f"/api/projects/{pid}")
-    if not force and (api.get(f"/api/projects/{pid}/studies") or api.get(f"/api/projects/{pid}/flows/summary")):
+    # 다른 Task의 것까지 본다. 지금 Task만 보면 두 번째 Task의 첫 응답이 Project 이름을 그 Task 이름으로 바꾼다
+    if not force and (api.get(f"/api/projects/{pid}/studies", all_works="true") or api.get(f"/api/projects/{pid}/flows/summary", all_works="true")):
         return {"project_id": pid, "name": p["name"], "description": p["description"], "skipped": True,
                 "note": "이미 쓰고 있는 Project라 이름을 바꾸지 않았습니다. 사용자가 바꿔 달라고 하면 force=True로 부른다."}
     body = {"version": p["version"]}
