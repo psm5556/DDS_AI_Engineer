@@ -103,9 +103,9 @@ def _check_constraints(constraints: list[dict]):
         raise ImportRejected(str(e)) from e
 
 
-def _check_flow(db: Session, project_id: int, flow_id):
+def _check_flow(db: Session, project_id: int, flow_id, work_id: int | None = None):
     try:
-        service.check_flow(db, project_id, flow_id)
+        service.check_flow(db, project_id, flow_id, work_id)
     except ValueError as e:
         raise ImportRejected(str(e)) from e
 
@@ -352,7 +352,7 @@ def _publish_report(db: Session, study: models.Study, rep: dict, flow_id, node_i
     for c in rep.get("range_changes") or []:
         lines.append(f"- 입력 '{c['name']}' 범위를 넓혔습니다: {c['old_lower']:g}~{c['old_upper']:g} → {c['lower']:g}~{c['upper']:g}")
     lines += [f"- {w}" for w in rep.get("warnings") or []]
-    service.publish_artifact(db, study.project_id, "markdown", f"[{study.name}] 불러온 데이터 확인", {"text": "\n".join(lines)}, flow_id, node_id)
+    service.publish_study_artifact(db, study, "markdown", f"[{study.name}] 불러온 데이터 확인", {"text": "\n".join(lines)}, flow_id, node_id)
 
 
 def _finish(db: Session, study: models.Study, rep: dict, flow_id, node_id) -> dict:
@@ -371,7 +371,7 @@ def _table_hash(inputs: list[dict], outputs: list[dict], rows: list[dict]) -> st
     return h.hexdigest()[:32]
 
 
-def import_new(db: Session, project_id: int, body: dict, user_id: int) -> dict:
+def import_new(db: Session, project_id: int, body: dict, user_id: int, work_id: int | None = None) -> dict:
     """표 → 새 스터디. 같은 표를 다시 넣으면 새 스터디를 만들지 않고 기존 스터디를 돌려준다."""
     inputs, outputs, rows = body.get("inputs") or [], body.get("outputs") or [], [_clean_row(r) for r in body.get("rows") or []]
     inputs = [{**c, "name": clean_text(c["name"])} for c in inputs]
@@ -380,7 +380,7 @@ def import_new(db: Session, project_id: int, body: dict, user_id: int) -> dict:
     expects_fields = bool(body.get("expects_fields"))
     _check_names(inputs, outputs)
     _check_constraints(body.get("constraints") or [])
-    _check_flow(db, project_id, body.get("flow_id"))  # 스터디를 만들기 전에 본다. 만든 뒤에 터지면 500과 함께 스터디만 남는다
+    _check_flow(db, project_id, body.get("flow_id"), work_id)  # 스터디를 만들기 전에 본다. 만든 뒤에 터지면 500과 함께 스터디만 남는다
     if not inputs:
         raise ImportRejected("입력 열이 지정되지 않았습니다 → 입력으로 쓸 숫자 열을 한 개 이상 골라 주세요")
     if not outputs and not expects_fields:
@@ -451,7 +451,7 @@ def import_new(db: Session, project_id: int, body: dict, user_id: int) -> dict:
         if partial:
             warnings.append(f"일부 출력이 빈 행 {len(partial)}개는 등록했지만, 빈 출력을 학습할 때는 빠집니다")
         name = str(body.get("name") or "").strip() or (Path(str(body.get("source") or "")).stem or "불러온 표")
-        study = models.Study(project_id=project_id, name=service._unique_study_name(db, project_id, name[:200]), variables=variables,
+        study = models.Study(project_id=project_id, work_id=work_id, name=service._unique_study_name(db, project_id, name[:200]), variables=variables,
                              objectives=body.get("objectives") or [], constraints=body.get("constraints") or [],
                              outputs=_output_defs(out_cols), adapter="data", adapter_config={}, flow_id=body.get("flow_id"), created_by=user_id)
         db.add(study)
@@ -480,7 +480,7 @@ def import_rows(db: Session, study: models.Study, body: dict, user_id: int) -> d
     pre_warnings = list(body.get("pre_warnings") or [])
     if not rows:
         raise ImportRejected("표에 데이터 행이 없습니다 → 값이 든 파일을 다시 고르세요")
-    _check_flow(db, study.project_id, body.get("flow_id"))
+    _check_flow(db, study.project_id, body.get("flow_id"), study.work_id)
     # 읽는 일까지 잠금 안에서 한다. 잠금 밖에서 읽은 케이스·범위로 비교하면 동시에 온 같은 표가 모두 새 행으로 들어가고, 넓힌 범위도 서로 덮어쓴다
     with _lock:
         db.expire_all()

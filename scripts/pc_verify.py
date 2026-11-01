@@ -270,7 +270,7 @@ def own_review_flows(flows: list[dict], msgs: list[dict], known_before: set[int]
 
 def is_note(text: str) -> bool:
     """오류가 아닌 시스템 안내(CLI 세션을 새로 열었다는 알림 등)."""
-    return "새 세션" in text
+    return "새로 시작" in text or "새 세션" in text  # 뒤는 Task 구조 전 서버의 문구
 
 
 EXPECT_NUMBER = re.compile(r"^(\w+)\s*(>=|<=|=)\s*(-?\d+(?:\.\d+)?)$")

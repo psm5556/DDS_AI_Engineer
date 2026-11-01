@@ -7,6 +7,7 @@ import { Modal } from "../components/Modal";
 import { fmt, PASTE_MAX_BYTES, PASTE_TOO_BIG } from "../format";
 import { useToast } from "../toast";
 import type { ImportReport, Study, SurrogateModel, TableColumn, TableJob, TablePreview, TrainJob } from "../types";
+import { COPY, taskPath } from "../work/copy";
 import { useCanvas } from "./CanvasContext";
 
 /** 표로 바로 Simulator: 표를 붙여 넣으면 알아서 읽고, 어느 열이 결과(출력)인지만 묻고, 만들기 → 학습 → 배포 → Simulator 열기.
@@ -46,7 +47,7 @@ export function TableJobsBar() {
         <div key={j.id} className={`table-job ${j.status}`}>
           {j.status === "running" && <><Loader2 size={14} className="spin" /><span className="grow">'{j.name}' Simulator를 만드는 중입니다 · {PHASE_LABEL[j.phase]} {secText(j.phase_sec)}</span></>}
           {j.status === "done" && <><Check size={14} /><span className="grow">'{j.name}' Simulator를 {j.reused ? "이미 만들어 두었습니다" : "만들었습니다"}{j.excluded_count ? ` · 빠진 행 ${j.excluded_count.toLocaleString("ko-KR")}개는 '불러온 데이터 확인' 카드에 이유가 있습니다` : ""}</span>
-            <button type="button" className="small primary" onClick={() => { void seen(j.id); nav(`/projects/${j.project_id}`, { state: { canvasTab: "simulator", studyId: j.study_id, modelId: j.model_id } }); }}>열기</button>
+            <button type="button" className="small primary" onClick={() => { void seen(j.id); nav(taskPath(j.project_id!, j.work_id), { state: { canvasTab: "simulator", studyId: j.study_id, modelId: j.model_id } }); }}>열기</button>
             <button type="button" className="icon-btn" aria-label="닫기" title="닫기" onClick={() => void seen(j.id)}><X size={13} /></button></>}
           {j.status === "failed" && <><AlertTriangle size={14} /><span className="grow">'{j.name}' Simulator를 만들지 못했습니다. {j.error}</span>
             <button type="button" className="icon-btn" aria-label="닫기" title="닫기" onClick={() => void seen(j.id)}><X size={13} /></button></>}
@@ -101,9 +102,11 @@ function RecognizedNote({ p }: { p: TablePreview }) {
 }
 
 /** 한 가지만 묻는다: 어느 열이 결과(출력)인가. 추측을 미리 골라 두고, 나머지 숫자 열은 전부 입력이다 */
-export function TableQuestion({ pid, text, onOpen, onCancel, onRepaste, onMaking }: {
+export function TableQuestion({ pid, wid, wMine, text, onOpen, onCancel, onRepaste, onMaking }: {
+  /** 지금 연 Task. 내 Task면 그 안에 넣고, 남의 Task이거나 없으면 내 새 Task에 넣는다(서버가 다시 본다) */
+  wid?: number | null; wMine?: boolean;
   /** 없으면(첫 화면) 만들 때 프로젝트를 만든다. 보기만 하고 닫았을 때 빈 프로젝트가 남지 않게 */
-  pid: number | null; text: string; onOpen: (projectId: number, studyId: number, modelId: number) => void; onCancel: () => void; onRepaste?: () => void;
+  pid: number | null; text: string; onOpen: (projectId: number, studyId: number, modelId: number, workId?: number | null) => void; onCancel: () => void; onRepaste?: () => void;
   /** 만드는 중인지 알린다. 그동안 입력창은 AI로 보내지 않는다(같은 표가 두 길로 간다) */
   onMaking?: (making: boolean) => void;
 }) {
@@ -171,7 +174,7 @@ export function TableQuestion({ pid, text, onOpen, onCancel, onRepaste, onMaking
     let job: TableJob;
     try {
       // 등록·학습·배포를 서버 작업 하나로 시작한다. 이 화면이 사라져도 서버가 끝까지 한다
-      job = await post<TableJob>("/api/table-jobs", { project_id: made.current, text, name, outputs: [...outs].map((n) => ({ name: n })) });
+      job = await post<TableJob>("/api/table-jobs", { project_id: made.current, work_id: wid ?? null, text, name, outputs: [...outs].map((n) => ({ name: n })) });
     } catch (e) {
       setPhase("ask"); setRunErr((e as Error).message);
       return;
@@ -206,7 +209,7 @@ export function TableQuestion({ pid, text, onOpen, onCancel, onRepaste, onMaking
     // 묻지 않고 뺀 행은 결과와 함께 꼭 알린다. 자세한 이유는 결과 카드 '불러온 데이터 확인'에 있다
     const left = job.excluded_count ? ` 빠진 행 ${job.excluded_count.toLocaleString("ko-KR")}개는 '불러온 데이터 확인' 카드에 이유가 있습니다.` : "";
     toast(job.reused ? `같은 표로 만든 '${job.name}' Simulator가 이미 있어 현재 버전을 그대로 엽니다.` : `'${job.name}' Simulator를 만들었습니다.${left}`);
-    onOpen(job.project_id!, job.study_id!, job.model_id!);
+    onOpen(job.project_id!, job.study_id!, job.model_id!, job.work_id);
   };
 
   const toggle = (n: string) => setOuts((s) => { const x = new Set(s); if (x.has(n)) x.delete(n); else x.add(n); return x; });
@@ -225,7 +228,7 @@ export function TableQuestion({ pid, text, onOpen, onCancel, onRepaste, onMaking
     <div className="ti-q">
       <div className="ti-q-head">
         <b>어느 열이 결과(출력)인가요?</b>
-        <span className="small muted">표 {preview.n_rows.toLocaleString("ko-KR")}행을 읽었습니다. 나머지 숫자 열은 입력이 됩니다</span>
+        <span className="small muted">{pid != null && (wid != null && wMine ? `${COPY.tableInto} ` : `${COPY.tableIntoNew} `)}표 {preview.n_rows.toLocaleString("ko-KR")}행을 읽었습니다. 나머지 숫자 열은 입력이 됩니다</span>
       </div>
       <div className="ti-chips" role="group" aria-label="결과(출력) 열">
         {numeric.map((c) => (
@@ -352,8 +355,8 @@ export function TableAddRows({ pid, study, onClose }: { pid: number; study: Stud
 }
 
 /** 붙여넣기 창: 넓은 입력 칸 하나. 붙여 넣는 즉시 읽어 질문으로 넘어간다 */
-export function TablePasteDialog({ pid, onClose, onOpen }: {
-  pid: number | null; onClose: () => void; onOpen: (projectId: number, studyId: number, modelId: number) => void;
+export function TablePasteDialog({ pid, wid, wMine, onClose, onOpen }: {
+  pid: number | null; wid?: number | null; wMine?: boolean; onClose: () => void; onOpen: (projectId: number, studyId: number, modelId: number, workId?: number | null) => void;
 }) {
   const toast = useToast();
   const [draft, setDraft] = useState("");
@@ -365,7 +368,7 @@ export function TablePasteDialog({ pid, onClose, onOpen }: {
   };
   return (
     <Modal title="표로 바로 Simulator" wide onClose={onClose}>
-      {text != null ? <TableQuestion pid={pid} text={text} onOpen={onOpen} onCancel={onClose} onRepaste={() => setText(null)} /> : (
+      {text != null ? <TableQuestion pid={pid} wid={wid} wMine={wMine} text={text} onOpen={onOpen} onCancel={onClose} onRepaste={() => setText(null)} /> : (
         <div className="ti-paste">
           <label htmlFor="ti-paste-box"><ClipboardPaste size={15} /><b>엑셀에서 표를 복사해 여기에 붙여 넣으세요</b></label>
           <textarea id="ti-paste-box" autoFocus spellCheck={false} value={draft} aria-label="표 붙여넣기"
@@ -387,9 +390,15 @@ export function TablePasteDialog({ pid, onClose, onOpen }: {
 }
 
 /** 데이터 탭에서 여는 창. 탭이 다시 그려져도 사라지지 않게 작업 공간에 둔다 */
-export function TableImportHost({ pid }: { pid: number }) {
+export function TableImportHost({ pid, wid, mine }: { pid: number; wid: number | null; mine: boolean }) {
   const c = useCanvas();
+  const nav = useNavigate();
   if (!c.tableOpen) return null;
-  return <TablePasteDialog pid={pid} onClose={() => c.setTableOpen(false)}
-    onOpen={(_, studyId, modelId) => { c.setTableOpen(false); c.openSimulator(studyId, modelId); }} />;
+  return <TablePasteDialog pid={pid} wid={wid} wMine={mine} onClose={() => c.setTableOpen(false)}
+    onOpen={(p, studyId, modelId, workId) => {
+      c.setTableOpen(false);
+      // 표가 다른 Task에 들어갔으면(남의 Task·새 Task 화면·같은 표를 이미 불러옴) 그 Task로 간다
+      if (workId != null && workId !== wid) nav(taskPath(p, workId), { state: { canvasTab: "simulator", studyId, modelId } });
+      else c.openSimulator(studyId, modelId);
+    }} />;
 }

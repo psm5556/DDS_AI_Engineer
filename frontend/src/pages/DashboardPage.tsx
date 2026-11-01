@@ -11,7 +11,9 @@ import { AgentPicker, resolveAgent, usePreferredAgent } from "../components/Agen
 import { folderName } from "../components/FolderModal";
 import { FLOW_STATUS, PRACTICE_EXAMPLES, when } from "../format";
 import { useToast } from "../toast";
-import type { AgentStatus, Attachment, Project } from "../types";
+import type { AgentStatus, Attachment, Project, WorkBrief } from "../types";
+import { COPY, taskPath, W } from "../work/copy";
+import { pickWork } from "../work/scope";
 
 // 앞의 셋은 CAD·CAE 툴과 모델 파일 없이 끝까지 된다(연습용 계산). 마지막만 내 모델과 툴이 필요하다고 말하고 파일을 먼저 받는다
 const STARTERS: { icon: typeof Rocket; t: string; p: string; askFile?: string }[] = [
@@ -26,9 +28,9 @@ const TABLE_PROMPT = "붙여 넣은 표의 입력·출력으로 예측 모델을
 
 class FolderError extends Error {}
 
-/** 첫 화면 = 새 프로젝트 시작: 요청 입력창이 가운데. 프로젝트 이름·내 PC 작업 폴더는 '옵션' 한 줄에 접어 둔다
+/** 첫 화면 = 새 Project 시작: 요청 입력창이 가운데. Project 이름·폴더는 '옵션' 한 줄에 접어 둔다
  *  (비워 두면 이름은 요청 내용으로, 폴더는 기본 위치로 정해진다 — 단계를 줄이기 위해).
- *  보내면 프로젝트를 만들고, 작업 폴더를 정한 뒤(에이전트가 첫 세션을 열기 전에) 대화로 넘어간다. */
+ *  보내면 Project를 만들고, 폴더를 정한 뒤(AI를 시작하기 전에) 첫 Task로 넘어간다. Task는 그 화면이 보낼 때 만든다. */
 export default function DashboardPage() {
   const { user } = useAuth();
   const nav = useNavigate();
@@ -42,7 +44,7 @@ export default function DashboardPage() {
   const [picking, setPicking] = useState(false);
   const [opts, setOpts] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
-  const openSimulator = (pid: number, studyId: number, modelId: number) => nav(`/projects/${pid}`, { state: { canvasTab: "simulator", studyId, modelId } });
+  const openSimulator = (pid: number, studyId: number, modelId: number, workId?: number | null) => nav(taskPath(pid, workId), { state: { canvasTab: "simulator", studyId, modelId } });
   const showOpts = opts || !!folderErr; // 폴더 오류가 나면 펼쳐서 보여 준다
   const folderRef = useRef<HTMLInputElement>(null);
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: () => get<Project[]>("/api/projects") });
@@ -56,7 +58,7 @@ export default function DashboardPage() {
   const browse = async () => {
     setPicking(true); setFolderErr("");
     try {
-      const r = await post<{ path: string }>("/api/agent/pick-folder", { initial: folder || null, title: "프로젝트 작업 폴더 선택" });
+      const r = await post<{ path: string }>("/api/agent/pick-folder", { initial: folder || null, title: `${W.project} 폴더 선택` });
       if (r.path) {
         setFolder(r.path);
         if (!name.trim()) setName(folderName(r.path)); // 이름을 비워 두었으면 폴더 이름으로
@@ -67,23 +69,23 @@ export default function DashboardPage() {
 
   const start = useMutation({
     mutationFn: async (o: Outgoing) => {
-      // ② 폴더를 먼저 확인한다 — 쓸 수 없는 폴더면 프로젝트를 만들지 않는다
+      // ② 폴더를 먼저 확인한다 — 쓸 수 없는 폴더면 Project를 만들지 않는다
       const path = folder.trim() ? (await post<{ path: string }>("/api/agent/check-folder", { path: folder.trim() })
         .catch((e: Error) => { throw new FolderError(e.message); })).path : null;
       // ① 이름: 적은 이름 → 없으면 요청 앞부분(에이전트가 곧 알맞게 바꾼다)
       const first = (o.text || o.pendingFiles[0]?.name || "").split(/[\n.!?]/)[0].trim();
-      const auto = first.length > 28 ? `${first.slice(0, 28)}…` : first || "새 프로젝트";
+      const auto = first.length > 28 ? `${first.slice(0, 28)}…` : first || COPY.newProject;
       const p = await post<Project>("/api/projects", { name: name.trim() || auto, description: "" });
       if (path) {
         await put(`/api/projects/${p.id}/local/folder`, { path })
-          .catch((e: Error) => toast(`작업 폴더를 정하지 못해 기본 위치로 시작합니다: ${e.message}`, true));
+          .catch((e: Error) => toast(`폴더를 정하지 못해 기본 위치로 시작합니다: ${e.message}`, true));
       }
       const ids: number[] = [];
       for (const f of o.pendingFiles) ids.push((await uploadFile<Attachment>(`/api/projects/${p.id}/attachments`, f)).id);
       return { p, ids, text: o.text };
     },
-    // ③ 요청을 들고 대화로
-    onSuccess: ({ p, ids, text }) => nav(`/projects/${p.id}/new`, { state: { prompt: text, attachmentIds: ids } }),
+    // ③ 요청을 들고 첫 Task 화면으로. Task는 거기서 보낼 때 만들어진다
+    onSuccess: ({ p, ids, text }) => nav(`/projects/${p.id}/w/new`, { state: { prompt: text, attachmentIds: ids } }),
     onError: (e: Error) => {
       if (e instanceof FolderError) { setFolderErr(e.message); setTimeout(() => folderRef.current?.focus(), 0); }
       else toast(e.message ?? "시작하지 못했습니다", true);
@@ -107,23 +109,24 @@ export default function DashboardPage() {
             onSend={(o) => start.mutateAsync(o).then(() => true, () => false)}
             leftBar={<AgentPicker value={resolveAgent(agent, preferred) ?? ""} onChange={setPreferred} disabled={!connected} />}
             placeholder="예: 내 브래킷 모델의 두께를 바꿔 가며 응력을 보고, 가장 가벼운 설계를 찾아 줘" />
+          <p className="small muted np-send">{COPY.homeSend}</p>
           <div className={`np-opts ${showOpts ? "open" : ""}`}>
             <button type="button" className="np-opts-toggle" aria-expanded={showOpts} onClick={() => setOpts(!showOpts)}
-              title="프로젝트 이름과 내 PC 작업 폴더 — 비워 두면 자동으로 정합니다">
+              title={`${W.project} 이름과 폴더 — 비워 두면 자동으로 정합니다`}>
               <SlidersHorizontal size={13} />옵션
-              <span className="np-opts-sum">{name.trim() ? `이름 '${name.trim()}'` : "이름 자동"} · {folder.trim() ? folderName(folder.trim()) : "기본 작업 폴더"}</span>
+              <span className="np-opts-sum">{name.trim() ? `이름 '${name.trim()}'` : COPY.homeAutoName} · {folder.trim() ? folderName(folder.trim()) : COPY.homeDefaultFolder}</span>
               <ChevronDown size={13} className="np-opts-chev" />
             </button>
             {showOpts && (
               <div className="np-opts-body">
                 <label className="np-row">
-                  <span className="np-label">프로젝트 이름</span>
+                  <span className="np-label">{W.project} 이름</span>
                   <input id="np-name" type="text" className="np-input" value={name} maxLength={200}
                     placeholder="비워 두면 요청 내용으로 정합니다" onChange={(e) => setName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); folderRef.current?.focus(); } }} />
                 </label>
                 <div className="np-row">
-                  <label className="np-label" htmlFor="np-folder">내 PC 작업 폴더</label>
+                  <label className="np-label" htmlFor="np-folder">{COPY.homeFolder}</label>
                   <div className="np-field">
                     <div className="np-folder">
                       <input id="np-folder" ref={folderRef} type="text" className="np-input mono" value={folder} disabled={!connected}
@@ -135,8 +138,8 @@ export default function DashboardPage() {
                     </div>
                     {folderErr ? <p className="np-err">{folderErr}</p>
                       : <p className="np-hint">
-                        {folder.trim() ? "이 폴더에 에이전트 설정 파일과 작업 하위 폴더(inputs·runs·studies·reports)를 만듭니다. 기존 파일은 건드리지 않습니다."
-                          : `기본 위치: ${agent?.info?.workspace ?? "내 PC의 DDS_Workspace"} 아래에 프로젝트 폴더를 만듭니다.`}</p>}
+                        {folder.trim() ? "이 폴더에 에이전트 설정 파일과 하위 폴더(inputs·runs·studies·reports)를 만듭니다. 기존 파일은 건드리지 않습니다."
+                          : `기본 위치: ${agent?.info?.workspace ?? "내 PC의 DDS_Workspace"} 아래에 ${W.project} 폴더를 만듭니다.`}</p>}
                   </div>
                 </div>
               </div>
@@ -160,14 +163,16 @@ export default function DashboardPage() {
 
       {!!projects?.length && (
         <div className="home-recent">
-          <div className="home-sec">최근 프로젝트{review.length > 0 ? <span className="home-todo">승인 대기 {review.length}</span> : null}</div>
+          <div className="home-sec">{COPY.homeRecent}{review.length > 0 ? <span className="home-todo">승인 대기 {review.length}</span> : null}</div>
           <div className="recent-rows">
             {projects.slice(0, 6).map((p) => {
-              const st = p.flow_status ? FLOW_STATUS[p.flow_status] : null;
-              const run = p.flow_status === "in_progress" || p.flow_status === "approved";
+              const w: WorkBrief | null = pickWork(p.works);
+              const status = w?.status ?? p.flow_status;
+              const st = status ? FLOW_STATUS[status] : null;
+              const run = status === "in_progress" || status === "approved";
               return (
-                <Link key={p.id} to={`/projects/${p.id}`} className="recent-row">
-                  <b>{p.name}</b>
+                <Link key={p.id} to={taskPath(p.id, w?.id)} className="recent-row">
+                  <b>{p.name}{w && <span className="recent-task"> · {w.name}</span>}</b>
                   {st && <span className={`chip ${st.chip}`}>{run && <Loader2 size={11} className="spin" />}{st.label}</span>}
                   <span className="small muted">{when(p.updated_at)}</span>
                   <ArrowRight size={14} className="go" aria-hidden="true" />

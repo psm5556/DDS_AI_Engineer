@@ -305,7 +305,7 @@ def make_issue(project: models.Project, rep: models.Report | None = None, editio
     if rep:
         return Issue(f"DDS-P{project.id:04d}-R{rep.id:03d}", f"{edition}판", rep.created_at, f"AI{who}",
                      f"{ISSUER} 발행 · AI 작성, 담당 엔지니어 검토 필요{cover}",
-                     f"이 문서는 {ISSUER}가 발행했습니다. AI가 작업 흐름과 결과를 읽고 썼으므로, 쓰기 전에 담당 엔지니어의 검토가 필요합니다.{end}")
+                     f"이 문서는 {ISSUER}가 발행했습니다. AI가 Task Flow과 결과를 읽고 썼으므로, 쓰기 전에 담당 엔지니어의 검토가 필요합니다.{end}")
     return Issue(f"DDS-P{project.id:04d}-AUTO", "자동 모음", datetime.now(), f"자동 모음{who}",
                  f"{ISSUER} 발행 · 게시된 결과 자동 모음, 담당 엔지니어 검토 필요{cover}",
                  f"이 문서는 {ISSUER}가 게시된 결과를 자동으로 모은 것입니다. 해석이 들어 있지 않으며, 쓰기 전에 담당 엔지니어의 검토가 필요합니다.{end}")
@@ -390,7 +390,7 @@ def compose(project: models.Project, arts: list[models.Artifact], flow: models.F
             blocks.insert(0, Block("note", text=STALE_NOTE))
     else:
         if flow:
-            title = f"작업 흐름 — {flow.title}"
+            title = f"Task Flow — {flow.title}"
             blocks += [Block("section", text=title, anchor=toc.add(2, title)), Block("flow", flow=flow)]
         for a in _ordered(arts):
             blocks += [Block("section", text=a.title, anchor=toc.add(2, a.title)), Block("result", art=a)]

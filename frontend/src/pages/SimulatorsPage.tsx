@@ -1,3 +1,4 @@
+import { W } from "../work/copy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Ban, LayoutGrid, List, Search, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -14,7 +15,7 @@ import type { DataSource, QualityLevel } from "../types";
 interface Item {
   study_id: number; study_name: string; model_id: number; version: number | null; outputs: string[]; n_variables: number; n_train: number; url: string;
   thumbnail_url: string | null;
-  source: "mine" | "project" | "link"; status: "active" | "stopped" | "expired"; project_id: number | null; project_name: string | null;
+  source: "mine" | "project" | "link"; status: "active" | "stopped" | "expired"; project_id: number | null; project_name: string | null; work_id?: number | null; work_name?: string | null;
   shared_by: string | null; note: string; share_id: number | null; updated_at: string | null;
   quality?: QualityLevel | null; data_source?: Partial<DataSource> | null;
 }
@@ -29,12 +30,13 @@ function savedView(): ViewMode {
 
 function meta(x: Item): string {
   const who = x.source === "link" ? `${x.shared_by ?? "다른 사용자"}님이 공유` : x.source === "project" ? `${x.shared_by ?? "멤버"}님이 배포` : "";
-  return [who, x.project_name, x.note, dataSourceText(x.data_source)].filter(Boolean).join(" · ");
+  const where = x.project_name && x.work_name ? `${x.project_name} / ${x.work_name}` : x.project_name;
+  return [who, where, x.note, dataSourceText(x.data_source)].filter(Boolean).join(" · ");
 }
 
 /** 찾는 대상은 화면에 보이는 글자다. 공유가 끊긴 줄은 이름·공유한 사람·메모만 보이므로 출력 이름으로는 찾지 않는다 */
 function matches(x: Item, term: string): boolean {
-  const words = [x.study_name, x.shared_by, x.note, ...(x.status === "active" ? [x.project_name, ...x.outputs] : [])];
+  const words = [x.study_name, x.shared_by, x.note, ...(x.status === "active" ? [x.project_name, x.work_name, ...x.outputs] : [])];
   return words.some((w) => w?.toLowerCase().includes(term));
 }
 
@@ -266,17 +268,17 @@ export default function SimulatorsPage() {
   return (
     <div className="page sims-page">
       <h1>Simulator</h1>
-      <p className="page-sub">해석 없이 설계변수를 바꿔 바로 예측합니다. 프로젝트에 들어가지 않아도 됩니다.</p>
+      <p className="page-sub">해석 없이 설계변수를 바꿔 바로 예측합니다. {W.project}에 들어가지 않아도 됩니다.</p>
       {total === 0 ? (
         <div className="empty-hero"><AgentGlyph size={32} /><b>아직 Simulator가 없습니다</b>
-          <p>프로젝트에서 예측 모델을 배포하면 여기에 보입니다. 공유 링크를 한 번 열면 그 Simulator도 여기에 들어옵니다.</p></div>
+          <p>{W.project}에서 예측 모델을 배포하면 여기에 보입니다. 공유 링크를 한 번 열면 그 Simulator도 여기에 들어옵니다.</p></div>
       ) : (
         <>
           <div className="sims-tools">
             <div className="sims-find">
               <Search size={15} />
               <input ref={findBox} type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setQ(""); }}
-                placeholder="이름 · 출력 · 프로젝트 · 공유한 사람 · 메모로 찾기" aria-label="Simulator 검색" />
+                placeholder={`이름 · 출력 · ${W.project} · 공유한 사람 · 메모로 찾기`} aria-label="Simulator 검색" />
               {/* 지우면 버튼이 사라지므로 입력창으로 돌아가 바로 다시 찾게 한다 */}
               {q && <button className="icon-btn" onClick={() => { setQ(""); findBox.current?.focus(); }} title="검색 지우기" aria-label="검색 지우기"><X size={14} /></button>}
             </div>

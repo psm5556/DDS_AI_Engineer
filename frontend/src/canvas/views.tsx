@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Database, Download, FolderOpen, Loader2, Plus, RotateCcw, Square, Table2, Trash2 } from "lucide-react";
+import { Copy, Database, Download, FolderOpen, Loader2, Plus, Square, Table2, Trash2 } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { del, download, get, post, put } from "../api";
 import { ArtifactCard } from "../artifacts/ArtifactView";
@@ -10,6 +10,8 @@ import { Skeleton } from "../components/Skeleton";
 import { dataSourceText } from "../components/ModelTrust";
 import { FlowCanvas } from "../flow/FlowCanvas";
 import { copyText, FLOW_STATUS, fmt, NODE_STATUS, NODE_TYPE, prefillAgent, ROLE_LABEL, sendToAgent, toolName, when } from "../format";
+import { COPY, W } from "../work/copy";
+import { useWorkList } from "../work/scope";
 import { orderNodes } from "../flow/order";
 import { flash, scrollMode } from "../motion";
 import { useCanvas } from "./CanvasContext";
@@ -17,7 +19,7 @@ import { insightFocusStudy, JudgementList, NextStep, useFlowJudgements } from ".
 import { relFromRunDir, useOpenLocal } from "./LocalFiles";
 import { TableAddRows } from "./TableImport";
 import { useToast } from "../toast";
-import type { AgentStatus, Artifact, Case, Flow, Project, StudyStatus, Study, TrainingDataset, User } from "../types";
+import type { Artifact, Case, Flow, Project, StudyStatus, Study, TrainingDataset, User } from "../types";
 
 /** 캔버스에 들어가는 화면들: 작업 흐름(단계별 결과) · 데이터(입력·출력, 학습 데이터, 케이스) · 멤버. 보고서는 ReportView, Simulator는 SimulatorTab.
  *  대화(가운데)에서 에이전트가 일하면 해당 화면이 실시간으로 갱신된다. */
@@ -33,7 +35,7 @@ export function useFlowDecision(pid: number, sessionId: number | null, connected
       put<Flow>(`/api/flows/${v.flow.id}/status`, { status: v.status, version: v.flow.version, session_id: sessionId }),
     onSuccess: (f) => {
       qc.invalidateQueries({ queryKey: ["flows", pid] });
-      if (sessionId) qc.invalidateQueries({ queryKey: ["messages", sessionId] });
+      qc.invalidateQueries({ queryKey: ["messages"] });
       if (f.status === "approved") toast(!f.start_queued ? "승인했습니다. 에이전트가 끝까지 진행합니다" : connected ? "승인했습니다. 지금 답이 끝나면 바로 시작합니다" : "승인했습니다. PC Agent가 연결되면 바로 시작합니다");
       else if (f.status === "review") toast("승인을 취소했습니다. 아무것도 실행하지 않았습니다");
       else toast("반려했습니다");
@@ -50,7 +52,6 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
   const [rm, setRm] = useState<Artifact | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
-  const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status") });
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/artifacts/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["artifacts", pid] }); toast("삭제했습니다"); },
@@ -90,8 +91,8 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
       <div className="flow-tab flow-none">
         <div className="empty-hero">
           <AgentGlyph size={32} />
-          <b>{loose.length || judge.outside.length ? "작업 흐름 없이 만든 결과입니다" : "아직 작업 흐름이 없습니다"}</b>
-          <p>해석을 새로 돌리거나 내 모델을 바꾸는 일은 에이전트가 작업 흐름을 먼저 그려 여기에 보여 주고, 승인하면 실행합니다. 조회·후처리, 가진 데이터로 예측 모델·Simulator 만들기, 보고서는 작업 흐름 없이 바로 합니다.</p>
+          <b>{loose.length || judge.outside.length ? `${W.flow} 없이 만든 결과입니다` : COPY.emptyFlow}</b>
+          <p>해석을 새로 돌리거나 내 모델을 바꾸는 일은 에이전트가 {W.flow}를 먼저 그려 여기에 보여 주고, 승인하면 실행합니다. 조회·후처리, 가진 데이터로 예측 모델·Simulator 만들기, 보고서는 {W.flow} 없이 바로 합니다.</p>
         </div>
         <NextStep j={judge} />
         {(loose.length > 0 || judge.outside.length > 0) && (
@@ -122,7 +123,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
     <div className="flow-tab">
       <div className="flow-bar">
         {flows.length > 1 && (
-          <select value={flow.id} onChange={(e) => setFid(Number(e.target.value))} aria-label="작업 흐름 선택" style={{ width: "100%" }}>
+          <select value={flow.id} onChange={(e) => setFid(Number(e.target.value))} aria-label={`${W.flow} 선택`} style={{ width: "100%" }}>
             {flows.map((f) => <option key={f.id} value={f.id}>#{f.id} {f.title} ({FLOW_STATUS[f.status].label})</option>)}
           </select>
         )}
@@ -130,15 +131,7 @@ export function FlowView({ pid, flows, arts }: { pid: number; flows?: Flow[]; ar
           <b className="flow-title">{flow.title}</b> <span className={`chip ${st.chip}`}>{st.label}</span>
           <div className="small muted">{flow.goal || "목표 미기재"} · 단계 {done}/{flow.nodes.length} 완료 · {when(flow.updated_at)}</div>
         </div>
-        {flow.status === "review" && <span className="notice-inline warn">대화의 카드에서 승인하거나 반려하세요</span>}
-        {flow.status !== "review" && flow.status !== "rejected" && (
-          <button className="small" title="입력창에 요청을 채웁니다. 새 모델 파일을 첨부해 보내면 옛 결과는 그대로 두고 새 스터디로 진행합니다"
-            onClick={() => {
-              if (!agent?.connected) { toast("PC Agent가 연결되어 있어야 다시 진행할 수 있습니다 → 설정에서 연결 상태를 확인하세요", true); return; }
-              prefillAgent(`지난 작업 흐름 '${flow.title}'(#${flow.id})을 새 모델로 다시 진행해 줘. 옛 스터디·모델·Simulator는 그대로 두고, 새 모델에서 달라진 점(부품·면 이름, 변수 범위, 단위)을 먼저 알려 줘. 바뀐 점: `,
-                "새 모델 파일을 첨부해 주세요. 파일이 내 PC에 이미 있으면 경로를 요청에 적어도 됩니다.");
-            }}><RotateCcw size={13} />이 흐름을 새 모델로 다시</button>
-        )}
+        {flow.status === "review" && <span className="notice-inline warn">가운데 기록의 카드에서 승인하거나 반려하세요</span>}
       </div>
       <div className="pbar" aria-label="진행률"><i style={{ width: `${(done / Math.max(1, flow.nodes.length)) * 100}%` }} /></div>
       <FlowCanvas flow={flow} selected={sel} onSelect={goStep} artifactCount={count} compact />
@@ -187,12 +180,12 @@ const TABLE_START_HINT = "엑셀에서 복사한 표를 붙여 넣으면 해석 
 export function StudiesView({ pid }: { pid: number }) {
   const c = useCanvas();
   const [adding, setAdding] = useState(false);
-  const { data: studies } = useQuery({ queryKey: ["studies", pid], queryFn: () => get<Study[]>(`/api/projects/${pid}/studies`) });
+  const studies = useWorkList<Study>("studies", pid, c.workId);
   const cur = studies?.find((s) => s.id === c.studyId)?.id ?? studies?.[0]?.id ?? null;
   if (!studies) return <Skeleton rows={5} />;
   if (!studies.length) {
     return <div className="empty-hero"><AgentGlyph size={32} /><b>아직 데이터가 없습니다</b>
-      <p>에이전트가 해석을 돌리거나 가진 결과를 등록하면 케이스가 여기에 쌓입니다. 엑셀 표가 있으면 붙여 넣어 지금 바로 Simulator를 만들 수 있습니다.</p>
+      <p>{COPY.emptyData}. 엑셀 표가 있으면 지금 바로 Simulator를 만들 수 있습니다.</p>
       <button className="primary" title={TABLE_START_HINT} onClick={() => c.setTableOpen(true)}><Table2 size={14} />표로 바로 Simulator</button></div>;
   }
   return (
@@ -384,7 +377,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
             {vars.map((v) => <div key={v}><span>{v}</span><b>{fmt(st.best!.params[v], 4)}</b></div>)}
             {obj && <div><span>{obj.name}</span><b style={{ color: "var(--brand)" }}>{fmt(st.best.results[obj.name], 4)}</b></div>}
           </div>
-        ) : <p className="small muted" style={{ marginTop: 10 }}>{st.counts.complete && !obj ? "목적(최소·최대로 할 값)을 정하지 않아 최적 케이스를 고르지 않았습니다. 대화로 목적을 알려 주면 찾아 드립니다."
+        ) : <p className="small muted" style={{ marginTop: 10 }}>{st.counts.complete && !obj ? "목적(최소·최대로 할 값)을 정하지 않아 최적 케이스를 고르지 않았습니다. 입력창에 목적을 적어 주면 찾아 드립니다."
           : st.counts.complete && cons ? "제약을 만족하는 케이스가 아직 없습니다." : "완료된 케이스가 아직 없습니다."}</p>}
         <div className="study-progress">
           <div className="pbar" aria-label="케이스 진행률"><i style={{ width: `${total ? ((st.counts.complete ?? 0) / total) * 100 : 0}%` }} /></div>
@@ -408,7 +401,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
             myQueued ? `대기 중인 ${myQueued}건은 시작하지 않습니다.` : "",
             myExtracting ? `Output 추출 ${myExtracting}건을 멈춥니다.` : "",
             st.stalled ? "연결이 끊긴 PC의 해석은 다시 연결될 때 끝냅니다. 이전 결과가 있으면 그대로 둡니다." : "",
-            "다시 돌리려면 대화로 요청하세요."].filter(Boolean).join(" ")}
+            "다시 돌리려면 입력창에 요청하세요."].filter(Boolean).join(" ")}
           onConfirm={() => stop.mutate()} onClose={() => setAskStop(false)} />}
         {askDelete && <Confirm title={askDelete.source === "import" ? "행 지우기" : "값 비우기"} danger confirmLabel={askDelete.source === "import" ? "지우기" : "비우기"}
           message={askDelete.source === "import" ? `케이스 ${askDelete.id}을(를) 지웁니다. 되돌릴 수 없습니다. 배포 중인 Simulator는 다시 학습해 배포할 때까지 그대로입니다.`
@@ -457,7 +450,7 @@ function StudyDetail({ pid, id }: { pid: number; id: number }) {
       <section className="block">
         <div className="block-head"><h3>케이스</h3><span className="cnt">{cases?.length ?? 0}건</span><span className="grow" />
           {planned && (
-            <button className="small" title="실험계획(DOE) 점을 CSV로 받습니다. 대기 중인 점이 있으면 그 점만 받습니다. 밖에서 해석한 뒤 출력 칸을 채워 대화로 넘기면 그 점이 채워집니다"
+            <button className="small" title="실험계획(DOE) 점을 CSV로 받습니다. 대기 중인 점이 있으면 그 점만 받습니다. 밖에서 해석한 뒤 출력 칸을 채워 입력창에 첨부하면 그 점이 채워집니다"
               onClick={() => download(`/api/studies/${id}/doe.csv`, `${s.name}_DOE.csv`).catch((e: Error) => toast(e.message, true))}><Download size={13} />DOE 계획표 받기(CSV)</button>
           )}
         </div>
@@ -502,7 +495,7 @@ export function MembersPanel({ p }: { p: Project }) {
 
   return (
     <div className="members">
-      <p className="small muted">멤버는 작업 흐름·결과·대화를 함께 보고, 자기 PC Agent로 작업을 요청할 수 있습니다 · 내 권한: {ROLE_LABEL[p.user_role ?? "member"]}</p>
+      <p className="small muted">멤버는 {W.task}·{W.flow}·결과를 함께 봅니다. 요청은 자기 {W.task}를 만들어 자기 PC Agent로 합니다 · 내 권한: {ROLE_LABEL[p.user_role ?? "member"]}</p>
       <p className="small muted">서버에 있는 결과·모델·Simulator는 내 PC가 꺼져 있어도 멤버가 이어서 씁니다. 해석 원본 파일(odb·d3plot 등)은 해석한 사람의 PC에만 있어, 그 파일이 필요한 일은 그 사람의 PC가 켜져 있어야 합니다.</p>
       {isMaster && (
         <div className="row members-add">

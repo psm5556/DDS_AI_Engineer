@@ -179,8 +179,8 @@ def require_member(project_id: int, user: models.User, db: Session) -> str:
     role = member_role(project_id, user, db)
     if role is None and not effective_admin(user):
         if user.is_admin:  # 웹에서는 보이는 프로젝트인데 AI만 막히므로 이유를 따로 알린다
-            raise HTTPException(403, "이 프로젝트의 멤버가 아닙니다. PC Agent·AI 토큰에는 관리자 권한이 없습니다 → 프로젝트 메뉴의 멤버·공유에서 자신을 멤버로 추가하세요")
-        raise HTTPException(403, "이 프로젝트의 멤버가 아닙니다 → 프로젝트 관리자에게 멤버 추가를 요청하세요")
+            raise HTTPException(403, "이 Project의 멤버가 아닙니다. PC Agent·AI 토큰에는 관리자 권한이 없습니다 → Project 메뉴의 멤버·공유에서 자신을 멤버로 추가하세요")
+        raise HTTPException(403, "이 Project의 멤버가 아닙니다 → Project 관리자에게 멤버 추가를 요청하세요")
     return role or "master"
 
 
@@ -188,12 +188,12 @@ def require_ai_can_work(project_id: int, user: models.User, db: Session) -> None
     """AI와 PC Agent를 움직이는 요청 앞에 둔다. 그들은 토큰으로 결과를 올리므로 관리자라도 멤버가 아니면 전부 실패한다.
     일을 시작한 뒤 조용히 망가지지 않게 먼저 막는다."""
     if member_role(project_id, user, db) is None:
-        raise HTTPException(403, "이 프로젝트의 멤버가 아니라서 AI와 PC Agent가 결과를 올릴 수 없습니다 → 프로젝트 메뉴의 멤버·공유에서 자신을 멤버로 추가한 뒤 다시 하세요")
+        raise HTTPException(403, "이 Project의 멤버가 아니라서 AI와 PC Agent가 결과를 올릴 수 없습니다 → Project 메뉴의 멤버·공유에서 자신을 멤버로 추가한 뒤 다시 하세요")
 
 
 def require_master(project_id: int, user: models.User, db: Session) -> None:
     if member_role(project_id, user, db) != "master" and not effective_admin(user):
-        raise HTTPException(403, "프로젝트 관리자(master)만 할 수 있습니다")
+        raise HTTPException(403, "Project 관리자(master)만 할 수 있습니다")
 
 
 def get_or_404(db: Session, model, obj_id: int, label: str):
@@ -205,6 +205,6 @@ def get_or_404(db: Session, model, obj_id: int, label: str):
 
 def get_project_for_member(project_id: int, user: models.User = Depends(get_current_user),
                            db: Session = Depends(get_db)) -> models.Project:
-    p = get_or_404(db, models.Project, project_id, "프로젝트")
+    p = get_or_404(db, models.Project, project_id, "Project")
     require_member(project_id, user, db)
     return p

@@ -27,7 +27,7 @@ Register = Callable[[Session, models.TableJob, models.User], dict]
 
 def view(job: models.TableJob) -> dict[str, Any]:
     now = job.finished_at or datetime.now()
-    return {"id": job.id, "project_id": job.project_id, "study_id": job.study_id, "model_id": job.model_id, "name": job.name, "status": job.status, "phase": job.phase,
+    return {"id": job.id, "project_id": job.project_id, "work_id": job.work_id, "study_id": job.study_id, "model_id": job.model_id, "name": job.name, "status": job.status, "phase": job.phase,
             "rows": job.rows or 0, "excluded_count": job.excluded_count or 0, "reused": bool(job.reused), "error": job.error, "seen": bool(job.seen),
             "phase_sec": max(0, int((now - (job.phase_at or job.created_at)).total_seconds())), "elapsed_sec": max(0, int((now - job.created_at).total_seconds()))}
 
@@ -48,7 +48,7 @@ def _stopped_by_delete(db: Session, job: models.TableJob) -> bool:
     if job.project_id is not None:
         return False
     job.seen = True  # 알림 칸에 띄우지 않는다. 질문 화면이 아직 보고 있으면 이 이유를 읽는다
-    _fail(db, job, "프로젝트를 삭제해 Simulator 만들기를 멈췄습니다")
+    _fail(db, job, "Project를 삭제해 Simulator 만들기를 멈췄습니다")
     return True
 
 
@@ -64,8 +64,8 @@ def _finish(db: Session, job: models.TableJob, model_id: int, reused: bool = Fal
         manager.publish({"type": "model_updated", "project_id": job.project_id, "data": {"id": model_id}})
 
 
-def start(db: Session, user: models.User, name: str, project_id: int | None, outputs: list[str] | None, register: Register) -> models.TableJob:
-    job = models.TableJob(user_id=user.id, project_id=project_id, name=name[:200], outputs=outputs, status="running", phase="import", phase_at=datetime.now())
+def start(db: Session, user: models.User, name: str, project_id: int | None, outputs: list[str] | None, register: Register, work_id: int | None = None) -> models.TableJob:
+    job = models.TableJob(user_id=user.id, project_id=project_id, work_id=work_id, name=name[:200], outputs=outputs, status="running", phase="import", phase_at=datetime.now())
     db.add(job)
     db.commit()
     db.refresh(job)
@@ -87,6 +87,11 @@ def _run(job_id: int, register: Register):
                 job.project_id, job.made_project = project.id, True
                 db.commit()
             has_project = True
+            if job.work_id is None:  # 지금 연 Task가 내 것이 아니거나 없으면 내 새 Task에 넣는다. 못 받으면 _drop_own_work가 지운다
+                from .. import work_service  # work_service가 이 패키지를 쓴다
+
+                job.work_id, job.made_work = work_service.new_work(db, job.project_id, user.id, work_service.TABLE_NAME).id, True
+                db.commit()
             try:
                 rep = register(db, job, user)
             except HTTPException as e:
@@ -99,6 +104,7 @@ def _run(job_id: int, register: Register):
             db.commit()
             if rep.get("reused"):
                 # 같은 표를 다시 붙여 넣었다. 사용자가 되돌린 버전을 조용히 바꾸지 않는다(공유 링크도 따라간다)
+                _to_reused_work(db, job, rep["study_id"])
                 live = service.current_model(db, rep["study_id"])
                 if live is not None:
                     _finish(db, job, live.id, reused=True)
@@ -110,6 +116,7 @@ def _run(job_id: int, register: Register):
             job = db.get(models.TableJob, job_id)
             if job is not None and job.status == "running" and not (has_project and _stopped_by_delete(db, job)):
                 if not job.study_id:
+                    _drop_own_work(db, job)
                     _drop_own_project(db, job)
                 _fail(db, job, f"표로 Simulator를 만들지 못했습니다({e.__class__.__name__}) → 다시 시도하고, 계속되면 관리자에게 서버 로그를 확인해 달라고 하세요")
 
@@ -133,8 +140,31 @@ def _drop_own_project(db: Session, job: models.TableJob):
         db.commit()
 
 
+def _drop_own_work(db: Session, job: models.TableJob):
+    """표를 못 받았으면 이 표 작업이 만든 빈 Task를 남기지 않는다. '취소하거나 실패하면 아무것도 남지 않는다'."""
+    if not job.made_work or job.work_id is None:
+        return
+    wid, job.work_id, job.made_work = job.work_id, None, False
+    db.commit()
+    if any(db.query(kind.id).filter_by(work_id=wid).first() for kind in _PROJECT_CONTENT):
+        return
+    work = db.get(models.Work, wid)
+    if work is not None:
+        db.delete(work)
+        db.commit()
+
+
+def _to_reused_work(db: Session, job: models.TableJob, study_id: int):
+    """같은 표를 이미 불러왔다. 그 스터디가 있는 Task를 연다. 이번에 만든 빈 Task는 남기지 않는다."""
+    _drop_own_work(db, job)
+    study = db.get(models.Study, study_id)
+    job.work_id = study.work_id if study else job.work_id
+    db.commit()
+
+
 def _reject(db: Session, job: models.TableJob, why: str):
     db.rollback()  # 거절되기 전까지 쌓인 것을 버린다. 남아 있으면 빈 프로젝트로 보이지 않는다
+    _drop_own_work(db, job)
     _drop_own_project(db, job)
     _fail(db, job, why)
 
@@ -171,6 +201,7 @@ def resume_after_restart():
             if job.study_id:
                 _pool.submit(_resume, job.id)
             else:
+                _drop_own_work(db, job)
                 _drop_own_project(db, job)
                 _fail(db, job, "서버가 다시 시작되어 표를 등록하지 못했습니다 → 표를 다시 붙여 넣어 주세요")
 

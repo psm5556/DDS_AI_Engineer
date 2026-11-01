@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session, object_session
 from cae_adapters import REGISTRY
 from cae_adapters.tabular import SNIFF_BYTES, Table, TableEncrypted, TableError, TableNotATable, analyze, fill_guessing, join_tables, read_pasted, read_table, sniff_table_file
 
-from .. import models, schemas
+from .. import models, schemas, work_service
 from ..agent.link import AgentError
 from ..config import settings
 from ..database import get_db
@@ -50,13 +50,15 @@ def list_adapters(user=Depends(get_current_user)):
 
 
 @router.get("/projects/{project_id}/studies", response_model=list[schemas.StudyResponse])
-def list_studies(project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
-    return db.query(models.Study).filter_by(project_id=project.id).order_by(models.Study.id.desc()).all()
+def list_studies(scope: work_service.WorkScope = Depends(work_service.work_scope), db: Session = Depends(get_db)):
+    q = db.query(models.Study).filter_by(project_id=scope.project.id)
+    return work_service.narrow(q, models.Study, scope.read()).order_by(models.Study.id.desc()).all()
 
 
 @router.post("/projects/{project_id}/studies", response_model=schemas.StudyResponse)
-def create_study(body: schemas.StudyCreate, project: models.Project = Depends(get_project_for_member),
+def create_study(body: schemas.StudyCreate, scope: work_service.WorkScope = Depends(work_service.work_scope),
                  user=Depends(get_current_user), db: Session = Depends(get_db)):
+    project = scope.project
     if body.adapter not in REGISTRY:
         raise HTTPException(400, f"알 수 없는 어댑터: {body.adapter}")
     for v in body.variables:
@@ -69,7 +71,7 @@ def create_study(body: schemas.StudyCreate, project: models.Project = Depends(ge
     except ValueError as e:
         raise HTTPException(400, str(e))
     # 결과 카드는 스터디 이름으로 묶인다. 같은 이름이면 옛 스터디의 카드가 새 데이터로 덮인다
-    s = models.Study(project_id=project.id, name=service._unique_study_name(db, project.id, body.name), variables=[v.model_dump(exclude_none=True) for v in body.variables],
+    s = models.Study(project_id=project.id, work_id=scope.write().id, name=service._unique_study_name(db, project.id, body.name), variables=[v.model_dump(exclude_none=True) for v in body.variables],
                      objectives=[o.model_dump() for o in body.objectives],
                      constraints=constraints, adapter=body.adapter,
                      outputs=[o.model_dump() for o in body.outputs], adapter_config=body.adapter_config, created_by=user.id)
@@ -126,10 +128,10 @@ def _import_rejected(fn, *args):
 
 
 @router.post("/projects/{project_id}/studies/import", response_model=schemas.ImportReport)
-def import_study(body: schemas.StudyImportRequest, project: models.Project = Depends(get_project_for_member),
+def import_study(body: schemas.StudyImportRequest, scope: work_service.WorkScope = Depends(work_service.work_scope),
                  user=Depends(get_current_user), db: Session = Depends(get_db)):
     """입력·출력 행을 등록해 스터디를 만든다. 해석·PC Agent·AI 없이 학습과 Simulator까지 갈 수 있다."""
-    return _import_rejected(importer.import_new, db, project.id, body.model_dump(), user.id)
+    return _import_rejected(importer.import_new, db, scope.project.id, body.model_dump(), user.id, scope.write().id)
 
 
 @router.post("/projects/{project_id}/studies/import/preview", response_model=schemas.TablePreview)
@@ -161,11 +163,12 @@ def table_preview_text(body: schemas.TablePasteRequest, user=Depends(get_current
 
 
 @router.post("/projects/{project_id}/studies/import/text", response_model=schemas.ImportReport)
-def import_text(body: schemas.TablePasteImport, project: models.Project = Depends(get_project_for_member),
+def import_text(body: schemas.TablePasteImport, scope: work_service.WorkScope = Depends(work_service.work_scope),
                 user=Depends(get_current_user), db: Session = Depends(get_db)):
     """붙여 넣은 표를 등록한다. 파일 등록과 같은 검증을 탄다. AI·PC Agent가 없어도 된다."""
     names = [c.name for c in body.outputs] if body.outputs is not None else None
-    return _import_table(_read_paste(body.text, body.header_row, names), None, body, project.id, user, db)
+    table = _read_paste(body.text, body.header_row, names)  # 표를 못 읽으면 빈 Task를 만들지 않는다
+    return _import_table(table, None, body, scope.project.id, user, db, scope.write().id)
 
 
 @router.post("/tables/check")
@@ -181,17 +184,21 @@ def table_check(file: UploadFile = File(...), user=Depends(get_current_user)):
 @router.post("/table-jobs", response_model=schemas.TableJobResponse)
 def table_job_start(body: schemas.TableJobCreate, user=Depends(get_current_user), db: Session = Depends(get_db)):
     """표로 Simulator: 등록 → 학습 → 배포를 서버에서 끝까지 한다. 화면을 닫아도 이어지고, 돌아오면 상태를 읽는다."""
+    work_id = None
     if body.project_id is not None:
         require_member(body.project_id, user, db)
+        work = db.get(models.Work, body.work_id) if body.work_id else None
+        # 내 Task면 그 안에 넣는다. 남의 Task를 보다 붙여 넣었거나 새 Task 화면이면 내 새 Task에 넣는다
+        work_id = work.id if work and work.project_id == body.project_id and work_service.is_mine(work, user.id) else None
     size = len(body.text.encode("utf-8", errors="ignore"))
     if size > settings.paste_max_mb * 1024 * 1024:
         raise HTTPException(413, f"붙여 넣은 표가 {size / 1024 / 1024:.0f}MB로 너무 큽니다. {settings.paste_max_mb}MB까지 받습니다 → 필요한 행과 열만 골라 다시 복사해 주세요")
     names = [c.name for c in body.outputs] if body.outputs is not None else None
 
     def register(session: Session, job: models.TableJob, owner: models.User) -> dict:
-        return _import_table(_read_paste(body.text, body.header_row, names), None, body, job.project_id, owner, session)
+        return _import_table(_read_paste(body.text, body.header_row, names), None, body, job.project_id, owner, session, job.work_id)
 
-    job = table_job.start(db, user, (body.name or "표 예측 모델").strip() or "표 예측 모델", body.project_id, names, register)
+    job = table_job.start(db, user, (body.name or "표 예측 모델").strip() or "표 예측 모델", body.project_id, names, register, work_id)
     return table_job.view(job)
 
 
@@ -224,7 +231,7 @@ def table_job_seen(job_id: int, user=Depends(get_current_user), db: Session = De
     return {"ok": True}
 
 
-def _import_table(table: Table, join: dict | None, m: schemas.TableMapping, project_id: int, user, db: Session) -> dict:
+def _import_table(table: Table, join: dict | None, m: schemas.TableMapping, project_id: int, user, db: Session, work_id: int | None = None) -> dict:
     if 0 < len(table.rows) < 3:  # 한두 행이면 모든 열이 상수로 보여 "출력 열이 없다"는 엉뚱한 이유가 나온다. 진짜 이유를 먼저 말한다
         raise HTTPException(400, f"데이터 행이 {len(table.rows)}개뿐입니다. 예측 모델에는 3행 이상이 필요합니다 → 행을 더 복사해 붙여 넣으세요")
     info = analyze(table)
@@ -246,16 +253,16 @@ def _import_table(table: Table, join: dict | None, m: schemas.TableMapping, proj
             "objectives": [o.model_dump() for o in m.objectives], "constraints": [c.model_dump(exclude_none=True) for c in m.constraints],
             "rows": table.records(numeric=True), "fixed": m.fixed, "expects_fields": m.expects_fields, "flow_id": m.flow_id, "node_id": m.node_id,
             "pre_removed": pre_removed, "pre_warnings": info["warnings"]}
-    return {**_import_rejected(importer.import_new, db, project_id, body, user.id), "join": join}
+    return {**_import_rejected(importer.import_new, db, project_id, body, user.id, work_id), "join": join}
 
 
 @router.post("/projects/{project_id}/studies/import/file", response_model=schemas.ImportReport)
 def import_file(file: UploadFile = File(...), outputs_file: UploadFile | None = File(None), mapping: str = Form("{}"),
-                project: models.Project = Depends(get_project_for_member), user=Depends(get_current_user), db: Session = Depends(get_db)):
+                scope: work_service.WorkScope = Depends(work_service.work_scope), user=Depends(get_current_user), db: Session = Depends(get_db)):
     """표 파일을 바로 등록한다. mapping을 비우면 미리보기의 추측대로 등록한다."""
     m = _mapping(mapping)
     table, join = _load_table(file, outputs_file, m.sheet, m.header_row, m.key, [c.name for c in m.outputs] if m.outputs is not None else None)
-    return _import_table(table, join, m, project.id, user, db)
+    return _import_table(table, join, m, scope.project.id, user, db, scope.write().id)
 
 
 @router.post("/studies/{study_id}/cases/import", response_model=schemas.ImportReport)
@@ -317,14 +324,17 @@ def set_study_adapter(study_id: int, body: schemas.StudyAdapterRequest, user=Dep
 
 
 @router.post("/studies/{study_id}/clone", response_model=schemas.StudyResponse)
-def clone_study(study_id: int, body: schemas.StudyCloneRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
+def clone_study(study_id: int, body: schemas.StudyCloneRequest, user=Depends(get_current_user), db: Session = Depends(get_db),
+                header: int | None = Depends(work_service.header_hint)):
     """신규 모델로 지난번처럼: 설정을 복사한 새 스터디를 만든다. 케이스·모델을 옮기지 않아 옛 결과는 그대로다."""
     s = _study(study_id, user, db)
     if body.project_id and body.project_id != s.project_id:
         require_member(body.project_id, user, db)
     fields = body.model_dump(exclude_none=True, exclude={"project_id"})
     try:
-        return service.clone_study(db, s, fields, body.project_id, owner_id=user.id)
+        # 복제본은 지금 Task에 생긴다. 옛 Task의 스터디를 찾아 복제해도 새 결과가 옛 Task에 쌓이지 않게
+        work = work_service.write_work(db, body.project_id or s.project_id, user, None, header)
+        return service.clone_study(db, s, fields, body.project_id, owner_id=user.id, work_id=work.id)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -539,9 +549,9 @@ def _model(model_id: int, user, db) -> models.SurrogateModel:
 
 
 @router.get("/projects/{project_id}/models", response_model=list[schemas.ModelResponse])
-def list_models(project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
-    return (db.query(models.SurrogateModel).join(models.Study).filter(models.Study.project_id == project.id)
-            .order_by(models.SurrogateModel.id.desc()).all())
+def list_models(scope: work_service.WorkScope = Depends(work_service.work_scope), db: Session = Depends(get_db)):
+    q = db.query(models.SurrogateModel).join(models.Study).filter(models.Study.project_id == scope.project.id)
+    return work_service.narrow(q, models.Study, scope.read()).order_by(models.SurrogateModel.id.desc()).all()
 
 
 @router.get("/models/{model_id}/spec")
@@ -554,7 +564,7 @@ def model_spec(model_id: int, user=Depends(get_current_user), db: Session = Depe
     versions = db.query(models.SurrogateModel).filter_by(study_id=study.id).order_by(models.SurrogateModel.id.desc()).all()
     return {"model": schemas.ModelResponse.model_validate(m), "variables": service.model_variables(study, m),
             "objectives": study.objectives, "study_name": study.name,
-            "project_id": study.project_id, "project_name": project.name if project else "",
+            "project_id": study.project_id, "project_name": project.name if project else "", "work_id": study.work_id,
             "current_model_id": live.id if live else None, "data_source": service.data_source(study),
             "versions": [schemas.ModelResponse.model_validate(x) for x in versions]}
 
@@ -711,8 +721,9 @@ def my_simulators(user=Depends(get_current_user), db: Session = Depends(get_db))
         seen.add(study.id)
         own = m.created_by == user.id
         owner = None if own else db.get(models.User, m.created_by) if m.created_by else None
+        work = db.get(models.Work, study.work_id) if study.work_id else None
         (mine if own else shared).append(_sim_item(m, study, url=f"/simulator/{m.id}", source="mine" if own else "project", project_id=project.id,
-                                                   project_name=project.name, shared_by=owner.display_name if owner else None,
+                                                   project_name=project.name, work_id=study.work_id, work_name=work.name if work else None, shared_by=owner.display_name if owner else None,
                                                    thumbnail_url=f"/api/models/{m.id}/thumbnail"))
     now = datetime.now()
     access = (db.query(models.ShareAccess, models.ShareLink).join(models.ShareLink, models.ShareAccess.share_id == models.ShareLink.id)

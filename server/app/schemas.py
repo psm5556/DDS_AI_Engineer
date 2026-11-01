@@ -85,12 +85,83 @@ class ProjectMemberResponse(BaseModel):
     role: str
 
 
+class WorkBrief(BaseModel):
+    """Task(코드 이름 Work) 한 줄. 사이드바와 머리글이 쓴다."""
+    id: int
+    uid: str | None = None
+    project_id: int
+    seq: int
+    name: str
+    owner_id: int
+    owner_name: str = ""
+    legacy: bool = False
+    mine: bool = False  # 내 Task다(주인이거나 이전 기록에서 일하던 멤버). 요청은 이때만 된다
+    can_manage: bool = False  # 이름 변경·삭제 가능(주인·Project master·관리자)
+    status: str | None = None  # 가장 급한 상태: review > in_progress·approved > failed > 마지막 흐름 상태
+    flow_title: str | None = None
+    model_file: str | None = None
+    n_cases: int = 0
+    source_label: str | None = None
+    version: int = 1
+    created_at: datetime
+    updated_at: datetime
+
+
+class WorkChat(BaseModel):
+    id: int
+    user_id: int
+    display_name: str = ""
+    agent: str
+    created_at: datetime
+
+
+class WorkDetail(WorkBrief):
+    chats: list[WorkChat] = []  # 시간순. 이전 기록은 여럿일 수 있다
+    active_chat_id: int | None = None  # 내가 보내는 곳(내 최근 기록). 남의 Task면 주인의 기록
+    n_simulators: int = 0  # 지우면 함께 사라지는 것(삭제 확인 창)
+    n_share_links: int = 0
+
+
+class WorkCreate(BaseModel):
+    name: str | None = Field(None, max_length=200)
+    name_auto: bool = True  # 화면이 요청 앞부분으로 붙인 이름이면 True
+    agent: str | None = None  # 기록을 함께 만들 AI. 표처럼 AI가 필요 없으면 비워 둔다
+
+
+class WorkUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    version: int | None = None
+
+
+class WorkChatCreate(BaseModel):
+    agent: str | None = None
+
+
+class WorkSearchHit(BaseModel):
+    project_id: int
+    project_name: str
+    work_id: int
+    work_name: str
+    owner_name: str = ""
+    created_at: datetime
+    model_file: str | None = None
+    matched: Literal["name", "file", "result"]
+    matched_text: str = ""
+
+
+class WorkSearchResult(BaseModel):
+    projects: list[int] = []  # 이름·설명이 맞은 Project
+    works: list[WorkSearchHit] = []
+
+
 class ProjectResponse(ProjectBase):
     members: list[ProjectMemberResponse]
     user_role: str | None
     is_favorite: bool = False
+    # Project 합산 상태: 승인 대기·실패는 내 Task만, 남의 Task는 진행 중만 올린다. 마지막 흐름 하나만 보면 앞선 승인 대기가 사라진다
     flow_status: str | None = None
     flow_title: str | None = None
+    works: list[WorkBrief] = []  # 최신 Task가 위
 
 
 class MemberUpsert(BaseModel):
@@ -100,6 +171,7 @@ class MemberUpsert(BaseModel):
 # ---------- Chat ----------
 class ChatSessionCreate(BaseModel):
     agent: str | None = None  # None이면 내 PC Agent의 기본 에이전트
+    work_id: int | None = None  # 어느 Task의 기록인지. 비우면 서버가 내 지금 Task를 고른다
 
 
 class ChatSessionResponse(ORM):
@@ -109,6 +181,7 @@ class ChatSessionResponse(ORM):
     title: str
     agent: str
     agent_session_id: str | None
+    work_id: int | None = None
     created_at: datetime
 
 
@@ -134,6 +207,7 @@ class SessionUpdate(BaseModel):
 class AttachmentResponse(ORM):
     id: int
     project_id: int
+    work_id: int | None = None  # 보낼 때 정해진다. 그래서 놓은 뒤 새 Task로 옮겨 갈 수 있다
     filename: str
     size: int
     sha256: str
@@ -189,6 +263,7 @@ class FlowStatusUpdate(BaseModel):
 class FlowResponse(ORM):
     id: int
     project_id: int
+    work_id: int | None = None
     title: str
     goal: str
     nodes: list[dict[str, Any]]
@@ -215,6 +290,7 @@ class ArtifactCreate(BaseModel):
 class ArtifactResponse(ORM):
     id: int
     project_id: int
+    work_id: int | None = None
     flow_id: int | None
     node_id: str | None
     kind: str
@@ -234,6 +310,7 @@ class ReportCreate(BaseModel):
 class ReportResponse(ORM):
     id: int
     project_id: int
+    work_id: int | None = None
     flow_id: int | None
     title: str
     body: str
@@ -374,11 +451,13 @@ class TablePasteImport(TableMapping):
 class TableJobCreate(TablePasteImport):
     """표로 Simulator: 등록·학습·배포를 서버 작업 하나로 돌린다. project_id가 없으면(첫 화면) 표를 받을 수 있을 때 프로젝트를 만든다."""
     project_id: int | None = None
+    work_id: int | None = None  # 지금 연 Task. 내 Task면 여기에 넣고, 남의 Task이거나 비어 있으면 내 새 Task를 만든다
 
 
 class TableJobResponse(BaseModel):
     id: int
     project_id: int | None = None
+    work_id: int | None = None
     study_id: int | None = None
     model_id: int | None = None
     name: str
@@ -451,6 +530,7 @@ class OutputAddRequest(BaseModel):
 class StudyResponse(ORM):
     id: int
     project_id: int
+    work_id: int | None = None
     name: str
     practice: bool = False  # 값이 실제 해석이 아니라 연습용 계산이다
     variables: list[dict[str, Any]]
@@ -614,6 +694,8 @@ class SimulatorItem(BaseModel):
     status: str = "active"  # active | stopped | expired
     project_id: int | None = None
     project_name: str | None = None
+    work_id: int | None = None  # 카드를 누르면 그 Task로 간다
+    work_name: str | None = None
     shared_by: str | None = None
     note: str = ""
     share_id: int | None = None

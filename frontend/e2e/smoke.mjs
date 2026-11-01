@@ -2,7 +2,7 @@
 // 화면을 고친 뒤 반드시 돌린다. 서버(+PC Agent)가 떠 있어야 한다: .venv\Scripts\python scripts\dev_live.py --agent demo
 //
 //   cd frontend
-//   npm run smoke                        # 화면 둘러보기 (로그인 → 첫 화면 → 표로 바로 Simulator → 툴 → 프로젝트 탭들 → 사이드바 순서·프로젝트 보기 → Simulator 카드·목록·검색 → 설정 → 관리)
+//   npm run smoke                        # 화면 둘러보기 (로그인 → 첫 화면 → 표로 바로 Simulator → 툴 → Task 탭들 → 사이드바 순서·프로젝트 보기 → Simulator 카드·목록·검색 → 설정 → 관리)
 //   npm run smoke -- --demo              # + 데모 에이전트로 전체 과정(CAD→보고서)을 실제로 돌려 승인·실행·완료까지 확인 (3~5분)
 //   npm run smoke -- --reduced           # '움직임 줄이기' 설정으로 점검(애니메이션 0개여야 통과)
 //   npm run smoke -- --insights          # + 데모로 두 목표·능동학습을 돌린 뒤 단계 곁의 판단을 펼쳐 점검(1~2분)
@@ -71,7 +71,7 @@ if (DEMO) {
     const input = page.getByLabel("에이전트에게 요청");
     await page.waitForFunction((el) => el.value.length > 0, await input.elementHandle());
     await input.press("Enter");
-    await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 30000 });
+    await page.waitForURL(/\/projects\/\d+\/w\/\d+/, { timeout: 30000 });
     await page.getByRole("button", { name: /승인하고 실행/ }).first().waitFor({ timeout: 90000 });
     await shot("demo-review");
     await page.getByRole("button", { name: /승인하고 실행/ }).first().click();
@@ -82,14 +82,14 @@ if (DEMO) {
     // 연습용 값은 실제 해석으로 읽히면 안 된다
     await page.locator(".canvas .notice", { hasText: "연습용 계산" }).first().waitFor({ timeout: 15000 });
     await page.locator(".flow-card .fs-tag", { hasText: "연습용 계산" }).first().waitFor({ timeout: 5000 });
-    for (const tab of ["작업 흐름", "데이터"]) {
+    for (const tab of ["Task Flow", "데이터"]) {
       await page.getByRole("tab", { name: tab }).click();
       await page.waitForTimeout(400);
       if (/\bmock\b/i.test(await page.locator(".chat, .canvas").allInnerTexts().then((x) => x.join(" ")))) throw new Error(`${tab} 탭에 mock이 그대로 보입니다`);
     }
   });
   await step("단계 머리글이 목록 맨 위에 붙음", async () => {
-    await page.getByRole("tab", { name: "작업 흐름" }).click();
+    await page.getByRole("tab", { name: "Task Flow" }).click();
     await page.locator(".step-list .step-head").first().waitFor({ timeout: 15000 });
     // 틈이 있으면 그 사이로 스크롤되는 결과가 비친다
     const gaps = await page.evaluate(() => {
@@ -110,17 +110,14 @@ if (DEMO) {
     });
     if (gaps.some((g) => g > 0.5)) throw new Error(`머리글 위에 틈이 있습니다: ${Math.max(...gaps)}px`);
   });
-  await step("이 흐름을 새 모델로 다시", async () => {
-    await page.getByRole("tab", { name: "작업 흐름" }).click();
-    const again = page.getByRole("button", { name: "이 흐름을 새 모델로 다시" });
-    if ((await again.count()) !== 1) throw new Error(`버튼이 ${await again.count()}개입니다. 한 곳에만 있어야 합니다`);
-    await again.click();
-    const input = page.getByLabel("에이전트에게 요청");
-    await page.waitForFunction((el) => el.value.includes("새 모델로 다시"), await input.elementHandle());
-    await page.locator(".composer-ask").waitFor({ timeout: 3000 });
-    await shot("flow-rerun-prefill");
-    await input.fill("");
-    await page.locator(".composer-ask .icon-btn").click();
+  await step("옛 버튼이 없음", async () => {
+    await page.getByRole("tab", { name: "Task Flow" }).click();
+    // 새 모델은 경로 카드와 '지난 Task처럼 시작'이 맡는다. 그전에는 입력창에 적거나 '+ 새 Task'로 시작한다
+    if (await page.getByRole("button", { name: "이 흐름을 새 모델로 다시" }).count()) throw new Error("옛 버튼이 남아 있습니다");
+    await page.getByRole("tab", { name: "보고서" }).click();
+    await page.locator(".report-cover").waitFor({ timeout: 15000 });
+    await shot("demo-report");
+    await page.getByRole("tab", { name: "Task Flow" }).click();
   });
   await step("DOE 계획표 받기", async () => {
     await page.getByRole("tab", { name: "데이터" }).click();
@@ -239,10 +236,10 @@ await step("표로 바로 Simulator", async () => {
   await shot("table-data-tab");
   const io = await page.locator(".io-block").innerText();
   for (const want of ["mm", "재질=SS400", "하중=1000", "효율", "[%]"]) if (!io.includes(want)) throw new Error(`입력·출력에 '${want}'이(가) 없습니다: ${io}`);
-  await page.getByRole("tab", { name: "작업 흐름" }).click();
+  await page.getByRole("tab", { name: "Task Flow" }).click();
   await page.waitForTimeout(800);
   await shot("table-flow-tab");
-  if (!(await page.locator(".flow-none .art-card").count())) throw new Error("작업 흐름 없이 만든 결과가 보이지 않습니다");
+  if (!(await page.locator(".flow-none .art-card").count())) throw new Error("Task Flow 없이 만든 결과가 보이지 않습니다");
   bracketStudy = (await apiGet(`/api/projects/${page.url().match(/projects\/(\d+)/)[1]}/studies`))[0].name;
 
   // 데이터 탭에서 나쁜 표: 500 없이 이유와 할 일
@@ -281,7 +278,7 @@ await step("표로 바로 Simulator", async () => {
   await page.locator(".model-trust .notice.warn").waitFor({ timeout: 15000 });
   await page.waitForTimeout(2000);
   await shot("table-poor-shared-link");
-  if (await page.getByRole("link", { name: /프로젝트 열기/ }).count()) throw new Error("공유 링크 화면에 프로젝트 버튼이 있습니다");
+  if (await page.getByRole("link", { name: /Project 열기/ }).count()) throw new Error("공유 링크 화면에 프로젝트 버튼이 있습니다");
   // 쓰는 중에 공유가 끊기면 옛 숫자를 남기지 않는다: 값을 지우고 이유를 보이고 입력을 막는다
   await page.locator(".sim-out li b").first().filter({ hasNotText: "…" }).waitFor({ timeout: 15000 });
   const stopped = await page.evaluate((u) => fetch(u, { method: "DELETE", headers: { Authorization: `Bearer ${localStorage.getItem("dds.token")}` } }).then((r) => r.status), `/api/shares/${token}`);
@@ -311,17 +308,17 @@ await step("넓은 Simulator의 ±와 자세히", async () => {
   if (both.length !== 2) throw new Error(`±의 근거가 툴팁에 없습니다: ${title}`);
   if (num(shown.match(/± ([\d.,e+-]+)/)[1]) !== Math.max(...both)) throw new Error(`±(${shown})가 큰 값이 아닙니다: ${title}`);
   await shot("simulator-wide-error-bar");
-  // 넓은 화면의 자세히: 프로젝트만 여는 것이 아니라 작업 흐름 탭의 그 판단을 펼친다. 표로 만들어 흐름이 없어도 같다
+  // 넓은 화면의 자세히: 프로젝트만 여는 것이 아니라 Task Flow 탭의 그 판단을 펼친다. 표로 만들어 흐름이 없어도 같다
   await page.locator(".trust-line a.trust-more").click();
   await page.waitForURL(/\/projects\/\d+/, { timeout: 15000 });
   await page.locator('.insight-sec[data-insight="trust"] .insight-body').waitFor({ timeout: 30000 });
-  if ((await page.getByRole("tab", { name: "작업 흐름" }).first().getAttribute("aria-selected")) !== "true") throw new Error("자세히가 작업 흐름 탭을 열지 않습니다");
+  if ((await page.getByRole("tab", { name: "Task Flow" }).first().getAttribute("aria-selected")) !== "true") throw new Error("자세히가 Task Flow 탭을 열지 않습니다");
   await shot("simulator-more-trust");
   // 데이터 탭은 데이터만 보여 준다
   await page.getByRole("tab", { name: "데이터" }).first().click();
   await page.locator(".io-block").waitFor({ timeout: 15000 });
   if (await page.locator(".insight-sec").count()) throw new Error("데이터 탭에 판단이 남아 있습니다");
-  await page.getByRole("tab", { name: "작업 흐름" }).first().click();
+  await page.getByRole("tab", { name: "Task Flow" }).first().click();
 });
 
 await step("넓은 Simulator에서 프로젝트로 돌아오기", async () => {
@@ -346,7 +343,7 @@ await step("넓은 Simulator에서 프로젝트로 돌아오기", async () => {
   }, bracket.study_id);
   await page.evaluate(() => localStorage.setItem("dds.canvas.layout", JSON.stringify({ collapsed: true, width: 560 })));
   await page.goto(`${BASE}/simulator/${v2.id}`);
-  const back = page.getByRole("link", { name: /프로젝트 열기/ });
+  const back = page.getByRole("link", { name: /Project 열기/ });
   await back.waitFor({ timeout: 8000 });
   if (!(await back.getAttribute("title")).includes("Simulator 탭")) throw new Error("버튼 설명에 Simulator 탭이 없습니다");
   await back.click();
@@ -366,9 +363,9 @@ await step("넓은 Simulator에서 프로젝트로 돌아오기", async () => {
   if ((await selected.getAttribute("aria-selected")) !== "true") throw new Error("도착한 뒤 탭이 바뀌었습니다");
   // 값이 남아 있지 않다: 새로고침하면 평범한 프로젝트 화면이다
   await page.reload();
-  await page.getByRole("tab", { name: "작업 흐름" }).waitFor({ timeout: 15000 });
+  await page.getByRole("tab", { name: "Task Flow" }).waitFor({ timeout: 15000 });
   await page.waitForTimeout(800);
-  if ((await page.getByRole("tab", { name: "작업 흐름" }).getAttribute("aria-selected")) !== "true") throw new Error(`새로고침해도 Simulator 탭이 강제됩니다: ${here}`);
+  if ((await page.getByRole("tab", { name: "Task Flow" }).getAttribute("aria-selected")) !== "true") throw new Error(`새로고침해도 Simulator 탭이 강제됩니다: ${here}`);
 
   // 대화가 있는 프로젝트는 최근 대화 주소로 한 번 더 옮겨 간다. 그래도 Simulator 탭을 잃지 않는다
   const req = (method, url, body) => page.evaluate(async ([m, u, b]) => {
@@ -378,7 +375,7 @@ await step("넓은 Simulator에서 프로젝트로 돌아오기", async () => {
   const chat = await req("POST", `/api/projects/${bracket.project_id}/sessions`, {});
   if (chat.status >= 400) { console.log(`  (대화를 만들지 못해 건너뜀: ${chat.status})`); return; }
   const arrivedOnChat = async (what) => {
-    await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 15000 });
+    await page.waitForURL(/\/projects\/\d+\/w\/\d+/, { timeout: 15000 });
     await page.locator(".sim-tab .sim-var").first().waitFor({ timeout: 15000 });
     await page.waitForTimeout(800); // 옮겨 간 뒤에 탭이 바뀌지 않는지 본다
     if ((await page.getByRole("tab", { name: "Simulator" }).getAttribute("aria-selected")) !== "true") throw new Error(`${what}: Simulator 탭이 아닙니다`);
@@ -386,14 +383,14 @@ await step("넓은 Simulator에서 프로젝트로 돌아오기", async () => {
   };
   await page.goto(`${BASE}/simulator/${v2.id}`);
   await back.click();
-  await arrivedOnChat("프로젝트 열기");
+  await arrivedOnChat("Project 열기");
   await shot("simulator-back-with-chat");
   const again = await page.locator(".sim-ver-toggle b").innerText();
   if (again !== `v${v2.version}`) throw new Error(`대화가 있는 프로젝트에서 다른 버전이 골라졌습니다: ${again}`);
   await page.reload();
-  await page.getByRole("tab", { name: "작업 흐름" }).waitFor({ timeout: 15000 });
+  await page.getByRole("tab", { name: "Task Flow" }).waitFor({ timeout: 15000 });
   await page.waitForTimeout(800);
-  if ((await page.getByRole("tab", { name: "작업 흐름" }).getAttribute("aria-selected")) !== "true") throw new Error("대화가 있는 프로젝트에서 새로고침해도 Simulator 탭이 강제됩니다");
+  if ((await page.getByRole("tab", { name: "Task Flow" }).getAttribute("aria-selected")) !== "true") throw new Error("대화가 있는 프로젝트에서 새로고침해도 Simulator 탭이 강제됩니다");
   // 끝난 표 작업 알림의 '열기'도 같은 길이다. 다른 화면에서 끝난 작업을 띄워 누른다
   const rows = ["얇기\t너비\t수명", ...Array.from({ length: 14 }, (_, i) => `${1 + i * 0.3}\t${10 + ((i * 7) % 11)}\t${(100 + 9 * i + ((i * 7) % 11) * 4).toFixed(1)}`)].join("\n");
   const job = await req("POST", "/api/table-jobs", { project_id: bracket.project_id, text: rows, name: "수명 예측", outputs: [{ name: "수명" }] });
@@ -438,10 +435,10 @@ if (INSIGHTS) {
     const input = page.getByLabel("에이전트에게 요청");
     await input.fill("세탁기 진동과 바닥 전달력을 두 목표로 능동학습까지 해서 보고서를 써 줘");
     await input.press("Enter");
-    await page.waitForURL(/\/projects\/\d+\/c\/\d+/, { timeout: 30000 });
+    await page.waitForURL(/\/projects\/\d+\/w\/\d+/, { timeout: 30000 });
     await page.getByRole("button", { name: /승인하고 실행/ }).first().click({ timeout: 90000 });
     await page.getByText("두 목표 최적화와 능동학습을 마쳤습니다").waitFor({ timeout: 420000 });
-    await page.getByRole("tab", { name: "작업 흐름" }).first().click();
+    await page.getByRole("tab", { name: "Task Flow" }).first().click();
     // 판단은 그 단계의 결과 곁에 있다. 공간 충진은 DOE 단계, 수렴은 최적화 단계
     for (const [step, key] of [["doe", "coverage"], ["doe", "quality"], ["train", "trust"], ["al", "active"], ["opt", "convergence"], ["opt", "pareto"]]) {
       await page.locator(`#step-${step} .insight-sec[data-insight="${key}"]`).waitFor({ timeout: 60000 });
@@ -501,7 +498,7 @@ await step("프로젝트", async () => {
   await page.waitForURL(/\/projects\//, { timeout: 15000 });
   await page.waitForTimeout(2000);
   await shot("workspace");
-  for (const t of ["작업 흐름", "보고서", "데이터", "파일"]) {
+  for (const t of ["Task Flow", "보고서", "데이터", "파일"]) {
     await step(`탭 ${t}`, async () => { await page.getByRole("tab", { name: t }).first().click({ timeout: 5000 }); await shot(`tab-${t}`); });
   }
   await step("보고서 목차", async () => {
@@ -517,13 +514,17 @@ await step("프로젝트", async () => {
     if (await page.evaluate(() => location.hash)) throw new Error("목차가 주소를 바꿨습니다");
     await shot("report-toc-jump");
   });
-  await step("대화 전환 메뉴", async () => { await page.locator(".ws-conv .ws-crumb").click(); await shot("conv-menu"); await page.keyboard.press("Escape"); });
+  await step("Task 메뉴", async () => {
+    const crumb = page.locator("button.ws-task");
+    if (!(await crumb.count())) { console.log("  (메뉴가 없는 Task라 건너뜀)"); return; }
+    await crumb.click(); await page.getByRole("menu", { name: "Task 메뉴" }).waitFor({ timeout: 5000 }); await shot("task-menu"); await page.keyboard.press("Escape");
+  });
   await step("Simulator 탭", async () => {
     await page.getByRole("tab", { name: "Simulator" }).click();
     await page.waitForTimeout(3000);
     await shot("tab-simulator");
     // 탭을 열어도 대화가 그대로 있어야 한다
-    if (!(await page.locator(".canvas").count()) || !(await page.locator(".ws-conv").count())) throw new Error("Simulator 탭에서 대화나 패널이 사라졌습니다");
+    if (!(await page.locator(".canvas").count()) || !(await page.locator(".ws-task").count())) throw new Error("Simulator 탭에서 기록이나 패널이 사라졌습니다");
     const toggle = page.locator(".sim-ver-toggle");
     if (await toggle.count()) { await toggle.click(); await page.waitForTimeout(300); await shot("tab-simulator-versions"); }
   });
@@ -535,11 +536,11 @@ await step("사이드바 순서", async () => {
   // 마켓의 '확인할 일' 숫자는 이름이 아니므로 뺀다. 검토 대기가 남은 서버에서 돌려도 순서만 본다
   const label = (e) => (e.tagName === "HR" ? "구분선" : e.getAttribute("aria-label") || e.querySelector("input")?.placeholder || e.textContent.trim().replace(/\d+$/, ""));
   const order = await page.locator(".side-nav-list > *").evaluateAll((els, f) => els.map(new Function("e", `return (${f})(e)`)), label.toString());
-  if (order.join(",") !== "Simulator,마켓,구분선,새 프로젝트,프로젝트 검색") throw new Error(`순서가 다릅니다: ${order}`);
+  if (order.join(",") !== "Simulator,마켓,구분선,새 Project,Project 검색") throw new Error(`순서가 다릅니다: ${order}`);
   await page.getByRole("button", { name: "사이드바 접기" }).click();
   const rail = await page.locator(".sidebar.rail > *").evaluateAll((els, f) => els.map(new Function("e", `return (${f})(e)`)), label.toString());
   const at = rail.indexOf("Simulator");
-  if (at < 0 || rail[at + 1] !== "마켓" || rail[at + 2] !== "구분선" || rail[at + 3] !== "새 프로젝트") throw new Error(`접은 사이드바 순서가 다릅니다: ${rail}`);
+  if (at < 0 || rail[at + 1] !== "마켓" || rail[at + 2] !== "구분선" || rail[at + 3] !== "새 Project") throw new Error(`접은 사이드바 순서가 다릅니다: ${rail}`);
   await shot("sidebar-rail");
   await page.getByRole("button", { name: "사이드바 펼치기" }).click();
 });
@@ -559,7 +560,7 @@ await step("프로젝트 보기", async () => {
     sent: ["내가 공유한 것", (p) => p.owner_id === me.id && others(p)],
     received: ["공유 받은 것", (p) => p.owner_id !== me.id && member(p)],
   };
-  const names = () => page.locator(".side-body .side-name").allTextContents();
+  const names = () => page.locator(".side-body .side-project > .side-item .side-name").allTextContents();
   for (const [id, [title, has]] of Object.entries(views)) {
     const btn = page.locator(`.side-views button[data-view="${id}"]`);
     await btn.click();
@@ -578,9 +579,9 @@ await step("프로젝트 보기", async () => {
   await page.locator(".side-views").waitFor();
   if ((await page.locator('.side-views button[data-view="favorite"]').getAttribute("aria-pressed")) !== "true") throw new Error("고른 보기를 기억하지 못합니다");
   await page.locator('.side-views button[data-view="all"]').click();
-  await page.getByLabel("프로젝트 검색").fill("없는-프로젝트-이름");
+  await page.getByLabel("Project 검색").fill("없는-프로젝트-이름");
   if ((await names()).length || !(await page.locator(".side-body .side-empty").count())) throw new Error("검색이 보기 안에서 동작하지 않습니다");
-  await page.getByLabel("프로젝트 검색").fill("");
+  await page.getByLabel("Project 검색").fill("");
   // 메뉴의 즐겨찾기가 그대로 동작하고 표시가 따라온다
   if (projects.length) {
     const first = projects[0];
@@ -620,7 +621,7 @@ await step("프로젝트 보기 규칙", async () => {
   try {
     await page.goto(BASE + "/");
     await page.locator(".side-views").waitFor();
-    const names = () => page.locator(".side-body .side-name").allTextContents();
+    const names = () => page.locator(".side-body .side-project > .side-item .side-name").allTextContents();
     const pick = (id) => page.locator(`.side-views button[data-view="${id}"]`).click();
     const want = {
       all: fixture.map((p) => p.name),
@@ -634,7 +635,7 @@ await step("프로젝트 보기 규칙", async () => {
       if (got.join("|") !== list.join("|")) throw new Error(`${id}: ${got.join(", ")}`);
     }
     // 검색은 고른 보기 안에서만 찾는다
-    const find = page.getByLabel("프로젝트 검색");
+    const find = page.getByLabel("Project 검색");
     await pick("received");
     await find.fill("규칙-혼자");
     if ((await names()).length || !(await page.locator(".side-body .side-empty").count())) throw new Error("검색이 고른 보기 밖까지 찾습니다");
@@ -676,13 +677,121 @@ await step("지금 연 프로젝트", async () => {
   await page.locator(".side-views").waitFor();
   await page.locator('.side-views button[data-view="favorite"]').click();
   // 고른 보기 밖이어도 연 프로젝트는 사라지지 않고 표시된다
-  const pinned = page.locator(".side-pinned .side-item.active .side-name");
+  const pinned = page.locator(".side-pinned .side-project > .side-item.here .side-name");
   await pinned.waitFor({ timeout: 8000 });
   if ((await pinned.textContent()) !== p.name) throw new Error("지금 연 프로젝트가 아닙니다");
   await shot("sidebar-pinned");
   await page.locator('.side-views button[data-view="all"]').click();
   if (await page.locator(".side-pinned").count()) throw new Error("보기 안에 있는데 따로 또 보입니다");
-  if ((await page.locator(".side-body .side-item.active").count()) !== 1) throw new Error("연 프로젝트 표시가 없습니다");
+  if ((await page.locator(".side-body .side-item.here").count()) !== 1) throw new Error("연 프로젝트 표시가 없습니다");
+});
+
+await step("Project > Task", async () => {
+  const call = (method, url, body) => page.evaluate(async ([m, u, b]) => {
+    const r = await fetch(u, { method: m, headers: { Authorization: `Bearer ${localStorage.getItem("dds.token")}`, "Content-Type": "application/json" }, body: b ? JSON.stringify(b) : undefined });
+    return r.json().catch(() => null);
+  }, [method, url, body]);
+  const p = await call("POST", "/api/projects", { name: "Task 시험", description: "" });
+  try {
+    // Task가 없는 Project: 프로젝트 줄을 누르면 새 Task 화면이고, 아무것도 만들어지지 않는다
+    await page.goto(`${BASE}/projects/${p.id}`);
+    await page.waitForURL(new RegExp(`/projects/${p.id}/w/new`), { timeout: 15000 });
+    await page.getByText("이 부품으로 새 일을 시작합니다").waitFor({ timeout: 8000 });
+    if (await page.getByText("새 대화").count()) throw new Error("화면에 '새 대화'가 남아 있습니다");
+    if (await page.locator(".ws-conv").count()) throw new Error("대화 전환 메뉴가 남아 있습니다");
+    await page.getByRole("tab", { name: "데이터" }).click();
+    await page.locator(".canvas .empty-hero").waitFor({ timeout: 8000 });
+    await page.getByRole("tab", { name: "Task Flow" }).click();
+    await page.locator(".canvas .flow-none").waitFor({ timeout: 8000 });
+    await shot("task-new-screen");
+    if ((await call("GET", `/api/projects/${p.id}/works`)).length) throw new Error("새 Task 화면을 열기만 했는데 Task가 생겼습니다");
+    // 두 Task: 결과는 각자의 탭에만 있고, 옆 Task의 소식은 탭을 빼앗지 않고 알린다
+    const mk = (name) => call("POST", `/api/projects/${p.id}/works`, { name, name_auto: false });
+    const a = await mk("1차 경량화");
+    const b = await mk("2차 M9");
+    const nodes = [{ id: "n", label: "단계", type: "doe" }];
+    await call("POST", `/api/projects/${p.id}/flows?work_id=${a.id}`, { title: "1차 흐름", goal: "", nodes, edges: [] });
+    await call("POST", `/api/projects/${p.id}/artifacts?work_id=${a.id}`, { kind: "markdown", title: "같은 제목", payload: { text: "1차 값" } });
+    await page.goto(`${BASE}/projects/${p.id}`);
+    await page.waitForURL(new RegExp(`/projects/${p.id}/w/${b.id}$`), { timeout: 15000 }); // 내 가장 최근 Task
+    await page.locator(".ws-task .t", { hasText: "2차 M9" }).waitFor({ timeout: 8000 });
+    await page.locator(".side-work", { hasText: "1차 경량화" }).locator(".side-st-text", { hasText: "승인 대기" }).waitFor({ timeout: 8000 });
+    if (await page.locator(".canvas .art-card").count()) throw new Error("새 Task의 탭에 다른 Task의 결과가 보입니다");
+    await page.getByRole("tab", { name: "데이터" }).click();
+    const flowB = await call("POST", `/api/projects/${p.id}/flows?work_id=${a.id}`, { title: "옆 Task의 새 흐름", goal: "", nodes, edges: [] });
+    await page.locator(".work-notice", { hasText: "1차 경량화" }).waitFor({ timeout: 8000 });
+    await page.waitForTimeout(1500);
+    if ((await page.getByRole("tab", { name: "데이터" }).getAttribute("aria-selected")) !== "true") throw new Error("옆 Task의 소식이 탭을 빼앗았습니다");
+    await shot("task-other-notice");
+    await page.locator(".work-notice").getByRole("button", { name: "열기" }).click();
+    await page.waitForURL(new RegExp(`/w/${a.id}$`), { timeout: 8000 });
+    await page.getByRole("tab", { name: "Task Flow" }).click();
+    await page.locator(".flow-bar select").waitFor({ timeout: 8000 });
+    await page.locator(".chat .flow-card", { hasText: "옆 Task의 새 흐름" }).waitFor({ timeout: 8000 });
+    await shot("task-with-flow");
+    // 머리글 메뉴에서 이름 바꾸기
+    await page.locator("button.ws-task").click();
+    await page.getByRole("menuitem", { name: "이름 바꾸기" }).click();
+    await page.getByLabel("새 이름").fill("1차 경량화 수정");
+    await page.getByRole("button", { name: "저장" }).click();
+    await page.locator(".ws-task .t", { hasText: "1차 경량화 수정" }).waitFor({ timeout: 8000 });
+    // 5개까지 보이고 더 보기로 펼친다. 지금 연 Task는 숨지 않는다
+    for (let i = 3; i <= 8; i++) await mk(`${i}차`);
+    await page.reload();
+    await page.locator(".side-moretasks", { hasText: "더 보기" }).waitFor({ timeout: 8000 });
+    if (!(await page.locator(".side-work.active", { hasText: "1차 경량화 수정" }).count())) throw new Error("지금 연 Task가 더 보기 뒤에 숨었습니다");
+    await shot("task-sidebar-long");
+    await page.locator(".side-moretasks", { hasText: "더 보기" }).click();
+    if ((await page.locator(".side-project.open .side-work").count()) < 8) throw new Error("더 보기를 눌러도 다 보이지 않습니다");
+    // 검색: 결과 제목으로 찾는다
+    await page.getByLabel("Project 검색").fill("같은 제목");
+    await page.locator(".side-work", { hasText: "1차 경량화 수정" }).waitFor({ timeout: 8000 });
+    await page.waitForTimeout(600);
+    if ((await page.locator(".side-project.open .side-work").count()) !== 1) throw new Error("검색 결과에 맞지 않는 Task가 보입니다");
+    await shot("task-search");
+    await page.getByLabel("Project 검색").fill("");
+    // 옛 주소는 그 Task로 넘어간다
+    await page.goto(`${BASE}/projects/${p.id}/c/${a.active_chat_id ?? 0}`);
+    await page.waitForURL(new RegExp(`/projects/${p.id}(/w/\\d+)?$`), { timeout: 15000 });
+    await page.goto(`${BASE}/projects/${p.id}/new`);
+    await page.waitForURL(new RegExp(`/projects/${p.id}/w/new$`), { timeout: 15000 });
+    // 남의 Task: 머리글에 주인과 '보기만 가능'을 보이고 입력창은 막힌다. 말없이 내 Task로 넘어가지 않는다
+    const uname = `tasker${Date.now()}`;
+    const anon = await page.evaluate(async ([u]) => {
+      await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: u, pin: "123456", display_name: "박프로" }) });
+    }, [uname]);
+    void anon;
+    const peer = (await call("GET", "/api/users")).find((u) => u.username === uname);
+    await call("PUT", `/api/users/${peer.id}`, { is_active: true });
+    await call("PUT", `/api/projects/${p.id}/members/${peer.id}`, { role: "member" });
+    const theirs = await page.evaluate(async ([u, pid]) => {
+      const t = (await (await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: u, pin: "123456" }) })).json()).access_token;
+      const r = await fetch(`/api/projects/${pid}/works`, { method: "POST", headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" }, body: JSON.stringify({ name: "남의 일", name_auto: false }) });
+      return r.json();
+    }, [uname, p.id]);
+    await page.goto(`${BASE}/projects/${p.id}/w/${theirs.id}`);
+    await page.locator(".ws-owner", { hasText: "보기만 가능" }).waitFor({ timeout: 8000 });
+    await page.locator(".side-work.active .side-owner", { hasText: "박프로" }).waitFor({ timeout: 8000 });
+    const box = page.getByLabel("에이전트에게 요청");
+    if (!(await box.getAttribute("placeholder"))?.includes("보기만")) throw new Error("남의 Task의 입력창 안내가 없습니다");
+    if (!(await box.getAttribute("readonly") !== null)) throw new Error("남의 Task의 입력창이 열려 있습니다");
+    await page.getByRole("tab", { name: "파일" }).click();
+    await page.getByText("박프로님 PC에 있습니다").waitFor({ timeout: 8000 });
+    await shot("task-others");
+    await page.getByRole("tab", { name: "Task Flow" }).click();
+    // 삭제: 사라지는 것과 남는 것을 함께 말한다
+    await page.goto(`${BASE}/projects/${p.id}/w/${a.id}`);
+    await page.locator("button.ws-task").click();
+    await page.getByRole("menuitem", { name: "삭제" }).click();
+    await page.getByText("내 PC 폴더는 지우지 않습니다").waitFor({ timeout: 5000 });
+    await shot("task-delete");
+    await page.getByRole("button", { name: "삭제" }).last().click();
+    await page.waitForURL(new RegExp(`/projects/${p.id}/w/(?!${a.id}$)`), { timeout: 15000 });
+    if ((await call("GET", `/api/works/${a.id}`))?.id) throw new Error("지운 Task가 남아 있습니다");
+  } finally {
+    await call("DELETE", `/api/projects/${p.id}`);
+    await page.goto(BASE + "/");
+  }
 });
 
 await step("Simulator 목록", async () => {

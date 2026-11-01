@@ -14,7 +14,7 @@ import type { AgentInstance, AgentRelease, AgentStatus, ApiToken } from "../type
 function updateText(state: string, auto: boolean) {
   const at = state.indexOf(":");
   const kind = at < 0 ? state : state.slice(0, at), v = at < 0 ? "" : state.slice(at + 1).trim();
-  if (kind === "pending") return `작업이 없을 때 ${v}(으)로 업데이트합니다`;
+  if (kind === "pending") return `쉬고 있을 때 ${v}(으)로 업데이트합니다`;
   if (kind === "installing") return `${v}을(를) 뒤에서 설치하는 중입니다. 계속 일해도 됩니다`;
   if (kind === "restarting") return `${v}(으)로 다시 시작하는 중입니다`;
   if (kind === "failed") return `업데이트하지 못했습니다: ${v} → ${auto ? "1시간 뒤 다시 시도합니다" : "'지금 업데이트'로 다시 시도하세요"}`;
@@ -76,8 +76,8 @@ export default function SettingsPage() {
             {agent?.connected ? <span className="chip ok"><CheckCircle2 size={12} />연결됨</span> : <span className="chip err"><XCircle size={12} />연결 안 됨</span>}
             <span className="grow" />
             {inst && latest && inst.outdated && agent?.connected && (
-              <button className="small" onClick={() => update.mutate()} disabled={update.isPending} title={working ? "진행 중인 대화·해석이 끊깁니다. 기다리면 끝난 뒤에 업데이트합니다" : undefined}>
-                <RefreshCw size={13} />지금 {latest.version}(으)로 업데이트{working && " (진행 중인 작업이 끊깁니다)"}</button>
+              <button className="small" onClick={() => update.mutate()} disabled={update.isPending} title={working ? "진행 중인 AI·해석이 끊깁니다. 기다리면 끝난 뒤에 업데이트합니다" : undefined}>
+                <RefreshCw size={13} />지금 {latest.version}(으)로 업데이트{working && " (진행 중인 일이 끊깁니다)"}</button>
             )}
           </div>
           {inst ? (
@@ -85,14 +85,14 @@ export default function SettingsPage() {
               <span>PC</span><b>{inst.hostname}</b>
               <span>버전</span><b>{inst.version ?? "-"} {latest && (inst.outdated ? <span className="chip warn">최신 {latest.version}</span> : <span className="chip ok">최신</span>)}</b>
               <span>마지막 연결</span><b>{when(inst.last_seen)}</b>
-              <span>작업</span><b>실행 중 케이스 {inst.status?.running_cases ?? 0} · 대기 {inst.status?.queued_cases ?? 0} · 진행 중 대화 {inst.status?.active_prompts ?? 0}</b>
+              <span>진행</span><b>실행 중 케이스 {inst.status?.running_cases ?? 0} · 대기 {inst.status?.queued_cases ?? 0} · 진행 중 AI {inst.status?.active_prompts ?? 0}</b>
               {inst.status?.update_state && inst.status.update_state !== "idle" && <><span>업데이트</span><b>{updateText(String(inst.status.update_state), prefs?.auto_update ?? true)}</b></>}
             </div>
           ) : <p className="small muted">아직 이 계정으로 연결된 PC가 없습니다. 아래 순서로 설치하세요.</p>}
           <label className="auto-update">
             <input type="checkbox" checked={prefs?.auto_update ?? true} disabled={!prefs || setAuto.isPending} onChange={(e) => setAuto.mutate(e.target.checked)} />
             <span><b>새 버전이 나오면 자동으로 업데이트</b>
-              <small>대화·해석이 없을 때 뒤에서 설치하고 PC Agent를 다시 시작합니다. 진행 중인 작업은 끊지 않습니다.</small></span>
+              <small>AI·해석이 없을 때 뒤에서 설치하고 PC Agent를 다시 시작합니다. 진행 중인 일은 끊지 않습니다.</small></span>
           </label>
           {user?.is_admin && (
             <label className="auto-update">
@@ -130,7 +130,7 @@ export default function SettingsPage() {
         </details>
 
         <section className="block">
-          <div className="block-head"><h3>AI 에이전트</h3><span className="small muted">대화를 시작할 때 고를 수 있습니다. 구독·사용 권한이 있는 것만 설치하세요.</span></div>
+          <div className="block-head"><h3>AI 에이전트</h3><span className="small muted">입력창에서 고를 수 있습니다. 구독·사용 권한이 있는 것만 설치하세요.</span></div>
           {!agent?.connected ? <p className="small muted">PC Agent가 연결되면 설치 상태를 보여 줍니다.</p> : (
             <div className="table-wrap"><table>
               <thead><tr><th>에이전트</th><th>상태</th><th>처음 로그인</th><th /></tr></thead>
@@ -199,7 +199,7 @@ function Diagnose({ connected }: { connected: boolean }) {
   return (
     <section className="block">
       <div className="block-head"><h3>내 PC 진단</h3>
-        <span className="small muted">작업 폴더와 CAE 뷰어를 확인합니다. CAD·CAE 툴 설치 상태는 <Link to="/tools">CAD·CAE 툴</Link> 화면에서 봅니다</span>
+        <span className="small muted">DDS 저장 위치와 CAE 뷰어를 확인합니다. CAD·CAE 툴 설치 상태는 <Link to="/tools">CAD·CAE 툴</Link> 화면에서 봅니다</span>
         <span className="grow" />
         <button className="small" disabled={!connected || run.isPending} onClick={() => run.mutate()}>
           {run.isPending ? <><span className="spinner" style={{ width: 12, height: 12 }} />확인 중</> : "진단 실행"}</button></div>
@@ -207,7 +207,7 @@ function Diagnose({ connected }: { connected: boolean }) {
       {d && (
         <>
           <div className="kv" style={{ marginBottom: 12 }}>
-            <span>작업 폴더</span><b>{d.workspace} <span className="chip">{d.workspace_free_gb} GB 남음</span></b>
+            <span>DDS 저장 위치</span><b>{d.workspace} <span className="chip">{d.workspace_free_gb} GB 남음</span></b>
             <span>CAE 뷰어</span><b>{d.viewers.length ? d.viewers.map((v) => <span key={v.ext} className={`chip ${v.found ? "ok" : "err"}`}>{v.ext} → {v.command[0].split(/[\/]/).pop()}</span>)
               : <span className="small muted">등록 없음 — 결과 파일은 Windows 기본 프로그램으로 열립니다</span>}</b>
           </div>

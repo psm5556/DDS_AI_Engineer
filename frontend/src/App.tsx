@@ -5,6 +5,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import { useSideLayout } from "./components/sideLayout";
 import { useLiveInvalidation } from "./live";
+import { WorkNotices } from "./work/useWorkNotices";
 import AdminPage from "./pages/AdminPage";
 import DashboardPage from "./pages/DashboardPage";
 import LoginPage from "./pages/LoginPage";
@@ -21,12 +22,12 @@ function RouteBoundary({ children }: { children: React.ReactNode }) {
   return <ErrorBoundary key={pathname} label="이 화면">{children}</ErrorBoundary>;
 }
 
-/** 왼쪽 사이드바 + 작업 영역. 프로젝트 화면은 '대화(가운데) + 라이브 캔버스(오른쪽)'로 나뉜다 (WorkspacePage).
+/** 왼쪽 사이드바 + 본문. Project 화면은 'Task의 기록(가운데) + 오른쪽 탭'으로 나뉜다 (WorkspacePage).
  *  상단바는 두지 않는다. PC Agent 상태는 사이드바 아래에 한 번만 보인다 */
 function Shell({ children }: { children: React.ReactNode }) {
   const side = useSideLayout();
   useLiveInvalidation();
-  // 화면 전환 등장: 같은 프로젝트 안에서 대화를 바꿀 때처럼 주소만 바뀌면 다시 재생하지 않는다
+  // 화면 전환 등장: 같은 Project 안에서 Task를 바꿀 때처럼 주소만 바뀌면 다시 재생하지 않는다
   const { pathname } = useLocation();
   const [, first, second] = pathname.split("/");
   const section = first === "projects" ? `projects/${second}` : first;
@@ -37,6 +38,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div key={section} className="page-fade"><RouteBoundary>{children}</RouteBoundary></div>
       </div>
       <TableJobsBar />
+      <WorkNotices />
     </div>
   );
 }
@@ -49,6 +51,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={protect(<DashboardPage />)} />
       <Route path="/projects/:pid" element={protect(<WorkspacePage />)} />
+      <Route path="/projects/:pid/w/:wid" element={protect(<WorkspacePage />)} />
       <Route path="/projects/:pid/new" element={protect(<WorkspacePage />)} />
       <Route path="/projects/:pid/c/:sid" element={protect(<WorkspacePage />)} />
       <Route path="/projects/:pid/*" element={<Navigate to=".." replace />} />

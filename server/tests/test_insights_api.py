@@ -438,4 +438,4 @@ def test_summary_table_has_no_cut_off_column(client):
     pub = client.post(f"/api/studies/{sid}/insights/publish", json={"keys": ["summary"]}, headers=admin).json()["published"]
     arts = client.get(f"/api/projects/{pid}/artifacts", headers=admin).json()
     a = next(x for x in arts if x["id"] == pub[0]["artifact_id"])
-    assert a["payload"]["columns"] == ["질문", "상태", "결론"] and "작업 흐름 탭" in a["title"]
+    assert a["payload"]["columns"] == ["질문", "상태", "결론"] and "Task Flow 탭" in a["title"]

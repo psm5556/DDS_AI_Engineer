@@ -280,7 +280,7 @@ def test_stale_flow_id_is_a_reason_and_leaves_nothing_behind(client):  # noqa: F
     pid = _project(client, admin)
     before = len(client.get(f"/api/projects/{pid}/studies", headers=admin).json())
     r = _import(client, admin, pid, flow_id=99999)
-    assert r.status_code == 400 and "작업 흐름" in r.json()["detail"] and "→" in r.json()["detail"]
+    assert r.status_code == 400 and "Task Flow" in r.json()["detail"] and "→" in r.json()["detail"]
     assert len(client.get(f"/api/projects/{pid}/studies", headers=admin).json()) == before
     sid = _import(client, admin, pid).json()["study_id"]
     assert client.post(f"/api/studies/{sid}/cases/import", json={"rows": _rows(2, seed=8), "flow_id": 99999}, headers=admin).status_code == 400
@@ -552,8 +552,14 @@ def test_other_members_script_needs_my_approved_flow(client):  # noqa: F811
         same = client.post(f"/api/studies/{sid}/recipe", headers=member, files={"file": ("r.zip", _bundle())}).json()
         assert same["created_by"] == me["id"]
         assert client.post(f"/api/studies/{sid}/run", json={"flow_id": other["id"]}, headers=member).status_code == 403
+        # 내 Task의 흐름을 남의 Task 스터디에 붙이지 못한다. 복제해 내 Task에서 돌린다(이유와 할 일을 알린다)
         mine = _approved_flow(client, member, pid)
-        assert client.post(f"/api/studies/{sid}/run", json={"flow_id": mine["id"]}, headers=member).json()["queued"] == 3
+        r = client.post(f"/api/studies/{sid}/run", json={"flow_id": mine["id"]}, headers=member)
+        assert r.status_code == 400 and "다른 Task" in r.json()["detail"] and "→" in r.json()["detail"]
+        work_id = client.get(f"/api/studies/{sid}", headers=admin).json()["study"]["work_id"]
+        same_work = client.post(f"/api/projects/{pid}/flows?work_id={work_id}", json={"title": "멤버 흐름", "goal": "", "nodes": [{"id": "n", "label": "n", "type": "doe"}], "edges": []}, headers=member).json()
+        same_work = client.put(f"/api/flows/{same_work['id']}/status", json={"status": "approved", "version": same_work["version"]}, headers=member).json()
+        assert client.post(f"/api/studies/{sid}/run", json={"flow_id": same_work["id"]}, headers=member).json()["queued"] == 3
     finally:
         registry.conns.pop(mu["id"], None)
         registry.conns.pop(me["id"], None)
@@ -567,7 +573,7 @@ def test_study_on_rejected_or_unapproved_flow_does_not_run(client, status):  # n
     f = _approved_flow(client, admin, pid, status)
     client.post(f"/api/studies/{sid}/doe", json={"n": 1, "seed": 9, "flow_id": f["id"]}, headers=admin)
     r = client.post(f"/api/studies/{sid}/run", json={}, headers=admin)
-    assert r.status_code == 403 and "작업 흐름" in r.json()["detail"] and "→" in r.json()["detail"]
+    assert r.status_code == 403 and "Task Flow" in r.json()["detail"] and "→" in r.json()["detail"]
 
 
 # ---------- 출력마다 값이 있는 행으로

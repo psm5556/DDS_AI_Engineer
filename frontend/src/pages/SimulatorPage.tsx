@@ -1,3 +1,5 @@
+import { W } from "../work/copy";
+import { taskPath } from "../work/copy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, Copy, FolderOpen, Link2, RotateCcw, Share2, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -17,7 +19,7 @@ import type { DataSource, Objective, SurrogateModel, Variable } from "../types";
 
 interface Spec {
   model: SurrogateModel; variables: Variable[]; objectives: Objective[]; study_name: string;
-  project_id?: number; project_name?: string; shared_by?: string; note?: string; current_model_id?: number | null;
+  project_id?: number; project_name?: string; work_id?: number | null; shared_by?: string; note?: string; current_model_id?: number | null;
   data_source?: Partial<DataSource> | null;
 }
 interface Pred { mean: Record<string, number>; std: Record<string, number> }
@@ -142,8 +144,8 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
         {/* 이동은 경로 글자가 아니라 버튼으로: 눌러서 어디로 가는지 한눈에 보이게 한다 */}
         <nav className="sim-nav" aria-label="이동">
           <Link className="btn small" to="/simulators"><ArrowLeft size={14} />Simulator 목록</Link>
-          {spec.project_id && <Link className="btn small" to={`/projects/${spec.project_id}`} state={{ canvasTab: "simulator", studyId: spec.model.study_id, modelId: spec.model.id }}
-            title="이 Simulator를 만든 프로젝트를 열고, 지금 보는 버전의 Simulator 탭을 보여 줍니다"><FolderOpen size={14} />프로젝트 열기: {spec.project_name || "프로젝트"}</Link>}
+          {spec.project_id && <Link className="btn small" to={taskPath(spec.project_id, spec.work_id)} state={{ canvasTab: "simulator", studyId: spec.model.study_id, modelId: spec.model.id }}
+            title={`이 Simulator를 만든 ${W.project}를 열고, 지금 보는 버전의 Simulator 탭을 보여 줍니다`}><FolderOpen size={14} />{W.project} 열기: {spec.project_name || `${W.project}`}</Link>}
         </nav>
         <div className="sim-head">
           <div className="grow"><h1>{spec.study_name} Simulator</h1>
@@ -159,11 +161,11 @@ export function SimulatorView({ base, specPath, modelId, fieldList, fieldBase, e
       {failure && (
         <div className={`notice ${closed ? "err" : "warn"} sim-failed`} role="alert"><AlertTriangle size={14} />
           <span>{closed
-            ? `이 Simulator를 더 쓸 수 없어 예측값을 지웠습니다. ${failure.reason} → ${spec.shared_by ? `공유한 ${spec.shared_by}님에게 문의하세요.` : "프로젝트 관리자에게 문의하세요."}`
+            ? `이 Simulator를 더 쓸 수 없어 예측값을 지웠습니다. ${failure.reason} → ${spec.shared_by ? `공유한 ${spec.shared_by}님에게 문의하세요.` : `${W.project} 관리자에게 문의하세요.`}`
             : `예측하지 못해 값을 지웠습니다. ${failure.reason} → 입력을 바꾸거나 잠시 뒤 다시 시도하세요.`}</span></div>
       )}
 
-      <TrustLine url={`${base}/trust-line`} onMore={onMore} moreTo={!onMore && spec.project_id ? `/projects/${spec.project_id}` : undefined}
+      <TrustLine url={`${base}/trust-line`} onMore={onMore} moreTo={!onMore && spec.project_id ? taskPath(spec.project_id, spec.work_id) : undefined}
         moreState={{ canvasTab: "flow", studyId: spec.model.study_id }} onMoreLink={() => askInsightFocus("trust", spec.model.study_id)} />
 
       {/* 왼쪽: 입력(설계변수)과 출력(예측값)을 붙여 둔다 · 오른쪽: 3D 형상·필드와 민감도 */}
@@ -241,7 +243,7 @@ export function ShareModal({ modelId, onClose }: { modelId: number; onClose: () 
   });
   return (
     <Modal title="Simulator 공유" wide onClose={onClose}>
-      <p className="small muted" style={{ marginBottom: 12 }}>링크를 받은 사내 사용자는 로그인만 하면 프로젝트 멤버가 아니어도 이 Simulator로 예측할 수 있습니다. 처음 열면 그 사람의 Simulator 목록에 들어옵니다. 링크는 항상 현재 버전을 보여 주고, 프로젝트의 대화·데이터·모델 파일은 보이지 않습니다.</p>
+      <p className="small muted" style={{ marginBottom: 12 }}>링크를 받은 사내 사용자는 로그인만 하면 {W.project} 멤버가 아니어도 이 Simulator로 예측할 수 있습니다. 처음 열면 그 사람의 Simulator 목록에 들어옵니다. 링크는 항상 현재 버전을 보여 주고, {W.project}의 기록·데이터·모델 파일은 보이지 않습니다.</p>
       {warning && <div className="notice warn share-warning" role="status"><span>{warning}</span></div>}
       <div className="row" style={{ marginBottom: 16 }}>
         <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="메모 (예: 설계팀 공유)" style={{ flex: 1 }} aria-label="공유 메모" />

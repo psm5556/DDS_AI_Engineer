@@ -79,12 +79,12 @@ def _decide(admin: models.User, op: str, note: str, db: Session, act):
 
 @router.put("/flows/{flow_id}/status", response_model=schemas.FlowResponse)
 def decide_flow(flow_id: int, body: schemas.FlowStatusUpdate, admin=Depends(require_devtest_admin), db: Session = Depends(get_db)):
-    return _decide(admin, "flow", f"작업 흐름 {flow_id}: {body.status}", db, lambda: flows.apply_flow_status(flow_id, body, admin, db))
+    return _decide(admin, "flow", f"Task Flow {flow_id}: {body.status}", db, lambda: flows.apply_flow_status(flow_id, body, admin, db))
 
 
 @router.post("/sessions/{session_id}/permission")
 def decide_permission(session_id: int, body: schemas.PermissionReply, admin=Depends(require_devtest_admin), db: Session = Depends(get_db)):
-    return _decide(admin, "permission", f"대화 {session_id}: {body.option_id}", db, lambda: sessions.reply_permission(session_id, body, admin, db))
+    return _decide(admin, "permission", f"기록 {session_id}: {body.option_id}", db, lambda: sessions.reply_permission(session_id, body, admin, db))
 
 
 @router.post("/run")

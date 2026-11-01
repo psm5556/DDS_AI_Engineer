@@ -67,28 +67,6 @@ body { background: var(--paper); }
 .ws-crumb small { flex: none; font-size: var(--fs-11); }
 .ws-project { max-width: 38%; color: var(--ink); font-weight: 600; }
 .ws-sep { color: var(--ink-5); padding: 0 1px; }
-.ws-conv { position: relative; min-width: 0; max-width: 46%; display: flex; }
-.ws-conv-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; width: 360px; max-width: calc(100vw - 32px); padding: 6px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow-modal); }
-.ws-conv-new, .ws-conv-open { display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: 100%; min-height: 34px; padding: 0 10px;
-  border: none; border-radius: var(--r-s); background: none; box-shadow: none; color: var(--ink-2); font-size: var(--fs-14); font-weight: 400; text-align: left; }
-.ws-conv-new { color: var(--ink); font-weight: 500; }
-.ws-conv-new:hover:not(:disabled) { background: var(--hover); }
-.ws-conv-sep { padding: 8px 10px 4px; font-size: var(--fs-12); color: var(--ink-4); border-top: 1px solid var(--line-2); margin-top: 4px; }
-.ws-conv-list { max-height: 50vh; overflow-y: auto; }
-.ws-conv-item { display: flex; align-items: center; border-radius: var(--r-s); }
-.ws-conv-item:hover { background: var(--hover); }
-.ws-conv-open:hover:not(:disabled) { background: none; color: var(--ink); }
-.ws-conv-item.on .ws-conv-open { color: var(--ink); font-weight: 600; }
-.ws-conv-open svg { flex: none; color: var(--ink-4); }
-.ws-conv-item.on .ws-conv-open svg { color: var(--brand); }
-.ws-conv-open .t { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.ws-conv-open .m { flex: none; font-size: var(--fs-12); color: var(--ink-4); }
-.ws-conv-acts { display: none; padding-right: 4px; }
-.ws-conv-acts .icon-btn { width: 26px; height: 26px; min-height: 26px; }
-.ws-conv-item:hover .ws-conv-acts, .ws-conv-acts:focus-within { display: flex; }
-.ws-conv-item:hover .ws-conv-open .m { display: none; }
-@media (hover: none) { .ws-conv-acts { display: flex; } }
 .ws-icon { position: relative; width: 34px; height: 34px; color: var(--ink-3); gap: 1px; }
 .ws-icon small { font-size: var(--fs-11); font-weight: 600; }
 .ws-icon.on { color: var(--ink); background: var(--active); }
@@ -186,7 +164,7 @@ body { background: var(--paper); }
   .ws-main { height: calc(100vh - 53px); }
   .ws-head { min-height: 46px; }
   .ws-project, .ws-sep { display: none; }
-  .ws-conv { max-width: 70%; }
+  .ws-task { max-width: 70%; }
   .canvas { position: fixed; inset: 0; z-index: 46; height: 100%; border-left: none; }
   .canvas-close { display: inline-flex; }
   .canvas-tabs button { padding: 0 8px; }
@@ -1431,3 +1409,36 @@ button.ghost, .btn.ghost { border-color: var(--line-strong); }
 .market-switch:disabled { opacity: 0.5; }
 .market-switch-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: var(--r-pill); background: var(--panel); transition: transform var(--dur-fast) var(--ease); }
 .market-switch.on .market-switch-knob { transform: translateX(16px); }
+/* Project > Task 사이드바: 두 단계까지만. Task 줄은 들여 쓰고, 상태는 글자로 함께 보인다 */
+.side-project + .side-project { margin-top: 1px; }
+.side-caret { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; min-height: 26px; margin-left: 2px; padding: 0; border: none; border-radius: var(--r-s); background: none; box-shadow: none; color: var(--ink-4); }
+.side-caret:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+.side-caret:disabled { opacity: 1; cursor: default; background: none; }
+.side-project > .side-item > .side-link { padding-left: 2px; }
+.side-item.here .side-link { color: var(--ink); font-weight: 500; }
+.side-works { margin-left: 18px; padding-left: 4px; border-left: 1px solid var(--line-2); }
+.side-work .side-link { min-height: 28px; padding-left: 8px; font-size: var(--fs-13); }
+.side-owner, .side-sub { color: var(--ink-4); font-weight: 400; }
+.side-st-text { flex: none; font-size: var(--fs-11); color: var(--ink-4); }
+.side-st-text.review { color: var(--warn); }
+.side-st-text.failed { color: var(--err); }
+.side-st-text.in_progress, .side-st-text.approved { color: var(--brand); }
+.side-newtask, .side-moretasks { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 28px; padding: 0 8px; border: none; border-radius: var(--r-s); background: none; box-shadow: none; color: var(--ink-3); font-size: var(--fs-13); font-weight: 400; text-align: left; }
+.side-newtask:hover, .side-moretasks:hover:not(:disabled) { background: var(--hover); color: var(--ink); text-decoration: none; }
+.side-moretasks { color: var(--ink-4); justify-content: flex-start; }
+.rail-btn { position: relative; }
+.rail-dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn-solid); box-shadow: 0 0 0 2px var(--paper); }
+/* 머리글: Project / Task */
+.ws-crumb.static { cursor: default; }
+.ws-crumb.static:hover:not(:disabled) { background: none; color: inherit; }
+.ws-task { min-width: 0; max-width: 46%; }
+.ws-owner { flex: none; white-space: nowrap; padding-left: var(--sp-1); }
+.ws-legacy { margin: 0 var(--sp-3) var(--sp-2); }
+/* 이전 기록의 경계 줄 */
+.tl-divider { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-3) 0; color: var(--ink-4); font-size: var(--fs-12); }
+.tl-divider::before, .tl-divider::after { content: ""; flex: 1; border-top: 1px solid var(--line-2); }
+.np-send { margin-top: var(--sp-2); text-align: left; }
+.recent-task { color: var(--ink-3); font-weight: 400; }
+/* 다른 Task의 소식: 탭을 빼앗지 않는 알림 */
+.work-notices { position: fixed; right: var(--sp-4); bottom: var(--sp-4); z-index: 70; display: flex; flex-direction: column; gap: var(--sp-2); }
+.work-notice { display: flex; align-items: center; gap: var(--sp-2); min-width: 280px; max-width: 420px; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-m); background: var(--paper); box-shadow: var(--shadow-pop); font-size: var(--fs-13); }

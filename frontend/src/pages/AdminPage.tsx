@@ -49,14 +49,14 @@ function Agents() {
         <span>실행 중 케이스<b>{online.reduce((a, i) => a + (i.status?.running_cases ?? 0), 0)}</b></span>
       </div>
       <div className="table-wrap panel" style={{ padding: 0 }}><table>
-        <thead><tr><th>사용자</th><th>PC</th><th>상태</th><th>버전</th><th>AI 에이전트</th><th>작업</th><th>마지막</th><th /></tr></thead>
+        <thead><tr><th>사용자</th><th>PC</th><th>상태</th><th>버전</th><th>AI 에이전트</th><th>진행</th><th>마지막</th><th /></tr></thead>
         <tbody>{list.map((i) => (
           <tr key={i.id}>
             <td>{i.user_display_name}</td><td>{i.hostname}</td>
             <td className="status-cell"><span className={`st ${i.connected ? "done" : ""}`}><i />{i.connected ? "연결" : "끊김"}</span></td>
             <td>{i.version} {i.outdated && <span className="chip warn">구버전</span>}</td>
             <td className="small">{(i.agents ?? []).filter((a) => a.installed && a.name !== "demo").map((a) => a.label).join(", ") || "-"}</td>
-            <td className="small">케이스 {i.status?.running_cases ?? 0}/{i.status?.queued_cases ?? 0} · 대화 {i.status?.active_prompts ?? 0}
+            <td className="small">케이스 {i.status?.running_cases ?? 0}/{i.status?.queued_cases ?? 0} · AI {i.status?.active_prompts ?? 0}
               {i.status?.update_state && i.status.update_state !== "idle" && <div className="muted">{i.status.update_state}</div>}</td>
             <td>{when(i.last_seen)}</td>
             <td className="r">{i.connected && i.outdated && <button className="small" onClick={() => update.mutate(i.user_id)}><RefreshCw size={12} />업데이트</button>}</td>
@@ -128,7 +128,7 @@ function Releases() {
   return (
     <>
       {choose && <PinModal title={`${choose} 최신으로 지정`} confirm="최신으로 지정" busy={latest.isPending} onClose={() => setChoose(null)}
-        onConfirm={(pin) => latest.mutate({ version: choose, pin })}>연결된 PC가 작업이 없을 때 이 버전으로 자동 업데이트합니다.</PinModal>}
+        onConfirm={(pin) => latest.mutate({ version: choose, pin })}>연결된 PC가 쉬고 있을 때 이 버전으로 자동 업데이트합니다.</PinModal>}
       <SetupChecklist />
       <div className="notice info" style={{ margin: "16px 0" }}>
         새 버전 배포: <code>python scripts/build_agent_bundle.py --publish --server {location.origin} --notes "변경 내용"</code>

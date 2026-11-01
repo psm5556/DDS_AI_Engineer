@@ -47,13 +47,16 @@ class NeedsApproval(ValueError):
     """승인이 없거나 반려된 흐름으로 돌리려 할 때. 문구에 이유와 할 일이 들어 있다."""
 
 
-def check_flow(db: Session, project_id: int, flow_id: int | None):
-    """지워진 흐름 번호를 받으면 결과 카드를 쓸 때 외래 키 오류(500)로 터진다. 데이터를 건드리기 전에 이유를 알린다."""
+def check_flow(db: Session, project_id: int, flow_id: int | None, work_id: int | None = None):
+    """지워진 흐름 번호를 받으면 결과 카드를 쓸 때 외래 키 오류(500)로 터진다. 데이터를 건드리기 전에 이유를 알린다.
+    work_id를 주면 같은 Task의 흐름인지도 본다. 다른 Task의 흐름에 결과를 붙이면 그 Task의 Task Flow 탭에 남의 결과가 나타난다."""
     if not flow_id:
         return
     flow = db.get(models.Flow, flow_id)
     if flow is None or flow.project_id != project_id:
-        raise ValueError(f"작업 흐름 {flow_id}번이 이 프로젝트에 없습니다 → 흐름 번호를 비우거나 지금 흐름의 번호를 주세요")
+        raise ValueError(f"Task Flow {flow_id}번이 이 Project에 없습니다 → 흐름 번호를 비우거나 지금 흐름의 번호를 주세요")
+    if work_id and flow.work_id and flow.work_id != work_id:
+        raise ValueError(f"Task Flow {flow_id}번은 다른 Task의 것입니다 → 흐름 번호를 비우거나 이 Task의 흐름 번호를 주세요")
 
 
 def check_config_scripts(config: dict | None):
@@ -83,15 +86,19 @@ def _cell(v, digits: int):
 
 # ---------- 아티팩트 ----------
 def publish_artifact(db: Session, project_id: int, kind: str, title: str, payload: dict,
-                     flow_id: int | None = None, node_id: str | None = None) -> models.Artifact:
-    """같은 프로젝트·같은 제목이면 갱신(upsert)해서 패널이 같은 카드를 업데이트하도록 한다."""
-    art = db.query(models.Artifact).filter_by(project_id=project_id, title=title).first()
+                     flow_id: int | None = None, node_id: str | None = None, work_id: int | None = None) -> models.Artifact:
+    """같은 Task·같은 제목이면 갱신(upsert)해서 패널이 같은 카드를 업데이트하도록 한다.
+    범위가 Project였을 때는 새 모델의 Task가 같은 제목으로 지난 Task의 결과를 덮어썼다."""
+    if work_id is None and flow_id:
+        flow = db.get(models.Flow, flow_id)
+        work_id = flow.work_id if flow else None
+    art = db.query(models.Artifact).filter_by(project_id=project_id, work_id=work_id, title=title).first()
     if art:
         art.kind, art.payload = kind, payload
         art.flow_id = flow_id or art.flow_id
         art.node_id = node_id or art.node_id
     else:
-        art = models.Artifact(project_id=project_id, kind=kind, title=title, payload=payload,
+        art = models.Artifact(project_id=project_id, work_id=work_id, kind=kind, title=title, payload=payload,
                               flow_id=flow_id, node_id=node_id)
         db.add(art)
     db.commit()
@@ -101,11 +108,18 @@ def publish_artifact(db: Session, project_id: int, kind: str, title: str, payloa
     return art
 
 
-def _retitle_artifact(db: Session, project_id: int, old: str, new: str):
+def publish_study_artifact(db: Session, study: models.Study, kind: str, title: str, payload: dict,
+                           flow_id: int | None = None, node_id: str | None = None) -> models.Artifact:
+    """스터디의 결과는 그 스터디의 Task에 쌓인다."""
+    return publish_artifact(db, study.project_id, kind, title, payload, flow_id, node_id, work_id=study.work_id)
+
+
+def _retitle_artifact(db: Session, study: models.Study, old: str, new: str):
     """카드 제목을 바꿀 때 쓴다. 갱신은 제목으로 찾으므로, 그대로 두면 옛 카드가 낡은 숫자를 들고 새 카드 옆에 남아 보고서 자료에도 섞인다.
     id를 지키므로 이미 쓴 보고서의 ![..](artifact:id)도 그대로 이어진다."""
-    art = db.query(models.Artifact).filter_by(project_id=project_id, title=old).first()
-    if art and not db.query(models.Artifact).filter_by(project_id=project_id, title=new).first():
+    scope = {"project_id": study.project_id, "work_id": study.work_id}
+    art = db.query(models.Artifact).filter_by(**scope, title=old).first()
+    if art and not db.query(models.Artifact).filter_by(**scope, title=new).first():
         art.title = new
         db.commit()
 
@@ -175,7 +189,7 @@ def best_case(study: models.Study, feasible_only: bool = True) -> models.Case | 
 # ---------- DOE ----------
 def create_doe(db: Session, study: models.Study, method: str, n: int, seed: int | None,
                flow_id=None, node_id=None) -> list[models.Case]:
-    check_flow(db, study.project_id, flow_id)
+    check_flow(db, study.project_id, flow_id, study.work_id)
     _remember(study, flow_id, node_id)
     pts = doe.sample(study.variables, n, method, seed)
     cases = [models.Case(study_id=study.id, params=p, source="doe") for p in pts]
@@ -185,7 +199,7 @@ def create_doe(db: Session, study: models.Study, method: str, n: int, seed: int 
     if len(names) >= 2:
         payload = {"x": names[0], "y": names[1],
                    "series": [{"name": f"{method.upper()} {n}점", "points": [{"x": p[names[0]], "y": p[names[1]]} for p in pts]}]}
-        publish_artifact(db, study.project_id, "scatter", f"[{study.name}] DOE 샘플 분포", payload, flow_id, node_id)
+        publish_study_artifact(db, study, "scatter", f"[{study.name}] DOE 샘플 분포", payload, flow_id, node_id)
     publish_cases_table(db, study, flow_id, node_id)
     manager.publish({"type": "study_updated", "project_id": study.project_id, "data": {"id": study.id}})
     return cases
@@ -206,7 +220,7 @@ def publish_cases_table(db, study, flow_id=None, node_id=None):
     payload = {"columns": ["ID", "출처", "상태", *names, *outs], "rows": rows}
     if len(study.cases) > len(cases):
         payload["truncated"] = {"shown": len(cases), "total": len(study.cases)}
-    publish_artifact(db, study.project_id, "table", f"[{study.name}] 케이스 결과", payload, flow_id, node_id)
+    publish_study_artifact(db, study, "table", f"[{study.name}] 케이스 결과", payload, flow_id, node_id)
 
 
 def fixed_values(study: models.Study) -> dict:
@@ -234,18 +248,21 @@ def tool_label(study: models.Study) -> str:
 def report_new_results(db: Session, rep: models.Report) -> int:
     """이 보고서를 쓴 뒤 새로 생기거나 바뀐 결과 수."""
     changed = func.coalesce(models.Artifact.updated_at, models.Artifact.created_at)
-    return db.query(models.Artifact).filter(models.Artifact.project_id == rep.project_id, changed > rep.created_at).count()
+    q = db.query(models.Artifact).filter(models.Artifact.project_id == rep.project_id, changed > rep.created_at)
+    return (q.filter(models.Artifact.work_id == rep.work_id) if rep.work_id else q).count()  # 다른 Task의 결과로 이 보고서를 다시 쓰라고 하지 않는다
 
 
-def report_is_current(db: Session, project_id: int) -> bool:
-    """가장 최근 보고서가 지금 결과를 모두 담았는지."""
-    rep = db.query(models.Report).filter_by(project_id=project_id).order_by(models.Report.id.desc()).first()
+def report_is_current(db: Session, project_id: int, work_id: int | None = None) -> bool:
+    """가장 최근 보고서가 지금 결과를 모두 담았는지. work_id를 주면 그 Task의 보고서만 본다."""
+    q = db.query(models.Report).filter_by(project_id=project_id)
+    rep = (q.filter_by(work_id=work_id) if work_id else q).order_by(models.Report.id.desc()).first()
     return bool(rep) and report_new_results(db, rep) == 0
 
 
-def practice_note(db: Session, project_id: int) -> str | None:
-    """프로젝트에 연습용 스터디가 있으면 그 안내. 보고서·AI 자료가 함께 쓴다."""
-    has = db.query(models.Study.id).filter(models.Study.project_id == project_id, models.Study.adapter == "mock").first()
+def practice_note(db: Session, project_id: int, work_id: int | None = None) -> str | None:
+    """Project(work_id를 주면 그 Task)에 연습용 스터디가 있으면 그 안내. 보고서·AI 자료가 함께 쓴다."""
+    q = db.query(models.Study.id).filter(models.Study.project_id == project_id, models.Study.adapter == "mock")
+    has = (q.filter(models.Study.work_id == work_id) if work_id else q).first()
     return PRACTICE_NOTE if has else None
 
 
@@ -319,7 +336,7 @@ def _unique_study_name(db: Session, project_id: int, name: str) -> str:
     return f"{name} ({i})"
 
 
-def clone_study(db: Session, study: models.Study, overrides: dict, project_id: int | None = None, owner_id: int | None = None) -> models.Study:
+def clone_study(db: Session, study: models.Study, overrides: dict, project_id: int | None = None, owner_id: int | None = None, work_id: int | None = None) -> models.Study:
     """지난번과 같은 설정으로 새 스터디를 만든다. 케이스·모델은 옮기지 않으므로 옛 결과와 Simulator는 그대로다."""
     from .recipe import copy_to
 
@@ -337,7 +354,7 @@ def clone_study(db: Session, study: models.Study, overrides: dict, project_id: i
     info: dict = {"cloned_from": {"study_id": study.id, "name": study.name}}
     if fixed_values(study):
         info["fixed"] = fixed_values(study)
-    new = models.Study(project_id=pid, name=_unique_study_name(db, pid, base[:200]), variables=[dict(v) for v in variables],
+    new = models.Study(project_id=pid, work_id=work_id or (study.work_id if pid == study.project_id else None), name=_unique_study_name(db, pid, base[:200]), variables=[dict(v) for v in variables],
                        objectives=overrides.get("objectives") if overrides.get("objectives") is not None else study.objectives,
                        constraints=overrides.get("constraints") if overrides.get("constraints") is not None else study.constraints,
                        outputs=overrides.get("outputs") if overrides.get("outputs") is not None else [o for o in study.outputs or [] if not o.get("auto")],
@@ -351,9 +368,10 @@ def clone_study(db: Session, study: models.Study, overrides: dict, project_id: i
     return new
 
 
-def flow_summaries(db: Session, project_id: int) -> list[dict]:
-    """흐름 목록과 거기에 연결된 스터디. "지난번처럼 다시"에서 AI가 흐름 id 없이 찾을 수 있게 한다."""
-    studies = db.query(models.Study).filter_by(project_id=project_id).all()
+def flow_summaries(db: Session, project_id: int, work_id: int | None = None) -> list[dict]:
+    """흐름 목록과 거기에 연결된 스터디. "지난번처럼 다시"에서 AI가 흐름 id 없이 찾을 수 있게 한다. work_id를 주면 그 Task만."""
+    scope = {"project_id": project_id, **({"work_id": work_id} if work_id else {})}
+    studies = db.query(models.Study).filter_by(**scope).all()
     by_name = {s.name: s for s in studies}
     links: dict[int, dict[int, models.Study]] = {}
     for s in studies:
@@ -377,7 +395,7 @@ def flow_summaries(db: Session, project_id: int) -> list[dict]:
         if dep:
             deployed[sid] = mid
     out = []
-    for f in db.query(models.Flow).filter_by(project_id=project_id).order_by(models.Flow.id.desc()):
+    for f in db.query(models.Flow).filter_by(**scope).order_by(models.Flow.id.desc()):
         out.append({"id": f.id, "title": f.title, "goal": f.goal or "", "status": f.status, "created_at": f.created_at,
                     "nodes": [{k: n.get(k) for k in ("id", "label", "type", "status")} for n in f.nodes or []],
                     "studies": [{"id": s.id, "name": s.name, "adapter": s.adapter, "counts": counts.get(s.id, {}), "latest_model_id": latest.get(s.id),
@@ -524,21 +542,21 @@ def reconcile_cases(conn, active: list[int], can_settle: bool = False):
 
 def _check_run_allowed(db: Session, study: models.Study, user_id: int, flow_id: int | None):
     """승인 규칙을 AI의 말에만 맡기지 않는다. 반려·승인 전 흐름에 묶인 스터디와, 내가 승인하지 않은 다른 사람의 스크립트는 돌리지 않는다."""
-    check_flow(db, study.project_id, flow_id)
+    check_flow(db, study.project_id, flow_id, study.work_id)
     if flow_id and study.flow_id != flow_id:
         study.flow_id = flow_id
     fid = flow_id or study.flow_id
     flow = db.get(models.Flow, fid) if fid else None
     if flow is not None and flow.status in ("review", "rejected"):
         state = "반려된" if flow.status == "rejected" else "아직 승인 전인"
-        raise NeedsApproval(f"이 스터디는 {state} 작업 흐름 '{flow.title}'에 묶여 있어 돌리지 않습니다 → 작업 흐름을 승인하거나 고쳐서 다시 제안해 승인을 받으세요")
+        raise NeedsApproval(f"이 스터디는 {state} Task Flow '{flow.title}'에 묶여 있어 돌리지 않습니다 → Task Flow을 승인하거나 고쳐서 다시 제안해 승인을 받으세요")
     recipe = study.recipe or {}
     author = recipe.get("created_by")
     if study.adapter == "script" and author and author != user_id:
         approved = flow is not None and flow.status in ("approved", "in_progress") and flow.approved_by == user_id
         if not approved:
             raise NeedsApproval(f"{recipe.get('created_by_name') or '다른 멤버'}님이 만든 스크립트입니다. 이 PC에서 돌리려면 승인을 받아야 합니다 "
-                                "→ 작업 흐름 카드에 만든 사람을 적어 제안하고, 승인한 뒤 그 흐름 번호로 돌리세요")
+                                "→ Task Flow 카드에 만든 사람을 적어 제안하고, 승인한 뒤 그 흐름 번호로 돌리세요")
 
 
 def run_cases_async(study_id: int, case_ids: list[int] | None, dry_run: bool, user_id: int, flow_id: int | None = None) -> tuple[int, int]:
@@ -1005,7 +1023,7 @@ def train_field(db: Session, study: models.Study, field: str, flow_id=None, node
         live.field_models = {**(live.field_models or {}), field: fm.id}
     db.commit()
     i = rom.info
-    publish_artifact(db, study.project_id, "markdown", f"[{study.name}] {field} 형상·필드 모델",
+    publish_study_artifact(db, study, "markdown", f"[{study.name}] {field} 형상·필드 모델",
                      {"text": f"- 학습 케이스 **{i['n_train']}개**, 노드 {rom.n_nodes:,}개, 형상 변화 {'있음(형상도 예측)' if rom.shape_varies else '없음'}\n"
                               + (f"- 제외 {len(excluded)}개: 케이스 {', '.join(str(x['case_id']) for x in excluded[:10])} ({excluded[0]['reason']} 등)\n" if excluded else "")
                               +
@@ -1030,7 +1048,7 @@ def publish_convergence(db, study, flow_id=None, node_id=None):
         if best is not None:
             pts_best.append({"x": i, "y": best})
     if pts_raw:
-        publish_artifact(db, study.project_id, "line", f"[{study.name}] {obj['name']} 수렴 이력",
+        publish_study_artifact(db, study, "line", f"[{study.name}] {obj['name']} 수렴 이력",
                          {"x": "평가 횟수", "series": [{"name": "평가값", "points": pts_raw},
                                                     {"name": "최적값", "points": pts_best}]}, flow_id, node_id)
 
@@ -1209,7 +1227,7 @@ def assess_quality(cv: dict, n_train: int, n_vars: int, adapter: str, constant: 
 
 def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=None, node_id=None,
           created_by: int | None = None) -> models.SurrogateModel:
-    check_flow(db, study.project_id, flow_id)
+    check_flow(db, study.project_id, flow_id, study.work_id)
     _remember(study, flow_id, node_id)
     outputs, skipped = resolve_outputs(db, study, outputs)
     done, excluded = training_rows(study, outputs)
@@ -1287,22 +1305,22 @@ def train(db: Session, study: models.Study, outputs: list[str] | None, flow_id=N
     db.commit()
 
     for o, v in cv.items():
-        _retitle_artifact(db, study.project_id, f"[{study.name}] {o} 예측 정확도 (교차검증)", f"[{study.name}] {o} 예측과 실제 비교")
-        publish_artifact(db, study.project_id, "scatter", f"[{study.name}] {o} 예측과 실제 비교",
+        _retitle_artifact(db, study, f"[{study.name}] {o} 예측 정확도 (교차검증)", f"[{study.name}] {o} 예측과 실제 비교")
+        publish_study_artifact(db, study, "scatter", f"[{study.name}] {o} 예측과 실제 비교",
                          {"x": "실제값", "y": "예측값", "diagonal": True,
                           "series": [{"name": f"R²={v['r2']:.3f}", "points": [{"x": a, "y": p} for a, p in zip(v["actual"], v["cv_pred"])]}]},
                          flow_id, node_id)
-    _retitle_artifact(db, study.project_id, f"[{study.name}] Surrogate 성능", f"[{study.name}] 예측 정확도 요약")
-    publish_artifact(db, study.project_id, "table", f"[{study.name}] 예측 정확도 요약",
+    _retitle_artifact(db, study, f"[{study.name}] Surrogate 성능", f"[{study.name}] 예측 정확도 요약")
+    publish_study_artifact(db, study, "table", f"[{study.name}] 예측 정확도 요약",
                      {"columns": ["모델", "출력", "R²", "RMSE", "학습 수"],
                       "rows": [[m.name, o, round(v["r2"], 4), round(v["rmse"], 5), m.n_train] for o, v in m.metrics.items()]},
                      flow_id, node_id)
     note_title = f"[{study.name}] 학습 데이터 안내"
     if quality["warnings"]:
-        publish_artifact(db, study.project_id, "markdown", note_title,
+        publish_study_artifact(db, study, "markdown", note_title,
                          {"text": f"- 정확도: **{quality['label']}**\n" + "\n".join(f"- {w}" for w in quality["warnings"])}, flow_id, node_id)
-    elif db.query(models.Artifact).filter_by(project_id=study.project_id, title=note_title).first():
-        publish_artifact(db, study.project_id, "markdown", note_title, {"text": f"- 정확도: **{quality['label']}**\n- 이번 학습에는 경고가 없습니다"}, flow_id, node_id)
+    elif db.query(models.Artifact).filter_by(project_id=study.project_id, work_id=study.work_id, title=note_title).first():
+        publish_study_artifact(db, study, "markdown", note_title, {"text": f"- 정확도: **{quality['label']}**\n- 이번 학습에는 경고가 없습니다"}, flow_id, node_id)
     manager.publish({"type": "model_updated", "project_id": study.project_id, "data": {"id": m.id}})
     return m
 
@@ -1359,7 +1377,7 @@ def _job_view(job: dict) -> dict:
 
 def start_train(db: Session, study: models.Study, outputs: list[str] | None, flow_id, node_id, user_id: int, force: bool = False) -> dict:
     """학습을 시작하고 바로 돌아온다. 같은 출력을 학습 중이면 그 작업을, 같은 데이터로 학습한 모델이 있으면 그 모델을 돌려준다."""
-    check_flow(db, study.project_id, flow_id)
+    check_flow(db, study.project_id, flow_id, study.work_id)
     names, _ = resolve_outputs(db, study, outputs)
     rows, excluded = training_rows(study, names)
     if len(rows) < 3:  # 작업을 만들기 전에 바로 알린다. 나중에 실패로 보이면 AI가 기다리다 시간을 쓴다
@@ -1474,7 +1492,7 @@ def _suggest_multi(study: models.Study, sur: Surrogate, lo, hi, n: int):
 
 def suggest(db: Session, study: models.Study, mode: str, n: int, model_id: int | None,
             flow_id=None, node_id=None) -> list[models.Case]:
-    check_flow(db, study.project_id, flow_id)
+    check_flow(db, study.project_id, flow_id, study.work_id)
     _remember(study, flow_id, node_id)
     m = _search_model(db, study, model_id)
     if not m:
@@ -1578,7 +1596,7 @@ def model_candidates(db: Session, study: models.Study, mode: str, n: int, model_
     candidates = [{"params": {v: float(cand[i][j]) for j, v in enumerate(sur.variables)},
                    "predicted": {k: float(mean[k][i]) for k in sur.outputs}, "std": {k: float(std[k][i]) for k in sur.outputs},
                    "feasible": states[i], "verified": False} for i in picked]
-    publish_artifact(db, study.project_id, "table", f"[{study.name}] 모델 예측 후보 (확인 안 됨)",
+    publish_study_artifact(db, study, "table", f"[{study.name}] 모델 예측 후보 (확인 안 됨)",
                      {"columns": [*sur.variables, *[f"{k} 예측" for k in sur.outputs], "제약 만족 예측"],
                       "rows": [[*[round(c["params"][v], 4) for v in sur.variables], *[round(c["predicted"][k], 5) for k in sur.outputs],
                                 {True: "예", False: "아니오"}.get(c["feasible"], "모름")] for c in candidates]})

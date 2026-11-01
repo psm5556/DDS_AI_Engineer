@@ -1,3 +1,4 @@
+import { W } from "../work/copy";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderSearch } from "lucide-react";
 import { useState } from "react";
@@ -26,7 +27,7 @@ export function FolderModal({ pid, initial, onPicked, onClose }: {
   const browse = async () => {
     setBusy("pick"); setErr("");
     try {
-      const r = await post<{ path: string }>("/api/agent/pick-folder", { initial: value || cur?.path || null, title: "작업 폴더 선택" });
+      const r = await post<{ path: string }>("/api/agent/pick-folder", { initial: value || cur?.path || null, title: `${W.project} 폴더 선택` });
       if (r.path) setPath(r.path);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(""); }
   };
@@ -37,7 +38,7 @@ export function FolderModal({ pid, initial, onPicked, onClose }: {
         await put<LocalFolderInfo>(`/api/projects/${pid}/local/folder`, { path: p });
         qc.invalidateQueries({ queryKey: ["local-folder", pid] });
         qc.invalidateQueries({ queryKey: ["local-tree", pid] });
-        toast(p ? "작업 폴더를 바꿨습니다. 다음 요청부터 이 폴더에서 작업합니다" : "기본 작업 폴더로 되돌렸습니다");
+        toast(p ? `${W.project} 폴더를 바꿨습니다. 다음 요청부터 이 폴더에서 일합니다` : `기본 ${W.project} 폴더로 되돌렸습니다`);
         onClose();
       } else {
         const r = p ? await post<{ path: string }>("/api/agent/check-folder", { path: p }) : null;
@@ -48,7 +49,7 @@ export function FolderModal({ pid, initial, onPicked, onClose }: {
   };
 
   return (
-    <Modal title="내 PC 작업 폴더" onClose={onClose} footer={<>
+    <Modal title={`${W.project} 폴더`} onClose={onClose} footer={<>
       {(cur?.custom || (!pid && initial)) && <button className="ghost" style={{ marginRight: "auto" }} disabled={!!busy} onClick={() => void save(null)}>기본 위치 사용</button>}
       <button onClick={onClose}>취소</button>
       <button className="primary" disabled={!!busy || !value.trim()} onClick={() => void save(value.trim())}>{busy === "save" ? "확인 중…" : "이 폴더 사용"}</button>
@@ -58,7 +59,7 @@ export function FolderModal({ pid, initial, onPicked, onClose }: {
           <p className="small muted">지금: <code>{cur.path}</code> {cur.custom ? "(직접 지정)" : "(기본 위치)"}</p>
         )}
         <div className="row folder-input">
-          <input type="text" value={value} autoFocus placeholder="예: D:\Work\브래킷_개선" aria-label="작업 폴더 경로"
+          <input type="text" value={value} autoFocus placeholder="예: D:\Work\브래킷_개선" aria-label={`${W.project} 폴더 경로`}
             onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && value.trim()) void save(value.trim()); }} />
           <button onClick={() => void browse()} disabled={!!busy} title="내 PC에 폴더 선택 창을 띄웁니다">
             <FolderSearch size={14} />{busy === "pick" ? "PC에서 고르는 중…" : "찾아보기…"}</button>
@@ -66,8 +67,8 @@ export function FolderModal({ pid, initial, onPicked, onClose }: {
         {busy === "pick" && <p className="small muted">PC Agent가 설치된 PC 화면에 폴더 선택 창이 열렸습니다.</p>}
         {err && <p className="small" style={{ color: "var(--err)" }}>{err}</p>}
         <ul className="small muted folder-notes">
-          <li>이 폴더에 에이전트 설정 파일과 작업 하위 폴더(inputs·scripts·runs·studies·reports)가 만들어집니다. 기존 파일은 건드리지 않습니다.</li>
-          {pid && <li>이미 만든 파일은 옮기지 않습니다. 대화는 이어지고, 다음 요청부터 새 폴더에서 작업합니다.</li>}
+          <li>이 폴더에 에이전트 설정 파일과 하위 폴더(inputs·scripts·runs·studies·reports)가 만들어집니다. 기존 파일은 건드리지 않습니다.</li>
+          {pid && <li>이미 만든 파일은 옮기지 않습니다. 기록은 이어지고, 다음 요청부터 새 폴더에서 일합니다.</li>}
           <li>폴더는 내 PC에만 적용됩니다. 함께하는 멤버는 각자 자기 PC에서 정합니다.</li>
         </ul>
       </div>

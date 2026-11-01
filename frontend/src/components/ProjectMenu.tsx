@@ -7,10 +7,12 @@ import { api, del, put } from "../api";
 import { MembersPanel } from "../canvas/views";
 import { useToast } from "../toast";
 import type { Project } from "../types";
+import { W } from "../work/copy";
 import { FolderModal } from "./FolderModal";
 import { Confirm, Modal } from "./Modal";
 
-/** 프로젝트 메뉴 (⋯ 또는 우클릭): 이름 바꾸기 · 즐겨찾기 · 멤버·공유 · 내 PC 폴더 열기 · 삭제 */
+/** Project 메뉴 (⋯ 또는 우클릭): 이름·설명 바꾸기 · 즐겨찾기 · 멤버·공유 · Project 폴더 열기 · Project 폴더 바꾸기 · 삭제.
+ *  폴더를 바꾸는 곳은 여기 한 곳이다. Task 메뉴는 work/WorkMenu.tsx */
 export function ProjectMenu({ p, at, onClose }: { p: Project; at: { x: number; y: number }; onClose: () => void }) {
   const [dialog, setDialog] = useState<"rename" | "members" | "folder" | "delete" | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -40,13 +42,13 @@ export function ProjectMenu({ p, at, onClose }: { p: Project; at: { x: number; y
     onSuccess: () => {
       refresh();
       qc.invalidateQueries({ queryKey: ["table-jobs"] }); // 이 프로젝트의 'Simulator를 만들었습니다' 알림이 남지 않게
-      toast("프로젝트를 삭제했습니다 (내 PC의 작업 폴더는 그대로 남아 있습니다)"); onClose(); nav("/");
+      toast(`${W.project}를 삭제했습니다 (내 PC의 ${W.project} 폴더는 그대로 남아 있습니다)`); onClose(); nav("/");
     },
     onError: err,
   });
   const openLocal = useMutation({
     mutationFn: () => api(`/api/projects/${p.id}/local/open`, { method: "POST", body: { path: "" } }),
-    onSuccess: () => { toast("내 PC에서 작업 폴더를 열었습니다"); onClose(); },
+    onSuccess: () => { toast(`내 PC에서 ${W.project} 폴더를 열었습니다`); onClose(); },
     onError: err,
   });
 
@@ -57,33 +59,33 @@ export function ProjectMenu({ p, at, onClose }: { p: Project; at: { x: number; y
     <Modal title={`멤버·공유 — ${p.name}`} onClose={onClose}><MembersPanel p={p} /></Modal>
   );
   if (dialog === "delete") return (
-    <Confirm title="프로젝트 삭제" danger confirmLabel="삭제" onClose={onClose} onConfirm={() => remove.mutate()}
-      message={<>‘{p.name}’의 대화·작업 흐름·결과·스터디·모델이 모두 삭제됩니다. 멤버에게서도 사라집니다.<br />
-        내 PC의 작업 폴더(해석 파일)는 지우지 않습니다.</>} />
+    <Confirm title={`${W.project} 삭제`} danger confirmLabel="삭제" onClose={onClose} onConfirm={() => remove.mutate()}
+      message={<>‘{p.name}’의 {W.task}·기록·{W.flow}·결과·스터디·모델이 모두 삭제됩니다. 멤버에게서도 사라집니다.<br />
+        내 PC의 {W.project} 폴더(해석 파일)는 지우지 않습니다.</>} />
   );
 
   const style = { left: Math.min(at.x, window.innerWidth - 230), top: Math.min(at.y, window.innerHeight - 260) };
   return createPortal(
     <div ref={ref} className="ctx-menu" role="menu" style={style} aria-label={`${p.name} 메뉴`}>
-      <button role="menuitem" onClick={() => setDialog("rename")} disabled={!isMaster} title={isMaster ? "" : "프로젝트 관리자만 바꿀 수 있습니다"}><Pencil size={14} />이름·설명 바꾸기</button>
+      <button role="menuitem" onClick={() => setDialog("rename")} disabled={!isMaster} title={isMaster ? "" : `${W.project} 관리자만 바꿀 수 있습니다`}><Pencil size={14} />이름·설명 바꾸기</button>
       <button role="menuitem" onClick={() => fav.mutate()}><Star size={14} fill={p.is_favorite ? "currentColor" : "none"} />{p.is_favorite ? "즐겨찾기 해제" : "즐겨찾기"}</button>
       <button role="menuitem" onClick={() => setDialog("members")}><Users size={14} />멤버·공유</button>
-      <button role="menuitem" onClick={() => openLocal.mutate()}><FolderOpen size={14} />내 PC 작업 폴더 열기</button>
-      <button role="menuitem" onClick={() => setDialog("folder")}><FolderCog size={14} />작업 폴더 바꾸기</button>
+      <button role="menuitem" onClick={() => openLocal.mutate()}><FolderOpen size={14} />{W.project} 폴더 열기</button>
+      <button role="menuitem" onClick={() => setDialog("folder")}><FolderCog size={14} />{W.project} 폴더 바꾸기</button>
       <div className="ctx-sep" />
-      <button role="menuitem" className="danger" onClick={() => setDialog("delete")} disabled={!isMaster} title={isMaster ? "" : "프로젝트 관리자만 삭제할 수 있습니다"}><Trash2 size={14} />삭제</button>
+      <button role="menuitem" className="danger" onClick={() => setDialog("delete")} disabled={!isMaster} title={isMaster ? "" : `${W.project} 관리자만 삭제할 수 있습니다`}><Trash2 size={14} />삭제</button>
     </div>,
     document.body,
   );
 }
 
-/** 프로젝트 이름·설명 (설명은 사이드바에서 이름에 마우스를 올리면 보인다) */
+/** Project 이름·설명 (설명은 사이드바에서 이름에 마우스를 올리면 보인다) */
 function ProjectInfoModal({ p, onSave, onClose }: { p: Project; onSave: (name: string, description: string) => void; onClose: () => void }) {
   const [name, setName] = useState(p.name);
   const [desc, setDesc] = useState(p.description);
   const ok = !!name.trim() && (name.trim() !== p.name || desc.trim() !== p.description);
   return (
-    <Modal title="프로젝트 이름·설명" onClose={onClose} footer={<>
+    <Modal title={`${W.project} 이름·설명`} onClose={onClose} footer={<>
       <button onClick={onClose}>취소</button>
       <button className="primary" disabled={!ok} onClick={() => onSave(name.trim(), desc.trim())}>저장</button>
     </>}>
@@ -91,7 +93,7 @@ function ProjectInfoModal({ p, onSave, onClose }: { p: Project; onSave: (name: s
         <label className="field"><span className="lbl">이름</span>
           <input type="text" autoFocus value={name} maxLength={200} onChange={(e) => setName(e.target.value)} onFocus={(e) => e.target.select()} /></label>
         <label className="field"><span className="lbl">설명</span>
-          <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="무엇을 하는 프로젝트인지 한두 줄로" /></label>
+          <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={`무엇을 하는 ${W.project}인지 한두 줄로`} /></label>
       </div>
     </Modal>
   );

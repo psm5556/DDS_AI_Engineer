@@ -55,6 +55,7 @@ class Project(TimestampMixin, Base):
     description = Column(Text, default="")
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     version = Column(Integer, default=1, nullable=False)
+    next_work_seq = Column(Integer, default=1)  # 다음 Task 번호. 지운 번호를 다시 쓰지 않는다(옛 행은 비어 있고 1로 본다)
 
     sessions = relationship("ChatSession", back_populates="project", cascade="all, delete-orphan")
     members = relationship("ProjectMember", cascade="all, delete-orphan")
@@ -68,11 +69,33 @@ class ProjectMember(Base):
     user = relationship("User")
 
 
+class Work(TimestampMixin, Base):
+    """Project 안의 일 한 건(화면 이름은 Task). 기록·흐름·결과·보고서·Simulator가 여기에 묶이고, 오른쪽 탭은 그 Task 것만 보여 준다.
+    코드 이름을 Work로 두는 것은 흐름 노드 type 'task'와 겹치지 않게 하기 위해서다."""
+    __tablename__ = "works"
+    __table_args__ = (UniqueConstraint("project_id", "seq"), {"sqlite_autoincrement": True})  # 지운 id를 다시 쓰면 옛 이벤트·주소가 다른 Task를 가리킨다
+    id = Column(Integer, primary_key=True)
+    uid = Column(String(32), default=lambda: uuid.uuid4().hex, index=True)  # PC 폴더의 표시 파일과 맞춰 본다(2단계)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    seq = Column(Integer, nullable=False)  # 폴더 번호. 이전 기록은 0이고, 다시 쓰지 않는다
+    name = Column(String(200), nullable=False)
+    name_auto = Column(Boolean, default=True, nullable=False)  # 자동으로 붙인 이름. 사람이 정한 이름은 AI가 바꾸지 않는다
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    legacy = Column(Boolean, default=False, nullable=False)  # Task 구조 전의 기록. 자기 폴더가 없고 Project 폴더를 쓴다
+    legacy_users = Column(JSON, default=list)  # 이전 전에 일하던 멤버. 이전 기록에서만 주인처럼 요청할 수 있다
+    source_work_id = Column(Integer, ForeignKey("works.id", ondelete="SET NULL"))  # 어디서 가져왔는지(5단계)
+    source_kind = Column(String(20))  # same_again | takeover
+    source_label = Column(String(200))  # 원본이 지워져도 어디서 가져왔는지 보여 준다
+    carry = Column(JSON)  # 첫 AI 시작 때 PC Agent가 받을 목록(5단계)
+    version = Column(Integer, default=1, nullable=False)
+
+
 class ChatSession(TimestampMixin, Base):
     __tablename__ = "chat_sessions"
     __table_args__ = {"sqlite_autoincrement": True}
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="SET NULL"), index=True)  # 어느 Task의 것인지
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # 소유자(이 사람의 PC Agent로 실행)
     title = Column(String(200), default="새 대화")
     agent = Column(String(30), default="gemini", nullable=False)  # gemini | claude | codex | demo
@@ -100,6 +123,7 @@ class Flow(TimestampMixin, Base):
     __tablename__ = "flows"
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="SET NULL"), index=True)  # 어느 Task의 것인지
     title = Column(String(200), nullable=False)
     goal = Column(Text, default="")
     nodes = Column(JSON, default=list)
@@ -124,6 +148,7 @@ class Artifact(Base):
     __table_args__ = (Index("ix_artifacts_project_time", "project_id", "updated_at", "created_at"),)  # 위와 같은 이유. payload는 표 전체가 들어 있어 크다
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="SET NULL"), index=True)  # 어느 Task의 것인지
     flow_id = Column(Integer, ForeignKey("flows.id", ondelete="SET NULL"))
     node_id = Column(String(100))
     # table | scatter | line | bar | parallel | markdown | image
@@ -140,6 +165,7 @@ class Report(Base):
     __tablename__ = "reports"
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="SET NULL"), index=True)  # 어느 Task의 것인지
     flow_id = Column(Integer, ForeignKey("flows.id", ondelete="SET NULL"))
     title = Column(String(200), nullable=False)
     body = Column(Text, default="")
@@ -155,6 +181,7 @@ class Study(TimestampMixin, Base):
     __tablename__ = "studies"
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="SET NULL"), index=True)  # 어느 Task의 것인지
     name = Column(String(200), nullable=False)
     variables = Column(JSON, default=list)
     objectives = Column(JSON, default=list)
@@ -170,6 +197,7 @@ class Study(TimestampMixin, Base):
     pc_notice = Column(JSON)
     flow_id = Column(Integer)  # 이 스터디를 마지막으로 쓴 작업 흐름. "지난번 흐름대로 다시"에서 흐름 → 스터디를 찾는다
     recipe = Column(JSON)  # 서버에 올린 스크립트 묶음 정보. 스크립트가 없는 멤버 PC가 내려받아 이어 쓴다 (study/recipe.py)
+    resume_turn = Column(JSON)  # 해석이 끝나면 AI를 다시 깨울 곳 {chat_id, flow_id} (입력 안 막기 단계에서 쓴다)
     created_by = Column(Integer)  # 이 스터디의 주인. 이 칸이 생기기 전 스터디는 비어 있고, 처음 돌린 사람을 주인으로 본다(service.study_owner)
 
     cases = relationship("Case", cascade="all, delete-orphan", order_by="Case.id")
@@ -206,6 +234,7 @@ class Case(TimestampMixin, Base):
     origin = Column(JSON)
     # 완료된 케이스를 다시 돌리는 동안 지켜 두는 이전 결과. 다시 돌리기가 실패해도 값을 잃지 않는다
     previous = Column(JSON)
+    from_case_id = Column(Integer)  # 이어받기로 복사한 결과의 원본 케이스(5단계)
     timing = Column(JSON)  # 해석 시각 {started_at, ended_at}. 옛 케이스에는 없고, 그러면 시간을 말하지 않는다
     error = Column(Text)
 
@@ -217,6 +246,8 @@ class TableJob(TimestampMixin, Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"))  # 첫 화면에서 시작하면 작업이 표를 받기 전에 만든다
     made_project = Column(Boolean, default=False)  # 작업이 만든 프로젝트다. 등록 중 서버가 다시 시작되어도 빈 프로젝트를 지울 수 있게
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="SET NULL"))  # 표가 들어가는 Task
+    made_work = Column(Boolean, default=False)  # 이 표 작업이 만든 Task다. 표를 못 받으면 빈 Task를 남기지 않는다
     study_id = Column(Integer, ForeignKey("studies.id", ondelete="SET NULL"))
     model_id = Column(Integer, ForeignKey("surrogate_models.id", ondelete="SET NULL"))
     name = Column(String(200), nullable=False)
@@ -336,6 +367,7 @@ class Attachment(Base):
     __tablename__ = "attachments"
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    work_id = Column(Integer, ForeignKey("works.id", ondelete="SET NULL"), index=True)  # 어느 Task의 것인지
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     filename = Column(String(300), nullable=False)
     size = Column(Integer, nullable=False)

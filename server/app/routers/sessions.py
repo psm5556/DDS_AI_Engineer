@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from .. import models, schemas
+from .. import models, schemas, work_service
 from ..agent.hub import hub
 from ..agent.link import AgentError, registry
 from ..config import settings
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api", tags=["agent"])
 
 
 def _session_for_member(session_id: int, user: models.User, db: Session) -> models.ChatSession:
-    chat = get_or_404(db, models.ChatSession, session_id, "대화")
+    chat = get_or_404(db, models.ChatSession, session_id, "기록")
     require_member(chat.project_id, user, db)
     return chat
 
@@ -38,7 +38,8 @@ def _check_agent(conn, agent: str):
 def _session_for_owner(session_id: int, user: models.User, db: Session) -> models.ChatSession:
     chat = _session_for_member(session_id, user, db)
     if chat.user_id != user.id:
-        raise HTTPException(403, "대화를 시작한 사람만 이 대화에 요청할 수 있습니다. 새 대화를 만들어 주세요.")
+        owner = db.get(models.User, chat.user_id)
+        raise HTTPException(403, work_service.not_mine_message(owner.display_name if owner else "다른 멤버"))
     return chat
 
 
@@ -49,14 +50,19 @@ def list_sessions(project: models.Project = Depends(get_project_for_member), db:
 
 @router.post("/projects/{project_id}/sessions", response_model=schemas.ChatSessionResponse)
 def create_session(body: schemas.ChatSessionCreate | None = None, project: models.Project = Depends(get_project_for_member),
-                   user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+                   user: models.User = Depends(get_current_user), db: Session = Depends(get_db), header: int | None = Depends(work_service.header_hint)):
+    """기록을 하나 더 연다. 화면은 쓰지 않고(Task를 만들 때 함께 생긴다) 스크립트·시험과 옛 호출을 위해 남긴다. 남의 Task에는 열지 않는다."""
     conn = registry.get(user.id)
     agent = (body.agent if body else None) or (conn.info.get("default_agent") if conn else None)
     if not agent:  # 정해진 값으로 채우면 사용자가 고르지 않은 CLI가 뜬다(Agent가 막 붙어 hello가 오기 전에 실제로 있었다)
         raise HTTPException(409, "사용할 AI 에이전트를 아직 알 수 없습니다 → 입력창에서 에이전트를 고르거나 PC Agent가 연결된 뒤 다시 시도하세요")
     _check_agent(conn, agent)
-    s = models.ChatSession(project_id=project.id, user_id=user.id, agent=agent)
-    db.add(s)
+    work = work_service.write_work(db, project.id, user, body.work_id if body else None, header)
+    if not work_service.is_mine(work, user.id):
+        if body and body.work_id:
+            raise HTTPException(403, work_service.not_mine_message(work_service.owner_label(db, work)))
+        work = work_service.new_work(db, project.id, user.id)
+    s = work_service.add_chat(db, work, user.id, agent)
     db.commit()
     return s
 
@@ -79,9 +85,12 @@ def send_prompt(session_id: int, body: schemas.PromptRequest, user: models.User 
         a = db.get(models.Attachment, aid)
         if not a or a.project_id != chat.project_id:
             raise HTTPException(404, "첨부 파일을 찾을 수 없습니다")
+        if a.work_id is None:  # 놓을 때는 Task를 정하지 않고 보낼 때 정한다. 그래야 새 Task로 옮겨 갈 수 있다
+            a.work_id = chat.work_id
         atts.append({"id": a.id, "filename": a.filename, "size": a.size, "sha256": a.sha256})
     text = body.text.strip() or "첨부한 파일을 확인해 주세요."
     _check_agent(registry.get(chat.user_id), chat.agent)
+    db.commit()
     try:
         # 바로 돌아온다. CLI 준비는 뒤에서 하고 화면은 turn_started·turn_stage로 단계를 본다
         turn_id = hub.send_prompt(session_id, text, atts)
@@ -155,7 +164,7 @@ def active_project(user: models.User = Depends(get_current_user)):
     """MCP 서버가 project_id를 받지 못했을 때 이 사용자가 최근 대화한 프로젝트."""
     pid = hub.active_project.get(user.id)
     if pid is None:
-        raise HTTPException(404, "활성 프로젝트가 없습니다")
+        raise HTTPException(404, "활성 Project가 없습니다")
     return {"project_id": pid}
 
 
@@ -163,7 +172,7 @@ def active_project(user: models.User = Depends(get_current_user)):
 def _session_for_editor(session_id: int, user: models.User, db: Session) -> models.ChatSession:
     chat = _session_for_member(session_id, user, db)
     if chat.user_id != user.id and member_role(chat.project_id, user, db) != "master" and not effective_admin(user):
-        raise HTTPException(403, "대화를 만든 사람이나 프로젝트 관리자만 바꿀 수 있습니다")
+        raise HTTPException(403, "Task를 만든 사람이나 Project 관리자만 바꿀 수 있습니다")
     return chat
 
 
@@ -175,7 +184,7 @@ def rename_session(session_id: int, body: schemas.SessionUpdate, user: models.Us
         chat.title = body.title.strip()
     if body.agent and body.agent != chat.agent:
         if chat.user_id != user.id:
-            raise HTTPException(403, "대화를 시작한 사람만 에이전트를 바꿀 수 있습니다")
+            raise HTTPException(403, "이 Task의 주인만 AI를 바꿀 수 있습니다")
         if hub.status(session_id)["busy"]:
             raise HTTPException(409, "에이전트가 작업 중입니다. 먼저 중지하세요")
         _check_agent(registry.get(user.id), body.agent)
@@ -191,7 +200,7 @@ def rename_session(session_id: int, body: schemas.SessionUpdate, user: models.Us
 def delete_session(session_id: int, user: models.User = Depends(require_jwt), db: Session = Depends(get_db)):
     chat = _session_for_editor(session_id, user, db)
     if hub.status(session_id)["busy"]:
-        raise HTTPException(409, "에이전트가 작업 중인 대화는 지울 수 없습니다. 먼저 중지하세요")
+        raise HTTPException(409, "AI가 답을 쓰는 중이라 지울 수 없습니다 → 먼저 중지하세요")
     hub.forget_chat(chat.id)
     for f in db.query(models.Flow).filter_by(chat_id=chat.id):
         if f.start_queued and f.status == "approved":  # 승인을 전할 대화가 없어졌다. 멈춘 채 두지 않고 승인 대기로 되돌린다
@@ -241,8 +250,9 @@ async def upload_attachment(file: UploadFile = File(...), project: models.Projec
 
 
 @router.get("/projects/{project_id}/attachments", response_model=list[schemas.AttachmentResponse])
-def list_attachments(project: models.Project = Depends(get_project_for_member), db: Session = Depends(get_db)):
-    return db.query(models.Attachment).filter_by(project_id=project.id).order_by(models.Attachment.id.desc()).all()
+def list_attachments(scope: work_service.WorkScope = Depends(work_service.work_scope), db: Session = Depends(get_db)):
+    q = db.query(models.Attachment).filter_by(project_id=scope.project.id)
+    return work_service.narrow(q, models.Attachment, scope.read()).order_by(models.Attachment.id.desc()).all()
 
 
 @router.get("/attachments/{attachment_id}/download")
@@ -295,7 +305,7 @@ def set_local_folder(body: schemas.LocalFolder, project: models.Project = Depend
     에이전트 CLI 세션은 시작 폴더가 고정이므로, 내 대화들은 다음 요청부터 새 폴더에서 새 세션으로 이어 간다(지난 대화 요약 전달)."""
     chats = db.query(models.ChatSession).filter_by(project_id=project.id, user_id=user.id).all()
     if any(hub.status(c.id).get("busy") for c in chats):
-        raise HTTPException(409, "에이전트가 이 프로젝트에서 작업 중입니다. 끝난 뒤 바꾸세요")
+        raise HTTPException(409, "AI가 이 Project에서 일하는 중입니다 → 끝난 뒤 바꾸세요")
     info = _agent_call(user, "local.folder.set", {"project_id": project.id, "project_name": project.name,
                                                    "project_uid": project.uid, "path": body.path})
     for c in chats:

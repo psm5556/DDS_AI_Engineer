@@ -39,6 +39,7 @@ class TurnState:
     chat_id: int
     project_id: int
     user_id: int
+    work_id: int | None = None  # 이 기록의 Task. 2단계에서 CLI의 작업 폴더를 여기서 정한다
     agent: str = ""
     sid: str | None = None
     busy: bool = False
@@ -102,7 +103,7 @@ class AgentHub:
         with self._lock:
             st = self.chats.get(chat.id)
             if st is None or st.user_id != chat.user_id:  # SQLite가 지운 id를 다시 쓸 수 있다
-                st = self.chats[chat.id] = TurnState(chat_id=chat.id, project_id=chat.project_id, user_id=chat.user_id,
+                st = self.chats[chat.id] = TurnState(chat_id=chat.id, project_id=chat.project_id, user_id=chat.user_id, work_id=chat.work_id,
                                                      agent=chat.agent, sid=chat.agent_session_id)
             return st
 
@@ -299,9 +300,9 @@ class AgentHub:
                                               if last.id != asked.id else "서버가 다시 시작되는 동안 이 요청이 끊겼습니다 → 같은 요청을 다시 보내 주세요."))
                     db.commit()
                     for m in closed:
-                        manager.publish({"type": "agent_event", "project_id": chat.project_id, "session_id": chat.id,
+                        manager.publish({"type": "agent_event", "project_id": chat.project_id, "session_id": chat.id, "work_id": chat.work_id,
                                          "event": {"kind": "tool_call_update", "message_id": m.id, "meta": m.meta}})
-                    manager.publish({"type": "agent_event", "project_id": chat.project_id, "session_id": chat.id,
+                    manager.publish({"type": "agent_event", "project_id": chat.project_id, "session_id": chat.id, "work_id": chat.work_id,
                                      "event": {"kind": "turn_ended", "stop_reason": "disconnected"}})
                     if (asked.meta or {}).get("flow_id"):  # 승인한 흐름을 하던 요청이 끊겼다. 다시 시킨다(뒤의 _flush_user_flows가 보낸다)
                         self._flow_turn_over(self._state(chat), asked.meta["flow_id"])
@@ -355,7 +356,7 @@ class AgentHub:
             with self._lock:
                 self.by_sid.pop(old, None)
             # 조용히 맥락을 잃지 않게 사용자에게 한 번 알린다
-            self._note(st, "이전 AI 세션을 이어 붙일 수 없어 새 세션으로 이어 갑니다. 지금까지의 대화 요약을 함께 넘겼습니다.")
+            self._note(st, "이전 AI를 이어 붙일 수 없어 AI를 새로 시작해 이어 갑니다. 지금까지의 기록 요약을 함께 넘겼습니다.")
         self._bind(st, sid)
         return sid
 
@@ -586,13 +587,31 @@ class AgentHub:
     #   PC Agent 없음  | 줄 세움          | -                                   | -                     | 곧바로 보냄
     #   흐름 진행 중   | -                | 남은 단계가 있으면 다시 시킴(한도)  | stopped               | 턴을 되살림
     # 사용자는 승인 뒤에 묻는 말을 받지 않는다. 계획을 바꾸려면 중지하고 입력창에 적거나, 새 흐름을 제안받는다.
-    def active_chat(self, user_id: int, project_id: int) -> int | None:
-        """이 사람이 이 프로젝트에서 지금 진행 중인 대화. AI가 제안한 흐름이 어느 대화에서 나왔는지 여기서 안다."""
-        return next((st.chat_id for st in self._user_states(user_id) if st.busy and st.project_id == project_id), None)
+    def active_chat(self, user_id: int, project_id: int, work_id: int | None = None) -> int | None:
+        """이 사람이 이 프로젝트에서 지금 진행 중인 대화. AI가 제안한 흐름이 어느 대화에서 나왔는지 여기서 안다.
+        work_id를 주면 그 Task의 대화만 본다. 옆 Task의 해석이 도는 중에 다른 Task에서 일할 수 있다."""
+        busy = [st for st in self._user_states(user_id) if st.busy and st.project_id == project_id and (not work_id or st.work_id == work_id)]
+        return max(busy, key=lambda st: st.started_at).chat_id if busy else None
 
-    def adopt_flow(self, flow_id: int, chat_id: int | None, user_id: int, project_id: int):
+    def active_work(self, user_id: int, project_id: int) -> int | None:
+        """이 사람이 이 프로젝트에서 지금 돌리는 Task. 헤더 없이 온 요청(옛 PC Agent)의 답. 둘 이상이면 가장 늦게 시작한 쪽이다."""
+        chat_id = self.active_chat(user_id, project_id)
+        st = self.chats.get(chat_id) if chat_id else None
+        return st.work_id if st else None
+
+    def recent_work(self, user_id: int, project_id: int) -> int | None:
+        """이 사람이 이 프로젝트에서 마지막으로 요청한 Task(서버를 다시 시작하면 잊는다). 턴이 끝난 뒤 늦게 오는 요청이 옆 Task로 새지 않게."""
+        rows = [st for st in self._user_states(user_id) if st.project_id == project_id and st.started_at]
+        return max(rows, key=lambda st: st.started_at).work_id if rows else None
+
+    def busy_works(self) -> set[int]:
+        """지금 AI가 답하는 Task들."""
+        with self._lock:
+            return {st.work_id for st in self.chats.values() if st.busy and st.work_id}
+
+    def adopt_flow(self, flow_id: int, chat_id: int | None, user_id: int, project_id: int, work_id: int | None = None):
         """AI가 단계를 움직였다. 사용자의 말로 이어 가는 중이어도 이제 이 턴은 그 흐름을 진행하는 턴이다."""
-        st = self.chats.get(chat_id) if chat_id else self.chats.get(self.active_chat(user_id, project_id) or 0)
+        st = self.chats.get(chat_id) if chat_id else self.chats.get(self.active_chat(user_id, project_id, work_id) or 0)
         if st and st.busy and st.user_id == user_id and st.project_id == project_id:
             with st.lock:
                 if st.busy and st.flow_id is None:
@@ -607,7 +626,7 @@ class AgentHub:
                 self._flow_turn_over(st, flow_id)
             self._flush_flows(st.chat_id)
         except Exception:
-            log.exception("작업 흐름 뒷정리 실패: 대화 %s", st.chat_id)
+            log.exception("Task Flow 뒷정리 실패: 대화 %s", st.chat_id)
 
     def _flows_stopped(self, st: TurnState, flow_id: int | None):
         """사용자가 멈췄다. 진행하던 흐름은 멈춤으로 두고, 아직 전하지 못한 승인은 되돌린다. '중지'를 누른 뒤에 일이 시작되면 안 된다."""
@@ -618,10 +637,10 @@ class AgentHub:
                 if f.status in ("approved", "in_progress") and (f.start_queued or f.id == flow_id):
                     if f.status == "approved" and not _flow_started(f):
                         f.status, f.approved_by = "review", None
-                        notes.append(f"단계를 시작하기 전에 중지해서 작업 흐름 '{f.title}'의 승인을 되돌렸습니다 → 진행하려면 카드에서 다시 승인해 주세요.")
+                        notes.append(f"단계를 시작하기 전에 중지해서 Task Flow '{f.title}'의 승인을 되돌렸습니다 → 진행하려면 카드에서 다시 승인해 주세요.")
                     else:
                         f.status = "stopped"
-                        notes.append(f"작업 흐름 '{f.title}'을 멈췄습니다. 여기까지의 결과는 그대로 있습니다 → 바꿀 점을 입력창에 적거나 '이어서 진행해 줘'라고 보내면 이어 갑니다.")
+                        notes.append(f"Task Flow '{f.title}'을 멈췄습니다. 여기까지의 결과는 그대로 있습니다 → 바꿀 점을 입력창에 적거나 '이어서 진행해 줘'라고 보내면 이어 갑니다.")
                 elif not f.start_queued:  # 반려를 전하려던 참이면 흐름은 이미 반려 상태이니 말만 거둔다
                     continue
                 f.handoff = None
@@ -644,7 +663,8 @@ class AgentHub:
             done = sum(n.get("status") in ("complete", "skipped") for n in nodes)
             if done == len(nodes):
                 return
-            newer = db.query(models.Flow.id).filter(models.Flow.project_id == f.project_id, models.Flow.id > f.id, models.Flow.status == "review").first()
+            # 같은 Task 안에서만 본다. 옆 Task의 새 제안이 이 Task의 승인된 흐름을 멈추면 안 된다
+            newer = db.query(models.Flow.id).filter(models.Flow.project_id == f.project_id, models.Flow.work_id == f.work_id, models.Flow.id > f.id, models.Flow.status == "review").first()
             h = dict(f.handoff or {})
             if newer:  # AI가 계획을 바꿔 새 흐름을 제안했다. 그쪽이 승인을 기다리니 옛 흐름을 더 밀지 않는다
                 f.status, f.handoff = "stopped", None
@@ -656,7 +676,7 @@ class AgentHub:
                         n["status"], n["detail"] = "failed", "에이전트가 이 단계를 이어 가지 못했습니다"
                 f.nodes, f.status = nodes, "failed"
                 f.handoff = {**h, "state": "gave_up"}
-                note = (f"에이전트가 승인한 작업 흐름 '{f.title}'을 '{left.get('label') or left['id']}' 단계에서 더 이어 가지 못했습니다. 여기까지의 결과는 그대로 있습니다 "
+                note = (f"에이전트가 승인한 Task Flow '{f.title}'을 '{left.get('label') or left['id']}' 단계에서 더 이어 가지 못했습니다. 여기까지의 결과는 그대로 있습니다 "
                         "→ 흐름 단계의 '원인 찾기'를 누르거나, 바꿀 점을 입력창에 적어 주세요.")
             else:
                 nudges = h.get("nudges", 0) + 1 if done <= h.get("done_at", -1) else 1
@@ -693,7 +713,7 @@ class AgentHub:
             try:
                 self.send_prompt(chat_id, text, flow_id=None if kind == "rejected" else flow_id, shown=shown, auto=kind)
             except AgentError as e:  # 그새 끊겼다. 다시 연결되면 보낸다
-                log.info("작업 흐름 결정을 전하지 못했습니다: %s", e)
+                log.info("Task Flow 결정을 전하지 못했습니다: %s", e)
                 with SessionLocal() as db:
                     f = db.get(models.Flow, flow_id)
                     if f:
@@ -715,7 +735,7 @@ class AgentHub:
             for chat_id in sorted(chats):
                 self._flush_flows(chat_id)
         except Exception:  # 전하지 못해도 연결은 살린다. 다음 연결·턴 끝에 다시 한다
-            log.exception("기다리는 작업 흐름을 전하지 못했습니다")
+            log.exception("기다리는 Task Flow을 전하지 못했습니다")
 
     def _mark_done(self, st: TurnState, stop_reason: str = "", reached_cli: bool = True):
         """요청 메시지에 끝났다고 남긴다. 서버를 다시 시작한 뒤 "끊긴 요청"과 가리고, 중지한 요청을 지난 대화 요약에서 가리는 데 쓴다."""
@@ -787,7 +807,7 @@ class AgentHub:
                     live.discard(sid)
             self.running.setdefault(uid, set()).discard(agent)
         # 턴을 먼저 끝낸다. CLI가 바로 죽어 runner_exit가 먼저 도착하면 같은 안내가 두 번 남는다
-        self._note(st, "AI 도구를 다시 시작합니다. 진행 중이던 작업은 끝납니다. 다음 요청 때 이전 대화를 이어 붙입니다.")
+        self._note(st, "AI 도구를 다시 시작합니다. 진행 중이던 작업은 끝납니다. 다음 요청 때 이전 기록을 이어 붙입니다.")
         self._finish(st, "cancelled")
         threading.Thread(target=self._deliver_force, args=(uid, conn, agent, turn_id), daemon=True, name=f"force-{agent}").start()
 
@@ -831,7 +851,7 @@ class AgentHub:
 
     # ---------- 이벤트 ----------
     def _broadcast(self, st: TurnState, event: dict):
-        manager.publish({"type": "agent_event", "project_id": st.project_id, "session_id": st.chat_id, "event": event})
+        manager.publish({"type": "agent_event", "project_id": st.project_id, "session_id": st.chat_id, "work_id": st.work_id, "event": event})
 
     def _broadcast_stage(self, st: TurnState):
         if st.busy:
@@ -900,9 +920,9 @@ class AgentHub:
             if not hit:
                 continue
             if forced:
-                note = "AI 도구를 다시 시작해서 이 요청이 끝났습니다. 다음 요청 때 이전 대화를 이어 붙입니다."
+                note = "AI 도구를 다시 시작해서 이 요청이 끝났습니다. 다음 요청 때 이전 기록을 이어 붙입니다."
             else:
-                note = "AI 도구가 갑자기 종료되어 이 요청이 끝났습니다 → 다시 보내면 AI 도구를 다시 시작해 이전 대화에 이어 갑니다."
+                note = "AI 도구가 갑자기 종료되어 이 요청이 끝났습니다 → 다시 보내면 AI 도구를 다시 시작해 이전 기록에 이어 갑니다."
                 if tail:
                     note += f"\n\n종료 전 기록:\n{tail[-800:]}"
             self._note(st, note)
@@ -1025,14 +1045,14 @@ def _flow_started(f: models.Flow) -> bool:
 def _flow_words(f: models.Flow, kind: str | None) -> tuple[str, str]:
     """에이전트에게 보내는 말과 대화에 보이는 말. 데모는 '승인했습니다'·'반려했습니다'를 보고 움직인다."""
     if kind == "rejected":
-        text = f"작업 흐름 '{f.title}'(#{f.id})을 반려했습니다. 무엇을 바꾸면 좋을지 물어보고 다시 제안해 주세요."
+        text = f"Task Flow '{f.title}'(#{f.id})을 반려했습니다. 무엇을 바꾸면 좋을지 물어보고 다시 제안해 주세요."
         return text, text
     if kind == "continue":
         left = [n.get("label") or n["id"] for n in f.nodes or [] if n.get("status") not in ("complete", "skipped")]
-        return (f"작업 흐름 '{f.title}'(#{f.id})이 아직 끝나지 않았습니다. 남은 단계: {', '.join(left)}. 승인받은 계획이니 사용자에게 묻지 말고, 정하지 않은 값은 기본값으로 정해 단계 설명에 적고 끝까지 진행하세요. "
+        return (f"Task Flow '{f.title}'(#{f.id})이 아직 끝나지 않았습니다. 남은 단계: {', '.join(left)}. 승인받은 계획이니 사용자에게 묻지 말고, 정하지 않은 값은 기본값으로 정해 단계 설명에 적고 끝까지 진행하세요. "
                 "이미 끝난 단계는 update_node로 complete로 적으세요. 정말 진행할 수 없는 단계는 update_node로 failed와 원인·할 일을 적고 사용자에게 알리세요.",
                 f"남은 단계({', '.join(left)})를 이어서 진행합니다.")
-    shown = f"작업 흐름 '{f.title}'(#{f.id})을 승인했습니다. 계획대로 진행해 주세요."
+    shown = f"Task Flow '{f.title}'(#{f.id})을 승인했습니다. 계획대로 진행해 주세요."
     return (f"{shown} 승인받은 계획이니 끝까지 진행하고 중간에 사용자에게 묻지 마세요. 정하지 않은 값은 기본값으로 정해 단계 설명에 적으세요. "
             "정말 진행할 수 없는 단계는 update_node로 failed와 원인·할 일을 적고 사용자에게 알리세요.", shown)
 

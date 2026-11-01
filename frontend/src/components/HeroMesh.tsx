@@ -594,7 +594,7 @@ export function HeroMesh({ onPhase }: { onPhase?: (phase: number) => void }) {
             <span className="tabs">{results.map((r, i) => (
               <button key={r.meta.id} type="button" tabIndex={-1} className={i === shown ? "on" : ""} onClick={() => jump.current(i)}>{r.meta.kind}</button>
             ))}</span>
-            <em>{m.name} · {m.method} · {m.element} {m.elements.toLocaleString()}개{m.scale ? ` · 변형 ×${m.scale}` : ""}{m.note ? ` · ${m.note}` : ""}<br />예시 모델을 실제로 계산한 결과입니다. 대화는 사용 흐름을 보여 주는 예시이고, 제품 데이터가 아닙니다.</em>
+            <em>{m.name} · {m.method} · {m.element} {m.elements.toLocaleString()}개{m.scale ? ` · 변형 ×${m.scale}` : ""}{m.note ? ` · ${m.note}` : ""}<br />예시 모델을 실제로 계산한 결과입니다. 왼쪽 글은 사용 흐름을 보여 주는 예시이고, 제품 데이터가 아닙니다.</em>
           </div>
         </div>
       )}

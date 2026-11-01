@@ -4,8 +4,8 @@ import { useState } from "react";
 import { api, get } from "../api";
 import { when } from "../format";
 import { useToast } from "../toast";
-import { FolderModal } from "../components/FolderModal";
-import type { AgentStatus, LocalTree } from "../types";
+import type { AgentStatus, LocalTree, WorkDetail } from "../types";
+import { COPY, W } from "../work/copy";
 
 const VIEWABLE = /\.(odb|d3plot|op2|f06|rst|rth|h3d|sim|fem|prt|stp|step|igs|iges|stl|vtu|vtk|cae|inp|k|key|dyn|png|jpg|csv|json|txt|log)$/i;
 // 에이전트가 쓰는 내부 파일(설정·지침) — 기본으로 숨긴다
@@ -19,7 +19,7 @@ function webViewerUrl(tpl: string, root: string, rel: string, host: string, pid:
     .replace(/\{host\}/g, encodeURIComponent(host)).replace(/\{project_id\}/g, String(pid));
 }
 
-/** 내 PC 작업 폴더 열기(탐색기) / CAE 뷰어로 열기 — PC Agent 경유 */
+/** 내 PC 폴더 열기(탐색기) / CAE 뷰어로 열기 — PC Agent 경유 */
 export function useOpenLocal(pid: number) {
   const toast = useToast();
   return useMutation({
@@ -38,29 +38,31 @@ export function relFromRunDir(runDir: string | null): string | null {
   return i >= 0 ? parts.slice(i).join("/") : null;
 }
 
-/** 캔버스 '파일' 탭: 내 PC의 프로젝트 작업 폴더 (규칙: inputs·scripts·runs·studies/S…/cases/C…·live·reports) */
-export function LocalFiles({ pid }: { pid: number }) {
+/** '파일' 탭: 내 PC의 폴더 (규칙: inputs·scripts·runs·studies/S…/cases/C…·live·reports). 폴더를 바꾸는 곳은 Project 메뉴 한 곳이다.
+ *  Task별 폴더가 없는 동안(2단계 전)은 Project 폴더를 보인다. 남의 Task의 파일은 그 사람 PC에 있으므로 내 PC를 뒤지지 않는다 */
+export function LocalFiles({ pid, work }: { pid: number; work?: WorkDetail | null }) {
+  const others = !!work && !work.mine;
   const [path, setPath] = useState("");
   const [hidden, setHidden] = useState(false);
-  const [picking, setPicking] = useState(false);
   const open = useOpenLocal(pid);
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ["local-tree", pid, path], queryFn: () => get<LocalTree>(`/api/projects/${pid}/local/tree?path=${encodeURIComponent(path)}`),
-    retry: false,
+    retry: false, enabled: !others,
   });
   const { data: cfg } = useQuery({ queryKey: ["config"], queryFn: () => get<{ web_viewer_url: string }>("/api/config/public"), staleTime: 600_000 });
   const { data: agent } = useQuery({ queryKey: ["agent", "status"], queryFn: () => get<AgentStatus>("/api/agent/status") });
   const crumbs = path ? path.split("/") : [];
   const entries = (data?.entries ?? []).filter((e) => hidden || path || !INTERNAL.test(e.name));
   const nHidden = (data?.entries.length ?? 0) - entries.length;
+  if (others) return <div className="empty-hero"><HardDrive size={28} /><p>{COPY.filesOfOther(work.owner_name)}</p></div>;
   if (error) {
-    return <div className="empty-hero"><HardDrive size={28} /><b>내 PC 작업 폴더를 볼 수 없습니다</b><p>{(error as Error).message}</p></div>;
+    return <div className="empty-hero"><HardDrive size={28} /><b>내 PC의 {W.project} 폴더를 볼 수 없습니다</b><p>{(error as Error).message}</p></div>;
   }
   return (
     <div className="local-files">
       <div className="row local-head">
         <nav className="local-crumb" aria-label="폴더 경로">
-          <button className="link-btn" onClick={() => setPath("")}>작업 폴더</button>
+          <button className="link-btn" onClick={() => setPath("")}>{W.project} 폴더</button>
           {crumbs.map((c, i) => (
             <span key={i}><ChevronRight size={12} /><button className="link-btn" onClick={() => setPath(crumbs.slice(0, i + 1).join("/"))}>{c}</button></span>
           ))}
@@ -73,11 +75,9 @@ export function LocalFiles({ pid }: { pid: number }) {
         <div className="local-rootbar">
           <span className="small muted local-root" title={data.root}>{data.root}{path ? `\\${path.replace(/\//g, "\\")}` : ""}</span>
           <span className={`local-kind ${data.custom ? "custom" : ""}`}>{data.custom ? "직접 지정" : "기본 위치"}</span>
-          <button className="link-btn small" onClick={() => setPicking(true)}>폴더 바꾸기</button>
         </div>
       )}
       {data?.notice && <p className="small muted local-notice" role="status">{data.notice}</p>}
-      {picking && <FolderModal pid={pid} onClose={() => { setPicking(false); setPath(""); }} />}
       <div className="table-wrap"><table className="local-table">
         <tbody>
           {entries.map((e) => (

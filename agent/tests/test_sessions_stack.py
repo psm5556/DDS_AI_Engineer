@@ -159,7 +159,7 @@ def test_cli_death_without_load_support_new_session_with_recap(stack):
     assert c["process_start"] == 2 and c["session_new"] == 2 and c["session_load"] == 0, c
     last = [e for e in read_log(stack.state) if e["ev"] == "prompt"][-1]["text"]
     assert "[DDS 컨텍스트]" in last and "[이전 대화" in last and "브래킷 두께를 바꿔 줘" in last and last.endswith("다음 요청")
-    assert sum("새 세션" in n for n in stack.system_notes(chat)) == 1  # 조용히 맥락을 잃지 않게 한 번 안내한다
+    assert sum("새로 시작" in n for n in stack.system_notes(chat)) == 1  # 조용히 맥락을 잃지 않게 한 번 안내한다
 
 
 def test_session_forgotten_by_cli_does_not_block_chat(stack):

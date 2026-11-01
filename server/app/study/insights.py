@@ -2958,7 +2958,7 @@ def get_insights(db: Session, study: models.Study) -> dict:
         # 연습 함수 값은 스터디 상태와 따로 늦게 끝난다. 저장된 결과에 넣지 않고 응답할 때 붙인다
         value = {**value, "sections": [{**x, "bench": line} if x["key"] == "active" else x for x in value["sections"]]}
     nx = (value.get("overview") or {}).get("next")
-    if nx and nx.get("key") == "report" and service.report_is_current(db, study.project_id):
+    if nx and nx.get("key") == "report" and service.report_is_current(db, study.project_id, study.work_id):
         # 이미 쓴 보고서를 또 쓰라고 하지 않는다. 보고서는 스터디 상태와 따로 바뀌므로 저장된 결과에 넣지 않고 응답할 때 고른다
         value = {**value, "overview": {**value["overview"], "next": None}}
     return {k: v for k, v in value.items() if k != "owner"}
@@ -3173,7 +3173,7 @@ def publish(db: Session, study: models.Study, flow_id: int | None, node_id: str 
     name, out = study.name, []
 
     def put(kind: str, title: str, payload: dict):
-        a = service.publish_artifact(db, study.project_id, kind, title, payload, flow_id, node_id)
+        a = service.publish_study_artifact(db, study, kind, title, payload, flow_id, node_id)
         caption = title.split("] ", 1)[-1]
         out.append({"artifact_id": a.id, "kind": kind, "title": title, "embed": f"![{caption}](artifact:{a.id})"})
 
@@ -3181,7 +3181,7 @@ def publish(db: Session, study: models.Study, flow_id: int | None, node_id: str 
         # 화면과 같은 규칙이다. 아직 판단하지 못한 줄은 보고서에도 숙제처럼 남기지 않는다
         rows = [[x["title"], x["state_label"], x["sentence"]] for x in secs.values() if not x.get("pending") and not x.get("collapsed") and x["state"] != "unknown"]
         if rows:
-            put("table", f"[{name}] 판단 요약 (자세히 보기: 작업 흐름 탭)", {"columns": ["질문", "상태", "결론"], "rows": rows})
+            put("table", f"[{name}] 판단 요약 (자세히 보기: Task Flow 탭)", {"columns": ["질문", "상태", "결론"], "rows": rows})
     inf = secs.get("influence")
     if inf and (want is None or "influence" in want):
         for v in (inf.get("variants") or [])[:2]:

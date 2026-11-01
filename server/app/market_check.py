@@ -112,7 +112,7 @@ RULE_TITLE = {
     "similar_name": ("비슷한 이름의 항목이 있습니다", "기존 항목으로 착각하게 하려는 것은 아닌지 확인하세요."),
     "unknown_mcp_tool": ("없는 dds 도구를 언급합니다", "AI가 없는 도구를 찾다 멈춥니다."),
     "asks_user_click": ("사용자에게 조작을 부탁하는 문구가 있습니다", "Live Link는 스스로 연결합니다. 사용자에게 버튼·저널 실행을 부탁하면 안 됩니다."),
-    "project_value": ("이 프로젝트 값이 남아 있습니다", "절대 경로·프로젝트 번호·케이스 번호·프로젝트 이름은 다른 PC에서 맞지 않고 기밀일 수 있습니다."),
+    "project_value": ("이 Project 값이 남아 있습니다", "절대 경로·Project 번호·케이스 번호·Project 이름은 다른 PC에서 맞지 않고 기밀일 수 있습니다."),
 }
 LABEL_PATH = "(이름표)"  # 파일이 아니라 등록 양식의 값에서 찾은 표시
 
@@ -853,7 +853,7 @@ def _layout(files: list[tuple[str, bytes]]) -> tuple[dict[str, list[tuple[str, b
         if any(x.startswith(".") for x in parts):
             raise PackageRejected(f"점으로 시작하는 파일은 넣을 수 없습니다: {p} → 숨은 설정이 PC로 복사되지 않게 빼 주세요")
         if parts[-1].lower() in RULE_FILES:
-            raise PackageRejected(f"작업 규칙 파일은 넣을 수 없습니다: {p} → 지침은 SKILL.md에 적어 주세요. 규칙 파일은 프로젝트 전체의 AI 지침을 바꿉니다")
+            raise PackageRejected(f"작업 규칙 파일은 넣을 수 없습니다: {p} → 지침은 SKILL.md에 적어 주세요. 규칙 파일은 Project 전체의 AI 지침을 바꿉니다")
         if PurePosixPath(low).suffix in _MARKET_BLOCKED_EXT:
             raise PackageRejected(f"받지 않는 파일 형식입니다: {p} → 사람이 읽어 확인할 수 없거나 열기만 해도 실행됩니다. 스크립트나 문서로 바꿔 넣어 주세요")
         rest.append((p, b))
@@ -924,7 +924,7 @@ def _scan_files(out: list[tuple[str, bytes]], ctx: CheckContext, scan: _Scan) ->
             continue
         text = _decode_any(body)
         if MANAGED_MARK in text:
-            raise PackageRejected(f"프로젝트 규칙 파일의 표시 글자가 있습니다: {path} → 이 글자는 AI 지침의 범위를 바꿉니다. 빼고 다시 올려 주세요")
+            raise PackageRejected(f"Project 규칙 파일의 표시 글자가 있습니다: {path} → 이 글자는 AI 지침의 범위를 바꿉니다. 빼고 다시 올려 주세요")
         if ext in OTHER_SCRIPT_EXT:
             scan.flag("not_python", path, None, f"{ext} 파일")
             scan.caps.add("runs_code")
@@ -962,7 +962,7 @@ def _check_unpacks_on_windows(files: list[tuple[str, bytes]]):
     paths = {p.lower() for p, _ in files}
     for path, _ in files:
         if len(path) > MAX_ITEM_PATH:
-            raise PackageRejected(f"경로가 너무 깁니다({len(path)}자): {clean_label(path)[:80]}… → {MAX_ITEM_PATH}자 안으로 줄여 주세요. PC의 작업 폴더 경로가 앞에 붙어 Windows 한도 260자를 넘습니다")
+            raise PackageRejected(f"경로가 너무 깁니다({len(path)}자): {clean_label(path)[:80]}… → {MAX_ITEM_PATH}자 안으로 줄여 주세요. PC의 폴더 경로가 앞에 붙어 Windows 한도 260자를 넘습니다")
         parts = path.split("/")
         for i in range(1, len(parts)):
             folder = "/".join(parts[:i])
