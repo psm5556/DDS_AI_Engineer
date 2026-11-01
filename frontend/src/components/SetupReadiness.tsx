@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Rocket, XCircle } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { get, post } from "../api";
 import { useAuth } from "../auth";
 import { useToast } from "../toast";
+import { PinModal } from "./MarketParts";
 
 export interface SetupStatus {
   setup_exe: boolean; runtime: boolean; release: string | null; ready: boolean; runtime_dir: string | null
@@ -33,9 +35,10 @@ export function SetupChecklist() {
   const qc = useQueryClient();
   const toast = useToast();
   const { data: st } = useSetupStatus();
+  const [askPin, setAskPin] = useState(false);
   const publish = useMutation({
-    mutationFn: () => post<{ version: string }>("/api/agent/releases/from-server"),
-    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["agent"] }); toast(`Agent ${r.version}을(를) 배포했습니다`); },
+    mutationFn: (pin: string) => post<{ version: string }>("/api/agent/releases/from-server", { pin }),
+    onSuccess: (r) => { setAskPin(false); qc.invalidateQueries({ queryKey: ["agent"] }); toast(`Agent ${r.version}을(를) 배포했습니다`); },
     onError: (e: Error) => toast(e.message, true),
   });
   if (!st) return null;
@@ -53,6 +56,8 @@ export function SetupChecklist() {
   );
   return (
     <section className="block setup-check">
+      {askPin && <PinModal title="서버 코드로 첫 버전 배포" confirm="배포" busy={publish.isPending} onClose={() => setAskPin(false)} onConfirm={(pin) => publish.mutate(pin)}>
+        연결된 PC가 작업이 없을 때 이 버전을 자동으로 받습니다.</PinModal>}
       <div className="block-head"><h3>PC Agent 설치 준비</h3>
         <span className={`chip ${st.ready ? "ok" : "warn"}`}>{st.ready ? "사용자가 바로 설치할 수 있습니다" : "준비가 더 필요합니다"}</span></div>
       <ul>
@@ -69,7 +74,7 @@ export function SetupChecklist() {
             : st.setup_exe ? linuxHow : "위 설치 프로그램과 같은 묶음에 들어 있습니다."}
         </Row>
         <Row ok={!!st.release} title={st.release ? `배포된 Agent 버전 ${st.release}` : "배포된 Agent 버전"}>
-          <button className="small primary" disabled={publish.isPending} onClick={() => publish.mutate()}>
+          <button className="small primary" disabled={publish.isPending} onClick={() => setAskPin(true)}>
             <Rocket size={13} />{publish.isPending ? "배포 중…" : "서버 코드로 첫 버전 배포"}</button>
         </Row>
       </ul>

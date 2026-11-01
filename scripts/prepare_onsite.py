@@ -221,7 +221,7 @@ def _client(server: str, user: str, pin: str):
 def publish(server: str, user: str, pin: str) -> bool:
     step("첫 Agent 버전 등록 (서버 코드로)")
     c = _client(server, user, pin)
-    r = c.post("/api/agent/releases/from-server")
+    r = c.post("/api/agent/releases/from-server", json={"pin": pin})
     if r.status_code == 409:
         ok(f"이미 등록된 버전입니다: {r.json().get('detail')}")
         return True

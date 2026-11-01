@@ -83,13 +83,22 @@ def test_agent_setup_readiness(client):  # noqa: F811
     st = client.get("/api/agent/setup/status", headers=admin).json()
     assert st["runtime"] is False and st["ready"] is False and st["runtime_dir"]  # 테스트 데이터 폴더에는 런타임이 없다
     assert st["server_windows"] is (os.name == "nt")  # Linux 서버면 화면이 Windows PC 묶음 안내를 보여 준다
-    r = client.post("/api/agent/releases/from-server", headers=admin)
+    assert client.post("/api/agent/releases/from-server", json={"pin": "000000"}, headers=admin).status_code == 403  # 틀린 PIN
+    assert client.get("/api/agent/setup/status", headers=admin).json()["release"] is None  # 아무것도 등록되지 않았다
+    r = client.post("/api/agent/releases/from-server", json={"pin": "123456"}, headers=admin)
     assert r.status_code == 200, r.text
     ver = r.json()["version"]
     assert r.json()["is_latest"] and client.get("/api/agent/setup/status", headers=admin).json()["release"] == ver
-    assert client.post("/api/agent/releases/from-server", headers=admin).status_code == 409  # 같은 버전은 한 번만
+    assert client.post("/api/agent/releases/from-server", json={"pin": "123456"}, headers=admin).status_code == 409  # 같은 버전은 한 번만
     kim, _ = _auth(client, "kim3", admin)
-    assert client.post("/api/agent/releases/from-server", headers=kim).status_code == 403
+    assert client.post("/api/agent/releases/from-server", json={"pin": "123456"}, headers=kim).status_code == 403
+    # 최신 지정(롤백)과 파일 올리기도 PIN을 받는다
+    assert client.put(f"/api/agent/releases/{ver}/latest", json={"pin": "000000"}, headers=admin).status_code == 403
+    assert client.put(f"/api/agent/releases/{ver}/latest", json={"pin": "123456"}, headers=admin).status_code == 200
+    up = {"files": {"file": ("a.zip", b"PK")}, "headers": admin}
+    assert client.post("/api/agent/releases", data={"version": "9.9.9", "pin": "000000"}, **up).status_code == 403
+    assert client.post("/api/agent/releases", data={"version": "9.9.9"}, **up).status_code == 422
+    assert client.post("/api/agent/releases", data={"version": "9.9.9", "pin": "123456", "make_latest": "false"}, **up).status_code == 200
     assert client.get("/api/agent/setup/status", headers=kim).json()["runtime_dir"] is None  # 서버 경로는 관리자에게만
 
 

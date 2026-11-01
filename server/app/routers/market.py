@@ -24,7 +24,7 @@ from .. import market_check, market_service, models, schemas
 from ..agent.link import registry
 from ..config import ROOT
 from ..database import get_db
-from ..deps import check_reauth_pin, effective_admin, get_current_user, require_admin, require_jwt
+from ..deps import effective_admin, get_current_user, require_admin, require_jwt, require_reauth_pin
 from ..market_check import CAP_LABEL, clean_label
 from ..market_service import GRADE_LABEL, PUBLIC_STATUS, STATUS_LABEL, ext_of, fingerprint, is_code, key_of, publish_updated, push_sync, recipients, resolve, versions_of, vkey
 from ..study.recipe import MAX_FILE, MAX_FILES, RecipeRejected
@@ -109,8 +109,7 @@ def _own_or_submitted(pkg: models.MarketPackage, v: models.MarketVersion, user: 
 
 
 def _check_pin(user: models.User, pin: str, db: Session):
-    if not check_reauth_pin(db.get(models.User, user.id), pin, db):
-        raise HTTPException(403, "PIN이 맞지 않습니다 → 다시 입력하세요. 5번 틀리면 잠깁니다")
+    require_reauth_pin(user, pin, db)
 
 
 def _require_on(db: Session):

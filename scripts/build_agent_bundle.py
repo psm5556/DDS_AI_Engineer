@@ -53,7 +53,7 @@ def publish(bundle: Path, ver: str, server: str, user: str, pin: str, notes: str
     c.headers["Authorization"] = f"Bearer {r.json()['access_token']}"
     with open(bundle, "rb") as f:
         r = c.post("/api/agent/releases", files={"file": (bundle.name, f, "application/zip")},
-                   data={"version": ver, "notes": notes, "make_latest": str(latest).lower()})
+                   data={"version": ver, "notes": notes, "make_latest": str(latest).lower(), "pin": pin})
     if r.status_code >= 400:
         sys.exit(f"등록 실패 {r.status_code}: {r.text}")
     print(f"서버 등록 완료: {r.json()['version']} (최신: {r.json()['is_latest']})")

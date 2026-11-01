@@ -121,13 +121,16 @@ function Releases() {
   const qc = useQueryClient();
   const toast = useToast();
   const { data } = useQuery({ queryKey: ["agent", "releases"], queryFn: () => get<AgentRelease[]>("/api/agent/releases") });
+  const [choose, setChoose] = useState<string | null>(null);
   const latest = useMutation({
-    mutationFn: (v: string) => put(`/api/agent/releases/${v}/latest`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["agent"] }); toast("최신 버전으로 지정했습니다. 연결된 PC가 유휴 시 자동 업데이트합니다"); },
+    mutationFn: (v: { version: string; pin: string }) => put(`/api/agent/releases/${v.version}/latest`, { pin: v.pin }),
+    onSuccess: () => { setChoose(null); qc.invalidateQueries({ queryKey: ["agent"] }); toast("최신 버전으로 지정했습니다. 연결된 PC가 유휴 시 자동 업데이트합니다"); },
     onError: (e: Error) => toast(e.message, true),
   });
   return (
     <>
+      {choose && <PinModal title={`${choose} 최신으로 지정`} confirm="최신으로 지정" busy={latest.isPending} onClose={() => setChoose(null)}
+        onConfirm={(pin) => latest.mutate({ version: choose, pin })}>연결된 PC가 작업이 없을 때 이 버전으로 자동 업데이트합니다.</PinModal>}
       <SetupChecklist />
       <div className="notice info" style={{ margin: "16px 0" }}>
         새 버전 배포: <code>python scripts/build_agent_bundle.py --publish --server {location.origin} --notes "변경 내용"</code>
@@ -139,7 +142,7 @@ function Releases() {
           <tr key={r.id}>
             <td><b>{r.version}</b> {r.is_latest && <span className="chip ok">최신</span>}</td>
             <td className="small">{r.notes || "-"}</td><td className="r">{Math.round(r.size / 1024)} KB</td><td>{when(r.created_at)}</td>
-            <td className="r">{!r.is_latest && <button className="small" onClick={() => latest.mutate(r.version)}>최신으로 지정</button>}</td>
+            <td className="r">{!r.is_latest && <button className="small" onClick={() => setChoose(r.version)}>최신으로 지정</button>}</td>
           </tr>))}
           {data && !data.length && <tr><td colSpan={5} className="small muted empty-row">아직 배포한 버전이 없습니다. 위 명령으로 첫 버전을 올리면 연결된 PC가 자동으로 업데이트합니다.</td></tr>}
         </tbody>

@@ -25,6 +25,10 @@ class UserAdminUpdate(BaseModel):
     admin_pin: str | None = None  # PIN 초기화·관리자 권한 변경을 하는 사람의 PIN
 
 
+class PinConfirm(BaseModel):
+    pin: str
+
+
 class PinChange(BaseModel):
     current_pin: str
     new_pin: str

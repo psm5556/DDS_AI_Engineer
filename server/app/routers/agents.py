@@ -20,7 +20,7 @@ from .. import models, schemas
 from ..agent.link import AgentConnection, registry
 from ..config import ROOT, settings
 from ..database import SessionLocal, get_db
-from ..deps import effective_admin, get_current_user, require_admin, require_jwt
+from ..deps import effective_admin, get_current_user, require_admin, require_jwt, require_reauth_pin
 from ..ws import manager
 
 router = APIRouter(prefix="/api/agent", tags=["agent-releases"])
@@ -71,14 +71,17 @@ def download(version: str, user=Depends(get_current_user), db: Session = Depends
 
 @router.post("/releases", response_model=schemas.AgentReleaseResponse)
 async def upload_release(file: UploadFile = File(...), version: str = Form(...), notes: str = Form(""),
-                         make_latest: bool = Form(True), admin=Depends(require_admin), db: Session = Depends(get_db)):
+                         make_latest: bool = Form(True), pin: str = Form(...), admin=Depends(require_admin), db: Session = Depends(get_db)):
+    # 모든 PC로 코드가 나가는 길이다. 빼앗긴 로그인만으로 올리지 못하게 PIN을 다시 받는다
+    require_reauth_pin(admin, pin, db)
     data = await file.read()
     return _register_release(db, data, version, notes, admin.id, make_latest)
 
 
 @router.post("/releases/from-server", response_model=schemas.AgentReleaseResponse)
-def release_from_server(admin=Depends(require_admin), db: Session = Depends(get_db)):
+def release_from_server(body: schemas.PinConfirm, admin=Depends(require_admin), db: Session = Depends(get_db)):
     """서버에 있는 코드로 Agent 번들을 만들어 최신 버전으로 등록한다(첫 배포를 웹에서 한 번에)."""
+    require_reauth_pin(admin, body.pin, db)
     spec = importlib.util.spec_from_file_location("build_agent_bundle", ROOT / "scripts" / "build_agent_bundle.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -107,8 +110,9 @@ def _register_release(db: Session, data: bytes, version: str, notes: str, upload
 
 
 @router.put("/releases/{version}/latest", response_model=schemas.AgentReleaseResponse)
-def set_latest(version: str, admin=Depends(require_admin), db: Session = Depends(get_db)):
+def set_latest(version: str, body: schemas.PinConfirm, admin=Depends(require_admin), db: Session = Depends(get_db)):
     """최신 지정(롤백도 이 경로: 이전 버전을 최신으로 지정)."""
+    require_reauth_pin(admin, body.pin, db)
     r = db.query(models.AgentRelease).filter_by(version=version).first()
     if not r:
         raise HTTPException(404, "해당 버전이 없습니다")

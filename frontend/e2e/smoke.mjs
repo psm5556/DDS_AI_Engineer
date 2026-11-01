@@ -1046,6 +1046,15 @@ await step("관리", async () => {
   await page.goto(BASE + "/admin?tab=releases");
   await page.waitForTimeout(1500);
   await shot("admin-releases");
+  // 모든 PC로 코드가 나가는 길이라 PIN을 먼저 받는다. 시험 서버에 버전을 남기지 않게 창만 보고 닫는다
+  const first = page.getByRole("button", { name: "서버 코드로 첫 버전 배포" });
+  if (await first.count()) {
+    await first.click();
+    await page.getByText("내 PIN", { exact: true }).waitFor();
+    await shot("admin-release-pin");
+    await page.getByRole("button", { name: "취소" }).click();
+    await page.getByText("내 PIN", { exact: true }).waitFor({ state: "hidden" });
+  }
   // 빼앗긴 로그인으로 PIN을 바꾸거나 관리자를 늘리지 못하게 내 PIN을 다시 받는다. 사람은 화면에서 그대로 할 수 있어야 한다
   await page.goto(BASE + "/admin?tab=users");
   const box = page.getByLabel("김 엔지니어 관리자").first(); // 앞 단계가 같은 이름의 계정을 여럿 만든다

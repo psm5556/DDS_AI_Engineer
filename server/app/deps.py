@@ -84,6 +84,12 @@ def check_reauth_pin(user: models.User, pin: str, db: Session) -> bool:
     return True
 
 
+def require_reauth_pin(user: models.User, pin: str, db: Session) -> None:
+    """위험한 결정 앞에서 PIN을 다시 받는다. 틀리면 403, 잠겼으면 423."""
+    if not check_reauth_pin(db.get(models.User, user.id), pin, db):
+        raise HTTPException(403, "PIN이 맞지 않습니다 → 다시 입력하세요. 5번 틀리면 잠깁니다")
+
+
 def create_access_token(user: models.User) -> str:
     exp = datetime.now(timezone.utc) + timedelta(hours=settings.access_token_hours)
     return jwt.encode({"sub": str(user.id), "exp": exp}, settings.secret_key, algorithm="HS256")
