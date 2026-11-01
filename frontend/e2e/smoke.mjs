@@ -803,16 +803,19 @@ await step("Project > Task", async () => {
     if (await box.inputValue() !== "이 조건으로 다시 돌려 줘") throw new Error("취소했는데 적은 요청이 사라졌습니다");
     await box.fill("");
     // 경로 카드 B: 내 Task에서 다른 부품을 말하면 묻는다. 고르기 전에는 아무것도 생기지 않고, Enter를 또 누르면 여기서 계속이다
-    await page.goto(`${BASE}/projects/${p.id}/w/${a.id}`);
-    const mineBox = page.getByLabel("에이전트에게 요청");
-    await mineBox.fill("이번엔 다른 부품 해석할게");
-    await mineBox.press("Enter");
-    const cardB = page.locator(".route-card");
-    await cardB.getByRole("button", { name: "새 Project로 시작" }).waitFor({ timeout: 8000 });
-    await cardB.getByText("지금 Project는 그대로입니다").waitFor({ timeout: 5000 });
-    await shot("route-card-b");
-    if ((await call("GET", "/api/projects")).some((x) => x.name.startsWith("이번엔 다른 부품"))) throw new Error("카드를 누르기 전에 Project가 생겼습니다");
-    await mineBox.fill("");
+    // PC Agent가 없으면 입력창이 잠겨 카드까지 가지 않는다(E2E UI 시나리오)
+    if ((await call("GET", "/api/agent/status")).connected) {
+      await page.goto(`${BASE}/projects/${p.id}/w/${a.id}`);
+      const mineBox = page.getByLabel("에이전트에게 요청");
+      await mineBox.fill("이번엔 다른 부품 해석할게");
+      await mineBox.press("Enter");
+      const cardB = page.locator(".route-card");
+      await cardB.getByRole("button", { name: "새 Project로 시작" }).waitFor({ timeout: 8000 });
+      await cardB.getByText("지금 Project는 그대로입니다").waitFor({ timeout: 5000 });
+      await shot("route-card-b");
+      if ((await call("GET", "/api/projects")).some((x) => x.name.startsWith("이번엔 다른 부품"))) throw new Error("카드를 누르기 전에 Project가 생겼습니다");
+      await mineBox.fill("");
+    }
     await page.goto(`${BASE}/projects/${p.id}/w/${theirs.id}`);
     await page.getByRole("tab", { name: "파일" }).click();
     await page.getByText("박프로님 PC에 있습니다").waitFor({ timeout: 8000 });
